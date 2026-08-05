@@ -686,3 +686,9 @@ class Orchestrator:
                 for role_name, role_cfg in cfg.get("roles", {}).items():
                     if isinstance(role_cfg, dict) and "system_prompt" in role_cfg:
                         prompts[role_name] = role_cfg["system_prompt"]
+            except Exception:
+                logger.debug("Failed to load YAML prompts", exc_info=True)
+        return prompts
+
+
+}

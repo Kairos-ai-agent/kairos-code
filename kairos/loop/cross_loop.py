@@ -107,7 +107,7 @@ def detect_cross_loop_patterns(rounds: List[dict]) -> str:
         and scores[-1] < APPROVE_SCORE_THRESHOLD
     ):
         advisories.append(
-            f"- Score has stayed near {scores[-1]} for three rounds. Re-plan "
+            f"- Score has flatlined near {scores[-1]} for three rounds. Re-plan "
             "or reduce scope instead of repeating the current implementation."
         )
 

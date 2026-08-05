@@ -353,7 +353,7 @@ def _make_round(category=None, severity="MAJOR", score=60, file=None,
         issues.append({
             "category": category,
             "severity": severity,
-            "file": file or "f.py",
+            "file": file,
             "line": 1,
             "description": description,
             "fix_instruction": "fix it",

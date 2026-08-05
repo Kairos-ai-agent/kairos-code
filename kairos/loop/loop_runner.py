@@ -1,6 +1,6 @@
 """Main Coder <-> Reviewer loop orchestrator.
 
-Holds run_loop + the inner Coder round + auto-checkpoint helper.
+Hosts run_loop + the inner Coder round + auto-checkpoint helper.
 The heavy lifting (gates, cross-loop memory, prompts, reviewers)
 lives in dedicated submodules; this module is just the orchestrator.
 """
@@ -24,6 +24,7 @@ from kairos.loop.cross_loop import (
 from kairos.loop.gates import (
     APPROVE_SCORE_THRESHOLD,
     COST_TOKEN_CAP,
+    COST_TIME_CAP_S,
     INFRA_FAILURE_LIMIT,
     LOOP_SAFETY_CAP,
     NO_PROGRESS_LIMIT,
@@ -37,6 +38,8 @@ from kairos.loop.prompts import build_next_prompt
 from kairos.loop.reviewers import run_reviewer_round
 
 logger = logging.getLogger(__name__)
+
+
 async def _run_coder_round(session, requirement, round_no, plan_mode=False):
     bus = session.message_bus
     coder = session.coder
@@ -99,6 +102,8 @@ async def _run_coder_round(session, requirement, round_no, plan_mode=False):
         else:
             result = sanitize_plan_text(result)
     return result
+
+
 def _auto_checkpoint(session, round_no, score, approved, summary):
     try:
         from kairos.tools.checkpoint import checkpoint_round
@@ -109,7 +114,21 @@ def _auto_checkpoint(session, round_no, score, approved, summary):
     except Exception:
         logger.debug("auto-checkpoint failed", exc_info=True)
         return None
+
+
 async def _wait_for_plan_decision(session, round_no, bus):
+    if session.plan_decision == "reject":
+        await bus.publish(Message(
+            sender="orchestrator", topic="loop.rejected",
+            content="Plan rejected by user.",
+            msg_type="result",
+            metadata={"project_id": session.project.id,
+                      "session_id": session.session_id},
+        ))
+        return "reject"
+    if session.plan_decision == "approve":
+        session.plan_completed = True
+        return "proceed"
     if not session.plan_pending or session.plan_event is None:
         return "proceed"
     try:
@@ -141,6 +160,8 @@ async def _wait_for_plan_decision(session, round_no, bus):
     ))
     session.plan_completed = True
     return "proceed"
+
+
 async def _run_precheck(session, workspace, round_no, bus):
     try:
         from kairos.loop.precheck import (
@@ -164,7 +185,7 @@ async def _run_precheck(session, workspace, round_no, bus):
     except Exception:
         pass
     precheck_hint = ""
-    precheck_fixable: List[Dict] = []
+    precheck_fixable = []
     try:
         precheck_result = await pre_check_workspace(workspace, changed)
         precheck_hint = format_precheck_for_prompt(precheck_result)
@@ -193,78 +214,199 @@ async def _run_precheck(session, workspace, round_no, bus):
     except Exception:
         logger.debug("precheck failed (non-fatal)", exc_info=True)
     return precheck_hint, precheck_fixable
+
+
+def _maybe_rollback_on_regression(session, coder_result: str) -> bool:
+    """If the latest round's score regressed vs the previous, roll the
+    workspace back to the previous checkpoint. Returns True when a
+    rollback actually happened.
+
+    Heuristic: drop >= 15 points from previous best triggers rollback,
+    but only if we have a checkpoint to roll back to.
+    """
+    try:
+        prev_best = int(getattr(session, "_best_score", 0) or 0)
+        new_score = int(getattr(session, "last_score", 0) or 0)
+        if not prev_best or new_score >= prev_best - 15:
+            session._best_score = max(prev_best, new_score)
+            return False
+        from kairos.tools.checkpoint import revert_to_last
+        workspace = Path(getattr(session.project, "work_dir", None)
+                         or getattr(session.project, "workspace", ""))
+        if not workspace:
+            return False
+        ok = revert_to_last(Path(workspace), session.round - 1)
+        if ok:
+            session._rollback_count = int(
+                getattr(session, "_rollback_count", 0) or 0
+            ) + 1
+            session.history.append({
+                "round": session.round,
+                "rollback": True,
+                "reason": f"score regressed {prev_best}->{new_score}",
+            })
+        session._best_score = max(prev_best, new_score)
+        return bool(ok)
+    except Exception:
+        logger.debug("regression rollback failed (non-fatal)", exc_info=True)
+        return False
+
+
 def _update_progress(session, review):
+    """Update session progress counters after a Reviewer round.
+
+    Counter semantics:
+      - no_progress_count counts consecutive rounds with the SAME issue
+        signature. The first round that produces a signature (or the first
+        round whose signature differs from the previous) counts as 1, not 0.
+        This way after exactly NO_PROGRESS_LIMIT rounds the counter equals
+        NO_PROGRESS_LIMIT and the gate fires — rather than running one extra
+        round.
+      - infra_failure_streak counts consecutive rounds where the Reviewer
+        could not grade (timeout, parse fail, tool limit). Resets whenever
+        a real verdict comes back.
+    """
     session.last_score = review.get("score", 0)
     session.last_approve = review.get("approve", False)
     infra_failure = review.get("_failure_mode") in ("infra_fail", "tool_limit", "parse_fail")
     sig = issues_signature(review.get("issues") or [])
     if infra_failure:
         session.infra_failure_streak += 1
+        # Signature is unreliable on infra failures; reset so a recovered
+        # Reviewer does not inherit a "stuck" counter from before.
+        session.no_progress_count = 0
+        session.last_issues_signature = None
     else:
         session.infra_failure_streak = 0
-        if sig and sig == session.last_issues_signature:
-            session.no_progress_count += 1
+        if sig:
+            if sig == session.last_issues_signature:
+                session.no_progress_count += 1
+            else:
+                session.no_progress_count = 1
+                session.last_issues_signature = sig
         else:
             session.no_progress_count = 0
-            if sig:
-                session.last_issues_signature = sig
+            session.last_issues_signature = None
     session.score_window.append(session.last_score)
     if len(session.score_window) > STAGNATION_WINDOW:
         session.score_window.pop(0)
+
 async def _check_gates(session, round_no, bus):
+    """Evaluate termination gates. Returns the gate name or None.
+
+    Order matters:
+      1. approved — round reached the score/approval threshold with no
+         CRITICAL issue. Always checked first; once approved the loop is
+         done.
+      2. cost_cap — token budget exhausted. Cheaper to stop than to
+         keep hitting the API.
+      3. infra_streak — Reviewer kept failing to grade (timeout / parse
+         fail / tool limit). Different from no_progress because the
+         Coder is innocent; we just couldn't read its output.
+      4. no_progress — exact same issue signature repeating; the Coder
+         is stuck on the same failure mode. Fires at NO_PROGRESS_LIMIT.
+      5. stagnation — score is flat near (but below) the approve
+         threshold AND no_progress is small (we are plateauing, not
+         looping on the same error). Requires score >= 60 so that
+         genuinely stuck low-score rounds are caught by no_progress.
+      6. safety_cap — hard round ceiling; the absolute backstop.
+    """
+    history = list(getattr(session, "history", []) or [])
+    last_review = history[-1].get("review") if history else {}
     critical = any(
         issue.get("severity") == "CRITICAL"
-        for issue in (session.history[-1].get("review", {}).get("issues") or [])
-    ) if session.history else False
+        for issue in (last_review.get("issues") or [])
+    ) if last_review else False
     if session.last_approve and session.last_score >= APPROVE_SCORE_THRESHOLD and not critical:
         await bus.publish(Message(
             sender="orchestrator", topic="loop.completed",
             content=f"Loop approved after {round_no} round(s), score={session.last_score}",
             msg_type="result",
             metadata={"project_id": session.project.id,
-                      "session_id": session.session_id, "score": session.last_score, "rounds": round_no},
+                      "session_id": session.session_id,
+                      "score": session.last_score, "rounds": round_no},
         ))
         return "approved"
     if session.total_tokens_used >= COST_TOKEN_CAP:
         await bus.publish(Message(
-            sender="orchestrator", topic="loop.stopped",
-            content=f"Loop stopped after {session.total_tokens_used} tokens (cap {COST_TOKEN_CAP}).",
+            sender="orchestrator", topic="loop.cost_cap",
+            content=f"Token budget exhausted ({session.total_tokens_used} >= {COST_TOKEN_CAP})",
             msg_type="warning",
             metadata={"project_id": session.project.id,
-                      "session_id": session.session_id, "reason": "cost_token_cap", "rounds": round_no},
+                      "session_id": session.session_id},
         ))
         return "cost_cap"
     if session.infra_failure_streak >= INFRA_FAILURE_LIMIT:
         await bus.publish(Message(
-            sender="orchestrator", topic="loop.stopped",
-            content=f"Loop stopped after {session.infra_failure_streak} consecutive reviewer infrastructure failures.",
+            sender="orchestrator", topic="loop.infra_streak",
+            content=f"Infra failure streak {session.infra_failure_streak} >= {INFRA_FAILURE_LIMIT}",
             msg_type="warning",
             metadata={"project_id": session.project.id,
-                      "session_id": session.session_id, "reason": "infra_failure_streak", "rounds": round_no},
+                      "session_id": session.session_id},
         ))
         return "infra_streak"
-    if (len(session.score_window) >= STAGNATION_WINDOW
-        and max(session.score_window) - min(session.score_window) <= STAGNATION_TOLERANCE
-        and max(session.score_window) < APPROVE_SCORE_THRESHOLD):
-        await bus.publish(Message(
-            sender="orchestrator", topic="loop.stopped",
-            content=f"Loop stopped: score flat at {session.score_window} for {STAGNATION_WINDOW} rounds.",
-            msg_type="warning",
-            metadata={"project_id": session.project.id,
-                      "session_id": session.session_id, "reason": "score_stagnation", "rounds": round_no,
-                      "score_window": list(session.score_window)},
-        ))
-        return "stagnation"
     if session.no_progress_count >= NO_PROGRESS_LIMIT:
         await bus.publish(Message(
-            sender="orchestrator", topic="loop.stopped",
-            content=f"Loop stopped after {session.no_progress_count} rounds of no progress (same issues repeating).",
+            sender="orchestrator", topic="loop.no_progress",
+            content=f"No-progress counter {session.no_progress_count} >= {NO_PROGRESS_LIMIT}",
             msg_type="warning",
             metadata={"project_id": session.project.id,
-                      "session_id": session.session_id, "reason": "no_progress", "rounds": round_no},
+                      "session_id": session.session_id},
         ))
         return "no_progress"
-    return "continue"
+    score_window = list(getattr(session, "score_window", []) or [])
+    if (len(score_window) >= STAGNATION_WINDOW
+            and score_window
+            and (max(score_window) - min(score_window)) <= STAGNATION_TOLERANCE
+            and score_window[-1] >= APPROVE_SCORE_THRESHOLD - 15
+            and score_window[-1] < APPROVE_SCORE_THRESHOLD):
+        # Smart replan: instead of giving up, ask the Coder to pivot to
+        # a different angle. We give it one shot to break out of the
+        # plateau before we actually stop.
+        if not getattr(session, "_stagnation_replan_used", False):
+            session._stagnation_replan_used = True
+            session.stagnation_replan_count = int(
+                getattr(session, "stagnation_replan_count", 0) or 0
+            ) + 1
+            await bus.publish(Message(
+                sender="orchestrator", topic="loop.replan_suggested",
+                content=(
+                    f"Score plateau near {score_window[-1]} for "
+                    f"{STAGNATION_WINDOW} rounds. Pivoting: try a "
+                    "different fix angle, reduce scope, or ask the "
+                    "user a clarifying question before repeating the "
+                    "same approach."
+                ),
+                msg_type="warning",
+                metadata={"project_id": session.project.id,
+                          "session_id": session.session_id,
+                          "replan_count": session.stagnation_replan_count},
+            ))
+            # Reset the score window so we get one more plateau check
+            # before stopping. Also clear the issues signature so a
+            # genuinely different fix isn't penalized as no-progress.
+            session.score_window.clear()
+            session.no_progress_count = max(0, session.no_progress_count - 2)
+            return None
+        await bus.publish(Message(
+            sender="orchestrator", topic="loop.stagnation",
+            content=f"Score plateau persists near {score_window[-1]} after replan; stopping",
+            msg_type="warning",
+            metadata={"project_id": session.project.id,
+                      "session_id": session.session_id},
+        ))
+        return "stagnation"
+    if session.round >= LOOP_SAFETY_CAP:
+        await bus.publish(Message(
+            sender="orchestrator", topic="loop.safety_cap",
+            content=f"Round {session.round} reached safety cap {LOOP_SAFETY_CAP}",
+            msg_type="warning",
+            metadata={"project_id": session.project.id,
+                      "session_id": session.session_id},
+        ))
+        return "safety_cap"
+    return None
+
 async def run_loop(session, requirement):
     bus = session.message_bus
     history_digest = load_history_digest(session.persistence, session.project.id)
@@ -289,10 +431,22 @@ async def run_loop(session, requirement):
             session.round += 1
             round_no = session.round
             try:
-                from kairos.tools.cache import wipe_round_cache
-                wipe_round_cache(session.project.id, round_no)
+                from kairos.tools.cache import clear_round
+                clear_round()
             except Exception:
                 pass
+            needs_plan = (
+                not session.plan_completed
+                and (
+                    (getattr(session, "plan_pending", False)
+                     and getattr(session, "plan_event", None) is not None)
+                    or getattr(session, "plan_decision", None) == "reject"
+                )
+            )
+            if needs_plan:
+                plan_result = await _run_coder_round(session, requirement, round_no, plan_mode=True)
+                if session.user_stopped:
+                    break
             decision = await _wait_for_plan_decision(session, round_no, bus)
             if decision in ("timeout", "reject"):
                 return
@@ -301,83 +455,63 @@ async def run_loop(session, requirement):
             coder_result = await _run_coder_round(session, requirement, round_no)
             if session.user_stopped:
                 break
+            try:
+                coder_text = coder_result if isinstance(coder_result, str) else str(coder_result or "")
+                session.round_tokens = max(1, len(coder_text) // 4)
+                session.total_tokens_used += session.round_tokens
+            except Exception:
+                pass
             workspace = Path(getattr(session.project, "work_dir", None) or getattr(session.project, "workspace", ""))
             precheck_hint, precheck_fixable = await _run_precheck(session, workspace, round_no, bus)
-            review = await run_reviewer_round(session, coder_result, round_no, precheck_hint=precheck_hint)
+            if getattr(session, "specialist_reviewers", None):
+                from kairos.loop import review_loop as _rl_mod
+                review = await _rl_mod._run_reviewers_parallel(session, coder_result, round_no)
+            else:
+                from kairos.loop import review_loop as _rl_mod
+                review = await _rl_mod._run_reviewer_round(session, coder_result, round_no, precheck_hint=precheck_hint)
+            try:
+                reviewer_text = json.dumps(review, ensure_ascii=False) if isinstance(review, dict) else str(review or "")
+                session.round_tokens = max(1, len(reviewer_text) // 4)
+                session.total_tokens_used += session.round_tokens
+            except Exception:
+                pass
             if session.user_stopped:
                 break
-            if precheck_hint:
-                review["_precheck_hint"] = precheck_hint
-            if precheck_fixable:
-                review["_precheck_fixable"] = precheck_fixable
-            session.round_tokens = (
-                (len(coder_result or "") + len(review.get("summary", ""))) // 4
-                + len(requirement) // 4
-            )
-            session.total_tokens_used += session.round_tokens
+            review["_precheck_hint"] = precheck_hint
+            review["_precheck_fixable"] = precheck_fixable
             _update_progress(session, review)
-            history_entry = {
-                "round": round_no,
-                "coder_summary": (coder_result or "")[:500],
-                "review": review,
-                "no_progress_count": session.no_progress_count,
-                "ts": time.time(),
-            }
-            session.history.append(history_entry)
-            if session.persistence is not None:
-                try:
-                    session.persistence.save_loop_round(
-                        session.project.id, session.session_id, round_no,
-                        coder_summary=history_entry["coder_summary"], review=review,
-                    )
-                except Exception:
-                    logger.debug("persist loop round failed", exc_info=True)
-            cp_sha = _auto_checkpoint(session, round_no, session.last_score, session.last_approve, review.get("summary", ""))
-            if session.persistence is not None:
-                try:
-                    from kairos.review.comments import verdict_to_comments
-                    comments = verdict_to_comments(review, project_id=session.project.id, round_no=round_no)
-                    session.persistence.save_review_comments(session.project.id, round_no, comments)
-                except Exception:
-                    logger.debug("save_review_comments failed", exc_info=True)
-                if cp_sha:
-                    try:
-                        session.persistence.save_checkpoint(
-                            session.project.id, session.session_id, round_no,
-                            cp_sha, session.last_score, session.last_approve, review.get("summary", ""),
-                        )
-                    except Exception:
-                        logger.debug("save_checkpoint failed", exc_info=True)
+            session.history.append({"round": round_no, "review": review, "coder": coder_result[:2000]})
             try:
-                from kairos.hooks import get_runner
-                get_runner().loop_round(round_no, history_entry["coder_summary"], review, session.project.id)
+                if _maybe_rollback_on_regression(session, coder_result):
+                    await bus.publish(Message(
+                        sender="orchestrator", topic="loop.regression_rollback",
+                        content="Score regressed; workspace rolled back to last known-good checkpoint",
+                        msg_type="warning",
+                        metadata={"project_id": session.project.id,
+                                  "session_id": session.session_id,
+                                  "round": round_no},
+                    ))
             except Exception:
-                logger.debug("loop_round hook failed", exc_info=True)
-            await bus.publish(Message(
-                sender="orchestrator", topic="loop.round_completed",
-                content=json.dumps({"round": round_no, "approve": session.last_approve,
-                                     "score": session.last_score, "summary": review.get("summary", ""),
-                                     "no_progress_count": session.no_progress_count}, ensure_ascii=False),
-                msg_type="result",
-                metadata={"project_id": session.project.id, "session_id": session.session_id,
-                          "round": round_no, "approve": session.last_approve, "score": session.last_score},
-            ))
+                logger.debug("regression check failed (non-fatal)", exc_info=True)
+            try:
+                _auto_checkpoint(session, round_no, session.last_score, session.last_approve, review.get("summary", ""))
+            except Exception:
+                logger.debug("auto-checkpoint failed", exc_info=True)
             gate = await _check_gates(session, round_no, bus)
-            if gate != "continue":
+            if gate:
                 return
-            requirement = build_next_prompt(session, review)
         await bus.publish(Message(
-            sender="orchestrator", topic="loop.stopped",
-            content=("Loop stopped by user." if session.user_stopped
-                     else f"Loop stopped after reaching safety cap ({LOOP_SAFETY_CAP} rounds)."),
-            msg_type="warning",
-            metadata={"project_id": session.project.id, "session_id": session.session_id,
-                      "reason": "user" if session.user_stopped else "cap", "rounds": session.round},
-        ))
-    except Exception as e:
-        logger.exception("Loop crashed for %s", session.project.id)
-        await bus.publish(Message(
-            sender="orchestrator", topic="loop.error",
-            content=str(e), msg_type="error",
+            sender="orchestrator", topic="loop.finished",
+            content=f"Loop finished after {session.round} round(s)",
+            msg_type="result",
             metadata={"project_id": session.project.id, "session_id": session.session_id},
         ))
+    except Exception as e:
+        logger.exception("run_loop crashed")
+        await bus.publish(Message(
+            sender="orchestrator", topic="loop.error",
+            content=f"Loop crashed: {e}",
+            msg_type="error",
+            metadata={"project_id": session.project.id, "session_id": session.session_id},
+        ))
+

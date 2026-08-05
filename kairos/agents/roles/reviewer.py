@@ -124,7 +124,7 @@ class Reviewer(KairosAgent):
     # dedicated infra_failure_streak gate to catch "Reviewer ran out
     # of turns" cleanly. 12 still covers a typical read + diff + test
     # pass on a real codebase.
-    MAX_TOOL_TURNS = 12
+    MAX_TOOL_TURNS = 20
     MAX_CHAT_TURNS = 5
 
     def __init__(self, agent_id: str, llm_config: LLMConfig, message_bus: MessageBus,

@@ -73,14 +73,19 @@ class Project:
         }
 
 
-_VALID_SPECIALISTS = {"security_reviewer", "perf_reviewer",
-                       "design_reviewer", "test_reviewer"}
+_VALID_SPECIALISTS = {
+    "security_reviewer", "perf_reviewer",
+    "design_reviewer", "test_reviewer",
+    "docs_reviewer", "refactor_reviewer",
+}
 
 REVIEW_FOCUS_MAP = {
     "security_reviewer": "security",
     "perf_reviewer": "performance",
     "design_reviewer": "design",
     "test_reviewer": "test",
+    "docs_reviewer": "documentation",
+    "refactor_reviewer": "code_quality",
 }
 
 
@@ -132,6 +137,16 @@ def _load_loop_config() -> dict:
 
 
 _AUTO_ROUTE_KEYWORDS = {
+    "docs_reviewer": [
+        "doc", "docs", "readme", "docstring", "comment",
+        "documentation", "example", "tutorial",
+        "文档", "注释", "示例", "教程", "说明",
+    ],
+    "refactor_reviewer": [
+        "refactor", "cleanup", "duplication", "duplicated", "dead code",
+        "complexity", "naming", "code quality",
+        "重构", "重复", "清理", "代码质量",
+    ],
     "security_reviewer": [
         "auth", "login", "oauth", "jwt", "password", "credential",
         "permission", "xss", "csrf", "injection", "encrypt", "token",
@@ -270,6 +285,77 @@ class Orchestrator:
             self.message_bus, yaml_prompts,
         )
 
+    _SPECIALIST_CLASSES = {
+        "security_reviewer": None,
+        "perf_reviewer": None,
+        "design_reviewer": None,
+        "test_reviewer": None,
+        "docs_reviewer": None,
+        "refactor_reviewer": None,
+    }
+
+    def _instantiate_specialists(self, project_id: str,
+                                specialist_names: List[str]) -> List[Any]:
+        """Create one agent instance per requested specialist role.
+
+        Returns an empty list when the project has no specialist set
+        configured, when the model router is offline, or when any
+        specialist class fails to import. Specialists run alongside
+        the main Reviewer; their scores are weighted-averaged.
+        """
+        if not specialist_names:
+            return []
+        out: List[Any] = []
+        for name in specialist_names:
+            if name not in _VALID_SPECIALISTS:
+                continue
+            cls = self._resolve_specialist_class(name)
+            if cls is None:
+                continue
+            try:
+                agent = self._make_agent(
+                    project_id, name, cls,
+                    self.model_router.get_provider_for_role(name),
+                    [],
+                    self.message_bus,
+                    self._load_yaml_prompts(),
+                )
+                out.append(agent)
+            except Exception:
+                logger.exception("failed to create specialist %s", name)
+        return out
+
+    def _resolve_specialist_class(self, name: str):
+        cached = self._SPECIALIST_CLASSES.get(name)
+        if cached or cached is False:
+            return cached or None
+        try:
+            if name == "security_reviewer":
+                from kairos.agents.roles import SecurityReviewer
+                cls = SecurityReviewer
+            elif name == "perf_reviewer":
+                from kairos.agents.roles import PerfReviewer
+                cls = PerfReviewer
+            elif name == "design_reviewer":
+                from kairos.agents.roles import DesignReviewer
+                cls = DesignReviewer
+            elif name == "test_reviewer":
+                from kairos.agents.roles import TestReviewer
+                cls = TestReviewer
+            elif name == "docs_reviewer":
+                from kairos.agents.roles import DocsReviewer
+                cls = DocsReviewer
+            elif name == "refactor_reviewer":
+                from kairos.agents.roles import RefactorReviewer
+                cls = RefactorReviewer
+            else:
+                cls = None
+        except Exception:
+            logger.exception("could not import specialist class %s", name)
+            cls = None
+        self._SPECIALIST_CLASSES[name] = cls or False
+        return cls
+
     def _make_agent(self, project_id, role, role_cls, provider, tools,
                     bus, yaml_prompts) -> KairosAgent:
         agent_id = f"{project_id}.{role}"
@@ -338,8 +424,8 @@ class Orchestrator:
             if not payload:
                 continue
             body = payload.get("content", b"").decode("utf-8", errors="replace")
-            chunks.append(f"### {meta[\"name\"]}\\n```\\n{body[:3000]}\\n```")
-        return "\\n\\n".join(chunks)
+            chunks.append(f"### {meta[\"name\"]}\n```\n{body[:3000]}\n```")
+        return "\n\n".join(chunks)
 
     def build_preferences_block(self, project_id: str) -> str:
         prefs = self._db.list_preferences(project_id)
@@ -367,7 +453,7 @@ class Orchestrator:
             lines.append("Prefer:")
             for r in by_kind["prefer"]:
                 lines.append(f"- {r}")
-        return chr(10).join(lines)
+        return "\n".join(lines)
 
     def get_all_agent_states(self, project_id: Optional[str] = None) -> List[dict]:
         agents = self._agents.values()
@@ -407,9 +493,9 @@ class Orchestrator:
         ref_digest = self.build_reference_digest(project_id)
         pref_block = self.build_preferences_block(project_id)
         if ref_digest:
-            requirement = f"{ref_digest}\\n\\n## User Requirement\\n{requirement}"
+            requirement = f"{ref_digest}\n\n## User Requirement\n{requirement}"
         if pref_block:
-            requirement = pref_block + "\\n\\n" + requirement
+            requirement = pref_block + "\n\n" + requirement
 
         loop_cfg = _load_loop_config()
         review_focus = list(loop_cfg.get("review_focus") or [])
@@ -421,6 +507,10 @@ class Orchestrator:
         except Exception:
             logger.debug("review-focus auto-route failed (non-fatal)", exc_info=True)
 
+        specialist_reviewers = self._instantiate_specialists(
+            project_id, list(loop_cfg.get("specialists") or [])
+        )
+
         session = LoopSession(
             project=project,
             message_bus=self.message_bus,
@@ -429,6 +519,7 @@ class Orchestrator:
             persistence=self._db,
             best_of_n=int(loop_cfg.get("best_of_n", 1) or 1),
             review_focus=review_focus,
+            specialist_reviewers=specialist_reviewers,
         )
         project.loop_session = session
         project.loop_task = asyncio.create_task(

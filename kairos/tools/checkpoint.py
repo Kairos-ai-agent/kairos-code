@@ -191,6 +191,37 @@ class CheckpointTool(BaseTool):
                               error="nothing to commit (no changes since last checkpoint)")
         return ToolResult(success=True, output=f"checkpoint {sha[:8]} saved",
                           metadata={"sha": sha, "label": label})
+def revert_to_last(workspace: Path, round_no: int) -> bool:
+    """Revert the workspace to the checkpoint commit before round_no.
+
+    Returns True on success. Used by the regression detector in
+    loop_runner: when the new round's score dropped sharply from the
+    previous best, roll the workspace back so the next Coder attempt
+    starts from the last known-good state instead of piling more
+    changes on top of a regression.
+
+    Uses `git reset --hard <sha>` to a checkpoint commit strictly
+    before the failing round, then leaves the workspace clean.
+    """
+    try:
+        workspace = Path(workspace)
+        if not ensure_repo(workspace):
+            return False
+        checkpoints = list_checkpoints(workspace, limit=200)
+        earlier = [cp for cp in checkpoints if cp["round"] < round_no]
+        if not earlier:
+            return False
+        target = max(earlier, key=lambda cp: cp["round"])
+        sha = target["sha"]
+        rc, _, err = _git(["reset", "--hard", sha], workspace)
+        if rc != 0:
+            logger.warning("git reset --hard %s failed: %s", sha, err)
+            return False
+        return True
+    except Exception:
+        logger.debug("revert_to_last failed (non-fatal)", exc_info=True)
+        return False
+
 def revert_file(workspace: Path, sha: str, path: str) -> tuple[bool, str]:
     """Restore a single file to its state at a specific checkpoint SHA.
 

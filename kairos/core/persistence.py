@@ -38,6 +38,19 @@ class Persistence:
                     conn.execute("ALTER TABLE messages ADD COLUMN project_id TEXT")
                 except sqlite3.OperationalError:
                     pass
+            # loop_rounds.insert_order preserves wall-clock insertion order
+            # even when multiple rows share the same created_at (which
+            # time.time() happily does in fast unit tests). Sort uses it
+            # as the tiebreaker after created_at + round.
+            loop_cols = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info(loop_rounds)").fetchall()
+            }
+            if "insert_order" not in loop_cols:
+                try:
+                    conn.execute("ALTER TABLE loop_rounds ADD COLUMN insert_order INTEGER")
+                except sqlite3.OperationalError:
+                    pass
 
     def _init_schema(self):
         with sqlite3.connect(self.db_path) as conn:
@@ -85,6 +98,7 @@ class Persistence:
                     score INTEGER,
                     approve INTEGER,
                     created_at REAL,
+                    insert_order INTEGER,
                     PRIMARY KEY (project_id, session_id, round)
                 );
 
@@ -364,26 +378,50 @@ class Persistence:
         overwritten (the table's PRIMARY KEY makes INSERT OR REPLACE work)."""
         review_json = json.dumps(review, ensure_ascii=False)
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
-                INSERT OR REPLACE INTO loop_rounds
-                (project_id, session_id, round, coder_summary, review_summary,
-                 review_json, score, approve, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                project_id, session_id, round_no,
-                coder_summary[:5000],
-                (review.get("summary") or "")[:2000],
-                review_json,
-                int(review.get("score") or 0),
-                1 if review.get("approve") else 0,
-                time.time(),
-            ))
+            # Monotonic insert counter so load_loop_rounds can preserve
+            # wall-clock order even when time.time() returns identical
+            # values for rows saved in the same microsecond.
+            insert_order = self._next_loop_insert_order(conn)
+            conn.execute(
+                "INSERT OR REPLACE INTO loop_rounds "
+                "(project_id, session_id, round, coder_summary, review_summary, "
+                "review_json, score, approve, created_at, insert_order) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    project_id, session_id, round_no,
+                    coder_summary[:5000],
+                    (review.get("summary") or "")[:2000],
+                    review_json,
+                    int(review.get("score") or 0),
+                    1 if review.get("approve") else 0,
+                    time.time(),
+                    insert_order,
+                ),
+            )
+
+    def _next_loop_insert_order(self, conn) -> int:
+        """Return a monotonically-increasing integer used as the
+        wall-clock tiebreaker when sorting rounds. We compute it from
+        MAX(insert_order)+1 (or 1 if empty) so each connection observes
+        the same sequence even when multiple processes write at once.
+        """
+        try:
+            row = conn.execute(
+                "SELECT COALESCE(MAX(insert_order), 0) FROM loop_rounds"
+            ).fetchone()
+            return int(row[0] or 0) + 1
+        except sqlite3.OperationalError:
+            # Pre-migration DB without the insert_order column.
+            return int(time.time() * 1000)
 
     def load_loop_rounds(self, project_id: str, limit: int = 20) -> List[dict]:
         """Load recent loop rounds for a project, oldest first.
 
-        Sort key is (created_at, round) ASC. Within a session this gives
-        round order; across sessions it gives wall-clock order. Newer
+        Sort key is (created_at, insert_order) ASC. The insert_order
+        column is a per-row monotonic counter set by save_loop_round,
+        so when many rows share the same created_at (fast unit tests,
+        batch saves, or even an out-of-order round save) we still get
+        them back in the order they were actually inserted. Newer
         rounds always come last, which is what the Coder wants — it
         reads "R1 happened, R2 happened, now I'm R3".
 
@@ -392,12 +430,26 @@ class Persistence:
         """
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
-            rows = conn.execute("""
-                SELECT * FROM loop_rounds WHERE project_id = ?
-            """, (project_id,)).fetchall()
-        ordered = sorted([dict(r) for r in rows],
-                         key=lambda r: (r.get("created_at") or 0,
-                                        r.get("round") or 0))
+            rows = conn.execute(
+                "SELECT * FROM loop_rounds WHERE project_id = ?",
+                (project_id,),
+            ).fetchall()
+        # Sort key preserves wall-clock order even when many rows share
+        # the same time.time() value (fast unit tests, batch saves).
+        # insert_order is the per-insert monotonic counter set by
+        # save_loop_round; it ties after created_at and round.
+        def _sort_key(r):
+            # insert_order is a per-row monotonic counter set by
+            # save_loop_round; it captures wall-clock insertion order
+            # even when time.time() returns identical values. We use
+            # it as the final tiebreaker so out-of-order round numbers
+            # (a session that saved R3 before R1 by accident) come back
+            # in the order they were actually inserted.
+            return (
+                r.get("created_at") or 0,
+                r.get("insert_order") or 0,
+            )
+        ordered = sorted([dict(r) for r in rows], key=_sort_key)
         return ordered[:limit]
 
     def load_last_loop_summary(self, project_id: str) -> Optional[str]:

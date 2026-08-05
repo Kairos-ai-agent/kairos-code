@@ -192,6 +192,15 @@ def _auto_route_specialists(requirement: str) -> list:
 class Orchestrator:
     """Bootstraps projects and runs Coder <-> Reviewer loops."""
 
+    _SPECIALIST_CLASSES = {
+        "security_reviewer": None,
+        "perf_reviewer": None,
+        "design_reviewer": None,
+        "test_reviewer": None,
+        "docs_reviewer": None,
+        "refactor_reviewer": None,
+    }
+
     def __init__(self, model_router: ModelRouter,
                  workspace_base: Path = Path("./workspace")):
         self.model_router = model_router
@@ -284,15 +293,6 @@ class Orchestrator:
             project.id, "reviewer", Reviewer, reviewer_provider, reviewer_tools,
             self.message_bus, yaml_prompts,
         )
-
-    _SPECIALIST_CLASSES = {
-        "security_reviewer": None,
-        "perf_reviewer": None,
-        "design_reviewer": None,
-        "test_reviewer": None,
-        "docs_reviewer": None,
-        "refactor_reviewer": None,
-    }
 
     def _instantiate_specialists(self, project_id: str,
                                 specialist_names: List[str]) -> List[Any]:

@@ -13,7 +13,6 @@ import httpx
 
 from kairos.tools.base import BaseTool, ToolResult
 
-
 class WebFetchTool(BaseTool):
     name = "webfetch"
     description = "Fetch the contents of a URL and return plain text"
@@ -60,7 +59,6 @@ class WebFetchTool(BaseTool):
             return ToolResult(success=False, output="", error=f"fetch timed out after {self._timeout}s")
         except Exception as e:
             return ToolResult(success=False, output="", error=str(e))
-
 
 class WebSearchTool(BaseTool):
     """Web search. We intentionally don't ship a default backend — users

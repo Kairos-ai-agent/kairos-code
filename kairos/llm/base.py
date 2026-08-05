@@ -7,14 +7,12 @@ from typing import Any, AsyncIterator, List, Optional
 
 from pydantic import BaseModel
 
-
 class ToolCall(BaseModel):
     """A tool call from the LLM."""
 
     id: str = ""
     name: str = ""
     arguments: Any = ""  # str or dict
-
 
 class LLMMessage(BaseModel):
     """A single message in a conversation."""
@@ -24,7 +22,6 @@ class LLMMessage(BaseModel):
     name: Optional[str] = None
     tool_call_id: Optional[str] = None
     tool_calls: Optional[List[ToolCall]] = None
-
 
 class LLMConfig(BaseModel):
     """Configuration for an LLM provider."""
@@ -37,7 +34,6 @@ class LLMConfig(BaseModel):
     temperature: float = 0.7
     timeout: int = 120
 
-
 class LLMResponse(BaseModel):
     """Response from an LLM provider."""
 
@@ -46,7 +42,6 @@ class LLMResponse(BaseModel):
     usage: dict = {}
     finish_reason: str = ""
     tool_calls: Optional[List[ToolCall]] = None
-
 
 class BaseLLMProvider(ABC):
     """Abstract base class for LLM providers."""

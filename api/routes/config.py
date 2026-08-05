@@ -23,17 +23,14 @@ from kairos.llm.model_router import SETTINGS_FILE
 # silently come back to life.
 ALLOWED_ROLES = {"coder", "reviewer"}
 
-
 def _load_settings() -> dict:
     if SETTINGS_FILE.exists():
         return json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
     return {}
 
-
 def _save_settings(data: dict):
     SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
     SETTINGS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-
 
 @router.get("/models")
 async def list_models():
@@ -41,7 +38,6 @@ async def list_models():
         "models": model_router.list_models(),
         "role_mappings": model_router.list_role_mappings(),
     }
-
 
 @router.post("/models/assign")
 async def assign_model(request: RoleModelAssignRequest):
@@ -55,11 +51,9 @@ async def assign_model(request: RoleModelAssignRequest):
     orchestrator.refresh_all_agents()
     return {"status": "ok", "role": request.role, "model": request.model_name}
 
-
 @router.get("/providers")
 async def list_providers():
     return {"providers": ProviderRegistry.list_providers()}
-
 
 # ========== Settings ==========
 
@@ -81,11 +75,9 @@ async def get_settings():
         "custom_models": settings.get("custom_models", []),
     }
 
-
 class SettingsRequest(BaseModel):
     api_keys: dict = {}
     custom_models: list[dict] = []
-
 
 @router.post("/settings")
 async def save_settings(request: SettingsRequest):
@@ -99,7 +91,6 @@ async def save_settings(request: SettingsRequest):
         settings["custom_models"] = request.custom_models
     _save_settings(settings)
     return {"status": "ok", "message": "Settings saved"}
-
 
 # ========== DeepSeek Model List ==========
 
@@ -133,14 +124,12 @@ async def fetch_deepseek_models():
         {"id": "deepseek-reasoner", "name": "DeepSeek Reasoner (R1)"},
     ]}
 
-
 # ========== Custom Model ==========
 
 class FetchModelsRequest(BaseModel):
     base_url: str
     api_key: str = ""
     protocol: str = "openai"  # "openai" or "anthropic"
-
 
 @router.post("/models/custom/fetch")
 async def fetch_custom_models(request: FetchModelsRequest):
@@ -201,7 +190,6 @@ async def fetch_custom_models(request: FetchModelsRequest):
 
     return {"models": [], "error": "Failed to fetch models"}
 
-
 # ========== Test Provider ==========
 
 class TestProviderRequest(BaseModel):
@@ -210,7 +198,6 @@ class TestProviderRequest(BaseModel):
     base_url: str = ""
     api_key: str = ""
     protocol: str = "openai"  # "openai" or "anthropic"
-
 
 # Built-in presets that don't need a custom base_url (D-03). Each entry
 # resolves to (base_url, default_model, protocol). Anything else is
@@ -221,7 +208,6 @@ _PROVIDER_PRESETS = {
     "anthropic": ("https://api.anthropic.com", "claude-sonnet-4-20250514", "anthropic"),
     "ollama":   ("http://localhost:11434/v1", "llama3.1", "openai"),
 }
-
 
 @router.post("/test-provider")
 async def test_provider(request: TestProviderRequest):
@@ -269,7 +255,6 @@ async def test_provider(request: TestProviderRequest):
     except Exception as e:
         return {"success": False, "message": f"Error: {str(e)[:200]}"}
 
-
 # ============================================================================
 # Loop config (data/settings.json -> loop_config)
 # ============================================================================
@@ -283,11 +268,9 @@ async def get_loop_config():
     from kairos.core.orchestrator import _load_loop_config
     return _load_loop_config()
 
-
 class LoopConfigRequest(BaseModel):
     specialists: list[str] = []
     best_of_n: int = 1
-
 
 @router.post("/loop")
 async def save_loop_config(request: LoopConfigRequest):

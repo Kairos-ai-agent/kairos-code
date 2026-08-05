@@ -18,7 +18,6 @@ from kairos.agents.base import KairosAgent
 from kairos.core.message_bus import MessageBus
 from kairos.llm.base import LLMConfig
 
-
 SYSTEM_PROMPT = """You are Kairos Coder — a senior software engineer with full access
 to the project workspace. You are the "doer" in a 2-agent LoopReview system;
 a separate Reviewer agent grades your work after each round.
@@ -104,7 +103,6 @@ Be honest. A 90 confidence means tests pass and the diff is small.
 A 40 confidence means best-effort change without full verification.
 If you cannot emit the block, the orchestrator will treat you as 0.
 """
-
 
 class Coder(KairosAgent):
     """Universal coding agent. Full tool access."""

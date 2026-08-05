@@ -11,7 +11,6 @@ from kairos.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
-
 def main():
     """Start the Kairos Code server."""
     print(f"""
@@ -35,7 +34,6 @@ Debug:  {settings.debug}
         reload=settings.debug,
         log_level="info",
     )
-
 
 if __name__ == "__main__":
     main()

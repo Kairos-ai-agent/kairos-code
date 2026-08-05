@@ -6,7 +6,6 @@ from typing import Dict, Type
 
 from kairos.llm.base import BaseLLMProvider, LLMConfig
 
-
 class ProviderRegistry:
     """Registry for LLM provider implementations."""
 
@@ -27,7 +26,6 @@ class ProviderRegistry:
         """List all registered provider names."""
         return list(cls._providers.keys())
 
-
 def create_provider(config: LLMConfig) -> BaseLLMProvider:
     """Create an LLM provider instance from config."""
     provider_class = ProviderRegistry.get(config.provider)
@@ -37,7 +35,6 @@ def create_provider(config: LLMConfig) -> BaseLLMProvider:
             f"Available: {ProviderRegistry.list_providers()}"
         )
     return provider_class(config)
-
 
 # Auto-import providers to register them
 def _register_all():

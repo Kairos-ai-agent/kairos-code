@@ -33,13 +33,11 @@ from kairos.llm.base import (
 
 logger = logging.getLogger(__name__)
 
-
 # Default retry knobs. Override via env or LLMConfig (added below).
 DEFAULT_MAX_RETRIES = 5
 DEFAULT_INITIAL_BACKOFF_S = 1.0
 DEFAULT_MAX_BACKOFF_S = 30.0
 DEFAULT_FAILOVER_AFTER = 3  # switch providers after N consecutive failures
-
 
 # Errors worth retrying. The openai SDK raises openai.RateLimitError
 # (429), openai.APIStatusError (5xx), openai.APITimeoutError, etc.
@@ -56,7 +54,6 @@ def _is_retryable(exc: BaseException) -> bool:
     if "service" in name and "unavailable" in msg:
         return True
     return False
-
 
 class ResilientProvider(BaseLLMProvider):
     """Wraps a primary provider with retry + optional failover."""
@@ -183,7 +180,6 @@ class ResilientProvider(BaseLLMProvider):
         await self.primary.close()
         if self.failover:
             await self.failover.close()
-
 
 def wrap_with_resilience(provider: BaseLLMProvider,
                           failover: Optional[BaseLLMProvider] = None,

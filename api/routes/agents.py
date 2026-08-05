@@ -17,7 +17,6 @@ from kairos.agents.base import AgentTask
 
 router = APIRouter()
 
-
 @router.get("")
 async def list_agents(project_id: str = None):
     """List all agents or agents in a project."""
@@ -25,7 +24,6 @@ async def list_agents(project_id: str = None):
     orchestrator.refresh_all_agents()
     states = orchestrator.get_all_agent_states(project_id)
     return {"agents": states}
-
 
 @router.get("/{agent_id}")
 async def get_agent(agent_id: str):
@@ -35,7 +33,6 @@ async def get_agent(agent_id: str):
         if state["agent_id"] == agent_id:
             return state
     raise HTTPException(status_code=404, detail=f"Agent not found: {agent_id}")
-
 
 @router.post("/chat")
 async def chat_with_agent(request: ChatRequest, project_id: str = Query(..., description="Project ID (required)")):
@@ -51,7 +48,6 @@ async def chat_with_agent(request: ChatRequest, project_id: str = Query(..., des
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.post("/task")
 async def assign_task(request: AssignTaskRequest, project_id: str = Query(..., description="Project ID (required)")):
@@ -75,7 +71,6 @@ async def assign_task(request: AssignTaskRequest, project_id: str = Query(..., d
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.post("/refresh")
 async def refresh_agents():

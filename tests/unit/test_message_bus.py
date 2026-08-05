@@ -6,7 +6,6 @@ import pytest
 
 from kairos.core.message_bus import Message, MessageBus
 
-
 @pytest.mark.asyncio
 async def test_publish_stores_in_history_and_respects_maxlen():
     bus = MessageBus()
@@ -15,7 +14,6 @@ async def test_publish_stores_in_history_and_respects_maxlen():
         await bus.publish(Message(sender="test", topic="t", content=i))
     history = bus.get_history(limit=10000)
     assert len(history) == 1000  # bounded, no growth
-
 
 @pytest.mark.asyncio
 async def test_publish_invokes_all_listeners_even_when_one_fails():
@@ -40,7 +38,6 @@ async def test_publish_invokes_all_listeners_even_when_one_fails():
     assert ("good", 42) in seen
     assert seen.count(("good", 42)) == 2
 
-
 @pytest.mark.asyncio
 async def test_listener_token_round_trip():
     """add_listener returns a token; remove_listener(token) drops it (B-03)."""
@@ -58,7 +55,6 @@ async def test_listener_token_round_trip():
     await bus.publish(Message(sender="s", topic="t", content=2))
     assert calls == [1]  # not invoked again after removal
 
-
 @pytest.mark.asyncio
 async def test_topic_broadcast_routes_to_subscribers_not_sender():
     bus = MessageBus()
@@ -72,7 +68,6 @@ async def test_topic_broadcast_routes_to_subscribers_not_sender():
     msg_a = await bus.receive("agent_a", timeout=0.05)
     assert msg_b is not None and msg_b.content == "hi"
     assert msg_a is None
-
 
 def test_sync_listener_is_supported():
     """A plain (non-async) function listener must also work."""

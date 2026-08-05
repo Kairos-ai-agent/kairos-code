@@ -10,7 +10,6 @@ import pytest
 from kairos.llm.base import LLMConfig
 from kairos.llm.model_router import ModelRouter
 
-
 @pytest.fixture
 def mock_router():
     router = ModelRouter()
@@ -21,7 +20,6 @@ def mock_router():
     router._model_configs["default"] = fake_provider.config
     router._provider_cache = {"test": fake_provider}
     return router
-
 
 @pytest.mark.asyncio
 async def test_create_project_creates_two_agents(mock_router, tmp_path):
@@ -58,7 +56,6 @@ async def test_create_project_creates_two_agents(mock_router, tmp_path):
         assert "multi_edit" not in reviewer_tool_names
         assert "webfetch" not in reviewer_tool_names
         assert "file_read" in reviewer_tool_names
-
 
 @pytest.mark.asyncio
 async def test_create_team_uses_work_dir_when_set(tmp_path):
@@ -97,7 +94,6 @@ async def test_create_team_uses_work_dir_when_set(tmp_path):
         assert any(str(user_workdir) in r for r in roots), \
             f"expected user work_dir in tool roots, got {roots}"
 
-
 # ---------------------------------------------------------------------- AgentState
 
 def test_agent_state_includes_progress_fields():
@@ -110,7 +106,6 @@ def test_agent_state_includes_progress_fields():
     assert d["total_turns"] == 8
     assert d["current_tool"] == "file_write"
 
-
 def test_agent_progress_defaults_when_idle():
     from kairos.agents.base import AgentState
     s = AgentState(agent_id="x", name="X", role="coder")
@@ -118,7 +113,6 @@ def test_agent_progress_defaults_when_idle():
     assert not d["current_turn"]
     assert not d["total_turns"]
     assert not d["current_tool"]
-
 
 def test_coder_and_reviewer_have_separate_turn_budgets():
     from kairos.agents.roles import Coder, Reviewer
@@ -128,7 +122,6 @@ def test_coder_and_reviewer_have_separate_turn_budgets():
     # no-progress counter on turn-limit hits. See
     # kairos/agents/roles/reviewer.py for the matching change.
     assert Reviewer.MAX_TOOL_TURNS == 20, "Reviewer needs ≥20 turns to grade a round"
-
 
 # ---------------------------------------------------------------------- Review verdict parser
 
@@ -150,7 +143,6 @@ def test_review_verdict_parser(raw, expected_approve):
     v = _parse_review_verdict(raw)
     assert v["approve"] is expected_approve
 
-
 def test_review_verdict_critical_issue_preserved():
     """Even if approve=true is in JSON, we report CRITICAL issues faithfully
     so the orchestrator's approval gate can reject."""
@@ -164,7 +156,6 @@ def test_review_verdict_critical_issue_preserved():
     v = _parse_review_verdict(raw)
     assert v["approve"] is True   # LLM said approve
     assert any(i["severity"] == "CRITICAL" for i in v["issues"])
-
 
 @pytest.mark.parametrize("raw,expected_mode", [
     # Tool-limit hit should be flagged distinctly from a parse error so
@@ -185,7 +176,6 @@ def test_review_verdict_failure_modes(raw, expected_mode):
     assert v["approve"] is False
     assert v["score"] == 0
 
-
 # ---------------------------------------------------------------------- Loop no-progress detection
 
 def test_issues_signature_ignores_fix_instruction_changes():
@@ -197,13 +187,11 @@ def test_issues_signature_ignores_fix_instruction_changes():
           "fix_instruction": "try/except around db call"}]
     assert _issues_signature(a) == _issues_signature(b)
 
-
 def test_issues_signature_distinguishes_different_files():
     from kairos.loop.review_loop import _issues_signature
     a = [{"file": "x.py", "line": 10, "description": "bug"}]
     b = [{"file": "y.py", "line": 10, "description": "bug"}]
     assert _issues_signature(a) != _issues_signature(b)
-
 
 # ---------------------------------------------------------------------- Loop start/stop
 

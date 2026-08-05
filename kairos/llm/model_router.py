@@ -18,7 +18,6 @@ from kairos.llm.resilient import wrap_with_resilience
 
 SETTINGS_FILE = Path(__file__).parent.parent.parent / "data" / "settings.json"
 
-
 class ModelRouter:
     """Routes agents to their assigned LLM models with caching."""
 

@@ -11,7 +11,6 @@ import httpx
 from kairos.llm.base import BaseLLMProvider, LLMConfig, LLMMessage, LLMResponse, ToolCall
 from kairos.llm.provider_registry import ProviderRegistry
 
-
 class AnthropicProvider(BaseLLMProvider):
     """Anthropic-compatible provider using direct HTTP calls."""
 
@@ -228,7 +227,6 @@ class AnthropicProvider(BaseLLMProvider):
 
     async def close(self):
         await self._client.aclose()
-
 
 ProviderRegistry.register("anthropic", AnthropicProvider)
 ProviderRegistry.register("claude", AnthropicProvider)

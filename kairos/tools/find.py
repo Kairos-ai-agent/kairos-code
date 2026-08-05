@@ -11,7 +11,6 @@ from typing import Optional
 
 from kairos.tools.base import BaseTool, ToolResult
 
-
 class FindTool(BaseTool):
     name = "find"
     description = "Find files by glob pattern (e.g. '**/*.py', 'src/*.ts')"

@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 @pytest.mark.asyncio
 async def test_project_messages_returns_404_for_unknown_project():
     from fastapi import FastAPI
@@ -22,7 +21,6 @@ async def test_project_messages_returns_404_for_unknown_project():
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         r = await c.get("/api/projects/nonexistent/messages")
         assert r.status_code == 404
-
 
 @pytest.mark.asyncio
 async def test_project_messages_scoped_query():
@@ -44,7 +42,6 @@ async def test_project_messages_scoped_query():
         assert r.json() == {"messages": [{"id": "m1"}]}
         call = real_orch.get_message_history.call_args
         assert call.kwargs.get("project_id") == "p1" or call.args[1] == "p1"
-
 
 @pytest.mark.asyncio
 async def test_start_loop_returns_immediately_with_background_task():
@@ -72,7 +69,6 @@ async def test_start_loop_returns_immediately_with_background_task():
         assert body["session_id"] == "session-xyz"
         assert body["project_id"] == "p1"
 
-
 @pytest.mark.asyncio
 async def test_start_loop_rejects_already_running():
     """409 if a loop is already running for the project."""
@@ -98,7 +94,6 @@ async def test_start_loop_rejects_already_running():
                          json={"requirement": "x"})
         assert r.status_code == 409
 
-
 @pytest.mark.asyncio
 async def test_stop_loop_returns_no_loop_when_idle():
     from fastapi import FastAPI
@@ -117,7 +112,6 @@ async def test_stop_loop_returns_no_loop_when_idle():
         r = await c.post("/api/projects/p1/stop")
         assert r.status_code == 200
         assert r.json()["status"] == "no_loop_running"
-
 
 @pytest.mark.asyncio
 async def test_get_loop_state_returns_running_flag():

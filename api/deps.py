@@ -14,7 +14,6 @@ config_path = Path(__file__).parent.parent / "kairos" / "config" / "models_confi
 model_router = ModelRouter(config_path=config_path)
 orchestrator = Orchestrator(model_router=model_router)
 
-
 def get_review_engine() -> ReviewEngine:
     """Create a review engine with configured LLM.
 

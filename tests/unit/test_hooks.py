@@ -9,13 +9,11 @@ import pytest
 
 from kairos.hooks.runner import HookRunner
 
-
 def test_runner_with_no_dir_is_noop(tmp_path):
     """Missing hooks dir must not crash; just produce no-op dispatch."""
     runner = HookRunner(hooks_dir=tmp_path / "does-not-exist")
     out = runner.pre_tool_use("file_read", {"path": "x"}, "agent1", "p1")
     assert out == {"path": "x"}  # passed through unchanged
-
 
 def test_pre_tool_use_can_rewrite_arguments(tmp_path):
     """If a hook returns a dict, it replaces the args."""
@@ -37,7 +35,6 @@ def pre_tool_use(tool_name, arguments, agent_id, project_id):
     passthrough = runner.pre_tool_use("file_read", {"path": "y"}, "agent1", "p1")
     assert passthrough == {"path": "y"}
 
-
 def test_pre_tool_use_chains_multiple_hooks(tmp_path):
     hooks = tmp_path / "hooks"
     hooks.mkdir()
@@ -58,7 +55,6 @@ def pre_tool_use(tool_name, arguments, agent_id, project_id):
     assert out.get("first") is True
     assert out.get("second") is True
 
-
 def test_post_tool_use_does_not_block(tmp_path):
     """Post hooks are fire-and-forget; failures shouldn't propagate."""
     hooks = tmp_path / "hooks"
@@ -70,7 +66,6 @@ def post_tool_use(tool_name, arguments, result, agent_id, project_id):
     runner = HookRunner(hooks_dir=hooks)
     # Must not raise.
     runner.post_tool_use("file_read", {}, MagicMock(), "a", "p")
-
 
 def test_loop_round_hook_receives_review(tmp_path):
     hooks = tmp_path / "hooks"
@@ -93,7 +88,6 @@ def loop_round(round_no, coder_summary, review, project_id):
         assert data["round"] == 3
         assert data["score"] == 80
 
-
 def test_loop_completed_hook_fires(tmp_path):
     hooks = tmp_path / "hooks"
     hooks.mkdir()
@@ -112,7 +106,6 @@ def loop_completed(project_id, final_score, total_rounds):
     # Already exec'd inside the runner, but we can call loop_completed
     # and verify it didn't raise. The mutation test is best-effort.
     runner.loop_completed("p1", 95, 4)  # idempotent
-
 
 def test_hook_file_with_syntax_error_is_skipped(tmp_path):
     """A broken hook file must not prevent the runner from working —

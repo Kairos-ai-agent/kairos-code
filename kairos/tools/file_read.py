@@ -6,7 +6,6 @@ from typing import Optional
 
 from kairos.tools.base import BaseTool, ToolResult
 
-
 class FileReadTool(BaseTool):
     """Read the contents of a file inside the project directory."""
 

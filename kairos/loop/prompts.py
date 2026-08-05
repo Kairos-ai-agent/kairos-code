@@ -3,14 +3,12 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable
 
-
 _REVIEW_FOCUS_LABELS = {
     "security_reviewer": "security, authentication, authorization, secrets, and OWASP risks",
     "perf_reviewer": "performance, latency, memory, I/O, concurrency, and scalability",
     "design_reviewer": "architecture, maintainability, UX, accessibility, and visual regressions",
     "test_reviewer": "test coverage, edge cases, deterministic behavior, and regression safety",
 }
-
 
 def _render_self_debug_block(fixes: Iterable[Dict[str, Any]]) -> str:
     rendered = []
@@ -29,7 +27,6 @@ def _render_self_debug_block(fixes: Iterable[Dict[str, Any]]) -> str:
         "3. Re-run the exact failing check and stop if it still fails.\n"
         "Detected fixes:\n" + "\n".join(rendered) + "\n"
     )
-
 
 def build_next_prompt(session: Any, review: Dict[str, Any]) -> str:
     """Compose a bounded next-round Coder prompt from immutable inputs."""
@@ -85,7 +82,6 @@ def build_next_prompt(session: Any, review: Dict[str, Any]) -> str:
         + "\n\nFix only the failures and issues above. Do not introduce new scope. "
         "Run the relevant checks before reporting completion."
     )
-
 
 def build_reviewer_description(
     session: Any,

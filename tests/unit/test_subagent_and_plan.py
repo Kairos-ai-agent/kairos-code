@@ -7,7 +7,6 @@ import pytest
 
 from kairos.llm.base import LLMConfig, LLMMessage, LLMResponse
 
-
 # ---------------------------------------------------------------------- Subagent
 
 def test_subagent_tool_requires_task():
@@ -19,7 +18,6 @@ def test_subagent_tool_requires_task():
     assert not res.success
     assert "task is required" in res.error
 
-
 def test_subagent_tool_requires_wired_parent():
     from kairos.tools.subagent import SubagentTool
     tool = SubagentTool(allowed_root=".")
@@ -27,7 +25,6 @@ def test_subagent_tool_requires_wired_parent():
     res = asyncio.run(tool.execute(task="do something"))
     assert not res.success
     assert "not wired" in res.error
-
 
 def test_subagent_tool_returns_child_result():
     """End-to-end: tool builds child Coder, runs it, returns its text.
@@ -69,7 +66,6 @@ def test_subagent_tool_returns_child_result():
     assert res.success, f"unexpected failure: {res.error}"
     assert "child finished: 42" in res.output
     assert res.metadata["child_agent_id"].startswith("p1.sub_")
-
 
 # ---------------------------------------------------------------------- Plan mode
 

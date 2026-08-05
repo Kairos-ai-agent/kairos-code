@@ -16,7 +16,6 @@ from typing import Optional
 from kairos.agents.base import AgentTask, KairosAgent
 from kairos.tools.base import BaseTool, ToolResult
 
-
 class SubagentTool(BaseTool):
     """Spawn a child agent (Coder) to do a focused sub-task.
 
@@ -116,6 +115,5 @@ class SubagentTool(BaseTool):
             output=result[:5000],
             metadata={"child_agent_id": child_id},
         )
-
 
 from kairos.core.message_bus import Message  # noqa: E402  (after class for forward ref)

@@ -17,7 +17,6 @@ from kairos.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
 
-
 def _git(args: list[str], cwd: Path, timeout: int = 30) -> tuple[int, str, str]:
     """Run a git command. Returns (rc, stdout, stderr). Never raises."""
     try:
@@ -36,7 +35,6 @@ def _git(args: list[str], cwd: Path, timeout: int = 30) -> tuple[int, str, str]:
         return 127, "", "git not installed"
     except Exception as e:
         return 1, "", str(e)
-
 
 def ensure_repo(workspace: Path) -> bool:
     """Make sure `workspace` is a git repo. Initializes one if needed.
@@ -58,7 +56,6 @@ def ensure_repo(workspace: Path) -> bool:
     _git(["config", "user.email", "kairos@localhost"], workspace)
     _git(["config", "user.name", "Kairos Coder"], workspace)
     return True
-
 
 def checkpoint_round(workspace: Path, round_no: int, score: int,
                      summary: str, approved: bool) -> Optional[str]:
@@ -88,7 +85,6 @@ def checkpoint_round(workspace: Path, round_no: int, score: int,
     if rc != 0:
         return None
     return sha.strip()
-
 
 def list_checkpoints(workspace: Path, limit: int = 50) -> list[dict]:
     """Return all kairos checkpoints (newest first), parsed from commit messages.
@@ -128,7 +124,6 @@ def list_checkpoints(workspace: Path, limit: int = 50) -> list[dict]:
         })
     return cps
 
-
 def checkout_checkpoint(workspace: Path, sha: str) -> tuple[bool, str]:
     """Restore the working tree to a checkpoint SHA.
 
@@ -143,7 +138,6 @@ def checkout_checkpoint(workspace: Path, sha: str) -> tuple[bool, str]:
     if rc != 0:
         return False, err or "checkout failed"
     return True, ""
-
 
 class CheckpointTool(BaseTool):
     """Manual checkpoint tool for the Coder.

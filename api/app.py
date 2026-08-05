@@ -20,7 +20,6 @@ from api.routes.websocket import router as ws_router
 
 log = logging.getLogger(__name__)
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup/shutdown lifecycle."""
@@ -33,7 +32,6 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass
     log.info("Shutdown complete.")
-
 
 # Create FastAPI app
 app = FastAPI(
@@ -61,14 +59,12 @@ app.include_router(review_router, prefix="/api/review", tags=["review"])
 app.include_router(config_router, prefix="/api/config", tags=["config"])
 app.include_router(ws_router, prefix="/ws", tags=["websocket"])
 
-
 # Global message stream — mounted at /api/messages (not under /projects
 # because FastAPI's path-param matching can shadow literal /messages
 # routes). Used by the Collaboration page for the project-agnostic feed.
 @app.get("/api/messages")
 async def global_messages(limit: int = 100):
     return {"messages": orchestrator.get_message_history(limit=limit)}
-
 
 @app.get("/")
 async def root():
@@ -86,11 +82,9 @@ async def root():
         },
     })
 
-
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "version": __version__}
-
 
 @app.get("/api/dashboard")
 async def dashboard():

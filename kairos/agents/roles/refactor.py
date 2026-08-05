@@ -11,7 +11,6 @@ from kairos.core.message_bus import MessageBus
 from kairos.llm.base import LLMConfig
 from kairos.agents.roles.reviewer import Reviewer
 
-
 SYSTEM_PROMPT = """You are Kairos Refactor Reviewer — a code-quality
 auditor grading one round of the Coder's work.
 
@@ -47,7 +46,6 @@ places that has now diverged) forces approve=false.
 - Don't grade correctness, security, docs. Out of scope.
 - Don't propose rewrites; the Coder applies surgical fixes.
 """
-
 
 class RefactorReviewer(Reviewer):
     """Specialist Reviewer focused on code quality and refactoring."""

@@ -11,7 +11,6 @@ from kairos.core.message_bus import MessageBus
 from kairos.llm.base import LLMConfig
 from kairos.agents.roles.reviewer import Reviewer
 
-
 SYSTEM_PROMPT = """You are Kairos Perf Reviewer — focused on performance.
 You grade one round of the Coder's work on perf only.
 
@@ -31,7 +30,6 @@ mark as MINOR with category="out_of_scope".
 
 Score <70 means do not approve. Severity-weighted issues as usual.
 """
-
 
 class PerfReviewer(Reviewer):
     """Specialist Reviewer focused on performance."""

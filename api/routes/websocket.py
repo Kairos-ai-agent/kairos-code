@@ -13,7 +13,6 @@ from api.deps import orchestrator
 router = APIRouter()
 log = logging.getLogger(__name__)
 
-
 class WSClient:
     """Per-client WebSocket state."""
 
@@ -21,7 +20,6 @@ class WSClient:
         self.ws = ws
         self.last_seen_msg_ts: float = 0.0
         self.alive = True
-
 
 _clients: Dict[str, WSClient] = {}
 
@@ -37,7 +35,6 @@ AGENT_STATE_TRIGGERS = {
 # How often to push `agent_update` as a heartbeat, even when no trigger
 # fires. Keeps badges moving and catches missed events from any source.
 AGENT_UPDATE_INTERVAL_S = 2.0
-
 
 @router.websocket("/collaboration")
 async def collaboration_ws(websocket: WebSocket):
@@ -133,7 +130,6 @@ async def collaboration_ws(websocket: WebSocket):
         # Drop the listener by token so reconnects don't accumulate closures.
         orchestrator.message_bus.remove_listener(listener_token)
         _clients.pop(client_id, None)
-
 
 async def broadcast(message: dict):
     """Broadcast to all alive clients."""

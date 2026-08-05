@@ -10,7 +10,6 @@ from typing import Optional
 
 from kairos.tools.base import BaseTool, ToolResult
 
-
 class TerminalTool(BaseTool):
     """Execute a shell command in a sandboxed project directory.
 

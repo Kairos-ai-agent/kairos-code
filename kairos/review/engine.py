@@ -15,7 +15,6 @@ from kairos.llm.provider_registry import create_provider
 
 logger = logging.getLogger(__name__)
 
-
 class ReviewIssue(BaseModel):
     """A single issue found during review."""
 
@@ -26,7 +25,6 @@ class ReviewIssue(BaseModel):
     code_snippet: str = ""
     suggestion: str = ""
 
-
 class FileReview(BaseModel):
     """Review result for a single file."""
 
@@ -34,7 +32,6 @@ class FileReview(BaseModel):
     issues: List[ReviewIssue] = []
     summary: str = ""
     score: int = 100  # 0-100
-
 
 class ReviewReport(BaseModel):
     """Complete review report for a project."""
@@ -49,7 +46,6 @@ class ReviewReport(BaseModel):
     overall_score: int = 100
     file_reviews: List[FileReview] = []
     summary: str = ""
-
 
 REVIEW_PROMPT = """You are a senior code reviewer. Review the following code and identify issues.
 
@@ -77,7 +73,6 @@ For each issue found, respond in this JSON format:
 
 If no issues found, return an empty array [].
 Be thorough but constructive. Focus on real problems, not style preferences."""
-
 
 class ReviewEngine:
     """Code review engine using LLM-powered analysis."""

@@ -12,7 +12,6 @@ from typing import Any, Callable, Deque, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-
 @dataclass
 class Message:
     """A message passed between agents."""
@@ -37,7 +36,6 @@ class Message:
             "timestamp": self.timestamp,
             "metadata": self.metadata,
         }
-
 
 class MessageBus:
     """Publish/subscribe message bus for inter-agent communication.

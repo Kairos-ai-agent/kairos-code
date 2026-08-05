@@ -9,7 +9,6 @@ from kairos.llm.base import BaseLLMProvider, LLMConfig, LLMMessage, LLMResponse,
 from kairos.llm.provider_registry import ProviderRegistry
 from kairos.llm.providers.base import format_messages_for_openai
 
-
 class OpenAIProvider(BaseLLMProvider):
     """OpenAI-compatible provider using the openai Python SDK."""
 
@@ -115,7 +114,6 @@ class OpenAIProvider(BaseLLMProvider):
 
     async def close(self):
         await self._client.close()
-
 
 # Register for all OpenAI-compatible providers
 for name in ["openai", "openrouter", "deepseek", "dashscope", "zhipuai", "fireworks", "siliconflow"]:

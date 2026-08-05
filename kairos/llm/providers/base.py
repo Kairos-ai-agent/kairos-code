@@ -7,7 +7,6 @@ from typing import List
 
 from kairos.llm.base import LLMMessage
 
-
 def format_messages_for_openai(messages: List[LLMMessage]) -> List[dict]:
     """Convert LLMMessage list to OpenAI-compatible format with tool_calls support."""
     result = []

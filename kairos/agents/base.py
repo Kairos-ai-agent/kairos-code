@@ -18,13 +18,11 @@ from kairos.tools.base import ToolResult
 
 logger = logging.getLogger(__name__)
 
-
 class AgentStatus(str, Enum):
     IDLE = "idle"
     THINKING = "thinking"
     ACTING = "acting"
     ERROR = "error"
-
 
 class AgentTask(BaseModel):
     """A task assigned to an agent."""
@@ -35,7 +33,6 @@ class AgentTask(BaseModel):
     context: Dict[str, Any] = {}
     status: str = "pending"
     result: Optional[str] = None
-
 
 class AgentState(BaseModel):
     """Observable state of an agent for the UI."""
@@ -53,7 +50,6 @@ class AgentState(BaseModel):
     current_turn: int = 0
     total_turns: int = 0
     current_tool: Optional[str] = None
-
 
 class KairosAgent:
     """Base agent with tool-calling loop.

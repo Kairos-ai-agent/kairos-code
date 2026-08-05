@@ -13,7 +13,6 @@ from __future__ import annotations
 import re
 from typing import List, Tuple
 
-
 # Match "Step N:" / "Step N -" / "N." / "N)" at the start of a line.
 _STEP_RE = re.compile(r"(?im)^[\s\-\*]*(?:step\s*)?(\d+)[\.\:\)]\s+(.+?)$")
 # Match backtick-wrapped paths: `path/to/file.py`
@@ -23,7 +22,6 @@ _FILE_VERB_RE = re.compile(
     r"(?i)\b(create|add|edit|update|modify|write|delete|remove|refactor)"
     r"\s+(?:file\s+)?`?([\w\-./\\]+\.[a-zA-Z]{1,4})`?"
 )
-
 
 def extract_steps(plan_text: str) -> List[Tuple[int, str, List[str]]]:
     """Return [(step_no, description, files_mentioned)] for each step.
@@ -50,7 +48,6 @@ def extract_steps(plan_text: str) -> List[Tuple[int, str, List[str]]]:
         files = list(set(_PATH_RE.findall(segment)))
         steps.append((n, desc, files))
     return steps
-
 
 def plan_to_mermaid(plan_text: str) -> str:
     """Convert plan_text to a Mermaid `flowchart TD` block.
@@ -79,7 +76,6 @@ def plan_to_mermaid(plan_text: str) -> str:
             lines.append(f'    {node_id} --> {file_id}["{f}"]')
         prev_id = node_id
     return "\n".join(lines)
-
 
 def plan_to_file_tree(plan_text: str) -> str:
     """Build a markdown file tree from paths mentioned in the plan.

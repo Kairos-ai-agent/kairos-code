@@ -11,14 +11,12 @@ from unittest.mock import MagicMock, AsyncMock
 
 import pytest
 
-
 # ---------------------------------------------------------------- ResilientProvider
 
 class _FakeResponse:
     def __init__(self, content="ok", tool_calls=None):
         self.content = content
         self.tool_calls = tool_calls or []
-
 
 class _FakeProvider:
     """Minimal BaseLLMProvider-like stub."""
@@ -43,7 +41,6 @@ class _FakeProvider:
     async def close(self):
         pass
 
-
 def test_resilient_provider_succeeds_on_first_try():
     from kairos.llm.resilient import ResilientProvider
     primary = _FakeProvider(responses=[_FakeResponse("hello")])
@@ -52,7 +49,6 @@ def test_resilient_provider_succeeds_on_first_try():
     assert resp.content == "hello"
     assert primary.calls == 1
     assert rp._consecutive_failures == 0
-
 
 def test_resilient_provider_retries_on_rate_limit():
     """429 (RateLimitError-shaped exception) should be retried, with
@@ -85,7 +81,6 @@ def test_resilient_provider_retries_on_rate_limit():
     # Backoff should be increasing (exponential)
     assert rp_sleeps[0] < rp_sleeps[1] < rp_sleeps[2]
 
-
 def test_resilient_provider_does_not_retry_on_4xx():
     """Non-retryable errors (e.g. bad request) should raise immediately."""
     from kairos.llm.resilient import ResilientProvider
@@ -99,7 +94,6 @@ def test_resilient_provider_does_not_retry_on_4xx():
     with pytest.raises(BadRequestError):
         asyncio.run(rp.complete([]))
     assert primary.calls == 1  # no retry
-
 
 def test_resilient_provider_failover_after_consecutive_failures():
     """If primary keeps failing past failover_after, switch to failover
@@ -127,7 +121,6 @@ def test_resilient_provider_failover_after_consecutive_failures():
     # failover kicks in.
     assert primary.calls >= 2
     assert failover.calls >= 1
-
 
 def test_resilient_provider_drops_back_to_primary_after_success():
     """After a successful call (even via failover), subsequent calls
@@ -159,7 +152,6 @@ def test_resilient_provider_drops_back_to_primary_after_success():
     r2 = asyncio.run(rp.complete([]))
     assert r2.content == "primary_ok"
 
-
 def test_resilient_provider_stream_yields_content():
     from kairos.llm.resilient import ResilientProvider
     primary = _FakeProvider(responses=[_FakeResponse("streamed")])
@@ -170,7 +162,6 @@ def test_resilient_provider_stream_yields_content():
             chunks.append(c)
     asyncio.run(collect())
     assert "streamed" in "".join(chunks)
-
 
 # ---------------------------------------------------------------- ToolCache
 
@@ -189,7 +180,6 @@ def test_tool_cache_basic_get_set():
     assert s["misses"] == 1
     assert 0.0 < s["hit_rate"] <= 1.0
 
-
 def test_tool_cache_clear_round_resets():
     from kairos.tools.cache import ToolCache, make_key
     c = ToolCache()
@@ -204,13 +194,11 @@ def test_tool_cache_clear_round_resets():
     assert c.misses == 0
     assert c.get(make_key("x", path="a")) is None
 
-
 def test_make_key_drops_private_kwargs():
     from kairos.tools.cache import make_key
     k1 = make_key("x", path="a", _cache=object())
     k2 = make_key("x", path="a")
     assert k1 == k2
-
 
 def test_make_key_distinguishes_args():
     from kairos.tools.cache import make_key
@@ -221,14 +209,12 @@ def test_make_key_distinguishes_args():
     assert k1 != k3
     assert k2 != k3
 
-
 def test_get_cache_singleton():
     from kairos.tools import cache as cache_mod
     cache_mod.set_cache(None)  # start clean
     a = cache_mod.get_cache()
     b = cache_mod.get_cache()
     assert a is b  # module-level singleton
-
 
 def test_clear_round_clears_singleton():
     from kairos.tools import cache as cache_mod
@@ -237,7 +223,6 @@ def test_clear_round_clears_singleton():
     c.set(("t", frozenset()), "v")
     cache_mod.clear_round()
     assert c.get(("t", frozenset())) is None
-
 
 # ---------------------------------------------------------------- precheck
 
@@ -249,13 +234,11 @@ def test_extract_known_fixes_module_not_found():
     assert any(f["kind"] == "missing_module" for f in fixes)
     assert "pip install" in fixes[0]["fix_instruction"]
 
-
 def test_extract_known_fixes_port_in_use():
     from kairos.loop.precheck import extract_known_fixes
     stderr = "OSError: [Errno 98] Address already in use: 8000"
     fixes = extract_known_fixes(stderr)
     assert any(f["kind"] == "port_in_use" for f in fixes)
-
 
 def test_extract_known_fixes_syntax_error():
     from kairos.loop.precheck import extract_known_fixes
@@ -263,12 +246,10 @@ def test_extract_known_fixes_syntax_error():
     fixes = extract_known_fixes(stderr)
     assert any(f["kind"] == "syntax_error" for f in fixes)
 
-
 def test_extract_known_fixes_empty_input():
     from kairos.loop.precheck import extract_known_fixes
     assert extract_known_fixes("") == []
     assert extract_known_fixes("just a normal log line") == []
-
 
 def test_extract_known_fixes_caps_at_five():
     from kairos.loop.precheck import extract_known_fixes
@@ -278,11 +259,9 @@ def test_extract_known_fixes_caps_at_five():
     fixes = extract_known_fixes(stderr)
     assert len(fixes) == 5
 
-
 def test_format_self_debug_hint_empty():
     from kairos.loop.precheck import format_self_debug_hint
     assert format_self_debug_hint([]) == ""
-
 
 def test_format_self_debug_hint_renders():
     from kairos.loop.precheck import format_self_debug_hint
@@ -294,11 +273,9 @@ def test_format_self_debug_hint_renders():
     assert "missing_module" in out
     assert "pip install x" in out
 
-
 def test_format_precheck_for_prompt_empty_when_no_failures():
     from kairos.loop.precheck import format_precheck_for_prompt
     assert format_precheck_for_prompt({"has_failures": False}) == ""
-
 
 def test_format_precheck_for_prompt_includes_lint():
     from kairos.loop.precheck import format_precheck_for_prompt
@@ -311,7 +288,6 @@ def test_format_precheck_for_prompt_includes_lint():
     assert "PRECHECK FAILURES" in out
     assert "E501" in out
 
-
 def test_pre_check_workspace_no_workspace(tmp_path: Path):
     """If the workspace doesn't exist, return a 'workspace not found'
     marker so the loop can keep going."""
@@ -319,7 +295,6 @@ def test_pre_check_workspace_no_workspace(tmp_path: Path):
     missing = tmp_path / "does_not_exist"
     result = asyncio.run(pre_check_workspace(missing, []))
     assert "workspace not found" in result["summary"]
-
 
 def test_pre_check_workspace_detects_pyproject(tmp_path: Path):
     """If a pyproject.toml exists and pytest is installed, the test
@@ -329,19 +304,16 @@ def test_pre_check_workspace_detects_pyproject(tmp_path: Path):
     cmd = _auto_detect_test_command(tmp_path)
     assert cmd[0] == "pytest"
 
-
 def test_pre_check_workspace_detects_package_json(tmp_path: Path):
     from kairos.loop.precheck import _auto_detect_test_command
     (tmp_path / "package.json").write_text("{}")
     cmd = _auto_detect_test_command(tmp_path)
     assert cmd[0] == "npm"
 
-
 def test_pre_check_workspace_no_test_config(tmp_path: Path):
     from kairos.loop.precheck import _auto_detect_test_command
     cmd = _auto_detect_test_command(tmp_path)
     assert cmd is None
-
 
 # ---------------------------------------------------------------- cross-loop patterns
 
@@ -374,17 +346,14 @@ def _make_round(category=None, severity="MAJOR", score=60, file=None,
         "review_json": json.dumps(review),
     }
 
-
 def test_cross_loop_empty():
     from kairos.loop.review_loop import _detect_cross_loop_patterns
     assert _detect_cross_loop_patterns([]) == ""
-
 
 def test_cross_loop_too_few_rounds():
     from kairos.loop.review_loop import _detect_cross_loop_patterns
     rounds = [_make_round(category="correctness", score=50)] * 2
     assert _detect_cross_loop_patterns(rounds) == ""
-
 
 def test_cross_loop_repeated_category():
     """3+ consecutive rounds with 'correctness' as the dominant
@@ -399,7 +368,6 @@ def test_cross_loop_repeated_category():
     assert "correctness" in out
     assert "consecutive rounds" in out
 
-
 def test_cross_loop_score_flatline():
     """3 rounds with similar low scores should produce a flatline
     advisory."""
@@ -413,7 +381,6 @@ def test_cross_loop_score_flatline():
     assert "flatlined" in out
     assert "50" in out
 
-
 def test_cross_loop_hot_files():
     """Same file flagged in 3+ rounds should be surfaced."""
     from kairos.loop.review_loop import _detect_cross_loop_patterns
@@ -424,7 +391,6 @@ def test_cross_loop_hot_files():
     ]
     out = _detect_cross_loop_patterns(rounds)
     assert "hot.py" in out
-
 
 def test_cross_loop_all_infra():
     """If all 3 recent rounds are infra failures (not real review
@@ -439,7 +405,6 @@ def test_cross_loop_all_infra():
     out = _detect_cross_loop_patterns(rounds)
     assert "infrastructure" in out.lower()
 
-
 def test_cross_loop_clean_rounds_no_advisory():
     """If 3 rounds are mixed/healthy, no advisory."""
     from kairos.loop.review_loop import _detect_cross_loop_patterns
@@ -450,7 +415,6 @@ def test_cross_loop_clean_rounds_no_advisory():
     ]
     out = _detect_cross_loop_patterns(rounds)
     assert out == ""
-
 
 def test_cross_loop_handles_corrupt_json():
     """A row with unparseable review_json should not crash; we just
@@ -465,7 +429,6 @@ def test_cross_loop_handles_corrupt_json():
     # Only 2 parseable rounds - should return ""
     out = _detect_cross_loop_patterns(rounds)
     assert out == ""
-
 
 def test_load_history_digest_includes_advisory():
     """End-to-end: the digest returned by _load_history_digest should
@@ -488,7 +451,6 @@ def test_load_history_digest_includes_advisory():
     assert "CROSS-LOOP ADVISORY" in digest
     assert "correctness" in digest
 
-
 def test_load_history_digest_empty_persistence():
     from kairos.loop.review_loop import _load_history_digest
     assert _load_history_digest(None, "p1") == ""
@@ -507,7 +469,6 @@ def test_loop_health_score_healthy():
         no_progress_count = 0
     assert _loop_health_score(S()) >= 90
 
-
 def test_loop_health_score_stagnating():
     from kairos.loop.review_loop import _loop_health_score
     class S:
@@ -517,7 +478,6 @@ def test_loop_health_score_stagnating():
     h = _loop_health_score(S())
     assert 60 <= h <= 90
 
-
 def test_loop_health_score_critical():
     from kairos.loop.review_loop import _loop_health_score
     class S:
@@ -525,7 +485,6 @@ def test_loop_health_score_critical():
         infra_failure_streak = 5
         no_progress_count = 5
     assert _loop_health_score(S()) <= 20
-
 
 def test_loop_health_score_empty_window():
     """Loop that has not scored yet should still report healthy (100)."""
@@ -535,7 +494,6 @@ def test_loop_health_score_empty_window():
         infra_failure_streak = 0
         no_progress_count = 0
     assert _loop_health_score(S()) == 100
-
 
 def test_auto_route_security_keywords():
     """Requirements mentioning auth/login/oauth should auto-enable
@@ -548,13 +506,11 @@ def test_auto_route_security_keywords():
         "implement user login and permissions"
     )
 
-
 def test_auto_route_perf_keywords():
     from kairos.core.orchestrator import _auto_route_specialists
     assert "perf_reviewer" in _auto_route_specialists(
         "Optimize API latency, add cache layer"
     )
-
 
 def test_auto_route_design_and_test():
     from kairos.core.orchestrator import _auto_route_specialists
@@ -565,13 +521,11 @@ def test_auto_route_design_and_test():
         "Add pytest unit tests with high coverage"
     )
 
-
 def test_auto_route_no_match():
     """Requirements that match no specialist keyword should return empty."""
     from kairos.core.orchestrator import _auto_route_specialists
     assert _auto_route_specialists("") == []
     assert _auto_route_specialists("fix typo in readme") == []
-
 
 def test_auto_route_multi_match():
     """Requirements matching multiple specialists should return all of them
@@ -585,7 +539,6 @@ def test_auto_route_multi_match():
     assert "perf_reviewer" in result
     assert "design_reviewer" in result
     assert "test_reviewer" in result
-
 
 # ---------------------------------------------------------------- self-debug + revert_file
 
@@ -626,7 +579,6 @@ def test_build_next_prompt_self_debug_block_when_precheck_fixable():
     assert "pip install pandas" in prompt
     assert prompt.index("SELF-DEBUG MODE") < prompt.index("PRECHECK FAILURES")
 
-
 def test_revert_file_via_git(tmp_path: Path):
     """revert_file restores a single file's content; other files untouched."""
     from kairos.tools.checkpoint import (
@@ -644,7 +596,6 @@ def test_revert_file_via_git(tmp_path: Path):
     assert (tmp_path / "a.py").read_text() == "version1"
     # b.py unchanged
     assert (tmp_path / "b.py").read_text() == "untouched"
-
 
 def test_orchestrator_review_focus_not_specialists():
     """Orchestrator must no longer build multiple specialist Reviewer

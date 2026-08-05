@@ -4,11 +4,9 @@ import pytest
 
 from kairos.core.persistence import Persistence
 
-
 @pytest.fixture
 def db(tmp_path):
     return Persistence(tmp_path / "mem.db")
-
 
 def test_save_and_load_loop_round(db):
     review = {"approve": False, "score": 70,
@@ -33,7 +31,6 @@ def test_save_and_load_loop_round(db):
     parsed = json.loads(r["review_json"])
     assert parsed["issues"][0]["file"] == "x.py"
 
-
 def test_load_loop_rounds_orders_chronologically(db):
     """Insertion-order = wall-clock order here (all in the same test).
     Loaded rounds should come back in the same order they were inserted."""
@@ -47,7 +44,6 @@ def test_load_loop_rounds_orders_chronologically(db):
     # Result: oldest-first ordering.
     assert rounds == [3, 1, 2]
 
-
 def test_load_loop_rounds_respects_limit(db):
     for r in range(10):
         db.save_loop_round("p1", "sess", r,
@@ -56,7 +52,6 @@ def test_load_loop_rounds_respects_limit(db):
     rows = db.load_loop_rounds("p1", limit=3)
     assert len(rows) == 3
 
-
 def test_load_loop_rounds_isolates_projects(db):
     db.save_loop_round("p1", "s1", 1, "x", {"approve": True, "score": 90, "summary": "ok"})
     db.save_loop_round("p2", "s2", 1, "y", {"approve": False, "score": 30, "summary": "bad"})
@@ -64,7 +59,6 @@ def test_load_loop_rounds_isolates_projects(db):
     assert len(db.load_loop_rounds("p2")) == 1
     assert db.load_loop_rounds("p1")[0]["score"] == 90
     assert db.load_loop_rounds("p2")[0]["score"] == 30
-
 
 def test_save_loop_round_is_idempotent(db):
     """Re-saving the same (project, session, round) overwrites the row
@@ -82,7 +76,6 @@ def test_save_loop_round_is_idempotent(db):
     assert rows[0]["score"] == 95
     assert rows[0]["coder_summary"] == "new"
 
-
 def test_load_last_loop_summary(db):
     assert db.load_last_loop_summary("p1") is None  # nothing yet
     db.save_loop_round("p1", "s1", 1, "x",
@@ -94,14 +87,12 @@ def test_load_last_loop_summary(db):
     assert "approved" in s
     assert "92" in s
 
-
 def test_delete_loop_rounds_removes_only_that_project(db):
     db.save_loop_round("p1", "s1", 1, "x", {"approve": True, "score": 90, "summary": "ok"})
     db.save_loop_round("p2", "s2", 1, "y", {"approve": True, "score": 90, "summary": "ok"})
     db.delete_loop_rounds("p1")
     assert db.load_loop_rounds("p1") == []
     assert len(db.load_loop_rounds("p2")) == 1
-
 
 # ---------------------------------------------------------------------- Loop digest builder
 
@@ -120,11 +111,9 @@ def test_history_digest_includes_past_rounds(db):
     assert "missing tests" in digest
     assert "flaky" in digest
 
-
 def test_history_digest_empty_for_new_project(db):
     from kairos.loop.review_loop import _load_history_digest
     assert _load_history_digest(db, "brand-new") == ""
-
 
 def test_history_digest_no_persistence_returns_empty():
     """If orchestrator wasn't given a Persistence handle (e.g. in tests),

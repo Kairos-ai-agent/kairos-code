@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import re
 
-
 _PLAN_NOISE_PATTERNS = [
     re.compile(r"<\|[a-zA-Z0-9_\- ]+\|>"),
     re.compile(r"<][a-zA-Z0-9_\-]+[>\[]"),
@@ -17,7 +16,6 @@ _PLAN_NOISE_PATTERNS = [
     ),
 ]
 
-
 def is_plan_dirty(text: str) -> bool:
     """Return whether plan output contains control or tool-call residue."""
     if not text:
@@ -26,7 +24,6 @@ def is_plan_dirty(text: str) -> bool:
         return True
     stripped = text.strip()
     return stripped.startswith("{") and stripped.endswith("}")
-
 
 def sanitize_plan_text(text: str) -> str:
     """Remove known provider control tokens without discarding useful prose."""

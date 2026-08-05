@@ -11,7 +11,6 @@ from kairos.core.message_bus import MessageBus
 from kairos.llm.base import LLMConfig
 from kairos.agents.roles.reviewer import Reviewer
 
-
 SYSTEM_PROMPT = """You are Kairos Documentation Reviewer — a docs-focused
 auditor grading one round of the Coder's work.
 
@@ -46,7 +45,6 @@ no way to discover its behavior) forces approve=false.
 - Don't rewrite the docs yourself — surface concrete fix instructions
   with file:line so the Coder can apply them.
 """
-
 
 class DocsReviewer(Reviewer):
     """Specialist Reviewer focused on documentation quality."""

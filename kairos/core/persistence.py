@@ -8,7 +8,6 @@ import time
 from pathlib import Path
 from typing import List, Optional
 
-
 class Persistence:
     """SQLite persistence for projects, messages, and requirements."""
 
@@ -193,7 +192,6 @@ class Persistence:
                 "ON project_files(project_id)"
             )
 
-
     # ----------------------------------------------------------------- preferences
 
     def add_preference(self, project_id: str, kind: str, rule: str) -> int:
@@ -306,6 +304,13 @@ class Persistence:
                 "SELECT * FROM project_files WHERE id = ?", (file_id,)
             ).fetchone()
             return dict(row) if row else None
+
+    def get_file(self, file_id: str) -> Optional[dict]:
+        """Alias for load_file — some call sites ask for `get_file`.
+
+        Both names refer to the same underlying SQLite row.
+        """
+        return self.load_file(file_id)
 
     def delete_file(self, file_id: str) -> bool:
         """Delete one reference file. Returns True if a row was removed."""

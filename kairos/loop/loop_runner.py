@@ -40,7 +40,6 @@ from kairos.loop.reviewers import run_reviewer_round
 
 logger = logging.getLogger(__name__)
 
-
 async def _run_coder_round(session, requirement, round_no, plan_mode=False):
     bus = session.message_bus
     coder = session.coder
@@ -104,7 +103,6 @@ async def _run_coder_round(session, requirement, round_no, plan_mode=False):
             result = sanitize_plan_text(result)
     return result
 
-
 def _auto_checkpoint(session, round_no, score, approved, summary):
     try:
         from kairos.tools.checkpoint import checkpoint_round
@@ -115,7 +113,6 @@ def _auto_checkpoint(session, round_no, score, approved, summary):
     except Exception:
         logger.debug("auto-checkpoint failed", exc_info=True)
         return None
-
 
 async def _wait_for_plan_decision(session, round_no, bus):
     if session.plan_decision == "reject":
@@ -161,7 +158,6 @@ async def _wait_for_plan_decision(session, round_no, bus):
     ))
     session.plan_completed = True
     return "proceed"
-
 
 async def _run_precheck(session, workspace, round_no, bus):
     try:
@@ -216,7 +212,6 @@ async def _run_precheck(session, workspace, round_no, bus):
         logger.debug("precheck failed (non-fatal)", exc_info=True)
     return precheck_hint, precheck_fixable
 
-
 def _maybe_rollback_on_regression(session, coder_result: str) -> bool:
     """If the latest round's score regressed vs the previous, roll the
     workspace back to the previous checkpoint. Returns True when a
@@ -251,7 +246,6 @@ def _maybe_rollback_on_regression(session, coder_result: str) -> bool:
     except Exception:
         logger.debug("regression rollback failed (non-fatal)", exc_info=True)
         return False
-
 
 def _update_progress(session, review):
     """Update session progress counters after a Reviewer round.
@@ -291,7 +285,6 @@ def _update_progress(session, review):
     session.score_window.append(session.last_score)
     if len(session.score_window) > STAGNATION_WINDOW:
         session.score_window.pop(0)
-
 
 async def _check_gates(session, round_no, bus):
     """Evaluate termination gates. Returns the gate name or None.
@@ -383,7 +376,6 @@ async def _check_gates(session, round_no, bus):
         return "safety_cap"
     return None
 
-
 # ============================================================================
 # Best-of-N + smart plan mode + round summary
 # ============================================================================
@@ -443,7 +435,6 @@ async def _best_of_n_attempts(session, requirement, round_no, n, bus):
         pass
     return best_text, best_score
 
-
 def _parse_self_confidence(coder_text: str) -> int:
     """Pull a 0-100 confidence score from the Coder tail if present.
 
@@ -464,7 +455,6 @@ def _parse_self_confidence(coder_text: str) -> int:
     except (TypeError, ValueError):
         return 0
     return max(0, min(100, val))
-
 
 def _is_trivial_requirement(requirement: str) -> bool:
     """Heuristic: a requirement is "trivial" when it is small, single-file,
@@ -490,11 +480,9 @@ def _is_trivial_requirement(requirement: str) -> bool:
         return False
     return len(text) <= 600
 
-
 def should_auto_approve_plan(requirement: str) -> bool:
     """Public predicate so the orchestrator can call this before launch."""
     return _is_trivial_requirement(requirement)
-
 
 def _build_round_summary(session, coder_result: str, review: dict, round_no: int) -> str:
     """One-paragraph round digest for the UI / loop_history table.
@@ -526,7 +514,6 @@ def _build_round_summary(session, coder_result: str, review: dict, round_no: int
         parts.append(f"summary: {summary[:200]}")
     return " | ".join(parts)
 
-
 async def _maybe_auto_approve_plan(session, round_no, bus, requirement: str):
     """If the user has not engaged plan mode AND the requirement is
     trivial, mark the plan as auto-approved so the loop skips the
@@ -552,7 +539,6 @@ async def _maybe_auto_approve_plan(session, round_no, bus, requirement: str):
     except Exception:
         pass
     return True
-
 
 async def run_loop(session, requirement):
     bus = session.message_bus

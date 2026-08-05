@@ -15,7 +15,6 @@ from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-
 class HookRunner:
     """Loads hooks from a directory and dispatches events to them."""
 
@@ -100,9 +99,7 @@ class HookRunner:
             except Exception:
                 logger.warning("loop_completed hook raised", exc_info=True)
 
-
 _runner: Optional[HookRunner] = None
-
 
 def get_runner() -> HookRunner:
     """Process-global hook runner. Lazily created with the default

@@ -17,7 +17,6 @@ from typing import Optional
 
 from kairos.tools.base import BaseTool, ToolResult
 
-
 # Subcommands we permit.
 ALLOWED_SUBCMDS = {
     "status", "diff", "log", "show", "branch", "add", "commit",
@@ -33,7 +32,6 @@ FORBIDDEN_ARGS = {
     "clean",                    # git clean -fd removes untracked
     "reset",                    # destructive
 }
-
 
 class GitTool(BaseTool):
     name = "git"

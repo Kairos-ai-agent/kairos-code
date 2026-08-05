@@ -15,7 +15,6 @@ from kairos.loop.prompts import build_reviewer_description
 
 logger = logging.getLogger(__name__)
 
-
 def _failure_verdict(mode: str, summary: str, description: str) -> Dict[str, Any]:
     return {
         "approve": False,
@@ -31,7 +30,6 @@ def _failure_verdict(mode: str, summary: str, description: str) -> Dict[str, Any
         "summary": summary,
         "_failure_mode": mode,
     }
-
 
 def _balanced_json_objects(text: str) -> Iterable[str]:
     start = None
@@ -58,7 +56,6 @@ def _balanced_json_objects(text: str) -> Iterable[str]:
             if depth == 0 and start is not None:
                 yield text[start:index + 1]
                 start = None
-
 
 def _normalize_verdict(data: Any) -> Dict[str, Any] | None:
     if not isinstance(data, dict):
@@ -103,7 +100,6 @@ def _normalize_verdict(data: Any) -> Dict[str, Any] | None:
         verdict["_failure_mode"] = str(failure_mode)
     return verdict
 
-
 def parse_review_verdict(raw: str) -> Dict[str, Any]:
     """Parse strict, fenced, or surrounding-text JSON without losing nesting."""
     text = (raw or "").strip()
@@ -135,7 +131,6 @@ def parse_review_verdict(raw: str) -> Dict[str, Any]:
         "Reviewer output was not parseable JSON.",
         "Reviewer returned text that could not be parsed as the required verdict.",
     )
-
 
 async def run_reviewer_round_for(
     session: Any,
@@ -192,7 +187,6 @@ async def run_reviewer_round_for(
         )
     return parse_review_verdict(raw or "")
 
-
 async def run_reviewer_round(
     session: Any,
     coder_result: str,
@@ -203,7 +197,6 @@ async def run_reviewer_round(
     return await run_reviewer_round_for(
         session, coder_result, round_no, session.reviewer, precheck_hint
     )
-
 
 async def run_reviewers_parallel(
     session: Any, coder_result: str, round_no: int

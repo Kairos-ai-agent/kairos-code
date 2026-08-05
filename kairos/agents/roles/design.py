@@ -10,7 +10,6 @@ from kairos.core.message_bus import MessageBus
 from kairos.llm.base import LLMConfig
 from kairos.agents.roles.reviewer import Reviewer
 
-
 SYSTEM_PROMPT = """You are Kairos Design Reviewer — focused on architecture
 and abstraction quality. You grade one round of the Coder's work on
 design only.
@@ -31,7 +30,6 @@ mark as MINOR with category="out_of_scope".
 
 Score <70 means do not approve. Severity-weighted issues as usual.
 """
-
 
 class DesignReviewer(Reviewer):
     """Specialist Reviewer focused on design & architecture."""

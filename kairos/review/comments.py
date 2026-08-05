@@ -17,7 +17,6 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-
 # Severity -> Codex priority mapping (0 = blocker, 3 = nit).
 _SEVERITY_PRIORITY = {
     "CRITICAL": 0,
@@ -25,7 +24,6 @@ _SEVERITY_PRIORITY = {
     "MINOR": 2,
     "SUGGESTION": 3,
 }
-
 
 def verdict_to_comments(
     review: Dict[str, Any],
@@ -68,14 +66,12 @@ def verdict_to_comments(
         })
     return comments
 
-
 def comments_to_jsonl(comments: List[Dict[str, Any]]) -> str:
     """Serialize comments as JSON Lines, one per line.
 
     Suitable for piping into editor plugins or `code-comment apply`.
     """
     return "\n".join(json.dumps(c, ensure_ascii=False) for c in comments)
-
 
 def comments_to_directive_lines(comments: List[Dict[str, Any]]) -> str:
     """Render comments as Codex-style ::code-comment{...} directives.

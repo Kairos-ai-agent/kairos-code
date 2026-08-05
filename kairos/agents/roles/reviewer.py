@@ -19,7 +19,6 @@ from kairos.agents.base import KairosAgent
 from kairos.core.message_bus import MessageBus
 from kairos.llm.base import LLMConfig
 
-
 SYSTEM_PROMPT = """You are Kairos Reviewer — a strict, fair senior engineer who
 grades each round of the Coder's work in a 2-agent LoopReview system.
 
@@ -114,7 +113,6 @@ Rules for ask_human:
   review). If the Coder didn't run tests, mark MAJOR with fix_instruction
   to run them.
 """
-
 
 class Reviewer(KairosAgent):
     """Read-mostly agent that grades Coder output each round."""

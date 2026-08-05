@@ -12,7 +12,6 @@ from typing import Optional
 
 from kairos.tools.base import BaseTool, ToolResult
 
-
 class GrepTool(BaseTool):
     name = "grep"
     description = "Search for a regex pattern across files in the project"

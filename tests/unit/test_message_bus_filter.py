@@ -4,7 +4,6 @@ import pytest
 
 from kairos.core.message_bus import Message, MessageBus
 
-
 @pytest.mark.asyncio
 async def test_get_history_filters_by_project_id_metadata():
     bus = MessageBus()
@@ -20,7 +19,6 @@ async def test_get_history_filters_by_project_id_metadata():
     assert {m.content for m in p1} == {1, 3}
     assert {m.content for m in p2} == {2}
 
-
 @pytest.mark.asyncio
 async def test_get_history_falls_back_to_sender_prefix():
     bus = MessageBus()
@@ -28,7 +26,6 @@ async def test_get_history_falls_back_to_sender_prefix():
     msgs = bus.get_history(limit=100, project_id="legacy-id")
     assert len(msgs) == 1
     assert msgs[0].content == "x"
-
 
 @pytest.mark.asyncio
 async def test_topic_and_project_can_combine():

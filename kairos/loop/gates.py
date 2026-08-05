@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-
 APPROVE_SCORE_THRESHOLD = 75
 NO_PROGRESS_LIMIT = 5
 LOOP_SAFETY_CAP = 50
@@ -15,7 +14,6 @@ COST_TIME_CAP_S = 30 * 60
 INFRA_FAILURE_LIMIT = 5
 STAGNATION_WINDOW = 3
 STAGNATION_TOLERANCE = 2
-
 
 def loop_health_score(session: Any) -> int:
     """Return a 0-100 health score for an in-progress loop."""
@@ -43,7 +41,6 @@ def loop_health_score(session: Any) -> int:
         score -= 10
 
     return max(0, min(100, score))
-
 
 def issues_signature(issues: List[Dict]) -> str:
     """Build a stable issue identity for consecutive-round detection."""

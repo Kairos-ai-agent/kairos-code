@@ -6,13 +6,11 @@ from pathlib import Path
 
 import pytest
 
-
 # ---------------------------------------------------------------- mermaid
 
 def test_plan_to_mermaid_empty():
     from kairos.review.mermaid import plan_to_mermaid
     assert "empty plan" in plan_to_mermaid("")
-
 
 def test_plan_to_mermaid_single_step():
     from kairos.review.mermaid import plan_to_mermaid
@@ -21,7 +19,6 @@ def test_plan_to_mermaid_single_step():
     assert "flowchart TD" in out
     assert "S1" in out
     assert "app.py" in out
-
 
 def test_plan_to_mermaid_multi_step_with_arrows():
     from kairos.review.mermaid import plan_to_mermaid
@@ -37,13 +34,11 @@ def test_plan_to_mermaid_multi_step_with_arrows():
     assert "src/index.js" in out
     assert "src/router.js" in out
 
-
 def test_plan_to_mermaid_fallback_when_no_numbering():
     from kairos.review.mermaid import plan_to_mermaid
     text = "Just a paragraph with no numbered steps."
     out = plan_to_mermaid(text)
     assert "flowchart TD" in out
-
 
 def test_extract_steps_returns_numbered():
     from kairos.review.mermaid import extract_steps
@@ -53,7 +48,6 @@ def test_extract_steps_returns_numbered():
     assert steps[0][0] == 1
     assert "do thing" in steps[0][1]
 
-
 def test_plan_to_file_tree_groups_by_dir():
     from kairos.review.mermaid import plan_to_file_tree
     text = "create `src/api/users.py` and edit `src/main.py` and add `tests/test_users.py`"
@@ -61,18 +55,15 @@ def test_plan_to_file_tree_groups_by_dir():
     assert "src/" in tree
     assert "tests/" in tree
 
-
 def test_plan_to_file_tree_empty():
     from kairos.review.mermaid import plan_to_file_tree
     assert "no file paths" in plan_to_file_tree("nothing here")
-
 
 # ---------------------------------------------------------------- comments
 
 def test_verdict_to_comments_empty():
     from kairos.review.comments import verdict_to_comments
     assert verdict_to_comments({"issues": []}) == []
-
 
 def test_verdict_to_comments_severity_to_priority():
     from kairos.review.comments import verdict_to_comments
@@ -94,7 +85,6 @@ def test_verdict_to_comments_severity_to_priority():
     ]
     assert all("title" in c and "body" in c and "file" in c for c in comments)
 
-
 def test_verdict_to_comments_includes_source_reviewer():
     from kairos.review.comments import verdict_to_comments
     verdict = {"issues": [
@@ -104,7 +94,6 @@ def test_verdict_to_comments_includes_source_reviewer():
     ]}
     comments = verdict_to_comments(verdict)
     assert "security_reviewer" in comments[0]["body"]
-
 
 def test_comments_to_jsonl_roundtrips():
     from kairos.review.comments import (
@@ -121,7 +110,6 @@ def test_comments_to_jsonl_roundtrips():
         parsed = json.loads(line)
         assert parsed["file"] == "a.py"
 
-
 def test_comments_to_directive_lines():
     from kairos.review.comments import (
         comments_to_directive_lines, verdict_to_comments,
@@ -135,7 +123,6 @@ def test_comments_to_directive_lines():
     assert "::code-comment{" in lines
     assert "title" in lines
 
-
 # ---------------------------------------------------------------- checkpoint
 
 def test_checkpoint_creates_repo(tmp_path: Path):
@@ -143,7 +130,6 @@ def test_checkpoint_creates_repo(tmp_path: Path):
     assert ensure_repo(tmp_path) is True
     assert (tmp_path / ".git").exists()
     assert list_checkpoints(tmp_path) == []
-
 
 def test_checkpoint_round_returns_sha(tmp_path: Path):
     from kairos.tools.checkpoint import (
@@ -162,7 +148,6 @@ def test_checkpoint_round_returns_sha(tmp_path: Path):
     assert cps[0]["approved"] is True
     assert "first round" in cps[0]["summary"]
 
-
 def test_checkpoint_no_changes_returns_none(tmp_path: Path):
     from kairos.tools.checkpoint import (
         checkpoint_round, ensure_repo, list_checkpoints,
@@ -173,7 +158,6 @@ def test_checkpoint_no_changes_returns_none(tmp_path: Path):
     sha = checkpoint_round(tmp_path, 2, 90, "second", False)  # nothing new
     assert sha is None
     assert len(list_checkpoints(tmp_path)) == 1
-
 
 def test_checkpoint_checkout_restores_files(tmp_path: Path):
     from kairos.tools.checkpoint import (
@@ -189,7 +173,6 @@ def test_checkpoint_checkout_restores_files(tmp_path: Path):
     assert ok is True, err
     assert (tmp_path / "file.txt").read_text() == "version1"
 
-
 def test_checkpoint_message_format(tmp_path: Path):
     """Verify the commit message structure so UI can parse round/score."""
     from kairos.tools.checkpoint import (
@@ -202,7 +185,6 @@ def test_checkpoint_message_format(tmp_path: Path):
     assert cps[0]["round"] == 7
     assert cps[0]["score"] == 92
 
-
 def test_checkpoint_on_non_git_workspace_returns_none(tmp_path: Path):
     """If git is unavailable / not installed, checkpoint is a no-op."""
     from kairos.tools.checkpoint import checkpoint_round
@@ -212,7 +194,6 @@ def test_checkpoint_on_non_git_workspace_returns_none(tmp_path: Path):
     empty.mkdir()
     sha = checkpoint_round(empty, 1, 80, "x", True)
     assert sha is None
-
 
 # ---------------------------------------------------------------- run_loop new gates
 
@@ -286,7 +267,6 @@ def test_run_loop_uses_specialists_when_configured():
     # 0.55/0.20/0.10 \u2014 should land in 78-85 range.
     assert 70 <= session.last_score <= 90
     assert session.last_approve is True
-
 
 def test_run_loop_best_of_n_runs_multiple_coders():
     """With best_of_n=2, the loop should spawn at least 2 coder attempts."""

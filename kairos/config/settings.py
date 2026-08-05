@@ -9,7 +9,6 @@ from typing import Optional
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
-
 class LLMProviderConfig(BaseSettings):
     """Configuration for a single LLM provider."""
 
@@ -19,7 +18,6 @@ class LLMProviderConfig(BaseSettings):
     max_tokens: int = 8192
     temperature: float = 0.7
     timeout: int = 120
-
 
 class Settings(BaseSettings):
     """Global application settings."""
@@ -83,6 +81,5 @@ class Settings(BaseSettings):
     default_provider: str = "openai"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
-
 
 settings = Settings()

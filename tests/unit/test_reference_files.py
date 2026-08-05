@@ -10,13 +10,11 @@ from __future__ import annotations
 import pytest
 from pathlib import Path
 
-
 @pytest.fixture
 def db(tmp_path):
     """Fresh Persistence rooted in tmp_path."""
     from kairos.core.persistence import Persistence
     return Persistence(tmp_path / "ref_test.db")
-
 
 # ---------------------------------------------------------------- persistence
 
@@ -30,7 +28,6 @@ def test_add_and_list_file(db):
     # `content` is not in list — only metadata.
     assert "content" not in files[0]
 
-
 def test_load_file_includes_content(db):
     db.add_file("f1", "p1", "x.txt", "text/plain", 5, "hello")
     record = db.load_file("f1")
@@ -38,13 +35,11 @@ def test_load_file_includes_content(db):
     assert record["content"] == "hello"
     assert record["name"] == "x.txt"
 
-
 def test_delete_file(db):
     db.add_file("f1", "p1", "x.txt", "text/plain", 5, "hello")
     assert db.delete_file("f1") is True
     assert db.load_file("f1") is None
     assert db.delete_file("f1") is False  # idempotent
-
 
 def test_delete_project_cascades_to_files(db):
     db.add_file("f1", "p1", "a.txt", "text/plain", 1, "a")
@@ -55,13 +50,11 @@ def test_delete_project_cascades_to_files(db):
     # p2's file untouched
     assert len(db.list_files("p2")) == 1
 
-
 def test_load_all_for_project_includes_content(db):
     db.add_file("f1", "p1", "small.txt", "text/plain", 5, "hello")
     files = db.load_all_files_for_project("p1")
     assert len(files) == 1
     assert files[0]["content"] == "hello"
-
 
 # ---------------------------------------------------------------- digest builder
 
@@ -89,14 +82,12 @@ def test_build_reference_digest_inlines_small_files(db):
     assert "A" * 10_000 not in digest
     assert "truncated" in digest.lower() or "…" in digest
 
-
 def test_build_reference_digest_empty_for_no_files(db):
     from kairos.core.orchestrator import Orchestrator
     orch = Orchestrator.__new__(Orchestrator)
     orch._db = db
     orch._projects = {}
     assert orch.build_reference_digest("p1") == ""
-
 
 def test_project_to_dict_includes_files(db):
     """to_dict() should expose a `files` array of metadata so the UI
@@ -108,7 +99,6 @@ def test_project_to_dict_includes_files(db):
     assert "files" in d
     assert len(d["files"]) == 1
     assert d["files"][0]["name"] == "x.txt"
-
 
 # ---------------------------------------------------------------- API endpoints
 
@@ -146,7 +136,6 @@ def _make_orch_with_api(tmp_path):
     app.include_router(projects_route_module.router, prefix="/api/projects")
     return TestClient(app), orch
 
-
 def test_upload_file_via_api(tmp_path):
     client, orch = _make_orch_with_api(tmp_path)
     project = orch.create_project("Test", "x", work_dir=str(tmp_path / "ws"))
@@ -173,7 +162,6 @@ def test_upload_file_via_api(tmp_path):
     r = client.get(f"/api/projects/{project.id}/files")
     assert r.json()["files"] == []
 
-
 def test_upload_rejects_oversized_file(tmp_path):
     client, orch = _make_orch_with_api(tmp_path)
     project = orch.create_project("Test", "x", work_dir=str(tmp_path / "ws"))
@@ -185,14 +173,12 @@ def test_upload_rejects_oversized_file(tmp_path):
     assert r.status_code == 413
     assert "too large" in r.json()["detail"].lower()
 
-
 def test_delete_file_returns_404_for_unknown(tmp_path):
     client, orch = _make_orch_with_api(tmp_path)
     project = orch.create_project("Test", "x", work_dir=str(tmp_path / "ws"))
 
     r = client.delete(f"/api/projects/{project.id}/files/nonexistent_id")
     assert r.status_code == 404
-
 
 def test_to_dict_round_trip_after_upload(tmp_path):
     """to_dict's `files` field should reflect a freshly uploaded file."""

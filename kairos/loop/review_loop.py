@@ -67,7 +67,6 @@ _run_reviewer_round_for = run_reviewer_round_for
 _run_reviewer_round = run_reviewer_round
 _run_reviewers_parallel = run_reviewers_parallel
 
-
 @dataclass
 class LoopSession:
     """Holds state for one ongoing loop."""
@@ -128,7 +127,6 @@ class LoopSession:
         self.plan_pending = False
         if self.plan_event and not self.plan_event.is_set():
             self.plan_event.set()
-
 
 # Re-export the loop runner helpers. Each underscore-prefixed name is the
 # canonical location; we mirror it here so tests can keep using

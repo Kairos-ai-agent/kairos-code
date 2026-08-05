@@ -9,7 +9,6 @@ from kairos.core.message_bus import MessageBus
 from kairos.llm.base import LLMConfig
 from kairos.agents.roles.reviewer import Reviewer
 
-
 SYSTEM_PROMPT = """You are Kairos Test Reviewer — focused on test coverage
 and test quality. You grade one round of the Coder's work on tests
 only.
@@ -33,7 +32,6 @@ fix_instruction="add unit tests covering [list of behaviors]".
 Score <70 means do not approve. CRITICAL if a critical path has zero
 tests.
 """
-
 
 class TestReviewer(Reviewer):
     """Specialist Reviewer focused on test coverage & quality."""

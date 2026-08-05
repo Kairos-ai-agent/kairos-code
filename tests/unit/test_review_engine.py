@@ -8,7 +8,6 @@ import pytest
 from kairos.llm.base import LLMConfig, LLMResponse
 from kairos.review.engine import ReviewEngine
 
-
 def _make_engine_with_response(text: str) -> ReviewEngine:
     """Build a ReviewEngine whose LLM provider returns `text` from complete()."""
     engine = ReviewEngine(LLMConfig(provider="openai", model="gpt-4o"))
@@ -18,7 +17,6 @@ def _make_engine_with_response(text: str) -> ReviewEngine:
     )
     engine._llm = fake_provider
     return engine
-
 
 @pytest.mark.asyncio
 async def test_fenced_json_block_parses(tmp_workspace):
@@ -31,7 +29,6 @@ async def test_fenced_json_block_parses(tmp_workspace):
     assert fr.issues[0].category == "CRITICAL"
     assert fr.score == 80  # 100 - 20 per critical
 
-
 @pytest.mark.asyncio
 async def test_bare_json_array_parses(tmp_workspace):
     body = json.dumps([{"category": "MAJOR", "description": "d"}])
@@ -39,7 +36,6 @@ async def test_bare_json_array_parses(tmp_workspace):
     fr = await engine.review_file("foo.py", "print('hi')")
     assert len(fr.issues) == 1
     assert fr.issues[0].category == "MAJOR"
-
 
 @pytest.mark.asyncio
 async def test_unrelated_brackets_dont_confuse_parser(tmp_workspace):
@@ -53,14 +49,12 @@ async def test_unrelated_brackets_dont_confuse_parser(tmp_workspace):
     assert len(fr.issues) == 1
     assert fr.issues[0].description == "real"
 
-
 @pytest.mark.asyncio
 async def test_unparseable_response_yields_empty_review(tmp_workspace):
     engine = _make_engine_with_response("just plain text, no JSON here")
     fr = await engine.review_file("foo.py", "x")
     assert fr.issues == []
     assert fr.score == 100
-
 
 @pytest.mark.asyncio
 async def test_score_decreases_with_severity(tmp_workspace):

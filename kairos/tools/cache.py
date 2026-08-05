@@ -30,7 +30,6 @@ from typing import Any, Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-
 class ToolCache:
     """Thread-safe per-round tool result cache.
 
@@ -75,7 +74,6 @@ class ToolCache:
         return {"hits": self.hits, "misses": self.misses,
                 "size": len(self._data), "hit_rate": round(self.hit_rate, 3)}
 
-
 def make_key(tool_name: str, **kwargs) -> Tuple[str, frozenset]:
     """Build a hashable cache key from tool name + kwargs.
 
@@ -85,13 +83,11 @@ def make_key(tool_name: str, **kwargs) -> Tuple[str, frozenset]:
                if not k.startswith("_") and k not in ("self", "cls")}
     return (tool_name, frozenset(cleaned.items()))
 
-
 # Module-level "current cache" pointer. Tools that opt in look this up
 # and cache against it. Reset every round by run_loop.
 _current: Optional[ToolCache] = None
 _default: Optional[ToolCache] = None
 _current_lock = threading.Lock()
-
 
 def _resolve() -> ToolCache:
     """Return the active cache, lazily creating a stable singleton.
@@ -108,11 +104,9 @@ def _resolve() -> ToolCache:
         _default = ToolCache()
     return _default
 
-
 def get_cache() -> ToolCache:
     """Get the active cache. Always non-None (module-level default)."""
     return _resolve()
-
 
 def set_cache(cache: Optional[ToolCache]) -> None:
     """Install a new active cache. Pass None to reset to the default singleton."""
@@ -123,7 +117,6 @@ def set_cache(cache: Optional[ToolCache]) -> None:
             # Reset the lazy default to a fresh singleton so the next
             # get_cache() call returns a clean, stable instance.
             _default = ToolCache()
-
 
 def clear_round() -> None:
     """Wipe the active cache (call at the end of each round)."""

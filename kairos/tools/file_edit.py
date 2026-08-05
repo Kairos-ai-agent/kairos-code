@@ -6,7 +6,6 @@ from typing import Optional
 
 from kairos.tools.base import BaseTool, ToolResult
 
-
 class FileEditTool(BaseTool):
     """Write file contents inside the project directory."""
 
@@ -37,7 +36,6 @@ class FileEditTool(BaseTool):
             return ToolResult(success=False, output="", error=str(e))
         except Exception as e:
             return ToolResult(success=False, output="", error=str(e))
-
 
 class FileEditReplaceTool(BaseTool):
     """Replace text in a file inside the project directory."""
@@ -78,7 +76,6 @@ class FileEditReplaceTool(BaseTool):
             return ToolResult(success=True, output=f"Replaced text in {path}")
         except Exception as e:
             return ToolResult(success=False, output="", error=str(e))
-
 
 class MultiEditTool(BaseTool):
     """Apply many edits across many files in a single call.

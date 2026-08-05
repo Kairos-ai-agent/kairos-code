@@ -11,7 +11,6 @@ import httpx
 from kairos.llm.base import BaseLLMProvider, LLMConfig, LLMMessage, LLMResponse
 from kairos.llm.provider_registry import ProviderRegistry
 
-
 class OllamaProvider(BaseLLMProvider):
     """Ollama local model provider via HTTP API."""
 
@@ -122,6 +121,5 @@ class OllamaProvider(BaseLLMProvider):
 
     async def close(self):
         await self._client.aclose()
-
 
 ProviderRegistry.register("ollama", OllamaProvider)

@@ -8,7 +8,6 @@ from typing import Any, Optional
 
 from pydantic import BaseModel
 
-
 class ToolResult(BaseModel):
     """Result of a tool execution."""
 
@@ -16,7 +15,6 @@ class ToolResult(BaseModel):
     output: str
     error: Optional[str] = None
     metadata: dict = {}
-
 
 class BaseTool(ABC):
     """Abstract base class for all agent tools."""

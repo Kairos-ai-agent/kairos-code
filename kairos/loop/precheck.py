@@ -28,10 +28,8 @@ from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-
 # Cap output so a long pytest trace doesn'"'"'t blow up the prompt.
 MAX_OUTPUT_CHARS = 3000
-
 
 async def _run(cmd: List[str], cwd: Path, timeout: int = 60) -> Dict:
     """Run a shell command asynchronously. Never raises."""
@@ -54,7 +52,6 @@ async def _run(cmd: List[str], cwd: Path, timeout: int = 60) -> Dict:
         return {"ok": None, "code": 127, "stdout": "", "stderr": "(command not found)"}
     except Exception as e:
         return {"ok": False, "code": -1, "stdout": "", "stderr": str(e)}
-
 
 async def pre_check_workspace(
     workspace: Path,
@@ -115,14 +112,12 @@ async def pre_check_workspace(
         "summary": summary,
     }
 
-
 def _auto_detect_test_command(workspace: Path) -> Optional[List[str]]:
     if (workspace / "pyproject.toml").exists() or (workspace / "pytest.ini").exists():
         return ["pytest", "-q", "--tb=short", "-x"]
     if (workspace / "package.json").exists():
         return ["npm", "test", "--silent"]
     return None
-
 
 def format_precheck_for_prompt(precheck: Dict) -> str:
     """Render the precheck result as a string the LLM can read.
@@ -144,7 +139,6 @@ def format_precheck_for_prompt(precheck: Dict) -> str:
         lines.append(out[-1500:])
     return "\n".join(lines)
 
-
 # ---------------------------------------------------------------- self-debug
 
 # Regex for the common "X not found / X not installed" class of errors
@@ -163,7 +157,6 @@ _KNOWN_ERROR_PATTERNS = [
     (re.compile(r"command not found: (\S+)"),
      "missing_binary", "install {match} or use a different command"),
 ]
-
 
 def extract_known_fixes(stderr: str, stdout: str = "") -> List[Dict]:
     """Scan a test/lint error log for patterns the Coder can fix in 1 step.
@@ -187,7 +180,6 @@ def extract_known_fixes(stderr: str, stdout: str = "") -> List[Dict]:
             if len(found) >= 5:
                 return found
     return found
-
 
 def format_self_debug_hint(fixes: List[Dict]) -> str:
     """Render the known-fix list as a Coder-readable hint."""

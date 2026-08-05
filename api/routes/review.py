@@ -11,16 +11,13 @@ from api.deps import get_review_engine, orchestrator
 
 router = APIRouter()
 
-
 class ReviewProjectRequest(BaseModel):
     project_path: str
     file_extensions: list[str] = [".py", ".js", ".ts", ".tsx", ".jsx"]
 
-
 class ReviewFileRequest(BaseModel):
     file_path: str
     code: str
-
 
 @router.post("/project")
 async def review_project(request: ReviewProjectRequest):
@@ -49,7 +46,6 @@ async def review_project(request: ReviewProjectRequest):
         return report.model_dump()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.post("/file")
 async def review_file(request: ReviewFileRequest):

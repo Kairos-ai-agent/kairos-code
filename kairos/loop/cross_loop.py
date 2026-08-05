@@ -14,7 +14,6 @@ CODER_TEMPERATURE_START = 0.7
 CODER_TEMPERATURE_END = 0.15
 CODER_TEMPERATURE_DECAY_ROUNDS = 15
 
-
 def coder_temperature_for_round(round_no: int) -> float:
     """Linearly decay exploration temperature, clamped at both ends."""
     if round_no <= 1:
@@ -26,7 +25,6 @@ def coder_temperature_for_round(round_no: int) -> float:
     return CODER_TEMPERATURE_START + (
         CODER_TEMPERATURE_END - CODER_TEMPERATURE_START
     ) * progress
-
 
 def load_history_digest(persistence, project_id: str) -> str:
     """Load a bounded summary of recent rounds and repeated patterns."""
@@ -50,7 +48,6 @@ def load_history_digest(persistence, project_id: str) -> str:
     digest = "Previous loop history on this project:\n" + "\n".join(parts)
     advisory = detect_cross_loop_patterns(rounds)
     return digest + ("\n\n" + advisory if advisory else "")
-
 
 def detect_cross_loop_patterns(rounds: List[dict]) -> str:
     """Detect repeated categories, flat scores, hot files, and infra streaks."""

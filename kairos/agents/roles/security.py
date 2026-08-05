@@ -11,7 +11,6 @@ from kairos.core.message_bus import MessageBus
 from kairos.llm.base import LLMConfig
 from kairos.agents.roles.reviewer import Reviewer
 
-
 SYSTEM_PROMPT = """You are Kairos Security Reviewer — a focused security
 auditor grading one round of the Coder's work.
 
@@ -56,7 +55,6 @@ do not approve.
   Reviewer handles those.
 - Don't propose broad refactors. Fix instructions must be surgical.
 """
-
 
 class SecurityReviewer(Reviewer):
     """Specialist Reviewer focused on security."""

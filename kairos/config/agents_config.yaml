@@ -1,0 +1,16 @@
+# Agent Role Configuration — LoopReview mode
+# Only two roles: Coder (universal) and Reviewer (gatekeeper).
+# See kairos/agents/roles/coder.py and reviewer.py for the canonical prompts.
+# These YAML prompts are loaded as overrides; if absent, Python defaults apply.
+
+roles:
+  coder:
+    name: "Coder"
+    description: "Universal coding agent — full tool access"
+    # system_prompt intentionally omitted: Python default in coder.py is the
+    # authoritative source. Add here only to override.
+
+  reviewer:
+    name: "Reviewer"
+    description: "Strict gatekeeper — read-only + tests, grades each round"
+    # system_prompt intentionally omitted: Python default in reviewer.py.

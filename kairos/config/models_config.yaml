@@ -1,0 +1,31 @@
+# LLM Model Configuration
+# Assign different models to the two LoopReview roles (coder, reviewer).
+# Built-in profiles below can be selected via the Settings UI; custom
+# providers (OpenAI/Anthropic compatible) live in data/settings.json under
+# `custom_models` and are referenced as `custom:<name>`.
+
+models:
+  default:
+    provider: openai
+    model: gpt-4o
+    temperature: 0.7
+    max_tokens: 8192
+
+  precise:
+    provider: anthropic
+    model: claude-sonnet-4-20250514
+    temperature: 0.3
+    max_tokens: 8192
+
+  fast:
+    provider: deepseek
+    model: deepseek-chat
+    temperature: 0.5
+    max_tokens: 4096
+
+# LoopReview role -> model mapping. Only two roles exist; any role not
+# listed here falls back to `default`. To bind a custom provider to a
+# role, set `data/settings.json` -> role_mappings.<role> = "custom:<name>".
+role_model_mapping:
+  coder: default
+  reviewer: precise

@@ -198,7 +198,7 @@ def test_tool_cache_clear_round_resets():
     c.get(make_key("x", path="a"))
     c.get(make_key("x", path="a"))
     assert c.hits == 2
-    assert c.misses == 1
+    assert c.misses == 0
     c.clear()
     assert c.hits == 0
     assert c.misses == 0

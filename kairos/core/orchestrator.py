@@ -424,7 +424,8 @@ class Orchestrator:
             if not payload:
                 continue
             body = payload.get("content", b"").decode("utf-8", errors="replace")
-            chunks.append(f"### {meta[\"name\"]}\n```\n{body[:3000]}\n```")
+            name = meta["name"]
+            chunks.append(f"### {name}\n```\n{body[:3000]}\n```")
         return "\n\n".join(chunks)
 
     def build_preferences_block(self, project_id: str) -> str:

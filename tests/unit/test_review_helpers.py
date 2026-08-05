@@ -147,7 +147,7 @@ def test_checkpoint_creates_repo(tmp_path: Path):
 
 def test_checkpoint_round_returns_sha(tmp_path: Path):
     from kairos.tools.checkpoint import (
-        checkpoint_round, list_checkpoints,
+        checkpoint_round, ensure_repo, list_checkpoints,
     )
     ensure_repo(tmp_path)
     (tmp_path / "hello.py").write_text("print('hi')")

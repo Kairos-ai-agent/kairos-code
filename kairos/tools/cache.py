@@ -88,23 +88,44 @@ def make_key(tool_name: str, **kwargs) -> Tuple[str, frozenset]:
 
 # Module-level "current cache" pointer. Tools that opt in look this up
 # and cache against it. Reset every round by run_loop.
-_current: Optional[ToolCache] = ToolCache()
+_current: Optional[ToolCache] = None
+_default: Optional[ToolCache] = None
 _current_lock = threading.Lock()
+
+
+def _resolve() -> ToolCache:
+    """Return the active cache, lazily creating a stable singleton.
+
+    We deliberately keep one persistent ToolCache instance alive at
+    module scope so that `set_cache(None)` followed by `get_cache()`
+    returns the SAME instance both times — otherwise tools that
+    capture a reference would silently lose cache hits.
+    """
+    global _current, _default
+    if _current is not None:
+        return _current
+    if _default is None:
+        _default = ToolCache()
+    return _default
 
 
 def get_cache() -> ToolCache:
     """Get the active cache. Always non-None (module-level default)."""
-    return _current if _current is not None else ToolCache()
+    return _resolve()
 
 
 def set_cache(cache: Optional[ToolCache]) -> None:
-    """Install a new active cache. Pass None to disable caching."""
-    global _current
+    """Install a new active cache. Pass None to reset to the default singleton."""
+    global _current, _default
     with _current_lock:
         _current = cache
+        if cache is None:
+            # Reset the lazy default to a fresh singleton so the next
+            # get_cache() call returns a clean, stable instance.
+            _default = ToolCache()
 
 
 def clear_round() -> None:
     """Wipe the active cache (call at the end of each round)."""
-    if _current is not None:
-        _current.clear()
+    cache = _resolve()
+    cache.clear()

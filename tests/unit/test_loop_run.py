@@ -282,7 +282,10 @@ async def test_score_stagnation_stops():
 async def test_cost_token_cap_stops(monkeypatch):
     """Token cap fires before the 50-round hard cap."""
     # Force a tiny cap so we don't need to fill the agent with 500k tokens.
+    from kairos.loop import gates as gates_mod
+    monkeypatch.setattr(gates_mod, "COST_TOKEN_CAP", 100)
     monkeypatch.setattr(rl, "COST_TOKEN_CAP", 100)
+    monkeypatch.setattr("kairos.loop.loop_runner.COST_TOKEN_CAP", 100)
     coder = StubAgent(["x" * 200] * 10)  # each \u224850 tokens
     reviewer = StubAgent([
         _verdict(approve=False, score=10, issues=[_issue(description=f"r{i}")],

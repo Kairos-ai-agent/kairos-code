@@ -256,15 +256,15 @@ def _update_progress(session, review):
     """Update session progress counters after a Reviewer round.
 
     Counter semantics:
-      - no_progress_count counts consecutive rounds with the SAME issue
-        signature. The first round that produces a signature (or the first
-        round whose signature differs from the previous) counts as 1, not 0.
-        This way after exactly NO_PROGRESS_LIMIT rounds the counter equals
-        NO_PROGRESS_LIMIT and the gate fires — rather than running one extra
-        round.
+      - no_progress_count increments when the issue signature repeats
+        verbatim. A brand-new signature resets the counter to 1 so that
+        after exactly NO_PROGRESS_LIMIT rounds of identical issues the
+        counter equals NO_PROGRESS_LIMIT and the gate fires the same
+        round — not one round later.
       - infra_failure_streak counts consecutive rounds where the Reviewer
         could not grade (timeout, parse fail, tool limit). Resets whenever
-        a real verdict comes back.
+        a real verdict comes back, and also clears no_progress so a
+        recovered Reviewer does not inherit a "stuck" counter from before.
     """
     session.last_score = review.get("score", 0)
     session.last_approve = review.get("approve", False)
@@ -360,37 +360,11 @@ async def _check_gates(session, round_no, bus):
             and (max(score_window) - min(score_window)) <= STAGNATION_TOLERANCE
             and score_window[-1] >= APPROVE_SCORE_THRESHOLD - 15
             and score_window[-1] < APPROVE_SCORE_THRESHOLD):
-        # Smart replan: instead of giving up, ask the Coder to pivot to
-        # a different angle. We give it one shot to break out of the
-        # plateau before we actually stop.
-        if not getattr(session, "_stagnation_replan_used", False):
-            session._stagnation_replan_used = True
-            session.stagnation_replan_count = int(
-                getattr(session, "stagnation_replan_count", 0) or 0
-            ) + 1
-            await bus.publish(Message(
-                sender="orchestrator", topic="loop.replan_suggested",
-                content=(
-                    f"Score plateau near {score_window[-1]} for "
-                    f"{STAGNATION_WINDOW} rounds. Pivoting: try a "
-                    "different fix angle, reduce scope, or ask the "
-                    "user a clarifying question before repeating the "
-                    "same approach."
-                ),
-                msg_type="warning",
-                metadata={"project_id": session.project.id,
-                          "session_id": session.session_id,
-                          "replan_count": session.stagnation_replan_count},
-            ))
-            # Reset the score window so we get one more plateau check
-            # before stopping. Also clear the issues signature so a
-            # genuinely different fix isn't penalized as no-progress.
-            session.score_window.clear()
-            session.no_progress_count = max(0, session.no_progress_count - 2)
-            return None
         await bus.publish(Message(
             sender="orchestrator", topic="loop.stagnation",
-            content=f"Score plateau persists near {score_window[-1]} after replan; stopping",
+            content=(
+                f"Score plateau near {score_window[-1]} for {STAGNATION_WINDOW} rounds; needs a new approach"
+            ),
             msg_type="warning",
             metadata={"project_id": session.project.id,
                       "session_id": session.session_id},

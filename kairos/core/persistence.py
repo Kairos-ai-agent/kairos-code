@@ -1,10 +1,13 @@
 """SQLite-backed persistence for Kairos projects and messages."""
 from __future__ import annotations
 import json
+import logging
 import sqlite3
 import time
 from pathlib import Path
 from typing import List, Optional
+
+logger = logging.getLogger(__name__)
 
 class Persistence:
     """SQLite persistence for projects, messages, and requirements."""
@@ -382,6 +385,10 @@ class Persistence:
             conn.row_factory = sqlite3.Row
             if not query:
                 rows = conn.execute('SELECT round, coder_summary, review_summary FROM loop_rounds WHERE project_id = ? ORDER BY round DESC LIMIT ?', (project_id, limit)).fetchall()
+                if rows:
+                    return [dict(r) for r in rows]
+                # Nothing in loop_rounds (only FTS was indexed) — fall back.
+                rows = conn.execute('SELECT round, coder_summary, review_summary FROM loop_rounds_fts WHERE project_id = ? ORDER BY round DESC LIMIT ?', (project_id, limit)).fetchall()
                 return [dict(r) for r in rows]
             try:
                 rows = conn.execute('SELECT lr.round, lr.coder_summary, lr.review_summary, fts.rank AS score FROM loop_rounds_fts fts JOIN loop_rounds lr ON     lr.project_id = fts.project_id     AND lr.session_id = fts.session_id     AND lr.round = fts.round WHERE fts.project_id = ? AND loop_rounds_fts MATCH ? ORDER BY fts.rank LIMIT ?', (project_id, query, limit)).fetchall()

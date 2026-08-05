@@ -302,7 +302,7 @@ def test_maybe_record_working_fix_only_on_fail_to_pass(db):
              "issues": [{"category": "correctness", "severity": "MAJOR",
                          "description": "missing null check on user input",
                          "file": "x.py", "line": 10}]}
-    passing = {"approve": True, "score": 90, "issues": []}
+    passing = {"approve": True, "score": 90, "issues": [], "_confidence": 0.9}
     # Fail -> pass should record.
     fid = maybe_record_working_fix(db, "p1", prior, passing, "added None guard")
     assert fid is not None

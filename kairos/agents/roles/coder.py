@@ -92,6 +92,17 @@ justification per step. Strict rules:
   than asking a question.
 - Keep the plan under ~400 words. The user will review and approve it before
   any real work begins.
+## Confidence block (best-of-N signal)
+When best-of-N is enabled, the orchestrator spawns N parallel Coder attempts
+and picks the highest-confidence one. To make that work, your LAST message
+(no tool calls in that turn) MUST end with this two-line block:
+
+    CONFIDENCE: 0-100
+    RISK: low|med|high
+
+Be honest. A 90 confidence means tests pass and the diff is small.
+A 40 confidence means best-effort change without full verification.
+If you cannot emit the block, the orchestrator will treat you as 0.
 """
 
 

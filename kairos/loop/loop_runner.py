@@ -9,10 +9,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 from kairos.agents.base import AgentTask
 from kairos.core.message_bus import Message
@@ -291,6 +292,7 @@ def _update_progress(session, review):
     if len(session.score_window) > STAGNATION_WINDOW:
         session.score_window.pop(0)
 
+
 async def _check_gates(session, round_no, bus):
     """Evaluate termination gates. Returns the gate name or None.
 
@@ -302,7 +304,7 @@ async def _check_gates(session, round_no, bus):
          keep hitting the API.
       3. infra_streak — Reviewer kept failing to grade (timeout / parse
          fail / tool limit). Different from no_progress because the
-         Coder is innocent; we just couldn't read its output.
+         Coder is innocent; we just could not read its output.
       4. no_progress — exact same issue signature repeating; the Coder
          is stuck on the same failure mode. Fires at NO_PROGRESS_LIMIT.
       5. stagnation — score is flat near (but below) the approve
@@ -381,6 +383,177 @@ async def _check_gates(session, round_no, bus):
         return "safety_cap"
     return None
 
+
+# ============================================================================
+# Best-of-N + smart plan mode + round summary
+# ============================================================================
+
+async def _best_of_n_attempts(session, requirement, round_no, n, bus):
+    """Run the Coder N times in parallel, score each by a quick self-grade
+    on the Coder tail, and return the winning (coder_result, score) pair.
+
+    Cheap self-grade: we ask the Coder to emit a brief self-eval in its
+    tail ("CONFIDENCE: 0-100"). We parse that. No Reviewer calls — the
+    real Reviewer runs after best-of-N picks a winner.
+
+    Falls back to single-attempt mode if n<=1 or the Coder tail is
+    unparseable (in which case we just use the first result).
+    """
+    if n <= 1 or not hasattr(session, "coder"):
+        coder_result = await _run_coder_round(session, requirement, round_no)
+        return coder_result, 0
+    try:
+        tasks = [
+            asyncio.create_task(_run_coder_round(session, requirement, round_no))
+            for _ in range(n)
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+    except Exception:
+        logger.debug("best-of-N spawn failed, using single attempt", exc_info=True)
+        coder_result = await _run_coder_round(session, requirement, round_no)
+        return coder_result, 0
+    candidates: List[Tuple[int, int, str]] = []
+    for idx, r in enumerate(results):
+        if isinstance(r, Exception):
+            logger.debug("best-of-N attempt %d raised: %s", idx, r)
+            continue
+        text = r if isinstance(r, str) else str(r or "")
+        score = _parse_self_confidence(text)
+        candidates.append((score, idx, text))
+    if not candidates:
+        first = results[0] if results else ""
+        text = first if isinstance(first, str) else str(first or "")
+        return text, 0
+    candidates.sort(key=lambda item: (-item[0], item[1]))
+    best_score, _, best_text = candidates[0]
+    try:
+        await bus.publish(Message(
+            sender="orchestrator", topic="loop.best_of_n_pick",
+            content=f"Picked attempt {candidates[0][1]+1}/{n} (self-confidence={best_score})",
+            msg_type="text",
+            metadata={"project_id": session.project.id,
+                      "session_id": session.session_id,
+                      "round": round_no,
+                      "best_of_n": n,
+                      "candidates": [
+                          {"idx": idx, "self_score": s} for s, idx, _ in candidates
+                      ]},
+        ))
+    except Exception:
+        pass
+    return best_text, best_score
+
+
+def _parse_self_confidence(coder_text: str) -> int:
+    """Pull a 0-100 confidence score from the Coder tail if present.
+
+    Format the Coder prompt teaches:
+        CONFIDENCE: 78
+        RISK: low
+    Anything missing or unparseable -> 0 (neutral). The Coder is not graded
+    on this; it is a soft signal so best-of-N can break ties.
+    """
+    if not coder_text:
+        return 0
+    tail = coder_text[-1200:]
+    m = re.search(r"CONFIDENCE\s*[:=]\s*(\d{1,3})", tail, re.IGNORECASE)
+    if not m:
+        return 0
+    try:
+        val = int(m.group(1))
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(100, val))
+
+
+def _is_trivial_requirement(requirement: str) -> bool:
+    """Heuristic: a requirement is "trivial" when it is small, single-file,
+    and has no architectural keywords. Plan mode adds latency for trivial
+    tasks; we auto-approve those.
+    """
+    if not requirement:
+        return True
+    text = requirement.strip()
+    if len(text) <= 200 and "\n\n" not in text:
+        return True
+    lowered = text.lower()
+    heavy_signals = (
+        "architecture", "refactor", "migrate", "rewrite",
+        "redesign", "multi-file",
+    )
+    if any(sig in lowered for sig in heavy_signals):
+        return False
+    file_path_count = sum(
+        1 for line in text.splitlines() if "`" in line and "." in line
+    )
+    if file_path_count >= 3:
+        return False
+    return len(text) <= 600
+
+
+def should_auto_approve_plan(requirement: str) -> bool:
+    """Public predicate so the orchestrator can call this before launch."""
+    return _is_trivial_requirement(requirement)
+
+
+def _build_round_summary(session, coder_result: str, review: dict, round_no: int) -> str:
+    """One-paragraph round digest for the UI / loop_history table.
+
+    Captures: outcome, score, top issues, files-touched signal. Designed
+    to be cheap to display and easy to grep in cross-loop memory.
+    """
+    parts = []
+    if review.get("approve"):
+        parts.append(f"APPROVED (score={review.get('score', 0)})")
+    else:
+        parts.append(f"rejected (score={review.get('score', 0)})")
+    issues = review.get("issues") or []
+    if issues:
+        top = issues[:3]
+        joined = "; ".join(
+            f"{i.get('severity','?')}:{i.get('file','?')}:{i.get('description','')[:60]}"
+            for i in top
+        )
+        parts.append(f"top issues: {joined}")
+    if session.history and len(session.history) >= 2:
+        prev = session.history[-2]["review"] if len(session.history) >= 2 else {}
+        prev_score = prev.get("score", 0) or 0
+        delta = (review.get("score", 0) or 0) - prev_score
+        if delta:
+            parts.append(f"score delta={delta:+d}")
+    summary = (review.get("summary") or "").strip()
+    if summary:
+        parts.append(f"summary: {summary[:200]}")
+    return " | ".join(parts)
+
+
+async def _maybe_auto_approve_plan(session, round_no, bus, requirement: str):
+    """If the user has not engaged plan mode AND the requirement is
+    trivial, mark the plan as auto-approved so the loop skips the
+    user-blocking plan wait. Emits a message so the UI can show
+    "auto-approved" instead of pending.
+    """
+    if session.plan_completed or session.plan_decision:
+        return False
+    if not _is_trivial_requirement(requirement):
+        return False
+    session.plan_decision = "approve"
+    session.plan_pending = False
+    session.plan_completed = True
+    try:
+        await bus.publish(Message(
+            sender="orchestrator", topic="loop.plan_auto_approved",
+            content="Plan auto-approved (trivial requirement detected).",
+            msg_type="result",
+            metadata={"project_id": session.project.id,
+                      "session_id": session.session_id,
+                      "round": round_no},
+        ))
+    except Exception:
+        pass
+    return True
+
+
 async def run_loop(session, requirement):
     bus = session.message_bus
     history_digest = load_history_digest(session.persistence, session.project.id)
@@ -409,6 +582,11 @@ async def run_loop(session, requirement):
                 clear_round()
             except Exception:
                 pass
+            # Auto-approve trivial plans so trivial tasks do not block on the user.
+            try:
+                await _maybe_auto_approve_plan(session, round_no, bus, requirement)
+            except Exception:
+                logger.debug("plan auto-approve failed (non-fatal)", exc_info=True)
             needs_plan = (
                 not session.plan_completed
                 and (
@@ -426,7 +604,14 @@ async def run_loop(session, requirement):
                 return
             if not session.original_requirement:
                 session.original_requirement = requirement
-            coder_result = await _run_coder_round(session, requirement, round_no)
+            # Best-of-N: spawn multiple Coders in parallel, pick highest-confidence winner.
+            best_of_n = max(1, min(int(getattr(session, "best_of_n", 1) or 1), 5))
+            if best_of_n > 1:
+                coder_result, _self_score = await _best_of_n_attempts(
+                    session, requirement, round_no, best_of_n, bus,
+                )
+            else:
+                coder_result = await _run_coder_round(session, requirement, round_no)
             if session.user_stopped:
                 break
             try:
@@ -453,6 +638,12 @@ async def run_loop(session, requirement):
                 break
             review["_precheck_hint"] = precheck_hint
             review["_precheck_fixable"] = precheck_fixable
+            try:
+                review["_round_summary"] = _build_round_summary(
+                    session, coder_result, review, round_no
+                )
+            except Exception:
+                logger.debug("round summary build failed (non-fatal)", exc_info=True)
             _update_progress(session, review)
             session.history.append({"round": round_no, "review": review, "coder": coder_result[:2000]})
             try:
@@ -488,4 +679,3 @@ async def run_loop(session, requirement):
             msg_type="error",
             metadata={"project_id": session.project.id, "session_id": session.session_id},
         ))
-

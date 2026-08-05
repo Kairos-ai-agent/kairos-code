@@ -129,8 +129,36 @@ class LoopSession:
         if self.plan_event and not self.plan_event.is_set():
             self.plan_event.set()
 
-from kairos.loop.loop_runner import _auto_checkpoint, _run_coder_round, run_loop
 
-_run_coder_round = _run_coder_round
+# Re-export the loop runner helpers. Each underscore-prefixed name is the
+# canonical location; we mirror it here so tests can keep using
+# `rl._foo` style imports.
+from kairos.loop.loop_runner import (
+    _auto_checkpoint,
+    _best_of_n_attempts,
+    _build_round_summary,
+    _check_gates,
+    _is_trivial_requirement,
+    _maybe_auto_approve_plan,
+    _maybe_rollback_on_regression,
+    _run_coder_round,
+    _run_precheck,
+    _update_progress,
+    _wait_for_plan_decision,
+    run_loop,
+    should_auto_approve_plan,
+)
+
 _auto_checkpoint = _auto_checkpoint
+_best_of_n_attempts = _best_of_n_attempts
+_build_round_summary = _build_round_summary
+_check_gates = _check_gates
+_is_trivial_requirement = _is_trivial_requirement
+_maybe_auto_approve_plan = _maybe_auto_approve_plan
+_maybe_rollback_on_regression = _maybe_rollback_on_regression
+_run_coder_round = _run_coder_round
+_run_precheck = _run_precheck
+_update_progress = _update_progress
+_wait_for_plan_decision = _wait_for_plan_decision
+should_auto_approve_plan = should_auto_approve_plan
 run_loop = run_loop

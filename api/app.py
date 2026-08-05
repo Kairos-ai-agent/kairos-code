@@ -17,6 +17,7 @@ from api.routes.projects import router as projects_router
 from api.routes.review import router as review_router
 from api.routes.config import router as config_router
 from api.routes.websocket import router as ws_router
+from api.routes.memory import router as memory_router
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +58,7 @@ app.include_router(agents_router, prefix="/api/agents", tags=["agents"])
 app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
 app.include_router(review_router, prefix="/api/review", tags=["review"])
 app.include_router(config_router, prefix="/api/config", tags=["config"])
+app.include_router(memory_router, prefix="/api/projects", tags=["memory"])
 app.include_router(ws_router, prefix="/ws", tags=["websocket"])
 
 # Global message stream — mounted at /api/messages (not under /projects

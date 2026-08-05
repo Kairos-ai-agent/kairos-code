@@ -131,16 +131,43 @@ async def get_loop_health(project_id: str):
         return {"health": 100, "running": False, "round": 0,
                 "factors": {"score_trend": [], "infra_streak": 0, "no_progress": 0}}
     health = _loop_health_score(session)
-    return {
+    factors = {
+        "score_trend": list(getattr(session, "score_window", []) or []),
+        "infra_streak": session.infra_failure_streak,
+        "no_progress": session.no_progress_count,
+    }
+    body = {
         "health": health,
         "running": bool(project.loop_task and not project.loop_task.done()),
         "round": session.round,
-        "factors": {
-            "score_trend": list(getattr(session, "score_window", []) or []),
-            "infra_streak": session.infra_failure_streak,
-            "no_progress": session.no_progress_count,
-        },
+        "factors": factors,
     }
+    # Surface memory stats so the UI can render a "what the agent has
+    # learned" panel alongside the health badge. Best-effort: failure
+    # to read memory tables never breaks the health response.
+    try:
+        db = getattr(orchestrator, "_db", None)
+        if db is not None:
+            notes = db.list_project_notes(project_id, limit=50) or []
+            skills = db.list_skills(project_id) or []
+            body["memory"] = {
+                "notes_count": len(notes),
+                "skills_count": len(skills),
+                "top_notes": [
+                    {"id": n.get("id"), "title": n.get("title"),
+                     "kind": n.get("kind"), "use_count": n.get("use_count")}
+                    for n in notes[:5]
+                ],
+                "top_skills": [
+                    {"id": s.get("id"), "name": s.get("name"),
+                     "confidence": s.get("confidence"),
+                     "use_count": s.get("use_count")}
+                    for s in skills[:5]
+                ],
+            }
+    except Exception:
+        body["memory"] = {"notes_count": 0, "skills_count": 0}
+    return body
 
 
 class BestOfNRequest(BaseModel):

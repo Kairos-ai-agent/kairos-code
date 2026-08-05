@@ -632,6 +632,72 @@ async def run_loop(session, requirement):
                 logger.debug("round summary build failed (non-fatal)", exc_info=True)
             _update_progress(session, review)
             session.history.append({"round": round_no, "review": review, "coder": coder_result[:2000]})
+
+            # ---- Memory writes: persist this round's digest + record
+            # working-fix patterns so the next round can short-circuit
+            # similar failures. All best-effort; never break the loop.
+            try:
+                pid = session.project.id
+                sid = session.session_id
+                persistence = getattr(session, "persistence", None)
+                if persistence is not None:
+                    # Save review comments so the next Coder prompt sees them.
+                    try:
+                        from kairos.review.comments import verdict_to_comments
+                        comments = verdict_to_comments(review, project_id=pid, round_no=round_no)
+                        if comments:
+                            persistence.save_review_comments(pid, round_no, comments)
+                    except Exception:
+                        logger.debug("memory: save_review_comments failed", exc_info=True)
+                    # Mirror the round into the FTS index so the next
+                    # memory block can find it by keyword.
+                    try:
+                        issues_text = "; ".join(
+                            (i.get("description") or "")
+                            for i in (review.get("issues") or [])
+                        )[:1500]
+                        persistence.index_loop_round(
+                            pid, sid, round_no,
+                            coder_summary=(coder_result or "")[:400],
+                            review_summary=(review.get("summary") or "")[:400],
+                            issues_text=issues_text,
+                        )
+                    except Exception:
+                        logger.debug("memory: index_loop_round failed", exc_info=True)
+                    # Working-fix: only on a fail -> pass transition.
+                    try:
+                        from kairos.memory.growth import maybe_record_working_fix
+                        prior_review = (session.history[-2]["review"]
+                                        if len(session.history) >= 2 else None)
+                        maybe_record_working_fix(
+                            persistence, pid, prior_review, review, coder_result,
+                        )
+                    except Exception:
+                        logger.debug("memory: maybe_record_working_fix failed", exc_info=True)
+                    # Promote repeated-issue categories to a never-rule.
+                    try:
+                        from kairos.memory.growth import auto_promote_failure_to_preference
+                        try:
+                            review_conf = float(review.get("_confidence") or 0.5)
+                        except (TypeError, ValueError):
+                            review_conf = 0.5
+                        for issue in (review.get("issues") or [])[:5]:
+                            auto_promote_failure_to_preference(
+                                persistence, pid, issue,
+                                consecutive_count=3, threshold=3,
+                                confidence=review_conf,
+                            )
+                    except Exception:
+                        logger.debug("memory: auto_promote failed", exc_info=True)
+                    # Promote CRITICAL/MAJOR issues into the global KB.
+                    try:
+                        from kairos.memory.growth import record_global_insights_from_review
+                        record_global_insights_from_review(persistence, pid, review)
+                    except Exception:
+                        logger.debug("memory: global insights failed", exc_info=True)
+            except Exception:
+                logger.debug("memory: round-end writes failed", exc_info=True)
+
             try:
                 if _maybe_rollback_on_regression(session, coder_result):
                     await bus.publish(Message(

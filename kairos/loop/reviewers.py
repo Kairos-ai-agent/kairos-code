@@ -98,6 +98,15 @@ def _normalize_verdict(data: Any) -> Dict[str, Any] | None:
     failure_mode = data.get("_failure_mode")
     if failure_mode:
         verdict["_failure_mode"] = str(failure_mode)
+    # Confidence calibration: Reviewer may emit _confidence (0.0-1.0)
+    # reflecting how certain they are about the verdict. Clamp to the
+    # valid range; absent value defaults to 0.5 (medium-low).
+    raw_conf = data.get("_confidence")
+    try:
+        conf = float(raw_conf)
+    except (TypeError, ValueError):
+        conf = 0.5
+    verdict["_confidence"] = max(0.0, min(1.0, conf))
     return verdict
 
 def parse_review_verdict(raw: str) -> Dict[str, Any]:

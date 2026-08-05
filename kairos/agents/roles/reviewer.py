@@ -112,6 +112,20 @@ Rules for ask_human:
 - Don't approve work that hasn't been verified (no test run, no git diff
   review). If the Coder didn't run tests, mark MAJOR with fix_instruction
   to run them.
+
+## Confidence calibration (helps the agent learn faster)
+Add a top-level _confidence field with a single 0.0–1.0 number reflecting
+how certain you are about this verdict:
+
+  1.0  — you ran the failing test and reproduced the bug
+  0.8  — you read the diff and the static evidence is overwhelming
+  0.6  — likely correct, but you didn't run the exact failing scenario
+  0.4  — guess based on pattern matching; user should verify
+  0.2  — speculative; consider whether to ask_human instead
+
+Confidence is consumed by the memory system to decide whether a fix
+should be promoted to a reusable playbook. Be honest — low confidence
+is fine and accelerates learning.
 """
 
 class Reviewer(KairosAgent):

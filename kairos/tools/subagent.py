@@ -13,8 +13,10 @@ import asyncio
 import uuid
 from typing import Optional
 
-from kairos.agents.base import AgentTask, KairosAgent
 from kairos.tools.base import BaseTool, ToolResult
+# KairosAgent / AgentTask are imported lazily inside execute() to avoid a
+# circular import: kairos.agents.base -> kairos.tools.base -> this file
+# -> kairos.agents.base (partially initialised at top-of-module).
 
 class SubagentTool(BaseTool):
     """Spawn a child agent (Coder) to do a focused sub-task.
@@ -70,6 +72,8 @@ class SubagentTool(BaseTool):
         # child uses the same model. Fresh memory = no inherited context.
         from kairos.agents.roles import Coder
         child_id = f"{self.project_id}.sub_{uuid.uuid4().hex[:6]}"
+        # Lazy import to break the agents.base <-> tools.base cycle.
+        from kairos.agents.base import AgentTask
         try:
             child = Coder(
                 agent_id=child_id,

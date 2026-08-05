@@ -66,8 +66,45 @@ def build_next_prompt(session: Any, review: Dict[str, Any]) -> str:
         review.get("_precheck_fixable") or []
     )
 
+    # Pull the bounded memory block (notes, skills, working fixes, FTS
+    # history, ask history, global insights). The orchestrator already
+    # injects this on start_loop; we re-pull it here so within-loop
+    # failures see fresh state (e.g. a working fix recorded last round).
+    memory_block = ""
+    try:
+        from kairos.memory.retrieval import assemble_coder_memory
+        persistence = getattr(session, "persistence", None)
+        pid = getattr(getattr(session, "project", None), "id", None)
+        if persistence is not None and pid:
+            # Build a short failure signature so working fixes match.
+            from kairos.memory.retrieval import failure_signature
+            issues = review.get("issues") or []
+            sig = failure_signature(issues[0]) if issues else ""
+            comments = []
+            for issue in issues:
+                comments.append({
+                    "severity": issue.get("severity") or "?",
+                    "file": issue.get("file") or "?",
+                    "line": issue.get("line") or "?",
+                    "body": issue.get("description") or "",
+                })
+            memory_block = assemble_coder_memory(
+                persistence,
+                str(pid),
+                str(getattr(session, "original_requirement", ""))[:2000],
+                last_failure_signature=sig or None,
+                last_reviewer_comments=comments or None,
+            )
+    except Exception:
+        memory_block = ""
+
+    memory_prepend = ""
+    if memory_block:
+        memory_prepend = "\n\n## Project Memory (notes / skills / past fixes)\n" + memory_block + "\n"
+
     return (
-        f"Round {session.round} of the loop. The previous round was NOT approved "
+        memory_prepend
+        + f"Round {session.round} of the loop. The previous round was NOT approved "
         f"(approve={approve}, score={score})."
         + answer_block
         + self_debug_block

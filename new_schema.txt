@@ -1,0 +1,93 @@
+                CREATE TABLE IF NOT EXISTS loop_checkpoints (
+                    project_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    round INTEGER NOT NULL,
+                    sha TEXT NOT NULL,
+                    score INTEGER,
+                    approved INTEGER,
+                    summary TEXT,
+                    created_at REAL,
+                    PRIMARY KEY (project_id, session_id, round)
+                );
+
+                -- Distilled project notes. Written by the post-loop
+                -- consolidator (Coder self-reflection) or by the user.
+                -- Each note is a short paragraph describing an
+                -- architecture decision, a convention, or a known pitfall.
+                -- Notes are injected into the next loop as a
+                -- "Project Notes" block before the requirement so the
+                -- Coder can build on prior learnings.
+                CREATE TABLE IF NOT EXISTS project_notes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id TEXT NOT NULL,
+                    kind TEXT NOT NULL DEFAULT 'convention',
+                    title TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    source TEXT NOT NULL DEFAULT 'user',
+                    use_count INTEGER NOT NULL DEFAULT 0,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                );
+
+                -- Reusable playbook entries. A skill has trigger
+                -- keywords and a body that gets injected into the
+                -- Coder prompt when any trigger matches the current
+                -- requirement or the most recent failure. Skills can
+                -- be user-authored or auto-extracted from successful
+                -- rounds. `confidence` starts at 0.5 and climbs each
+                -- time the skill is referenced in a successful round.
+                CREATE TABLE IF NOT EXISTS project_skills (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    triggers TEXT NOT NULL DEFAULT '[]',
+                    body TEXT NOT NULL,
+                    confidence REAL NOT NULL DEFAULT 0.5,
+                    use_count INTEGER NOT NULL DEFAULT 0,
+                    success_count INTEGER NOT NULL DEFAULT 0,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                );
+
+                -- Working-fix patterns captured from successful rounds.
+                -- Given a from_signature and the fix that actually
+                -- worked, we can match it against future rounds and
+                -- inject the fix into the prompt before the Coder
+                -- tries to rediscover it.
+                CREATE TABLE IF NOT EXISTS working_fixes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id TEXT NOT NULL,
+                    from_signature TEXT NOT NULL,
+                    fix_body TEXT NOT NULL,
+                    issue_category TEXT NOT NULL DEFAULT 'general',
+                    success_count INTEGER NOT NULL DEFAULT 1,
+                    failure_count INTEGER NOT NULL DEFAULT 0,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                );
+
+                -- Full-text search over loop_rounds for relevance-
+                -- scored memory retrieval. Uses FTS5 with porter
+                -- stemming; INSERT OR IGNORE so manual edits to
+                -- loop_rounds do not blow up the index.
+                CREATE VIRTUAL TABLE IF NOT EXISTS loop_rounds_fts USING fts5(
+                    project_id, session_id, round UNINDEXED,
+                    coder_summary, review_summary, issues_text,
+                    tokenize = 'porter unicode61'
+                );
+
+                -- Global cross-project knowledge base. Keyed by
+                -- project_id = empty string so it is queryable as
+                -- "all insights ever seen". Each row is a single
+                -- distilled lesson with category, source project,
+                -- and a use_count so rarely-useful insights bubble up.
+                CREATE TABLE IF NOT EXISTS global_kb (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id TEXT NOT NULL DEFAULT '',
+                    source_project_id TEXT NOT NULL DEFAULT '',
+                    category TEXT NOT NULL DEFAULT 'general',
+                    body TEXT NOT NULL,
+                    use_count INTEGER NOT NULL DEFAULT 0,
+                    created_at REAL NOT NULL
+                );
+            """)

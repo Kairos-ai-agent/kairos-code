@@ -523,6 +523,33 @@ class Orchestrator:
         return [m.to_dict() for m in
                 self.message_bus.get_history(limit=limit, project_id=project_id)]
 
+    def build_memory_block(self, project_id: str, requirement: str,
+                            last_failure_signature: Optional[str] = None,
+                            last_reviewer_comments: Optional[List[dict]] = None) -> str:
+        """Assemble the memory section that goes in front of the user
+        requirement. Pulls notes, skills, working fixes, FTS-ranked
+        history, reviewer comments, ask history, and global KB
+        insights into one bounded string. See kairos.memory.retrieval.
+
+        `last_failure_signature` / `last_reviewer_comments` are
+        passed through so the next-round prompt can short-circuit
+        on a known-bad pattern. Both are optional.
+        """
+        try:
+            from kairos.memory.retrieval import assemble_coder_memory
+        except Exception:
+            logger.debug("memory module import failed", exc_info=True)
+            return ""
+        try:
+            return assemble_coder_memory(
+                self._db, project_id, requirement,
+                last_failure_signature=last_failure_signature,
+                last_reviewer_comments=last_reviewer_comments,
+            )
+        except Exception:
+            logger.debug("assemble_coder_memory failed", exc_info=True)
+            return ""
+
     async def start_loop(self, project_id: str, requirement: str) -> str:
         """Start the Coder <-> Reviewer loop. Returns the loop session id.
 
@@ -547,10 +574,13 @@ class Orchestrator:
 
         ref_digest = self.build_reference_digest(project_id)
         pref_block = self.build_preferences_block(project_id)
+        mem_block = self.build_memory_block(project_id, requirement)
         if ref_digest:
             requirement = f"{ref_digest}\n\n## User Requirement\n{requirement}"
         if pref_block:
             requirement = pref_block + "\n\n" + requirement
+        if mem_block:
+            requirement = mem_block + "\n\n" + requirement
 
         loop_cfg = _load_loop_config()
         review_focus = list(loop_cfg.get("review_focus") or [])
@@ -719,6 +749,56 @@ class Orchestrator:
         except Exception:
             logger.debug("Failed to persist final status for %s",
                          project_id, exc_info=True)
+
+        # Self-learning: fire-and-forget consolidation so the agent
+        # gets smarter in the background while the user reads the result.
+        # Wrapped in try/except so a post-loop error never blocks the
+        # status save above.
+        try:
+            rounds = self._db.load_loop_rounds(project_id, limit=20)
+            if rounds and rounds[-1].get("approve"):
+                # Cheap, no-LLM pass: re-derive advisory, promote
+                # repeated failures to preferences, flag ambiguous
+                # signatures. Runs synchronously so the next loop on
+                # this project immediately benefits.
+                from kairos.memory.growth import consolidate_project
+                summary = consolidate_project(self._db, project_id, rounds)
+                if summary.get("promoted_preferences"):
+                    logger.info("self-learning: promoted %d preference(s) for %s",
+                                summary["promoted_preferences"], project_id)
+                # Heavy LLM-driven reflection runs as a background
+                # task. It writes project_notes + project_skills. We
+                # fire it but never await it; a future start_loop
+                # sees the writes when it pulls the memory block.
+                self._maybe_reflect(project_id, rounds)
+        except Exception:
+            logger.debug("self-learning post-loop pass failed", exc_info=True)
+
+    def _maybe_reflect(self, project_id: str, rounds: List[dict]) -> None:
+        """Schedule an LLM-driven self-reflection in the background.
+
+        Cheap heuristic for whether reflection is worth it: only run
+        when (a) at least 5 rounds happened, (b) at least one round
+        was approved (we have something to learn from), and (c) the
+        previous reflection for this project is more than 30 minutes
+        old (so we do not hammer the LLM on tiny projects). The
+        reflection itself is implemented in `kairos.learning.reflect`
+        and is wrapped in an asyncio.Task so it never blocks.
+        """
+        approved = [r for r in rounds if r.get("approve")]
+        if len(rounds) < 5 or not approved:
+            return
+        try:
+            from kairos.learning.reflect import maybe_run_reflection
+            task = asyncio.create_task(
+                maybe_run_reflection(self._db, project_id, rounds),
+                name=f"reflect-{project_id}",
+            )
+            self._dispatch_tasks.add(task)
+            task.add_done_callback(self._dispatch_tasks.discard)
+        except Exception:
+            logger.debug("reflection scheduling failed", exc_info=True)
+
 
     def refresh_all_agents(self):
         for agent_id, agent in self._agents.items():

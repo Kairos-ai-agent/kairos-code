@@ -7,10 +7,17 @@ import pytest
 from fastapi.testclient import TestClient
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def client():
-    # Ensure settings point at a per-process workspace.
+    # Per-function scope so test state (projects, notes, …) doesn't
+    # leak across tests in the same file. The settings.json is
+    # also re-imported so the workspace_dir setting sticks.
+    import importlib
     os.environ.setdefault("KAIROS_WORKSPACE", "./_api_test_workspace")
+    # Force a fresh import so any test that mutated module-level
+    # state (e.g. settings) starts clean.
+    import api.deps as _api_deps
+    importlib.reload(_api_deps)
     from api.app import app
     return TestClient(app)
 

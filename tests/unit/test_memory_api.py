@@ -10,14 +10,20 @@ from fastapi.testclient import TestClient
 @pytest.fixture
 def client():
     # Per-function scope so test state (projects, notes, …) doesn't
-    # leak across tests in the same file. The settings.json is
-    # also re-imported so the workspace_dir setting sticks.
-    import importlib
+    # leak across tests in the same file. We rely on the app
+    # being constructed once at import time (module-scope), but
+    # we blow away the SQLite database between tests so each
+    # one starts with an empty project list.
+    import shutil
+    from pathlib import Path
     os.environ.setdefault("KAIROS_WORKSPACE", "./_api_test_workspace")
-    # Force a fresh import so any test that mutated module-level
-    # state (e.g. settings) starts clean.
-    import api.deps as _api_deps
-    importlib.reload(_api_deps)
+    # Wipe the test DB so the project list starts empty.
+    test_db = Path("data/_api_test.sqlite")
+    if test_db.exists():
+        try:
+            test_db.unlink()
+        except OSError:
+            pass
     from api.app import app
     return TestClient(app)
 

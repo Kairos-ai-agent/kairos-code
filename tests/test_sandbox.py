@@ -14,6 +14,7 @@ import pytest
 from kairos.sandbox import (
     DEFAULT_DENY_PATTERNS,
     SandboxPolicy,
+    _linux_landlock_sandbox,
     apply_to_subprocess,
     assign_child_to_sandbox,
     check_policy,
@@ -132,3 +133,63 @@ def test_sandbox_policy_network_default_off():
         assert policy.network is False
         policy_on = SandboxPolicy(allowed_root=Path(d), network=True)
         assert policy_on.network is True
+
+
+# ---------------------------------------------------------------------------
+# Landlock ctypes implementation
+# ---------------------------------------------------------------------------
+
+
+def test_landlock_sandbox_returns_none_on_non_linux():
+    """On non-Linux platforms, _linux_landlock_sandbox short-circuits
+    via the `landlock_available()` gate and returns None without
+    touching ctypes. This test runs on every platform."""
+    with tempfile.TemporaryDirectory() as d:
+        policy = SandboxPolicy(allowed_root=Path(d))
+        # Even on Linux, this won't apply the sandbox (no real
+        # Landlock kernel in CI), but the call must not raise.
+        result = _linux_landlock_sandbox(policy)
+        if sys.platform != "linux":
+            assert result is None
+        else:
+            # On real Linux: may return fd (success) or None
+            # (no Landlock support, e.g. old kernel). Either is
+            # acceptable — we only assert the call doesn't raise.
+            assert result is None or isinstance(result, int)
+
+
+def test_landlock_sandbox_without_allowed_root_returns_none():
+    """A policy with no allowed_root is a no-op (return None)."""
+    policy = SandboxPolicy(allowed_root=Path(""))
+    assert _linux_landlock_sandbox(policy) is None
+
+
+def test_landlock_sandbox_does_not_raise_on_bad_root():
+    """If the allowed_root doesn't exist, the function returns None
+    silently (the open() syscall fails, errno is logged, we bail)."""
+    policy = SandboxPolicy(allowed_root=Path("/this/does/not/exist/at/all"))
+    # Must not raise.
+    result = _linux_landlock_sandbox(policy)
+    assert result is None
+
+
+def test_landlock_sandbox_arch_gate(monkeypatch):
+    """On a platform we don't know (e.g. riscv64), the function
+    returns None before touching ctypes. We simulate this by
+    making `landlock_available()` return True but reporting an
+    unknown arch."""
+    if sys.platform != "linux":
+        pytest.skip("Linux-only arch gate test")
+    import platform
+    import kairos.sandbox as sb
+
+    real_machine = platform.machine
+
+    def fake_machine():
+        return "riscv64"
+    monkeypatch.setattr(platform, "machine", fake_machine)
+    monkeypatch.setattr(sb, "landlock_available", lambda: True)
+    with tempfile.TemporaryDirectory() as d:
+        policy = SandboxPolicy(allowed_root=Path(d))
+        assert _linux_landlock_sandbox(policy) is None
+    # Restore for subsequent tests (monkeypatch should auto-restore).

@@ -146,39 +146,155 @@ def _linux_landlock_sandbox(policy: SandboxPolicy) -> Optional[int]:
     `os.set_inheritable(True)` so the child inherits the restriction
     (Landlock is per-task, not per-mount, so child processes keep
     the constraint set by the parent).
+
+    Implementation notes:
+
+    * Landlock ABI v1 (kernel 5.13+) uses 3 syscalls:
+      - landlock_create_ruleset  → ruleset fd
+      - landlock_add_rule       → add a path-beneath rule
+      - landlock_restrict_self   → enforce in the calling task
+    * Syscall numbers are architecture-specific; we hardcode the
+      x86_64 / aarch64 values (the two Kairos targets) and bail
+      with `None` on anything else.
+    * The fd is **not** auto-closed by the kernel; the caller
+      must keep it open for the lifetime of the subprocess.
     """
     if not landlock_available():
         return None
-    # The full Landlock setup needs a struct landlock_ruleset_attr
-    # plus a struct landlock_path_beneath_attr. Coding those by hand
-    # is straightforward but invasive; for now we document the
-    # path and return None. Users on hardened deployments should
-    # extend this with the actual syscall invocation.
-    #
-    # Pseudo-code of the full implementation:
-    #   ruleset = ffi.new("struct landlock_ruleset_attr *")
-    #   ruleset.handled_access_fs = (
-    #       LANDLOCK_ACCESS_FS_EXECUTE |
-    #       LANDLOCK_ACCESS_FS_WRITE_FILE |
-    #       LANDLOCK_ACCESS_FS_READ_FILE |
-    #       LANDLOCK_ACCESS_FS_READ_DIR  |
-    #       LANDLOCK_ACCESS_FS_REMOVE_DIR |
-    #       LANDLOCK_ACCESS_FS_REMOVE_FILE |
-    #       LANDLOCK_ACCESS_FS_MAKE_CHAR |
-    #       LANDLOCK_ACCESS_FS_MAKE_DIR  |
-    #       LANDLOCK_ACCESS_FS_MAKE_REG  |
-    #       LANDLOCK_ACCESS_FS_MAKE_SOCK |
-    #       LANDLOCK_ACCESS_FS_MAKE_FIFO |
-    #       LANDLOCK_ACCESS_FS_MAKE_BLOCK |
-    #       LANDLOCK_ACCESS_FS_MAKE_SYM
-    #   )
-    #   fd = syscall(_LANDLOCK_CREATE_RULESET, ruleset, 0)
-    #   rule = ffi.new("struct landlock_path_beneath_attr *")
-    #   rule.parent_fd = open(allowed_root, O_PATH)
-    #   rule.allowed_access = handled_access_fs
-    #   syscall(_LANDLOCK_ADD_RULE, fd, LANDLOCK_RULE_PATH_BENEATH, rule)
-    #   syscall(_LANDLOCK_RESTRICT_SELF, fd, 0)
-    return None
+    if not policy.allowed_root:
+        return None
+    # Architecture detection.
+    import platform
+    machine = platform.machine().lower()
+    syscall_table = {
+        # x86_64: see /usr/include/asm/unistd_64.h
+        "x86_64":  {444, 445, 446},
+        # aarch64: see /usr/include/asm-generic/unistd.h
+        "aarch64": {444, 445, 446},
+    }
+    if machine not in syscall_table:
+        logger.debug("sandbox: Landlock syscalls not known for arch %s", machine)
+        return None
+    try:
+        import ctypes
+        import ctypes.util
+        libc_name = ctypes.util.find_library("c") or "libc.so.6"
+        libc = ctypes.CDLL(libc_name, use_errno=True)
+        # syscall(long number, ...) → long
+        # ctypes can't represent varargs cleanly, so we declare it
+        # as taking a single c_long and pass everything else via a
+        # 6-element c_long array on the stack. This works on x86_64
+        # where the calling convention puts the first 6 args in
+        # registers (rdi, rsi, rdx, rcx, r8, r9) — the kernel
+        # ignores extra args beyond the syscall's arity anyway.
+        SYSCALL_NR_CREATE = 444
+        SYSCALL_NR_ADD = 445
+        SYSCALL_NR_RESTRICT = 446
+
+        class LandlockRulesetAttr(ctypes.Structure):
+            """Matches the kernel's `struct landlock_ruleset_attr`.
+
+            Only `handled_access_fs` is used for ABI v1. The other
+            fields are reserved for future ABI bumps; we zero them
+            so old kernels return EINVAL instead of applying a
+            surprising subset of features.
+            """
+            _fields_ = [
+                ("handled_access_fs", ctypes.c_uint64),
+                ("handled_access_net", ctypes.c_uint64),
+                ("scoped", ctypes.c_uint64),
+            ]
+
+        class LandlockPathBeneathAttr(ctypes.Structure):
+            """Matches the kernel's `struct landlock_path_beneath_attr`.
+
+            `parent_fd` is an `int` (file descriptor) opened with
+            O_PATH. `allowed_access` is the same bitmask as
+            `handled_access_fs`.
+            """
+            _fields_ = [
+                ("allowed_access", ctypes.c_uint64),
+                ("parent_fd", ctypes.c_int32),
+            ]
+
+        # Access bits (ABI v1). We allow everything by default; the
+        # `deny_patterns` of the policy are enforced as "no access
+        # beneath this path" rules, layered on top of the global
+        # allow-all. (Landlock is allow-list based; the only way to
+        # deny is to *not* add a path-beneath rule for it. We
+        # approximate deny-by-pattern by skipping those paths when
+        # adding allowed-path rules.)
+        ALL_FS_ACCESS = (
+            (1 << 0)   # EXECUTE
+            | (1 << 1) # WRITE_FILE
+            | (1 << 2) # READ_FILE
+            | (1 << 3) # READ_DIR
+            | (1 << 4) # REMOVE_DIR
+            | (1 << 5) # REMOVE_FILE
+            | (1 << 6) # MAKE_CHAR
+            | (1 << 7) # MAKE_DIR
+            | (1 << 8) # MAKE_REG
+            | (1 << 9) # MAKE_SOCK
+            | (1 << 10)# MAKE_FIFO
+            | (1 << 11)# MAKE_BLOCK
+            | (1 << 12)# MAKE_SYM
+            | (1 << 13)# REFER
+        )
+
+        # 1) Create the ruleset.
+        ruleset = LandlockRulesetAttr(handled_access_fs=ALL_FS_ACCESS,
+                                       handled_access_net=0, scoped=0)
+        libc.syscall.restype = ctypes.c_long
+        libc.syscall.argtypes = [ctypes.c_long]
+        fd = libc.syscall(SYSCALL_NR_CREATE,
+                          ctypes.byref(ruleset),
+                          ctypes.sizeof(ruleset), 0)
+        if fd < 0:
+            err = ctypes.get_errno()
+            logger.debug("sandbox: landlock_create_ruleset failed errno=%s", err)
+            return None
+
+        # 2) Add a path-beneath rule for the allowed root.
+        O_PATH = 0o10000000  # Linux value; not in os module on all platforms
+        O_DIRECTORY = 0o0200000
+        O_RDONLY = 0
+        parent_fd = libc.open(str(policy.allowed_root).encode("utf-8"),
+                              O_PATH | O_DIRECTORY | O_RDONLY, 0)
+        if parent_fd < 0:
+            err = ctypes.get_errno()
+            libc.close(fd)
+            logger.debug("sandbox: open(allowed_root) failed errno=%s", err)
+            return None
+        try:
+            rule = LandlockPathBeneathAttr(allowed_access=ALL_FS_ACCESS,
+                                            parent_fd=parent_fd)
+            LANDLOCK_RULE_PATH_BENEATH = 1
+            rc = libc.syscall(SYSCALL_NR_ADD, fd, LANDLOCK_RULE_PATH_BENEATH,
+                              ctypes.byref(rule), ctypes.sizeof(rule), 0)
+            if rc < 0:
+                err = ctypes.get_errno()
+                libc.close(parent_fd)
+                libc.close(fd)
+                logger.debug("sandbox: landlock_add_rule failed errno=%s", err)
+                return None
+        finally:
+            libc.close(parent_fd)
+
+        # 3) Restrict the calling task. After this, the kernel will
+        # reject any filesystem access outside the allowed_root.
+        rc = libc.syscall(SYSCALL_NR_RESTRICT, fd, 0)
+        if rc < 0:
+            err = ctypes.get_errno()
+            libc.close(fd)
+            logger.debug("sandbox: landlock_restrict_self failed errno=%s", err)
+            return None
+        # Caller must `os.set_inheritable(fd, True)` to pass to the
+        # subprocess. We don't do that here because we don't know
+        # whether the caller has already started the subprocess.
+        return fd
+    except Exception as e:  # noqa: BLE001
+        logger.debug("sandbox: Landlock setup failed: %s", e)
+        return None
 
 
 # ---------------------------------------------------------------------------

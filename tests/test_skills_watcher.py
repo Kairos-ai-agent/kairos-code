@@ -145,6 +145,26 @@ async def test_watcher_stop_is_idempotent(tmp_path):
     await watcher.stop()
 
 
+async def test_watcher_stop_sync_works_without_loop(tmp_path):
+    """`stop_sync` is the variant orchestrator-shutdown / tests use;
+    it must work even when there's no running event loop."""
+    watcher = SkillsWatcher([tmp_path])
+    await watcher.start()
+    # Drop out of the event loop and call stop_sync — it should
+    # not raise, even though the underlying task is still cleaning up.
+    watcher.stop_sync()
+    # Calling it again is a no-op.
+    watcher.stop_sync()
+
+
+def test_watcher_stop_sync_on_unstarted_watcher(tmp_path):
+    """stop_sync on a never-started watcher is a safe no-op (used by
+    orchestrator _close_project_runtime when the watcher never came
+    up)."""
+    watcher = SkillsWatcher([tmp_path])
+    watcher.stop_sync()  # should not raise
+
+
 @pytest.mark.asyncio
 async def test_watcher_handles_missing_directory(tmp_path):
     """A directory that doesn't exist is fine — watcher just scans

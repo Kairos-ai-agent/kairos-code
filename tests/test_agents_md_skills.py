@@ -241,6 +241,31 @@ project body
     assert "project body" in skills[0].body
 
 
+def test_skills_loader_recurses_into_subdirs(tmp_path):
+    """Monorepo: each service ships its own skills/<service>/<name>.md."""
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    sd = proj / ".kairos" / "skills"
+    sd.mkdir(parents=True)
+    # Nested in a subdir.
+    backend = sd / "backend"
+    backend.mkdir()
+    (backend / "deploy.md").write_text(
+        "---\nname: deploy\ndescription: x\n---\n\nbackend body\n",
+        encoding="utf-8",
+    )
+    (sd / "frontend.md").write_text(
+        "---\nname: docs\ndescription: x\n---\n\ntop body\n",
+        encoding="utf-8",
+    )
+    loader = SkillsLoader(project_dir=proj)
+    skills = loader.discover()
+    by_name = {s.name for s in skills}
+    # Nested skills get a `__`-separated prefix.
+    assert "backend__deploy" in by_name
+    assert "docs" in by_name  # top-level unchanged
+
+
 def test_skills_loader_match_returns_top_n_by_priority(tmp_path):
     proj = tmp_path / "proj"
     proj.mkdir()

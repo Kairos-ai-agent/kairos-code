@@ -152,20 +152,46 @@ class SkillsLoader:
 
     def discover(self) -> List[Skill]:
         """Return all skills found at both scopes, project wins on
-        duplicate names."""
+        duplicate names.
+
+        Discovery is **recursive**: in a monorepo, every service
+        can ship its own ``.kairos/skills/<service>/<name>.md`` and
+        the loader will pick it up. Nested skill names are
+        namespaced with ``__`` to avoid collisions — ``backend/deploy.md``
+        becomes the skill name ``backend__deploy`` (matching Claude
+        Code 2.1's nested-skill loading convention).
+        """
         skills: Dict[str, Skill] = {}
-        if self.global_dir and self.global_dir.exists():
-            for md in sorted(self.global_dir.glob("*.md")):
+        for scope_root, project_scope in (
+            (self.global_dir, False),
+            (
+                self.project_dir / ".kairos" / "skills"
+                if self.project_dir else None,
+                True,
+            ),
+        ):
+            if not scope_root or not scope_root.exists():
+                continue
+            for md in sorted(scope_root.rglob("*.md")):
                 s = _parse_skill(md)
-                if s:
-                    skills[s.name] = s
-        if self.project_dir:
-            proj_skills_dir = self.project_dir / ".kairos" / "skills"
-            if proj_skills_dir.exists():
-                for md in sorted(proj_skills_dir.glob("*.md")):
-                    s = _parse_skill(md)
-                    if s:
-                        skills[s.name] = s  # project wins
+                if not s:
+                    continue
+                # Compute namespaced name from the relative path
+                # inside the skills root, e.g.
+                # "backend/api/commit.md" -> "backend__api__commit"
+                rel = md.relative_to(scope_root)
+                parts = list(rel.parts[:-1])  # drop the filename
+                if parts:
+                    prefix = "__".join(
+                        p.replace("__", "_") for p in parts
+                    )
+                    namespaced = f"{prefix}__{s.name}"
+                else:
+                    namespaced = s.name
+                # Project wins on name collision.
+                if project_scope or namespaced not in skills:
+                    s.name = namespaced
+                    skills[namespaced] = s
         return list(skills.values())
 
     def match(self, context: Dict[str, Any]) -> List[Skill]:

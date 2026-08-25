@@ -21,17 +21,8 @@ async def list_projects():
 
 @router.post("")
 async def create_project(request: "CreateProjectRequest"):
-    try:
-        project = orchestrator.create_project(request.name, request.description, request.work_dir)
-        result = project.to_dict()
-        return result
-    except Exception as e:
-        import traceback
-        import logging
-        logging.getLogger("api.routes.projects").error(
-            "create_project failed: %s\n%s", e, traceback.format_exc()
-        )
-        raise
+    project = orchestrator.create_project(request.name, request.description, request.work_dir)
+    return project.to_dict()
 
 
 @router.get("/{project_id}")

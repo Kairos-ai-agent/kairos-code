@@ -379,11 +379,16 @@ class Orchestrator:
         if role in yaml_prompts:
             kwargs["system_prompt"] = yaml_prompts[role]
         # Pass the project's work_dir so the agent can pick up AGENTS.md
-        # and Skills from the project. project = self._projects[...] is
-        # available in this method's scope (closed-over).
-        project = self._projects.get(project_id)
-        if project is not None:
-            kwargs["project_dir"] = str(project.work_dir or project.workspace)
+        # and Skills from the project. `getattr` keeps this method usable
+        # from tests that bypass __init__ (where self._projects may not
+        # have been set up).
+        projects_map = getattr(self, "_projects", None)
+        if projects_map is not None:
+            project = projects_map.get(project_id)
+            if project is not None:
+                kwargs["project_dir"] = str(
+                    project.work_dir or project.workspace
+                )
         agent = role_cls(
             agent_id=agent_id,
             llm_config=provider.config,

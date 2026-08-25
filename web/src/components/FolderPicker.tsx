@@ -22,6 +22,7 @@ import { FolderOpenOutlined, PlusOutlined, HistoryOutlined } from '@ant-design/i
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import api from '../api/client';
+import type { Project } from '../types';
 
 const RECENT_KEY = 'kairos:recent-folders';
 const MAX_RECENT = 5;

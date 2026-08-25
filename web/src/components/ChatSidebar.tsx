@@ -6,49 +6,62 @@
  *   ┌──────────────────────────────┐
  *   │  [ +  New chat             ]  │  ← primary CTA
  *   │  ──────────────────────────  │
- *   │  Today                      │  ← group label
- *   │   • Loop review  · 3    ●   │  ← active session
- *   │   • Try /plan          85   │
- *   │  Yesterday                  │
- *   │   • Refactor API            │
- *   │  Previous 7 days            │
- *   │   • ...                     │
- *   │  Older                      │
- *   │   • ...                     │
+ *   │  PROJECTS    12              │  ← top section, default 10
+ *   │  ● demo                      │     with "Show all" expand
+ *   │    test1                     │
+ *   │    test2                     │
+ *   │    ...                       │
+ *   │  [Show all (15)]             │
  *   │  ──────────────────────────  │
- *   │   [empty space flex]        │  ← scroll if list grows
+ *   │  SESSIONS in "demo"          │  ← bottom section, per-project
+ *   │  Today                       │     grouped by date
+ *   │   • Loop · 3     ●          │
+ *   │   • Try /plan   85          │
+ *   │  Yesterday                   │
+ *   │   • ...                      │
+ *   │  ──────────────────────────  │
+ *   │   [empty space flex]         │
  *   └──────────────────────────────┘
  *
- * Sessions are grouped into 4 buckets by `last_activity`:
- *   - Today (last 24h)
- *   - Yesterday (24-48h)
- *   - Previous 7 days (2-7d)
- *   - Older (>7d)
+ * Projects are loaded once at the topbar level (see AppLayout) and
+ * pushed into the chat store. We render the top 10 by default and
+ * add a "Show all (N)" toggle when there are more. The active
+ * project is highlighted; clicking another project switches the
+ * chat store's currentProject and navigates to /chat (resets the
+ * session thread because sessions are scoped per project).
  *
- * The active session is highlighted via the chat store's
- * `currentSessionId`. Selecting a session updates the store and the
- * Chat page re-renders with that session's history.
+ * Sessions for the current project are grouped by `last_activity`:
+ *   - Today (last 24h) / Yesterday (24-48h) /
+ *     Previous 7 days (2-7d) / Older (>7d)
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Spin, Empty, Tooltip } from 'antd';
-import { PlusOutlined, MessageOutlined, ThunderboltOutlined,
-         CheckCircleFilled, CloseCircleFilled } from '@ant-design/icons';
+import {
+  PlusOutlined, MessageOutlined, ThunderboltOutlined,
+  CheckCircleFilled, CloseCircleFilled, DownOutlined,
+  UpOutlined, ProjectOutlined,
+} from '@ant-design/icons';
 
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import api from '../api/client';
-import type { LoopSession } from '../types';
+import type { LoopSession, Project } from '../types';
+
+const DEFAULT_PROJECT_LIMIT = 10;
 
 const ChatSidebar: React.FC = () => {
   const tokens = useThemeTokens();
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId?: string }>();
+  const projects = useChatStore((s) => s.projects);
   const currentProject = useChatStore((s) => s.currentProject);
+  const setCurrentProject = useChatStore((s) => s.setCurrentProject);
   const sessions = useChatStore((s) => s.sessions);
   const setSessions = useChatStore((s) => s.setSessions);
   const setCurrentSessionId = useChatStore((s) => s.setCurrentSessionId);
   const [loading, setLoading] = useState(false);
+  const [projectsExpanded, setProjectsExpanded] = useState(false);
 
   // Re-fetch sessions whenever the project changes.
   useEffect(() => {
@@ -63,16 +76,41 @@ const ChatSidebar: React.FC = () => {
       .finally(() => setLoading(false));
   }, [currentProject, setSessions]);
 
-  // Group by date bucket. Order: Today → Yesterday → Previous 7 days → Older.
+  // Sort projects: current first, then by created_at desc.
+  const sortedProjects = useMemo(() => {
+    const arr = [...projects];
+    arr.sort((a, b) => {
+      // Current project bubbles to the top.
+      if (currentProject && a.id === currentProject.id) return -1;
+      if (currentProject && b.id === currentProject.id) return 1;
+      // Otherwise most recent first.
+      return (b.created_at || 0) - (a.created_at || 0);
+    });
+    return arr;
+  }, [projects, currentProject]);
+
+  const visibleProjects = projectsExpanded
+    ? sortedProjects
+    : sortedProjects.slice(0, DEFAULT_PROJECT_LIMIT);
+  const hiddenCount = sortedProjects.length - visibleProjects.length;
+
   const grouped = useMemo(() => groupByDate(sessions), [sessions]);
 
-  const select = (sid: string) => {
+  const selectSession = (sid: string) => {
     setCurrentSessionId(sid);
     navigate(`/chat/${sid}`);
   };
 
+  const selectProject = (p: Project) => {
+    if (currentProject?.id === p.id) return;  // no-op
+    setCurrentProject(p);
+    navigate('/chat');
+  };
+
   const startNew = () => {
     if (!currentProject) {
+      // No project selected — bounce to /today so the user can
+      // either add a folder or pick from the project list.
       navigate('/today');
       return;
     }
@@ -102,48 +140,188 @@ const ChatSidebar: React.FC = () => {
       </Button>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 4px' }}>
-        {loading && (
-          <div style={{ display: 'flex', justifyContent: 'center',
-                        padding: 16 }}>
-            <Spin size="small" />
+        {/* ------------------- Projects list ------------------- */}
+        {projects.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '6px 8px 4px',
+            }}>
+              <span style={{
+                fontSize: 11, fontWeight: 600, color: tokens.labelTertiary,
+                letterSpacing: '0.04em', textTransform: 'uppercase',
+              }}>
+                Projects
+              </span>
+              <span style={{
+                fontSize: 11, color: tokens.labelTertiary,
+              }}>
+                {projects.length}
+              </span>
+            </div>
+            {visibleProjects.map((p) => (
+              <ProjectRow
+                key={p.id}
+                project={p}
+                active={currentProject?.id === p.id}
+                onClick={() => selectProject(p)}
+              />
+            ))}
+            {hiddenCount > 0 && !projectsExpanded && (
+              <Button
+                type="text" block size="small"
+                icon={<DownOutlined />}
+                onClick={() => setProjectsExpanded(true)}
+                style={{ color: tokens.labelTertiary, fontSize: 12,
+                          height: 28, marginTop: 2 }}
+              >
+                Show all ({sortedProjects.length})
+              </Button>
+            )}
+            {projectsExpanded && sortedProjects.length > DEFAULT_PROJECT_LIMIT && (
+              <Button
+                type="text" block size="small"
+                icon={<UpOutlined />}
+                onClick={() => setProjectsExpanded(false)}
+                style={{ color: tokens.labelTertiary, fontSize: 12,
+                          height: 28, marginTop: 2 }}
+              >
+                Show less
+              </Button>
+            )}
           </div>
         )}
-        {!loading && sessions.length === 0 && (
+
+        {/* ------------------- Sessions list ------------------- */}
+        {currentProject && (
+          <>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '6px 8px 4px',
+              borderTop: `1px solid ${tokens.border}`,
+              marginTop: 4,
+            }}>
+              <span style={{
+                fontSize: 11, fontWeight: 600, color: tokens.labelTertiary,
+                letterSpacing: '0.04em', textTransform: 'uppercase',
+              }}>
+                Sessions
+              </span>
+              {sessions.length > 0 && (
+                <span style={{ fontSize: 11, color: tokens.labelTertiary }}>
+                  {sessions.length}
+                </span>
+              )}
+            </div>
+            {loading && (
+              <div style={{ display: 'flex', justifyContent: 'center',
+                            padding: 16 }}>
+                <Spin size="small" />
+              </div>
+            )}
+            {!loading && sessions.length === 0 && (
+              <Empty
+                image={<MessageOutlined style={{ fontSize: 24,
+                                                color: tokens.labelTertiary }} />}
+                imageStyle={{ height: 32 }}
+                description={
+                  <span style={{ color: tokens.labelTertiary, fontSize: 12 }}>
+                    No sessions yet — start a new loop below.
+                  </span>
+                }
+                style={{ marginTop: 12 }}
+              />
+            )}
+            {!loading && grouped.map((group) => (
+              <div key={group.label} style={{ marginBottom: 8 }}>
+                <div style={{
+                  padding: '4px 8px 2px', fontSize: 10,
+                  color: tokens.labelTertiary,
+                }}>
+                  {group.label}
+                </div>
+                {group.items.map((s) => (
+                  <SessionRow
+                    key={s.session_id}
+                    session={s}
+                    active={s.session_id === sessionId}
+                    onClick={() => selectSession(s.session_id)}
+                  />
+                ))}
+              </div>
+            ))}
+          </>
+        )}
+
+        {!currentProject && projects.length === 0 && (
           <Empty
-            image={<MessageOutlined style={{ fontSize: 28,
+            image={<ProjectOutlined style={{ fontSize: 28,
                                             color: tokens.labelTertiary }} />}
             imageStyle={{ height: 40 }}
             description={
               <span style={{ color: tokens.labelTertiary, fontSize: 12 }}>
-                {currentProject
-                  ? 'No sessions yet — start a new loop below.'
-                  : 'Select a project to see its sessions.'}
+                Add a folder from the top bar to start your first project.
               </span>
             }
-            style={{ marginTop: 24 }}
+            style={{ marginTop: 32 }}
           />
         )}
-        {!loading && grouped.map((group) => (
-          <div key={group.label} style={{ marginBottom: 12 }}>
-            <div style={{
-              padding: '6px 8px 4px', fontSize: 11,
-              fontWeight: 600, color: tokens.labelTertiary,
-              letterSpacing: '0.04em', textTransform: 'uppercase',
-            }}>
-              {group.label}
-            </div>
-            {group.items.map((s) => (
-              <SessionRow
-                key={s.session_id}
-                session={s}
-                active={s.session_id === sessionId}
-                onClick={() => select(s.session_id)}
-              />
-            ))}
-          </div>
-        ))}
       </div>
     </div>
+  );
+};
+
+const ProjectRow: React.FC<{
+  project: Project;
+  active: boolean;
+  onClick: () => void;
+}> = ({ project, active, onClick }) => {
+  const tokens = useThemeTokens();
+  return (
+    <Tooltip
+      title={project.description && project.description !== project.name
+             ? project.description : undefined}
+      placement="right"
+    >
+      <div
+        onClick={onClick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter') onClick(); }}
+        data-testid={`project-row-${project.id}`}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '7px 10px', borderRadius: 8,
+          cursor: 'pointer',
+          background: active ? tokens.bgLay2 : 'transparent',
+          color: active ? tokens.labelPrimary : tokens.labelSecondary,
+          transition: 'background 0.12s',
+        }}
+        onMouseEnter={(e) => {
+          if (!active) e.currentTarget.style.background = tokens.bgLay1;
+        }}
+        onMouseLeave={(e) => {
+          if (!active) e.currentTarget.style.background = 'transparent';
+        }}
+      >
+        {active && (
+          <span style={{
+            display: 'inline-block', width: 4, height: 16,
+            borderRadius: 2, background: tokens.labelPrimary,
+          }} />
+        )}
+        <ProjectOutlined style={{ color: active ? tokens.labelPrimary
+                                              : tokens.labelTertiary }} />
+        <div style={{
+          flex: 1, minWidth: 0,
+          fontSize: 13, fontWeight: active ? 600 : 500,
+          whiteSpace: 'nowrap', overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}>
+          {project.name || project.id}
+        </div>
+      </div>
+    </Tooltip>
   );
 };
 
@@ -153,7 +331,6 @@ const SessionRow: React.FC<{
   onClick: () => void;
 }> = ({ session, active, onClick }) => {
   const tokens = useThemeTokens();
-  // Title = first line of the coder summary, truncated.
   const title = useMemo(() => {
     if (!session.round_count) {
       return session.running ? 'Starting…' : 'Empty session';
@@ -167,9 +344,10 @@ const SessionRow: React.FC<{
       role="button"
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter') onClick(); }}
+      data-testid={`session-row-${session.session_id}`}
       style={{
         display: 'flex', alignItems: 'center', gap: 8,
-        padding: '8px 10px', borderRadius: 8,
+        padding: '7px 10px', borderRadius: 8,
         cursor: 'pointer',
         background: active ? tokens.bgLay2 : 'transparent',
         color: active ? tokens.labelPrimary : tokens.labelSecondary,
@@ -191,7 +369,7 @@ const SessionRow: React.FC<{
             : <CloseCircleFilled style={{ color: tokens.warning }} />}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
-          fontSize: 13, fontWeight: active ? 600 : 500,
+          fontSize: 12, fontWeight: active ? 600 : 500,
           whiteSpace: 'nowrap', overflow: 'hidden',
           textOverflow: 'ellipsis',
         }}>
@@ -199,7 +377,7 @@ const SessionRow: React.FC<{
         </div>
         {session.round_count > 0 && (
           <div style={{
-            fontSize: 11, color: tokens.labelTertiary,
+            fontSize: 10, color: tokens.labelTertiary,
             whiteSpace: 'nowrap', overflow: 'hidden',
             textOverflow: 'ellipsis',
           }}>

@@ -22,7 +22,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation, NavLink } from 'react-router-dom';
-import { Layout, Button, Dropdown, Select, Tooltip, Avatar, theme } from 'antd';
+import { Layout, Button, Dropdown, Tooltip, Avatar, theme } from 'antd';
 import {
   MenuFoldOutlined, MenuUnfoldOutlined,
   SunOutlined, MoonOutlined, SettingOutlined,
@@ -120,15 +120,6 @@ const AppLayout: React.FC = () => {
           Kairos
         </div>
 
-        <ProjectPicker
-          value={currentProject?.id}
-          onChange={(id) => {
-            const p = projects.find((x) => x.id === id) || null;
-            setCurrentProject(p);
-            navigate('/chat');
-          }}
-        />
-
         <FolderPicker />
 
         <div style={{ flex: 1 }} />
@@ -208,24 +199,5 @@ const AppLayout: React.FC = () => {
   );
 };
 
-const ProjectPicker: React.FC<{
-  value?: string;
-  onChange: (id: string) => void;
-}> = ({ value, onChange }) => {
-  const projects = useChatStore((s) => s.projects);
-  const tokens = useThemeTokens();
-  return (
-    <Select
-      value={value}
-      onChange={onChange}
-      variant="borderless"
-      style={{ minWidth: 180, color: tokens.labelPrimary }}
-      placeholder="Select a project"
-      options={projects.map((p) => ({
-        value: p.id, label: p.name || p.id,
-      }))}
-    />
-  );
-};
-
 export default AppLayout;
+

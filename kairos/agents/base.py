@@ -34,6 +34,11 @@ class AgentTask(BaseModel):
     context: Dict[str, Any] = {}
     status: str = "pending"
     result: Optional[str] = None
+    # Codex-Harness-style output guardrail verdict. Populated by the
+    # agent's run() when an output_guardrail is attached. Optional
+    # so existing call sites that build AgentTask without it keep
+    # working unchanged.
+    guardrail: Optional[Dict[str, Any]] = None
 
 class AgentState(BaseModel):
     """Observable state of an agent for the UI."""
@@ -172,6 +177,7 @@ class KairosAgent:
         message_bus: MessageBus,
         tools: Optional[List[Any]] = None,
         project_dir: Optional[str] = None,
+        output_guardrail: Optional[Any] = None,
     ):
         self.agent_id = agent_id
         self.name = name
@@ -200,6 +206,17 @@ class KairosAgent:
         self._memory: List[LLMMessage] = []
         self._max_tokens = 80000  # Token budget
         self._keep_recent = 4     # Always keep last N messages
+
+        # Codex-Harness-style retained reasoning: a running summary of
+        # older conversation turns is kept alongside the raw recent
+        # messages. The summary is regenerated every SUMMARIZE_EVERY_N
+        # turns (or when memory would otherwise overflow). It is
+        # injected into the system_prompt as a single "earlier context"
+        # block so the model keeps long-term memory without us having
+        # to fit every historical message into the context window.
+        self._memory_summary: str = ""
+        self._summarize_every_n: int = 8
+        self._last_summarized_at_turn: int = 0
 
         # Message bus subscription
         self.message_bus.subscribe(agent_id, f"agent.{agent_id}")
@@ -240,6 +257,13 @@ class KairosAgent:
         else:
             self._agents_md_loader = None
             self._skills_loader = None
+
+        # Optional output guardrail (Codex-Harness-style hook). When
+        # present, ``run()`` invokes it on the final result before
+        # returning so a Reviewer agent (or a fast local check) can
+        # flag the output. Stays None by default — enabling it costs
+        # an extra LLM round-trip and not every project needs it.
+        self._output_guardrail = output_guardrail
 
     @property
     def state(self) -> AgentState:
@@ -346,10 +370,97 @@ class KairosAgent:
                     system = f"{system}\n\n{skills_block}"
             except Exception as exc:
                 logger.debug("skills injection failed: %s", exc)
-        return (
-            [LLMMessage(role="system", content=system)]
-            + self._memory
+
+        # Inject retained-reasoning summary (Codex-Harness-style) as a
+        # second system message, immediately after the role + skills
+        # system prompt. This is the agent's "earlier context" memory
+        # for the long-running session.
+        msgs: List[LLMMessage] = [LLMMessage(role="system", content=system)]
+        if self._memory_summary:
+            msgs.append(LLMMessage(
+                role="system",
+                content=(
+                    "# Earlier conversation summary\n"
+                    "The following is a compact summary of turns that have\n"
+                    "been compacted out of the active context window. Treat\n"
+                    "it as authoritative for anything not contradicted by\n"
+                    "the recent messages below.\n\n"
+                    f"{self._memory_summary}"
+                ),
+            ))
+        msgs.extend(self._memory)
+        return msgs
+
+    async def _maybe_summarize_memory(self, current_turn: int) -> None:
+        """Periodically condense the older memory into a running summary.
+
+        Triggered every `_summarize_every_n` turns OR when memory has
+        grown past 80% of the token budget. The summary is *added to*
+        (not replaced) so we don't lose information between snapshots:
+        new turns contribute a delta on top of the prior summary.
+
+        We always keep the most recent `_keep_recent` messages verbatim
+        so the model can reference the latest tool calls without having
+        to query the summary.
+        """
+        # Don't bother until there's something to summarize.
+        if len(self._memory) <= self._keep_recent:
+            return
+        threshold_turn = (
+            self._last_summarized_at_turn + self._summarize_every_n
         )
+        token_total = sum(
+            self._count_tokens(m.content) for m in self._memory
+        )
+        over_budget = token_total > int(self._max_tokens * 0.8)
+        if current_turn < threshold_turn and not over_budget:
+            return
+
+        # Pick the older half to compact. The most recent slice is
+        # preserved verbatim regardless.
+        keep = self._keep_recent
+        older = self._memory[:-keep] if len(self._memory) > keep else []
+        if not older:
+            return
+        try:
+            transcript = "\n\n".join(
+                f"[{m.role}] {m.content[:1500]}" for m in older
+            )
+            prior = self._memory_summary
+            prompt = (
+                "You are compressing a long agent transcript into a "
+                "running summary. Preserve:\n"
+                "  1. Decisions made and the rationale\n"
+                "  2. Tools called and the paths/files they touched\n"
+                "  3. Errors hit and how they were resolved\n"
+                "  4. Open questions and remaining work\n"
+                "Be terse. Use bullet points. Target 200-400 words.\n\n"
+            )
+            if prior:
+                prompt += (
+                    f"# Existing summary (merge into, do not repeat):\n"
+                    f"{prior}\n\n# New turns to fold in:\n{transcript}"
+                )
+            else:
+                prompt += f"# Turns to summarize:\n{transcript}"
+            response = await self._llm.complete([
+                LLMMessage(role="user", content=prompt)
+            ])
+            new_summary = (response.content or "").strip()
+            if new_summary:
+                self._memory_summary = new_summary
+                self._last_summarized_at_turn = current_turn
+                logger.debug(
+                    "%s: memory summarized at turn %d (%d chars)",
+                    self.agent_id, current_turn, len(new_summary),
+                )
+        except Exception as exc:
+            # Summarization is best-effort. A failure here shouldn't
+            # break the agent loop.
+            logger.warning(
+                "%s: memory summarization failed: %s",
+                self.agent_id, exc,
+            )
 
     async def run(self, task: AgentTask, plan_mode: bool = False) -> str:
         """Main agent loop with tool-calling support.
@@ -402,6 +513,11 @@ class KairosAgent:
             # Tool-calling loop
             result = ""
             timed_out = False
+            # Sentinel: stays True only if we ran out of turns without
+            # breaking out of the for loop (i.e. every turn had at least
+            # one tool call, so the agent never converged to a final
+            # answer). See the post-loop `if hit_turn_limit` below.
+            hit_turn_limit = True
             for turn in range(self.MAX_TOOL_TURNS):
                 self.status = AgentStatus.THINKING
                 self.current_turn = turn + 1
@@ -465,6 +581,7 @@ class KairosAgent:
                 # No tool calls -> done
                 if not response.tool_calls:
                     result = response.content
+                    hit_turn_limit = False
                     break
 
                 # Execute tool calls
@@ -525,7 +642,22 @@ class KairosAgent:
                         metadata={"task_id": task.id, "tool": tc.name,
                                   "success": tool_result.success, "turn": turn + 1},
                     ))
-            else:
+
+                # End-of-turn: condense older turns into a running
+                # summary (Codex-Harness-style retained reasoning).
+                # Runs only every _summarize_every_n turns or when
+                # memory approaches the token budget, so per-turn cost
+                # is usually zero. Indented 16 spaces so it lives
+                # inside the for-turn loop body.
+                await self._maybe_summarize_memory(turn + 1)
+
+            # We can't use a bare `for/else` here because we're inside
+            # a try block (Python parses `else` as a try-else clause).
+            # The `hit_turn_limit` sentinel below is set to False by
+            # the inner `if not response.tool_calls: break` branch; if
+            # it's still True after the loop, every turn produced at
+            # least one tool call and the agent never converged.
+            if hit_turn_limit:
                 result = f"Tool call limit reached after {self.MAX_TOOL_TURNS} turns."
 
             # Publish final result
@@ -539,6 +671,33 @@ class KairosAgent:
 
             task.status = "completed" if not timed_out else "failed"
             task.result = result
+
+            # Codex-Harness-style output guardrail hook. If a reviewer
+            # guardrail is attached, let it grade the final result.
+            # The guardrail publishes its own verdict to the bus; we
+            # also stamp the task with a "guardrail" flag so the
+            # orchestrator can decide whether to re-dispatch the
+            # Coder or surface a warning. We do NOT mutate ``result``
+            # itself — the Coder's answer is preserved verbatim so
+            # the user can read it even when the guardrail trips.
+            if self._output_guardrail is not None:
+                try:
+                    g_result = await self._output_guardrail.check(
+                        self.agent_id, result,
+                        context={"task_id": task.id, "role": self.role},
+                    )
+                    task.guardrail = g_result.to_dict()
+                    if g_result.tripwire:
+                        logger.warning(
+                            "%s: output guardrail tripped (%s): %s",
+                            self.agent_id, g_result.severity,
+                            g_result.summary,
+                        )
+                except Exception as exc:
+                    logger.warning(
+                        "%s: guardrail raised %s; treating as pass",
+                        self.agent_id, exc,
+                    )
             self.status = AgentStatus.IDLE
             self.current_turn = 0
             self.total_turns = 0

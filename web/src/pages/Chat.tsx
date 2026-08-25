@@ -60,6 +60,13 @@ const Chat: React.FC = () => {
     running: boolean; round: number; last_score: number;
     last_approve: boolean; session_id?: string;
   } | null>(null);
+  const [planState, setPlanState] = useState<{
+    pending: boolean; text: string; decision: string | null;
+    round: number;
+  } | null>(null);
+  const [askState, setAskState] = useState<{
+    pending: boolean; question: string; context: string; round: number;
+  } | null>(null);
   const [wsState, setWsState] = useState<'connecting' | 'open' | 'closed'>('closed');
 
   // ----- WebSocket plumbing -----
@@ -70,6 +77,27 @@ const Chat: React.FC = () => {
       // state updates (round, score) update the topbar; round.completed
       // triggers a sessions refetch.
       const t = (data.topic || data.type || '').toString();
+      if (t === 'plan.pending' || t === 'ask.pending') {
+        // The orchestrator is asking the user to make a decision.
+        // We don't have a dedicated plan/ask channel in the message
+        // bus yet, so refetch via the REST endpoint to make sure
+        // the banner shows.
+        if (currentProject) {
+          if (t === 'plan.pending') {
+            api.get(`/projects/${currentProject.id}/plan`)
+              .then((r) => setPlanState(r.data || null)).catch(() => {});
+          } else {
+            api.get(`/projects/${currentProject.id}/ask`)
+              .then((r) => setAskState(r.data || null)).catch(() => {});
+          }
+        }
+        return;
+      }
+      if (t === 'plan.cleared' || t === 'ask.cleared') {
+        if (t === 'plan.cleared') setPlanState(null);
+        else setAskState(null);
+        return;
+      }
       if (t === 'loop.round_completed' || t === 'round.completed') {
         // Refetch sessions so the sidebar reflects the new round.
         if (currentProject) {
@@ -184,6 +212,30 @@ const Chat: React.FC = () => {
       .catch(() => setLoopState(null));
   }, [currentProject]);
 
+  // Poll for pending plan / ask every 2s when a project is selected.
+  // Cheaper than wiring a dedicated WS topic for these — the loop
+  // is short-lived and the calls are tiny.
+  useEffect(() => {
+    if (!currentProject) {
+      setPlanState(null);
+      setAskState(null);
+      return;
+    }
+    const tick = () => {
+      api.get<{ pending: boolean; text: string; decision: string | null;
+                round: number }>(`/projects/${currentProject.id}/plan`)
+        .then((r) => setPlanState(r.data || null))
+        .catch(() => {});
+      api.get<{ pending: boolean; question: string; context: string;
+                round: number }>(`/projects/${currentProject.id}/ask`)
+        .then((r) => setAskState(r.data || null))
+        .catch(() => {});
+    };
+    tick();
+    const id = window.setInterval(tick, 2000);
+    return () => window.clearInterval(id);
+  }, [currentProject]);
+
   useEffect(() => {
     if (currentProject && sessionId) {
       loadSessionHistory(currentProject.id, sessionId);
@@ -214,6 +266,35 @@ const Chat: React.FC = () => {
       msgApi.error(e?.response?.data?.detail || 'Failed to start loop');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const answerAsk = async (text: string) => {
+    if (!currentProject) return;
+    try {
+      await api.post(`/projects/${currentProject.id}/ask/answer`,
+                     { answer: text });
+      appendMessage({
+        id: `user-${Date.now()}`,
+        sender: 'user', receiver: 'reviewer', topic: 'ask.answer',
+        content: text, msg_type: 'text',
+        timestamp: Date.now() / 1000, metadata: {},
+      });
+    } catch (e: any) {
+      msgApi.error(e?.response?.data?.detail || 'Failed to submit answer');
+    }
+  };
+
+  const handleSubmit = async (text: string, mode: ComposerMode) => {
+    if (mode === 'ask') {
+      // Ask mode: there's a pending reviewer question. The composer
+      // is being used to answer it.
+      await answerAsk(text);
+    } else {
+      // loop / plan both call /start (plan mode is a hint to the
+      // backend; the existing /start endpoint already accepts the
+      // requirement as-is).
+      await startLoop(text, mode);
     }
   };
 
@@ -291,9 +372,43 @@ const Chat: React.FC = () => {
         />
       </div>
 
+      {/* Plan / Ask banner — shows when the loop is waiting on the user */}
+      {planState?.pending && (
+        <PlanBanner
+          text={planState.text}
+          round={planState.round}
+          onApprove={async () => {
+            if (!currentProject) return;
+            try {
+              await api.post(`/projects/${currentProject.id}/plan/approve`);
+              setPlanState(null);
+            } catch (e: any) {
+              msgApi.error(e?.response?.data?.detail || 'Failed to approve');
+            }
+          }}
+          onReject={async () => {
+            if (!currentProject) return;
+            try {
+              await api.post(`/projects/${currentProject.id}/plan/reject`);
+              setPlanState(null);
+            } catch (e: any) {
+              msgApi.error(e?.response?.data?.detail || 'Failed to reject');
+            }
+          }}
+        />
+      )}
+      {askState?.pending && (
+        <AskBanner
+          question={askState.question}
+          context={askState.context}
+          round={askState.round}
+          onAnswered={() => setAskState(null)}
+        />
+      )}
+
       {/* Composer */}
       <ChatComposer
-        onSubmit={startLoop}
+        onSubmit={handleSubmit}
         busy={busy}
         disabled={!showComposer}
         disabledHint="Select a project first."
@@ -334,3 +449,137 @@ const Chat: React.FC = () => {
 };
 
 export default Chat;
+
+// ---------------------------------------------------------------------------
+// PlanBanner — shown when the Coder has produced a draft plan and the
+// loop is blocked on user approval.
+// ---------------------------------------------------------------------------
+
+const PlanBanner: React.FC<{
+  text: string;
+  round: number;
+  onApprove: () => Promise<void> | void;
+  onReject: () => Promise<void> | void;
+}> = ({ text, round, onApprove, onReject }) => {
+  const tokens = useThemeTokens();
+  const [busy, setBusy] = useState(false);
+  const wrap = async (fn: () => Promise<void> | void) => {
+    setBusy(true);
+    try { await fn(); } finally { setBusy(false); }
+  };
+  return (
+    <div style={{
+      margin: '0 16px 8px', maxWidth: 768, marginLeft: 'auto', marginRight: 'auto',
+      background: tokens.bgLay1, border: `1px solid ${tokens.borderStrong}`,
+      borderLeft: `4px solid ${tokens.coderAccent}`,
+      borderRadius: 12, padding: 14,
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        marginBottom: 8,
+      }}>
+        <span style={{ fontWeight: 600, fontSize: 13,
+                       color: tokens.labelPrimary }}>
+          📋 Plan ready · round {round}
+        </span>
+      </div>
+      <pre style={{
+        margin: 0, fontSize: 12, lineHeight: 1.5,
+        color: tokens.labelSecondary, maxHeight: 160, overflow: 'auto',
+        whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+        fontFamily: 'inherit',
+      }}>
+        {text}
+      </pre>
+      <div style={{ display: 'flex', gap: 8, marginTop: 10, justifyContent: 'flex-end' }}>
+        <Button size="small" onClick={() => wrap(onReject)} loading={busy}>
+          Reject & stop
+        </Button>
+        <Button size="small" type="primary"
+                style={{ background: tokens.coderAccent, border: 'none' }}
+                onClick={() => wrap(onApprove)} loading={busy}>
+          Approve & continue
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// AskBanner — shown when the Reviewer has asked a clarifying question
+// and the loop is blocked on the user's answer.
+// ---------------------------------------------------------------------------
+
+const AskBanner: React.FC<{
+  question: string;
+  context: string;
+  round: number;
+  onAnswered: () => void;
+}> = ({ question, context, round, onAnswered }) => {
+  const tokens = useThemeTokens();
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (!text.trim()) return;
+    // We need the currentProject id here; pull it from the chat store
+    // so this component stays self-contained.
+    const pid = useChatStore.getState().currentProject?.id;
+    if (!pid) return;
+    setBusy(true);
+    try {
+      await api.post(`/projects/${pid}/ask/answer`, { answer: text });
+      onAnswered();
+    } catch (e: any) {
+      // surface error inline; the parent page also has its own
+      // antMessage handler.
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div style={{
+      margin: '0 16px 8px', maxWidth: 768, marginLeft: 'auto', marginRight: 'auto',
+      background: tokens.bgLay1, border: `1px solid ${tokens.borderStrong}`,
+      borderLeft: `4px solid ${tokens.reviewerAccent}`,
+      borderRadius: 12, padding: 14,
+    }}>
+      <div style={{
+        fontWeight: 600, fontSize: 13, color: tokens.labelPrimary,
+        marginBottom: 6,
+      }}>
+        ❓ Reviewer asks · round {round}
+      </div>
+      <div style={{ fontSize: 13, color: tokens.labelSecondary,
+                    lineHeight: 1.5, marginBottom: 8 }}>
+        {question}
+      </div>
+      {context && (
+        <details style={{ marginBottom: 8, color: tokens.labelTertiary,
+                          fontSize: 12 }}>
+          <summary style={{ cursor: 'pointer' }}>Show context</summary>
+          <pre style={{ whiteSpace: 'pre-wrap', marginTop: 6,
+                        fontFamily: 'inherit' }}>
+            {context}
+          </pre>
+        </details>
+      )}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+          placeholder="Type your answer…"
+          style={{
+            flex: 1, padding: '6px 10px', borderRadius: 8,
+            border: `1px solid ${tokens.border}`,
+            background: tokens.bgBase, color: tokens.labelPrimary,
+            fontSize: 13, outline: 'none',
+          }}
+          autoFocus
+        />
+        <Button type="primary" onClick={submit} loading={busy}
+                disabled={!text.trim()}>Answer</Button>
+      </div>
+    </div>
+  );
+};

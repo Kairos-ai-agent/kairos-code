@@ -1,34 +1,48 @@
-"""Project API routes — LoopReview mode."""
+﻿"""Project API routes 鈥?LoopReview mode."""
 
 from __future__ import annotations
 
 import base64
 import json
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from api.deps import orchestrator
+from api import deps
 from kairos.loop.review_loop import _loop_health_score
 
 router = APIRouter()
 
 
+def _orch():
+    """Resolve the live orchestrator via the deps module.
+
+    Routes call `orch().method(...)` so tests that monkeypatch
+    `api.deps.orchestrator` are seen by every handler without needing
+    to also patch a stale `from api.deps import orchestrator`
+    reference (which is what bit us with test_checkpoints_api /
+    test_sessions_api). New routes should prefer
+    `Depends(get_orchestrator)` 鈥?this shim exists for the 37
+    existing call sites we'd otherwise have to rewrite.
+    """
+    return deps.orchestrator
+
+
 @router.get("")
 async def list_projects():
-    projects = orchestrator.list_projects()
+    projects = _orch().list_projects()
     return {"projects": [p.to_dict() for p in projects]}
 
 
 @router.post("")
 async def create_project(request: "CreateProjectRequest"):
-    project = orchestrator.create_project(request.name, request.description, request.work_dir)
+    project = _orch().create_project(request.name, request.description, request.work_dir)
     return project.to_dict()
 
 
 @router.get("/{project_id}")
 async def get_project(project_id: str):
-    project = orchestrator.get_project(project_id)
+    project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     return project.to_dict()
@@ -36,15 +50,15 @@ async def get_project(project_id: str):
 
 @router.post("/{project_id}/start")
 async def start_loop(project_id: str, request: "StartLoopRequest"):
-    """Start the Coder ↔ Reviewer loop. Returns immediately; the loop
+    """Start the Coder 鈫?Reviewer loop. Returns immediately; the loop
     runs in the background and emits progress over the WebSocket."""
-    project = orchestrator.get_project(project_id)
+    project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     if project.loop_task and not project.loop_task.done():
         raise HTTPException(status_code=409, detail="A loop is already running for this project")
     try:
-        session_id = await orchestrator.start_loop(project_id, request.requirement)
+        session_id = await _orch().start_loop(project_id, request.requirement)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return {"status": "started", "project_id": project_id, "session_id": session_id}
@@ -53,10 +67,10 @@ async def start_loop(project_id: str, request: "StartLoopRequest"):
 @router.post("/{project_id}/stop")
 async def stop_loop(project_id: str):
     """User-initiated stop of the loop."""
-    project = orchestrator.get_project(project_id)
+    project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
-    stopped = orchestrator.stop_loop(project_id)
+    stopped = _orch().stop_loop(project_id)
     return {"status": "stopping" if stopped else "no_loop_running",
             "project_id": project_id}
 
@@ -64,10 +78,10 @@ async def stop_loop(project_id: str):
 @router.get("/{project_id}/plan")
 async def get_plan(project_id: str):
     """Get the Coder'"'"'s draft plan waiting for user approval (if any)."""
-    project = orchestrator.get_project(project_id)
+    project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
-    plan = orchestrator.get_plan(project_id)
+    plan = _orch().get_plan(project_id)
     if plan is None:
         return {"pending": False, "text": "", "decision": None, "round": 0}
     return plan
@@ -75,30 +89,66 @@ async def get_plan(project_id: str):
 
 @router.post("/{project_id}/plan/approve")
 async def approve_plan(project_id: str):
-    """User approves the Coder'"'"'s plan — loop continues with tool execution."""
-    project = orchestrator.get_project(project_id)
+    """User approves the Coder'"'"'s plan 鈥?loop continues with tool execution."""
+    project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
-    ok = orchestrator.approve_plan(project_id)
+    ok = _orch().approve_plan(project_id)
     return {"status": "approved" if ok else "no_plan_pending",
             "project_id": project_id}
 
 
 @router.post("/{project_id}/plan/reject")
 async def reject_plan(project_id: str):
-    """User rejects the plan — loop stops."""
-    project = orchestrator.get_project(project_id)
+    """User rejects the plan 鈥?loop stops."""
+    project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
-    ok = orchestrator.reject_plan(project_id)
+    ok = _orch().reject_plan(project_id)
     return {"status": "rejected" if ok else "no_plan_pending",
+            "project_id": project_id}
+
+
+class AskAnswerRequest(BaseModel):
+    answer: str
+
+
+@router.get("/{project_id}/ask")
+async def get_ask_state(project_id: str):
+    """Get the Reviewer's pending question waiting for user answer (if any).
+
+    Mirrors the `/plan` endpoint but for the Coder 鈫?user ask flow.
+    The Loop emits an `ask_state` message on the WebSocket when this
+    changes; the chat UI polls it as a fallback.
+    """
+    project = _orch().get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404,
+                            detail=f"Project not found: {project_id}")
+    state = _orch().get_ask(project_id)
+    if state is None:
+        return {"pending": False, "question": "", "context": "", "round": 0}
+    return state
+
+
+@router.post("/{project_id}/ask/answer")
+async def answer_ask(project_id: str, request: AskAnswerRequest):
+    """Submit the user's answer to a pending ask; the loop resumes."""
+    project = _orch().get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404,
+                            detail=f"Project not found: {project_id}")
+    if not (request.answer or "").strip():
+        raise HTTPException(status_code=400, detail="answer is required")
+    ok = _orch().answer_ask(project_id, request.answer)
+    return {"status": "answered" if ok else "no_ask_pending",
             "project_id": project_id}
 
 
 @router.get("/{project_id}/loop")
 async def get_loop_state(project_id: str):
     """Inspect current loop state: round, last score, last issues, etc."""
-    project = orchestrator.get_project(project_id)
+    project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     session = project.loop_session
@@ -135,7 +185,7 @@ async def list_loop_sessions(project_id: str):
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     persisted = _orch._db.list_loop_sessions(project_id)  # type: ignore[attr-defined]
     # Promote the live in-memory session (if any) to the top of the
-    # list — it might not have any rounds yet, but the user expects
+    # list 鈥?it might not have any rounds yet, but the user expects
     # to see "the current run" highlighted in the sidebar.
     in_mem = None
     sess = project.loop_session
@@ -174,7 +224,7 @@ async def get_session_rounds(project_id: str, session_id: str):
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     rows = _orch._db.load_session_rounds(project_id, session_id)  # type: ignore[attr-defined]
     # Pull the in-memory session if it matches (it has the freshest
-    # state — last round, plan/ask markers, etc. — even if it isn't
+    # state 鈥?last round, plan/ask markers, etc. 鈥?even if it isn't
     # yet persisted to disk).
     sess = project.loop_session
     if sess and sess.session_id == session_id and getattr(sess, "history", None):
@@ -208,7 +258,7 @@ async def get_loop_health(project_id: str):
     into one number so the UI can show a color-coded badge without
     re-deriving the formula on the frontend.
     """
-    project = orchestrator.get_project(project_id)
+    project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     session = project.loop_session
@@ -270,7 +320,7 @@ async def set_best_of_n(project_id: str, request: "BestOfNRequest"):
     it AFTER start_loop updates session.best_of_n in place so the next
     round uses the new value.
     """
-    project = orchestrator.get_project(project_id)
+    project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     if request.best_of_n < 1 or request.best_of_n > 5:
@@ -283,35 +333,35 @@ async def set_best_of_n(project_id: str, request: "BestOfNRequest"):
 
 @router.get("/{project_id}/loop/best_of_n")
 async def get_best_of_n(project_id: str):
-    project = orchestrator.get_project(project_id)
+    project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     return {"best_of_n": getattr(project, "best_of_n", 1) or 1}
 
 
-# Global message stream — see #27 / #28 for why this is at /api/messages
-# (and not under /projects) — FastAPI'"'"'s dynamic-segment matching shadows
+# Global message stream 鈥?see #27 / #28 for why this is at /api/messages
+# (and not under /projects) 鈥?FastAPI'"'"'s dynamic-segment matching shadows
 # literal paths under the same prefix.
 @router.get("/messages")
 async def get_global_messages(limit: int = 100):
-    return {"messages": orchestrator.get_message_history(limit=limit)}
+    return {"messages": _orch().get_message_history(limit=limit)}
 
 
 @router.get("/{project_id}/messages")
 async def get_project_messages(project_id: str, limit: int = 50):
-    project = orchestrator.get_project(project_id)
+    project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
-    messages = orchestrator.get_message_history(limit=limit, project_id=project_id)
+    messages = _orch().get_message_history(limit=limit, project_id=project_id)
     return {"messages": messages}
 
 
 @router.delete("/{project_id}")
 async def delete_project(project_id: str):
-    project = orchestrator.get_project(project_id)
+    project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
-    orchestrator.delete_project(project_id)
+    _orch().delete_project(project_id)
     return {"status": "ok", "message": f"Project {project_id} deleted"}
 
 
@@ -327,25 +377,25 @@ async def delete_project(project_id: str):
 
 @router.get("/{project_id}/files")
 async def list_reference_files(project_id: str):
-    project = orchestrator.get_project(project_id)
+    project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
-    files = orchestrator.list_reference_files(project_id)
+    files = _orch().list_reference_files(project_id)
     return {"files": files}
 
 @router.get("/{project_id}/files/{file_id}")
 async def get_reference_file(project_id: str, file_id: str):
-    project = orchestrator.get_project(project_id)
+    project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
-    record = orchestrator.get_reference_file(file_id)
+    record = _orch().get_reference_file(file_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"File not found: {file_id}")
     if record.get("project_id") != project_id:
         raise HTTPException(status_code=403, detail="File does not belong to this project")
     return record
 
-# 5 MB cap — reference files are kept inline in SQLite, so we have
+# 5 MB cap 鈥?reference files are kept inline in SQLite, so we have
 # to guard against accidental uploads of large files that would bloat
 # the DB and slow every subsequent read.
 MAX_REFERENCE_FILE_BYTES = 5 * 1024 * 1024
@@ -360,7 +410,7 @@ async def upload_reference_file(project_id: str, file: UploadFile = File(...)):
     the UI simple). The endpoint enforces a 5 MB cap to keep SQLite
     happy and returns 413 when the upload is too large.
     """
-    project = orchestrator.get_project(project_id)
+    project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     name = file.filename or "upload.bin"
@@ -371,7 +421,7 @@ async def upload_reference_file(project_id: str, file: UploadFile = File(...)):
             status_code=413,
             detail=f"File too large (max {MAX_REFERENCE_FILE_BYTES} bytes)"
         )
-    file_id = orchestrator.add_reference_file(project_id, name, mime, content)
+    file_id = _orch().add_reference_file(project_id, name, mime, content)
     return {
         "status": "ok",
         "file": {
@@ -384,13 +434,13 @@ async def upload_reference_file(project_id: str, file: UploadFile = File(...)):
 
 @router.delete("/{project_id}/files/{file_id}")
 async def delete_reference_file(project_id: str, file_id: str):
-    project = orchestrator.get_project(project_id)
+    project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
-    record = orchestrator.get_reference_file(file_id)
+    record = _orch().get_reference_file(file_id)
     if record is None or record.get("project_id") != project_id:
         raise HTTPException(status_code=404, detail=f"File not found: {file_id}")
-    ok = orchestrator.delete_reference_file(file_id)
+    ok = _orch().delete_reference_file(file_id)
     return {"status": "deleted" if ok else "not_found", "file_id": file_id}
 
 # ============================================================================
@@ -399,10 +449,10 @@ async def delete_reference_file(project_id: str, file_id: str):
 
 @router.post("/{project_id}/checkpoint/revert_file")
 async def revert_file(project_id: str, request: "RevertFileRequest"):
-    project = orchestrator.get_project(project_id)
+    project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
-    ok, err = orchestrator.revert_file(project_id, request.sha, request.path)
+    ok, err = _orch().revert_file(project_id, request.sha, request.path)
     if not ok:
         raise HTTPException(status_code=400, detail=err or "revert failed")
     return {"status": "reverted", "project_id": project_id,
@@ -419,3 +469,4 @@ class StartLoopRequest(BaseModel):
 class RevertFileRequest(BaseModel):
     sha: str
     path: str
+

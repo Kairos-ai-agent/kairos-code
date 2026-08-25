@@ -141,11 +141,19 @@ const AppLayout: React.FC = () => {
         <Tooltip title={mode === 'dark' ? 'Switch to light' : 'Switch to dark'}>
           <Button
             type="text"
-            icon={mode === 'dark' ? <SunOutlined /> : <MoonOutlined />}
             onClick={toggle}
-            style={{ color: tokens.labelSecondary }}
+            style={{
+              color: tokens.labelSecondary,
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              fontSize: 13,
+            }}
             data-testid="theme-toggle"
-          />
+          >
+            {mode === 'dark' ? <SunOutlined /> : <MoonOutlined />}
+            <span style={{ fontWeight: 500 }}>
+              {mode === 'dark' ? 'Light' : 'Dark'}
+            </span>
+          </Button>
         </Tooltip>
         <Dropdown
           menu={{

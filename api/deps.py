@@ -1,4 +1,11 @@
-"""Shared dependencies for the API layer."""
+"""Shared dependencies for the API layer.
+
+We expose a `get_orchestrator()` FastAPI dependency that resolves the
+singleton at request time. Route modules call this via `Depends` so
+tests that monkeypatch `api.deps.orchestrator` actually see the
+patched instance (a stale `from api.deps import orchestrator` at the
+top of a route file would defeat the patch).
+"""
 
 import json
 from pathlib import Path
@@ -13,6 +20,19 @@ from kairos.llm.base import LLMConfig
 config_path = Path(__file__).parent.parent / "kairos" / "config" / "models_config.yaml"
 model_router = ModelRouter(config_path=config_path)
 orchestrator = Orchestrator(model_router=model_router)
+
+
+def get_orchestrator() -> Orchestrator:
+    """FastAPI dependency — returns the live orchestrator singleton.
+
+    Tests can replace `api.deps.orchestrator` and routes that use
+    `Depends(get_orchestrator)` will see the patched instance. Routes
+    that `from api.deps import orchestrator` at the top of the file
+    would NOT see the patch (they hold a stale reference); prefer
+    `Depends(get_orchestrator)` for new routes.
+    """
+    return orchestrator
+
 
 def get_review_engine() -> ReviewEngine:
     """Create a review engine with configured LLM.

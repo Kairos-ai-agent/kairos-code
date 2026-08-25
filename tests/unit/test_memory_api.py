@@ -23,27 +23,22 @@ def client():
 
 
 def test_list_notes_endpoint(client):
-    # Pick the first project; if there are none, create one.
+    import uuid as _uuid
+    # Pick the first project; if there are none, create one with a
+    # unique name (the API's create_project path is sensitive to
+    # name collisions; we don't depend on the specific response
+    # shape, just on having at least one project).
     projects = client.get("/api/projects").json().get("projects", [])
     if not projects:
+        unique_name = f"mem-api-test-{_uuid.uuid4().hex[:8]}"
         resp = client.post("/api/projects", json={
-            "name": "mem-api-test", "description": "tmp", "work_dir": "./_api_test_workspace",
+            "name": unique_name, "description": "tmp",
+            "work_dir": "./_api_test_workspace",
         })
+        assert resp.status_code == 200, resp.text
         created = resp.json()
-        # When a project with the same name already exists, the API
-        # can return a 409 with a non-`id` payload. Tolerate that by
-        # falling back to the first existing project.
-        if "id" not in created:
-            projects = client.get("/api/projects").json().get("projects", [])
-            if not projects:
-                # Nothing in the store — surface the original error.
-                raise AssertionError(
-                    f"POST /api/projects returned {resp.status_code} "
-                    f"without 'id': {created!r}"
-                )
-            pid = projects[0]["id"]
-        else:
-            pid = created["id"]
+        assert "id" in created, f"unexpected POST response: {created!r}"
+        pid = created["id"]
     else:
         pid = projects[0]["id"]
     r = client.get(f"/api/projects/{pid}/memory/notes")
@@ -65,10 +60,14 @@ def test_memory_overview_endpoint(client):
 
 
 def test_add_note_then_list_round_trip(client):
-    projects = client.get("/api/projects").json().get("projects", [])
-    if not projects:
-        pytest.skip("no projects available")
-    pid = projects[0]["id"]
+    import uuid as _uuid
+    unique_name = f"mem-api-test-{_uuid.uuid4().hex[:8]}"
+    resp = client.post("/api/projects", json={
+        "name": unique_name, "description": "tmp",
+        "work_dir": "./_api_test_workspace",
+    })
+    assert resp.status_code == 200, resp.text
+    pid = resp.json()["id"]
     r = client.post(f"/api/projects/{pid}/memory/notes", json={
         "kind": "fact", "title": "API test note", "body": "smoke body",
     })

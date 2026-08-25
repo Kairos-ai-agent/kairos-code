@@ -30,7 +30,7 @@ import {
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import ChatThread from '../components/ChatThread';
-import ChatComposer, { type ComposerMode } from '../components/ChatComposer';
+import ChatComposer from '../components/ChatComposer';
 import api, { onWebSocketMessage, onWebSocketState } from '../api/client';
 import type { Message, LoopSession, SessionRound } from '../types';
 
@@ -245,9 +245,15 @@ const Chat: React.FC = () => {
   }, [currentProject, sessionId, loadSessionHistory, setCurrentMessages]);
 
   // ----- Actions -----
-  const startLoop = async (text: string, _mode: ComposerMode) => {
+  //
+  // The Auto router is dead simple:
+  //   - If a Reviewer question is pending, submit the answer.
+  //   - Otherwise, kick off a new loop with the requirement.
+  // Plan / Ask as user-selectable modes are gone (the loop surfaces
+  // a PlanBanner / AskBanner at the right time instead).
+  const handleSubmit = async (text: string) => {
     if (!currentProject) {
-      msgApi.warning('Pick a project first.');
+      msgApi.warning('Pick a project or folder first.');
       return;
     }
     setBusy(true);
@@ -255,46 +261,28 @@ const Chat: React.FC = () => {
       // Optimistic: render the user's bubble immediately.
       appendMessage({
         id: `user-${Date.now()}`,
-        sender: 'user', receiver: 'agent', topic: 'user.input',
+        sender: 'user',
+        receiver: askState?.pending ? 'reviewer' : 'agent',
+        topic: askState?.pending ? 'ask.answer' : 'user.input',
         content: text, msg_type: 'text',
         timestamp: Date.now() / 1000, metadata: {},
       });
-      await api.post(`/projects/${currentProject.id}/start`, { requirement: text });
-      // The backend pushes session.started via WS; our handler
-      // navigates to /chat/{sid} and refetches sessions.
+      if (askState?.pending) {
+        await api.post(`/projects/${currentProject.id}/ask/answer`,
+                       { answer: text });
+        // Optimistic: clear the banner immediately. The next poll
+        // cycle (≤ 2s) will confirm the backend updated.
+        setAskState(null);
+      } else {
+        await api.post(`/projects/${currentProject.id}/start`,
+                       { requirement: text });
+        // session.started arrives via WS and our handler navigates
+        // to /chat/{sid} + refetches sessions.
+      }
     } catch (e: any) {
-      msgApi.error(e?.response?.data?.detail || 'Failed to start loop');
+      msgApi.error(e?.response?.data?.detail || 'Failed to submit');
     } finally {
       setBusy(false);
-    }
-  };
-
-  const answerAsk = async (text: string) => {
-    if (!currentProject) return;
-    try {
-      await api.post(`/projects/${currentProject.id}/ask/answer`,
-                     { answer: text });
-      appendMessage({
-        id: `user-${Date.now()}`,
-        sender: 'user', receiver: 'reviewer', topic: 'ask.answer',
-        content: text, msg_type: 'text',
-        timestamp: Date.now() / 1000, metadata: {},
-      });
-    } catch (e: any) {
-      msgApi.error(e?.response?.data?.detail || 'Failed to submit answer');
-    }
-  };
-
-  const handleSubmit = async (text: string, mode: ComposerMode) => {
-    if (mode === 'ask') {
-      // Ask mode: there's a pending reviewer question. The composer
-      // is being used to answer it.
-      await answerAsk(text);
-    } else {
-      // loop / plan both call /start (plan mode is a hint to the
-      // backend; the existing /start endpoint already accepts the
-      // requirement as-is).
-      await startLoop(text, mode);
     }
   };
 
@@ -375,10 +363,10 @@ const Chat: React.FC = () => {
           messages={currentMessages}
           emptyHint={
             !currentProject
-              ? 'Select a project from the top bar to start chatting.'
+              ? 'Pick a project, or add a folder above, to start chatting.'
               : isRunning
                 ? 'Loop is running — round output will appear here.'
-                : 'Type a task below; the Coder + Reviewer will iterate until approved.'
+                : 'Type a task below; the Auto router picks the right mode.'
           }
         />
       </div>
@@ -422,7 +410,7 @@ const Chat: React.FC = () => {
         onSubmit={handleSubmit}
         busy={busy}
         disabled={!showComposer}
-        disabledHint="Select a project first."
+        disabledHint="Select a project or folder to start."
       />
 
       {/* Starter suggestions (only when truly empty + no session) */}

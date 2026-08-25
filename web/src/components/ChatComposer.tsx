@@ -1,62 +1,60 @@
 /**
  * ChatComposer — sticky bottom-of-thread input box.
  *
- * Layout (ChatGPT beta style):
+ * Layout (ChatGPT beta style, post-Auto-mode):
  *
  *   ┌──────────────────────────────────────────────────┐
- *   │  [Mode ▼]  [Auto-send ☐]                  📎    │
- *   │  ┌────────────────────────────────────┐    ↑   │
- *   │  │ Describe a task or /plan something…│   send  │
- *   │  │                                    │         │
+ *   │  ┌────────────────────────────────────┐         │
+ *   │  │ Describe a task — the Auto router…  │    ↑   │
+ *   │  │                                    │  send  │
  *   │  └────────────────────────────────────┘         │
  *   │  Enter to send · Shift+Enter for new line        │
  *   └──────────────────────────────────────────────────┘
  *
  * Behaviour:
- *   - Auto-grow: textarea grows with content up to 240px (12 lines),
- *     then scrolls inside its own box.
+ *   - The Loop / Plan / Ask mode selector is **hidden**. Every
+ *     submission goes through the Auto router which the chat page
+ *     implements (it decides whether the input triggers a fresh loop
+ *     or an ask-answer based on backend state — see Chat.tsx).
+ *   - Auto-grow textarea (up to 240px / 12 lines).
  *   - Cmd/Ctrl+Enter or click the send button: submit.
  *   - Enter alone: also submit (chat-style default).
  *   - Shift+Enter: insert a literal newline.
- *   - Disabled when the project is missing or while a submission is
- *     in flight (`busy`).
+ *   - Disabled when no project/folder is selected, or while a
+ *     submission is in flight (`busy`).
+ *
+ * Rationale for the simplification: the user shouldn't have to pick
+ * between Loop / Plan / Ask — the loop already exposes a PlanBanner
+ * (the Coder's draft, with approve/reject) and an AskBanner (the
+ * Reviewer's question, with an answer input). Both are surfaced in
+ * the chat thread at the right moment, so the user never has to
+ * declare a mode up front.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { Button, Select, Tooltip, Switch, Form, Tag } from 'antd';
+import { Button, Tooltip, App as AntdApp } from 'antd';
 import {
-  ArrowUpOutlined, PaperClipOutlined, ThunderboltOutlined,
-  MessageOutlined,
+  ArrowUpOutlined, PaperClipOutlined,
 } from '@ant-design/icons';
 
 import { useThemeTokens } from '../hooks/useThemeTokens';
 
-export type ComposerMode = 'loop' | 'plan' | 'ask';
-
 interface Props {
   value?: string;
   onChange?: (v: string) => void;
-  onSubmit: (text: string, mode: ComposerMode) => Promise<void> | void;
+  onSubmit: (text: string) => Promise<void> | void;
   placeholder?: string;
   busy?: boolean;
-  /** Show the "no project selected" hint and disable the box. */
   disabled?: boolean;
   disabledHint?: string;
-  /** Show the model selector (when multiple models available). */
-  models?: string[];
-  model?: string;
-  onModelChange?: (m: string) => void;
 }
 
 const MAX_TEXTAREA_HEIGHT = 240;
 
 const ChatComposer: React.FC<Props> = ({
-  value, onChange, onSubmit, placeholder, busy,
-  disabled, disabledHint, models, model, onModelChange,
+  value, onChange, onSubmit, placeholder, busy, disabled, disabledHint,
 }) => {
   const tokens = useThemeTokens();
   const [text, setText] = useState(value || '');
-  const [mode, setMode] = useState<ComposerMode>('loop');
-  const [autoSend, setAutoSend] = useState(true);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Sync external value updates (e.g. parent resetting after submit).
@@ -77,7 +75,7 @@ const ChatComposer: React.FC<Props> = ({
     const trimmed = text.trim();
     if (!trimmed || disabled || busy) return;
     try {
-      await onSubmit(trimmed, mode);
+      await onSubmit(trimmed);
       setText('');
     } catch {
       // Caller surfaces the error; keep the text so the user can retry.
@@ -115,8 +113,8 @@ const ChatComposer: React.FC<Props> = ({
           rows={1}
           disabled={disabled || busy}
           placeholder={disabled
-            ? (disabledHint || 'Select a project to start chatting')
-            : (placeholder || 'Describe a task — the Coder + Reviewer will iterate.')}
+            ? (disabledHint || 'Pick a project or folder to start chatting')
+            : (placeholder || 'Describe a task — the Auto router picks the right mode.')}
           style={{
             width: '100%', border: 'none', outline: 'none',
             background: 'transparent', color: tokens.labelPrimary,
@@ -130,35 +128,6 @@ const ChatComposer: React.FC<Props> = ({
           display: 'flex', alignItems: 'center', gap: 8,
           paddingTop: 4,
         }}>
-          <Select
-            value={mode}
-            onChange={(v) => setMode(v as ComposerMode)}
-            size="small"
-            variant="borderless"
-            style={{ minWidth: 88 }}
-            options={[
-              { value: 'loop', label: <span><ThunderboltOutlined /> Loop</span> },
-              { value: 'plan', label: <span>📋 Plan</span> },
-              { value: 'ask', label: <span>❓ Ask</span> },
-            ]}
-          />
-          <Tooltip title="Auto-send next round on approval">
-            <span style={{ display: 'inline-flex', alignItems: 'center',
-                           gap: 4, fontSize: 12, color: tokens.labelTertiary }}>
-              Auto
-              <Switch size="small" checked={autoSend}
-                      onChange={setAutoSend} />
-            </span>
-          </Tooltip>
-          {models && models.length > 0 && (
-            <Select
-              size="small" variant="borderless"
-              value={model} onChange={onModelChange}
-              style={{ minWidth: 110, marginLeft: 4 }}
-              placeholder="Model"
-              options={models.map((m) => ({ value: m, label: m }))}
-            />
-          )}
           <div style={{ flex: 1 }} />
           <Tooltip title="Attach file (coming soon)">
             <Button type="text" icon={<PaperClipOutlined />} disabled

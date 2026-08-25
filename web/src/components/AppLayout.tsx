@@ -37,6 +37,7 @@ import { LAYOUT } from '../styles/theme';
 import api from '../api/client';
 import type { Project } from '../types';
 import ChatSidebar from './ChatSidebar';
+import FolderPicker from './FolderPicker';
 
 const { Header, Sider, Content } = Layout;
 
@@ -127,6 +128,8 @@ const AppLayout: React.FC = () => {
             navigate('/chat');
           }}
         />
+
+        <FolderPicker />
 
         <div style={{ flex: 1 }} />
 

@@ -191,3 +191,32 @@ export interface LoopConfig {
   specialists: string[];
   best_of_n: number;
 }
+
+// ---------------------------------------------------------------- Chat sidebar
+
+/** A row in the chat-style session list. Mirrors the backend
+ *  `GET /api/projects/{id}/sessions` response. */
+export interface LoopSession {
+  session_id: string;
+  round_count: number;
+  last_round: number;
+  last_score: number;
+  last_approve: boolean;
+  started_at: number;
+  last_activity: number;
+  running?: boolean;
+}
+
+/** One round in a session's history. Mirrors `loop_rounds` rows. */
+export interface SessionRound {
+  project_id: string;
+  session_id: string;
+  round: number;
+  coder_summary: string;
+  review_summary: string;
+  review_json: string | null;
+  score: number;
+  approve: number;       // 0 / 1 — SQLite has no bool
+  created_at: number;
+  insert_order: number;
+}

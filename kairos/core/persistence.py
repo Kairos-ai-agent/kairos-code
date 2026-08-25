@@ -215,6 +215,60 @@ class Persistence:
         ordered = sorted([dict(r) for r in rows], key=_sort_key)
         return ordered[:limit]
 
+    def list_loop_sessions(self, project_id: str) -> List[dict]:
+        """Distinct sessions for a project, newest session first.
+
+        Each entry: {session_id, round_count, last_round, last_score,
+        last_approve, started_at, ended_at}. The sidebar of the new
+        chat-style UI uses this to render the conversation list.
+
+        Sort: most recent activity first. We use MAX(created_at) over
+        the session's rounds as the "last activity" timestamp; if a
+        session has zero rounds (i.e. started but no round saved yet)
+        it won't appear here, but the in-memory `project.loop_session`
+        will still surface it through the loop endpoint.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute('''
+                SELECT
+                    session_id,
+                    COUNT(*)             AS round_count,
+                    MAX(round)           AS last_round,
+                    MAX(COALESCE(score, 0)) AS last_score,
+                    MAX(approve)         AS last_approve,
+                    MIN(created_at)      AS started_at,
+                    MAX(created_at)      AS last_activity
+                FROM loop_rounds
+                WHERE project_id = ?
+                GROUP BY session_id
+                ORDER BY last_activity DESC
+            ''', (project_id,)).fetchall()
+        out: List[dict] = []
+        for r in rows:
+            d = dict(r)
+            d['last_approve'] = bool(d.get('last_approve'))
+            out.append(d)
+        return out
+
+    def load_session_rounds(self, project_id: str, session_id: str) -> List[dict]:
+        """All rounds for one session, oldest first.
+
+        Used by the chat thread to rebuild the full conversation
+        history of a session. Same sort key as `load_loop_rounds`."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute('''
+                SELECT * FROM loop_rounds
+                WHERE project_id = ? AND session_id = ?
+            ''', (project_id, session_id)).fetchall()
+        def _sort_key(r):
+            # insert_order is a per-row monotonic counter; tie-breaking
+            # on it (rather than `round`) keeps the order stable when
+            # many rows share a created_at (batch saves / unit tests).
+            return (r.get('created_at') or 0, r.get('insert_order') or 0)
+        return sorted([dict(r) for r in rows], key=_sort_key)
+
     def load_last_loop_summary(self, project_id: str) -> Optional[str]:
         """One-line digest of the most recent loop's last round — useful
         for the UI to show "last time this project..." without rehydrating

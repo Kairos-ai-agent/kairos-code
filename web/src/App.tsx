@@ -1,64 +1,41 @@
+/**
+ * App — top-level router.
+ *
+ * Layout:
+ *   /             → Chat (default landing; sidebar with project picker)
+ *   /chat         → Chat (new conversation)
+ *   /chat/:sid    → Chat (specific session)
+ *   /today        → Today (stats + recent activity)
+ *   /settings     → Settings
+ *   /projects     → Projects (legacy page, kept for project CRUD)
+ *   /loop         → Loop (legacy page, kept for advanced diagnostics)
+ */
 import React, { useEffect } from 'react';
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { Layout, Menu, Typography } from 'antd';
-import {
-  DashboardOutlined,
-  ProjectOutlined,
-  SettingOutlined,
-  SyncOutlined,
-} from '@ant-design/icons';
+import { Routes, Route, Navigate } from 'react-router-dom';
 
-import Dashboard from './pages/Dashboard';
+import AppLayout from './components/AppLayout';
+import Chat from './pages/Chat';
+import Today from './pages/Today';
+import SettingsPage from './pages/Settings';
 import ProjectPage from './pages/Project';
 import Loop from './pages/Loop';
-import SettingsPage from './pages/Settings';
 import { connectWebSocket } from './api/client';
 
-const { Sider, Content } = Layout;
-const { Title } = Typography;
-
-const menuItems = [
-  { key: '/', icon: <DashboardOutlined />, label: 'Dashboard' },
-  { key: '/projects', icon: <ProjectOutlined />, label: 'Projects' },
-  { key: '/loop', icon: <SyncOutlined />, label: 'Loop Review' },
-  { key: '/settings', icon: <SettingOutlined />, label: 'Settings' },
-];
-
 const App: React.FC = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  useEffect(() => {
-    connectWebSocket();
-  }, []);
-
+  useEffect(() => { connectWebSocket(); }, []);
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider width={180} theme="dark" collapsedWidth={0} breakpoint="lg">
-        <div style={{ padding: '12px 16px' }}>
-          <Title level={5} style={{ color: '#fff', margin: 0, fontSize: 14 }}>
-            Kairos Code
-          </Title>
-        </div>
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[location.pathname]}
-          items={menuItems}
-          onClick={({ key }) => navigate(key)}
-          style={{ borderRight: 0 }}
-        />
-      </Sider>
-      <Content style={{ padding: '12px 16px', overflow: 'auto', background: '#0a0a0a' }}>
-        <Routes location={location} key={location.pathname}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/projects" element={<ProjectPage />} />
-          <Route path="/loop" element={<Loop />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </Content>
-    </Layout>
+    <Routes>
+      <Route element={<AppLayout />}>
+        <Route path="/" element={<Navigate to="/chat" replace />} />
+        <Route path="/chat" element={<Chat />} />
+        <Route path="/chat/:sessionId" element={<Chat />} />
+        <Route path="/today" element={<Today />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/projects" element={<ProjectPage />} />
+        <Route path="/loop" element={<Loop />} />
+        <Route path="*" element={<Navigate to="/chat" replace />} />
+      </Route>
+    </Routes>
   );
 };
 

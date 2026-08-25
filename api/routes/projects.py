@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import json
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -113,6 +114,90 @@ async def get_loop_state(project_id: str):
         "history": session.history[-5:],
         "user_stopped": session.user_stopped,
     }
+
+
+@router.get("/{project_id}/sessions")
+async def list_loop_sessions(project_id: str):
+    """List all loop sessions for a project, newest first.
+
+    Each session is a single `kairos exec`-style run: from the moment
+    the user clicks "start" until the loop converges, stops, or is
+    killed. The new chat-style UI renders one row per session in the
+    left sidebar so the user can browse past runs.
+
+    The currently-running in-memory session is appended at the top if
+    it isn't already in the persisted list (it won't have any rounds
+    saved yet but we still want it visible in the sidebar).
+    """
+    from api.deps import orchestrator as _orch
+    project = _orch.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+    persisted = _orch._db.list_loop_sessions(project_id)  # type: ignore[attr-defined]
+    # Promote the live in-memory session (if any) to the top of the
+    # list — it might not have any rounds yet, but the user expects
+    # to see "the current run" highlighted in the sidebar.
+    in_mem = None
+    sess = project.loop_session
+    if sess and sess.session_id:
+        in_mem = {
+            "session_id": sess.session_id,
+            "round_count": int(getattr(sess, "round", 0) or 0),
+            "last_round": int(getattr(sess, "round", 0) or 0),
+            "last_score": int(getattr(sess, "last_score", 0) or 0),
+            "last_approve": bool(getattr(sess, "last_approve", False)),
+            "started_at": float(getattr(sess, "started_at", 0) or 0),
+            "last_activity": float(getattr(sess, "started_at", 0) or 0),
+            "running": bool(project.loop_task and not project.loop_task.done()),
+        }
+    if in_mem and in_mem["session_id"] not in {p["session_id"] for p in persisted}:
+        persisted.insert(0, in_mem)
+    else:
+        # Mark whichever one is currently running.
+        if in_mem:
+            for p in persisted:
+                if p["session_id"] == in_mem["session_id"]:
+                    p["running"] = bool(project.loop_task
+                                         and not project.loop_task.done())
+    return {"project_id": project_id, "sessions": persisted}
+
+
+@router.get("/{project_id}/sessions/{session_id}/rounds")
+async def get_session_rounds(project_id: str, session_id: str):
+    """All rounds of one session, oldest first.
+
+    Used by the chat thread to rebuild a session's full conversation
+    history (Coder summary, Reviewer verdict, per-round issues)."""
+    from api.deps import orchestrator as _orch
+    project = _orch.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+    rows = _orch._db.load_session_rounds(project_id, session_id)  # type: ignore[attr-defined]
+    # Pull the in-memory session if it matches (it has the freshest
+    # state — last round, plan/ask markers, etc. — even if it isn't
+    # yet persisted to disk).
+    sess = project.loop_session
+    if sess and sess.session_id == session_id and getattr(sess, "history", None):
+        # Append any history rows whose round isn't already on disk.
+        seen_rounds = {int(r.get("round", -1)) for r in rows}
+        for h in sess.history:
+            r = int(h.get("round", -1))
+            if r in seen_rounds:
+                continue
+            review = h.get("review") or {}
+            rows.append({
+                "project_id": project_id,
+                "session_id": session_id,
+                "round": r,
+                "coder_summary": h.get("coder_summary", ""),
+                "review_summary": (review.get("summary") or ""),
+                "review_json": json.dumps(review) if review else None,
+                "score": int(review.get("score", 0) or 0),
+                "approve": 1 if review.get("approve") else 0,
+                "created_at": float(h.get("created_at", 0) or 0),
+            })
+        rows.sort(key=lambda r: (r.get("created_at", 0), r.get("round", 0)))
+    return {"project_id": project_id, "session_id": session_id, "rounds": rows}
 
 
 @router.get("/{project_id}/health")

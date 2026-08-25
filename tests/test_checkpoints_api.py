@@ -22,20 +22,23 @@ if str(ROOT) not in sys.path:
 
 import pytest
 
-# These tests don't need a real DB. The route module imports
-# `api.deps.orchestrator` at top level, so we patch it before
-# the import.
+# These tests don't need a real DB. We import the route module
+# and then expose the orchestrator attribute via a per-test
+# fixture (see `fake_orchestrator` below) so the rest of the test
+# session — which legitimately uses the real orchestrator — is
+# not affected by a module-scope monkey-patch.
 import api.deps as _api_deps
-_api_deps.orchestrator = MagicMock()
-from api.routes.checkpoints import (  # noqa: E402
-    CreateCheckpointRequest,
-    RestoreRequest,
-    list_project_checkpoints,
-    restore_checkpoint,
-    diff_checkpoint,
-    create_checkpoint,
-)
+import api.routes.checkpoints as _checkpoints_routes  # noqa: E402
 from kairos.tools import checkpoint as ckpt
+
+# Re-export the route functions for callers that previously imported
+# them from api.routes.checkpoints at module load time.
+CreateCheckpointRequest = _checkpoints_routes.CreateCheckpointRequest
+RestoreRequest = _checkpoints_routes.RestoreRequest
+list_project_checkpoints = _checkpoints_routes.list_project_checkpoints
+restore_checkpoint = _checkpoints_routes.restore_checkpoint
+diff_checkpoint = _checkpoints_routes.diff_checkpoint
+create_checkpoint = _checkpoints_routes.create_checkpoint
 
 
 # ---------------------------------------------------------------------------
@@ -68,11 +71,35 @@ def _git_init(path: Path) -> None:
 
 
 @pytest.fixture
-def git_project(tmp_path):
+def fake_orchestrator():
+    """Swap in a MagicMock orchestrator for the duration of the test,
+    then restore the real one. This prevents module-scope pollution
+    of `api.deps.orchestrator`, which would otherwise break later
+    test files (e.g. test_memory_api.py) that rely on the real
+    Orchestrator singleton bound to data/kairos.db.
+
+    The route module (`api.routes.checkpoints`) does
+    `from api.deps import orchestrator` at import time, so the symbol
+    in the route module is a separate reference. We patch both.
+    """
+    real_deps = _api_deps.orchestrator
+    real_routes = _checkpoints_routes.orchestrator
+    mock = MagicMock()
+    _api_deps.orchestrator = mock
+    _checkpoints_routes.orchestrator = mock
+    try:
+        yield mock
+    finally:
+        _api_deps.orchestrator = real_deps
+        _checkpoints_routes.orchestrator = real_routes
+
+
+@pytest.fixture
+def git_project(tmp_path, fake_orchestrator):
     proj_dir = tmp_path / "proj"
     _git_init(proj_dir)
     proj = _make_project("p1", proj_dir)
-    _api_deps.orchestrator._projects = {"p1": proj}
+    fake_orchestrator._projects = {"p1": proj}
     yield proj_dir
 
 

@@ -266,7 +266,12 @@ class Orchestrator:
         project = Project(project_id, name, description, workspace, work_dir, db=self._db)
         self._projects[project_id] = project
         self._db.save_project(project)
-        self._create_agents(project)
+        try:
+            self._create_agents(project)
+        except Exception as e:
+            import traceback
+            logger.error("create_project _create_agents failed: %s\n%s", e, traceback.format_exc())
+            raise
         return project
 
     def _create_agents(self, project: Project):

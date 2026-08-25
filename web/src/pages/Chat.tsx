@@ -24,7 +24,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Tag, Tooltip, message as antMessage, App as AntdApp } from 'antd';
 import {
   PlayCircleOutlined, StopOutlined, ReloadOutlined, ThunderboltOutlined,
-  ExportOutlined, CodeOutlined,
+  ExportOutlined, CodeOutlined, BranchesOutlined,
 } from '@ant-design/icons';
 
 import { useChatStore } from '../stores/chatStore';
@@ -356,6 +356,17 @@ const Chat: React.FC = () => {
                   onClick={() => currentProject && api.get(`/projects/${currentProject.id}/loop`).then((r) => setLoopState(r.data))}
                   size="small">Refresh</Button>
         ) : null}
+        {hasSession && currentProject && sessionId && (
+          <Tooltip title="View per-turn trace">
+            <Button
+              icon={<BranchesOutlined />}
+              onClick={() => navigate(`/trace/${currentProject.id}/${sessionId}`)}
+              size="small"
+            >
+              Trace
+            </Button>
+          </Tooltip>
+        )}
       </div>
 
       {/* Thread */}

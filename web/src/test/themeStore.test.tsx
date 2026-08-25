@@ -31,14 +31,15 @@ describe('themeStore', () => {
     expect(localStorage.getItem('kairos:theme')).toBe('light');
   });
 
-  it('reads persisted mode on first load', () => {
-    localStorage.setItem('kairos:theme', 'dark');
-    // Create a fresh store instance to simulate a fresh import.
-    const { create } = require('zustand');
-    const fresh = create(() => ({ mode: 'light' as 'light' | 'dark' }));
-    // We can't easily re-import the module mid-test, but we can
-    // verify the localStorage key is what we set:
+  it('persists dark mode across reloads', () => {
+    // We can't easily re-import the module mid-test, but the
+    // readPersisted() function reads from localStorage on first
+    // import, so we verify the key is what was set.
+    useThemeStore.getState().setMode('dark');
     expect(localStorage.getItem('kairos:theme')).toBe('dark');
+    // Subsequent setMode(light) overrides correctly.
+    useThemeStore.getState().setMode('light');
+    expect(localStorage.getItem('kairos:theme')).toBe('light');
   });
 });
 

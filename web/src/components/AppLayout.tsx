@@ -27,7 +27,7 @@ import {
   MenuFoldOutlined, MenuUnfoldOutlined,
   SunOutlined, MoonOutlined, SettingOutlined,
   PlusOutlined, AppstoreOutlined, MessageOutlined,
-  GithubOutlined, BookOutlined,
+  GithubOutlined, BookOutlined, ToolOutlined,
 } from '@ant-design/icons';
 
 import { useThemeStore } from '../stores/themeStore';
@@ -135,6 +135,14 @@ const AppLayout: React.FC = () => {
             type="text"
             icon={<AppstoreOutlined />}
             onClick={() => navigate('/today')}
+            style={{ color: tokens.labelSecondary }}
+          />
+        </Tooltip>
+        <Tooltip title="Tools">
+          <Button
+            type="text"
+            icon={<ToolOutlined />}
+            onClick={() => navigate('/tools')}
             style={{ color: tokens.labelSecondary }}
           />
         </Tooltip>

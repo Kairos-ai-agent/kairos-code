@@ -26,14 +26,28 @@ def test_list_notes_endpoint(client):
     # Pick the first project; if there are none, create one.
     projects = client.get("/api/projects").json().get("projects", [])
     if not projects:
-        created = client.post("/api/projects", json={
+        resp = client.post("/api/projects", json={
             "name": "mem-api-test", "description": "tmp", "work_dir": "./_api_test_workspace",
-        }).json()
-        pid = created["id"]
+        })
+        created = resp.json()
+        # When a project with the same name already exists, the API
+        # can return a 409 with a non-`id` payload. Tolerate that by
+        # falling back to the first existing project.
+        if "id" not in created:
+            projects = client.get("/api/projects").json().get("projects", [])
+            if not projects:
+                # Nothing in the store — surface the original error.
+                raise AssertionError(
+                    f"POST /api/projects returned {resp.status_code} "
+                    f"without 'id': {created!r}"
+                )
+            pid = projects[0]["id"]
+        else:
+            pid = created["id"]
     else:
         pid = projects[0]["id"]
     r = client.get(f"/api/projects/{pid}/memory/notes")
-    assert r.status_code == 200
+    assert r.status_code == 200, r.text
     assert "notes" in r.json()
 
 

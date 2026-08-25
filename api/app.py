@@ -18,6 +18,8 @@ from api.routes.review import router as review_router
 from api.routes.config import router as config_router
 from api.routes.websocket import router as ws_router
 from api.routes.memory import router as memory_router
+from api.routes.teams import router as teams_router
+from api.routes.checkpoints import router as checkpoints_router
 
 log = logging.getLogger(__name__)
 
@@ -60,6 +62,8 @@ app.include_router(review_router, prefix="/api/review", tags=["review"])
 app.include_router(config_router, prefix="/api/config", tags=["config"])
 app.include_router(memory_router, prefix="/api/projects", tags=["memory"])
 app.include_router(ws_router, prefix="/ws", tags=["websocket"])
+app.include_router(teams_router, prefix="/api/projects", tags=["teams"])
+app.include_router(checkpoints_router, prefix="/api/projects", tags=["checkpoints"])
 
 # Global message stream — mounted at /api/messages (not under /projects
 # because FastAPI's path-param matching can shadow literal /messages

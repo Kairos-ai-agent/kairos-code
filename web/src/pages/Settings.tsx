@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   Card, Typography, Table, Select, Button, Space, Tag, message,
-  Tabs, Input, Divider, Form, Modal, Radio,
+  Tabs, Input, Divider, Form, Modal, Radio, Alert, Checkbox, Slider,
 } from 'antd';
 import {
   SaveOutlined, RobotOutlined, TeamOutlined,
@@ -397,7 +397,6 @@ const SettingsPage: React.FC = () => {
         <Button type="primary" icon={<SaveOutlined />} onClick={handleSave}>保存所有设置</Button>
       </Space>
       <Tabs defaultActiveKey="deepseek" items={tabItems} />
-    </div>
       <Card title="Loop Behavior" size="small" style={{ marginTop: 16 }}>
         <Space direction="vertical" style={{ width: '100%' }} size={12}>
           <Alert type="info" message="These settings apply on the next loop start. They do not change a running loop." />

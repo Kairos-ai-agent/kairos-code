@@ -7,6 +7,7 @@ import json
 import logging
 import time
 from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
@@ -170,6 +171,7 @@ class KairosAgent:
         llm_config: LLMConfig,
         message_bus: MessageBus,
         tools: Optional[List[Any]] = None,
+        project_dir: Optional[str] = None,
     ):
         self.agent_id = agent_id
         self.name = name
@@ -188,7 +190,7 @@ class KairosAgent:
         # Live progress fields (read by .state below and updated each turn
         # so the WS heartbeat can push them out to the UI).
         self.current_turn: int = 0
-        self.total_turns: int = 0
+        self.total_turns = 0
         self.current_tool: Optional[str] = None
 
         # Concurrency protection
@@ -202,6 +204,42 @@ class KairosAgent:
         # Message bus subscription
         self.message_bus.subscribe(agent_id, f"agent.{agent_id}")
         self.message_bus.subscribe(agent_id, "broadcast")
+
+        # Codex-Harness-style project context: AGENTS.md augments the
+        # hard-coded system_prompt at construction time. Skills are
+        # loaded per task at _build_messages() because matching depends
+        # on the current task context (keyword / tools / filename).
+        # Both loaders are optional — if project_dir is None, the agent
+        # behaves exactly as before.
+        self._project_dir = Path(project_dir) if project_dir else None
+        if self._project_dir is not None:
+            try:
+                from kairos.agents_md import AgentsMdLoader
+                from kairos.skills import SkillsLoader
+                self._agents_md_loader = AgentsMdLoader(
+                    project_dir=self._project_dir,
+                )
+                self._skills_loader = SkillsLoader(
+                    project_dir=self._project_dir,
+                )
+                self.system_prompt = (
+                    self._agents_md_loader.merge_into_system_prompt(
+                        self.system_prompt
+                    )
+                )
+            except Exception as exc:
+                # Don't fail agent construction if AGENTS.md or skills
+                # can't be read — log and continue with the hard-coded
+                # prompt.
+                logger.warning(
+                    "Failed to load AGENTS.md / skills for %s: %s",
+                    self._project_dir, exc,
+                )
+                self._agents_md_loader = None
+                self._skills_loader = None
+        else:
+            self._agents_md_loader = None
+            self._skills_loader = None
 
     @property
     def state(self) -> AgentState:
@@ -280,8 +318,36 @@ class KairosAgent:
     def _build_messages(self) -> List[LLMMessage]:
         """Build messages for LLM including system prompt and memory."""
         self._truncate_memory()
+        system = self.system_prompt
+        # Inject Codex-style skills based on current task + tool context.
+        # We do this every turn because the active tool list changes
+        # after each tool call, which can promote/demote skills.
+        if self._skills_loader is not None and self.current_task is not None:
+            try:
+                task = self.current_task
+                ctx = {
+                    "title": task.title,
+                    "description": task.description,
+                    "tools": [
+                        tc.name for tc in (
+                            (self._memory[-1].tool_calls or [])
+                            if self._memory and self._memory[-1].tool_calls
+                            else []
+                        )
+                    ] or [
+                        # If we haven't called any tool yet, expose
+                        # the agent's known tool names so keyword /
+                        # tool filters can match the agent's domain.
+                        t.name for t in self.tools
+                    ],
+                }
+                skills_block = self._skills_loader.for_context(ctx)
+                if skills_block:
+                    system = f"{system}\n\n{skills_block}"
+            except Exception as exc:
+                logger.debug("skills injection failed: %s", exc)
         return (
-            [LLMMessage(role="system", content=self.system_prompt)]
+            [LLMMessage(role="system", content=system)]
             + self._memory
         )
 

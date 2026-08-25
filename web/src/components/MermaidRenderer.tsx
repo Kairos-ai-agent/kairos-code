@@ -1,14 +1,31 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-// Lazily-loaded mermaid instance. We don't import at module top-level
-// because mermaid is ~600KB; lazy load keeps the bundle smaller for
-// pages that don't render plans.
+// Lazily-loaded mermaid instance. We don't bundle mermaid (~600KB) —
+// instead we inject a CDN <script> on first use and resolve when its
+// global `mermaid` becomes available. This keeps the main bundle small
+// for pages that never render a plan diagram.
+const MERMAID_VERSION = '10.9.1';
+const MERMAID_CDN = `https://cdn.jsdelivr.net/npm/mermaid@${MERMAID_VERSION}/dist/mermaid.min.js`;
+
 let mermaidPromise: Promise<any> | null = null;
 
-async function getMermaid() {
-  if (!mermaidPromise) {
-    mermaidPromise = import('mermaid').then((m) => {
-      const mermaid = m.default;
+function loadMermaidFromCdn(): Promise<any> {
+  if (typeof window === 'undefined') {
+    return Promise.reject(new Error('mermaid requires a browser environment'));
+  }
+  if ((window as any).mermaid) {
+    return Promise.resolve((window as any).mermaid);
+  }
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(
+      `script[data-mermaid-loader="1"]`,
+    ) as HTMLScriptElement | null;
+    const onReady = () => {
+      const mermaid = (window as any).mermaid;
+      if (!mermaid) {
+        reject(new Error('mermaid script loaded but global is missing'));
+        return;
+      }
       mermaid.initialize({
         startOnLoad: false,
         theme: 'dark',
@@ -22,8 +39,32 @@ async function getMermaid() {
           fontFamily: 'inherit',
         },
       });
-      return mermaid;
-    });
+      resolve(mermaid);
+    };
+    if (existing) {
+      existing.addEventListener('load', onReady);
+      existing.addEventListener('error', () =>
+        reject(new Error('mermaid CDN script failed to load')),
+      );
+      // If the script already finished before we attached, resolve now.
+      if ((window as any).mermaid) onReady();
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = MERMAID_CDN;
+    script.async = true;
+    script.dataset.mermaidLoader = '1';
+    script.addEventListener('load', onReady);
+    script.addEventListener('error', () =>
+      reject(new Error('mermaid CDN script failed to load')),
+    );
+    document.head.appendChild(script);
+  });
+}
+
+async function getMermaid() {
+  if (!mermaidPromise) {
+    mermaidPromise = loadMermaidFromCdn();
   }
   return mermaidPromise;
 }

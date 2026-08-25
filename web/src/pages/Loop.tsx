@@ -289,6 +289,7 @@ const Loop: React.FC = () => {
       }
       }
     });
+    const unsubState = onWebSocketState((s) => {
       setWsOpen(s === 'open');
       if (s === 'open') {
         api.get('/agents').then((r) => setAgents(r.data.agents || [])).catch(() => {});
@@ -645,6 +646,7 @@ const Loop: React.FC = () => {
                   key: 'tree',
                   label: 'Files',
                   children: (
+                    <>
                     {diffFiles.length > 0 && (
                 <div style={{ maxHeight: 140, overflow: 'auto', marginBottom: 6 }}>
                   {diffFiles.map((f) => (
@@ -667,6 +669,7 @@ const Loop: React.FC = () => {
                       borderRadius: 4, maxHeight: 200, overflow: 'auto',
                       color: '#d9d9d9', whiteSpace: 'pre-wrap',
                     }}>{planViz.file_tree}</pre>
+                    </>
                   ),
                 },
               ]} />

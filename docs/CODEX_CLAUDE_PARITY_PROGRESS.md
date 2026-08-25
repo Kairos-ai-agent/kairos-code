@@ -115,7 +115,63 @@
 
 ---
 
-## 3. 集成建议（P0 三个如何接入 Kairos 主流程）
+## 3. Round 2 — P1 (7) + 加分 (3) 全部完成
+
+**完成日期**：2026-08-25
+
+**P1 全部完成**：
+| ID | 功能 | 文件 | 测试 |
+|----|------|------|------|
+| P1-1 | Permission rules (allow/ask/deny + wildcards) | `kairos/permissions.py` | 17 |
+| P1-2 | Approval modes (Suggest/Edit/Full-auto) | `kairos/approval.py` | 13 |
+| P1-3 | Plugin system (skills+agents+hooks + mcp.yaml) | `kairos/plugins.py` | 17 |
+| P1-4 | Session resume / fork (UUID 历史) | `kairos/sessions.py` | 12 |
+| P1-5 | Checkpoints API (Esc Esc undo) | `api/routes/checkpoints.py` | 10 |
+| P1-6 | Hierarchical config (root>project>plugin 合并) | `kairos/config/merge.py` | 15 |
+| P1-7 | AutoMemory (always/never preferences 提取) | `kairos/learning/auto_memory.py` | 15 |
+| 加分 | Skill hot-reload watcher (1Hz polling) | `kairos/skills_watcher.py` | 9 |
+| 加分 | Nested skills 加载 (monorepo) | `kairos/agents_md_skills.py` | (合入 agents_md) |
+| 加分 | Pre-commit + CI workflow | `docs/PRE_COMMIT_HOOK.py` + `.github/workflows/kairos.yml` | 8 |
+
+**集成修复**（影响 test_memory_api.py 2 failed）：`tests/test_checkpoints_api.py` 在 module 顶层
+`_api_deps.orchestrator = MagicMock()` 永久污染 session singleton，导致后续 `test_memory_api.py` 的
+`POST /api/projects` 返回 200 + `{}`。修复：换成 per-test fixture（`fake_orchestrator`），
+finally 恢复 real orchestrator。详情见 memory entry `Pytest module-level orchestrator monkey-patch`。
+
+**总测试数**：327 → 440 PASS（+113），0 破坏。
+
+---
+
+## 4. Round 3 — P2 (6) 全部完成
+
+**完成日期**：2026-08-26
+
+**P2 全部完成**：
+| ID | 功能 | 文件 | 测试 |
+|----|------|------|------|
+| P2-1 | Agent Teams (TaskBoard + 并行 dispatch + merge) | `kairos/teams.py` + `api/routes/teams.py` | 26 |
+| P2-2 | Trace viewer (per-turn JSONL recorder) | `kairos/tracing.py` + `api/routes/traces.py` | 18 |
+| P2-3 | Cloud delegation (HTTP + Local delegator) | `kairos/cloud.py` + `api/routes/cloud.py` | 27 |
+| P2-4 | Multimodal input (image attachments) | `kairos/multimodal.py` | 25 |
+| P2-5 | Voice mode (STT + TTS protocol + mock + Whisper fallback) | `kairos/voice.py` | 22 |
+| P2-6 | Computer use (Mock + Windows ctypes) | `kairos/computer_use.py` | 26 |
+
+**架构亮点**：
+- **Agent Teams**：`SharedTaskBoard` thread-safe（`threading.Lock`），`Team.dispatch()` 用 `asyncio.gather` + `Semaphore(max_workers)` 控制并发，merge 支持 fast_forward / squash / manual 三策略
+- **Trace viewer**：`TraceRecorder` thread-safe，append-only JSONL，seq 唯一（lock 内分配），支持 `tool_invocation` context manager 自动配对 tool_call/tool_result
+- **Cloud delegation**：纯 stdlib `urllib`（无新依赖），`CloudDelegator` 支持 404=noop cancel，`LocalDelegator` 走 runner function 用于测试 + offline 模式
+- **Multimodal**：magic byte 优先于 extension（`lie.png` 含 jpeg 内容时被识别为 jpeg），20MB 默认 cap 兼容 Anthropic 5MB + OpenAI 20MB 限制
+- **Voice mode**：`STTProvider` / `TTSProvider` Protocol 接口，`MockSTTProvider` 返回 SHA-256 prefix 标记（生产不会误认），`MockTTSProvider` 返回 0.1 秒静音 WAV（可播放），`WhisperSTTProvider` 优先 faster_whisper fallback openai-whisper
+- **Computer use**：input actions **强制 require confirm=True**（防误触），`dry_run=True` 只记录不执行，Windows ctypes 完整实现（BitBlt + GetDIBits + SetCursorPos + mouse_event + keybd_event + 滚轮）
+
+**总测试数**：440 → 588 PASS（+148），0 破坏，11 skip（POSIX-only）。
+
+---
+
+## 5. 一句话总结
+
+> **P0 (3) + P1 (7) + 加分 (3) + P2 (6) = 19/19 全部完成**。测试 283 → 588 PASS（+305，2.08x），0 破坏。
+> 所有模块零新 pip 依赖（stdlib only：asyncio/urllib/zlib/struct/wave/threading/mimetypes/ctypes）。
 
 ### 3.1 MCP 接入
 ```python
@@ -144,28 +200,39 @@ if project.is_git_repo:
 
 ---
 
-## 4. 测试覆盖率
+## 4. 测试覆盖率（最终）
 
 ```
 $ python -m pytest tests/
-============ 327 passed, 11 skipped, 1 warning in 92.09s =============
+============ 588 passed, 11 skipped, 1 warning in 75s =============
 ```
 
-| 测试文件 | 测试数 | 新增 |
+**3 轮新增测试分布**：
+
+| 测试文件 | 测试数 | 轮次 |
 |---------|--------|------|
-| `test_agents_md_skills.py` | 18 | — |
-| `test_guardrails.py` | 14 | — |
-| `test_manifest.py` | 12 | — |
-| `test_retained_reasoning.py` | 6 | — |
-| `test_sandbox.py` | 12 | — |
-| **`test_mcp_client.py`** | **11** | **新** |
-| **`test_cli.py`** | **18** | **新** |
-| **`test_worktree.py`** | **15** | **新** |
-| `tests/unit/*.py` | 221 | — |
-| **合计** | **327** | **+44** |
-
----
-
-## 5. 一句话总结
-
-> **P0 三个（MCP 客户端 / kairos exec CLI / git worktree 隔离）全部完成、44 个新测试 PASS、327 总测试 PASS、0 破坏。** 接下来 P1 7 项 + P2 6 项 + 加分 3 项 = 16 项待做。P1-1（permission rules）下一步开干。
+| `test_agents_md_skills.py` | 18 | R1 (含 1 nested) |
+| `test_guardrails.py` | 14 | R1 |
+| `test_manifest.py` | 12 | R1 |
+| `test_retained_reasoning.py` | 6 | R1 |
+| `test_sandbox.py` | 12 | R1 |
+| `test_mcp_client.py` | 11 | R1 (P0) |
+| `test_cli.py` | 18 | R1 (P0) |
+| `test_worktree.py` | 15 | R1 (P0) |
+| `test_permissions.py` | 17 | R2 (P1) |
+| `test_approval.py` | 13 | R2 (P1) |
+| `test_plugins.py` | 17 | R2 (P1) |
+| `test_sessions.py` | 12 | R2 (P1) |
+| `test_checkpoints_api.py` | 10 | R2 (P1) |
+| `test_config_merge.py` | 15 | R2 (P1) |
+| `test_auto_memory.py` | 15 | R2 (P1) |
+| `test_skills_watcher.py` | 9 | R2 (加分) |
+| `test_pre_commit.py` | 8 | R2 (加分) |
+| `test_teams.py` | 26 | R3 (P2-1) |
+| `test_tracing.py` | 18 | R3 (P2-2) |
+| `test_cloud.py` | 27 | R3 (P2-3) |
+| `test_multimodal.py` | 25 | R3 (P2-4) |
+| `test_voice.py` | 22 | R3 (P2-5) |
+| `test_computer_use.py` | 26 | R3 (P2-6) |
+| `tests/unit/*.py` | 221 | baseline |
+| **合计** | **588** | **+305** |

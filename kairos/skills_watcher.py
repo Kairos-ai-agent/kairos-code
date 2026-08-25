@@ -83,6 +83,24 @@ class SkillsWatcher:
             pass
         self._task = None
 
+    def stop_sync(self) -> None:
+        """Sync-friendly variant: signal the task to exit but don't
+        await it. The actual cleanup happens on the next event loop
+        tick; this is safe to call from non-async code (e.g.
+        orchestrator shutdown, tests)."""
+        if self._task is None:
+            return
+        self._stopped.set()
+        # We don't await the task — the caller is responsible for
+        # letting the loop run one more tick if they need a clean
+        # shutdown. For tests this is fine because the loop will
+        # clean up the task on the next iteration.
+        try:
+            self._task.cancel()
+        except RuntimeError:
+            pass
+        self._task = None
+
     # -- internals --------------------------------------------------------
 
     def _scan_mtimes(self) -> dict[Path, float]:

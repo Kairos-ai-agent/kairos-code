@@ -11,6 +11,7 @@ kairos.loop.review_loop for backward compatibility).
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import logging
 import time
@@ -37,6 +38,26 @@ from kairos.tools.terminal import TerminalTool
 from kairos.tools.webfetch import WebFetchTool, WebSearchTool
 
 
+@dataclasses.dataclass(eq=False)
+class ProjectRuntime:
+    """Per-project live resources attached by the orchestrator.
+
+    Holds the McpRegistry, worktree paths, skills watcher, manifest
+    and output guardrail that are wired up when a project is created
+    (or loaded from persistence). All fields are optional; a project
+    may have any subset depending on what the runtime could attach
+    (e.g. a non-git project has no worktrees).
+    """
+    manifest: Optional[Any] = None
+    mcp_registry: Optional[Any] = None
+    coder_worktree: Optional[Any] = None  # kairos.worktree.Worktree
+    reviewer_worktree: Optional[Any] = None
+    skills_watcher: Optional[Any] = None
+    output_guardrail: Optional[Any] = None
+    attached_at: float = 0.0
+    attach_errors: List[str] = dataclasses.field(default_factory=list)
+
+
 class Project:
     """A LoopReview project: one Coder, one Reviewer, one loop session."""
 
@@ -59,6 +80,11 @@ class Project:
         # Per-project best-of-N setting (read by the API endpoints and
         # passed to LoopSession at loop start). 1 = single attempt.
         self.best_of_n: int = 1
+        # Per-project live resources wired in by the orchestrator.
+        # Each subsystem (MCP, worktree, guardrail, skills watcher,
+        # manifest) attaches itself here on _create_agents so we
+        # can clean up on shutdown without hunting for state.
+        self.runtime: "ProjectRuntime" = ProjectRuntime()
 
     def to_dict(self) -> dict:
         return {
@@ -273,28 +299,57 @@ class Orchestrator:
         effective_root = project.work_dir or str(project.workspace)
         Path(effective_root).mkdir(parents=True, exist_ok=True)
 
+        # Optionally isolate each role in its own git worktree.
+        # Only when the project root is itself a git repo. Failure
+        # is logged + recorded on the runtime, not raised — a
+        # non-git or unwritable project still gets a working agent.
+        coder_root = effective_root
+        reviewer_root = effective_root
+        try:
+            cw, rw = self._create_role_worktrees(effective_root)
+            if cw is not None:
+                project.runtime.coder_worktree = cw
+                coder_root = str(cw.path)
+            if rw is not None:
+                project.runtime.reviewer_worktree = rw
+                reviewer_root = str(rw.path)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("worktree setup failed for %s: %s", project.id, e)
+            project.runtime.attach_errors.append(f"worktree: {e}")
+
         coder_tools = [
-            FileReadTool(allowed_root=effective_root),
-            FileEditTool(allowed_root=effective_root),
-            FileEditReplaceTool(allowed_root=effective_root),
-            MultiEditTool(allowed_root=effective_root),
-            GrepTool(allowed_root=effective_root),
-            FindTool(allowed_root=effective_root),
-            GitTool(allowed_root=effective_root),
-            TerminalTool(allowed_cwd=effective_root),
+            FileReadTool(allowed_root=coder_root),
+            FileEditTool(allowed_root=coder_root),
+            FileEditReplaceTool(allowed_root=coder_root),
+            MultiEditTool(allowed_root=coder_root),
+            GrepTool(allowed_root=coder_root),
+            FindTool(allowed_root=coder_root),
+            GitTool(allowed_root=coder_root),
+            TerminalTool(allowed_cwd=coder_root),
             WebFetchTool(),
             WebSearchTool(),
         ]
-        subagent_tool = SubagentTool(allowed_root=effective_root)
+        subagent_tool = SubagentTool(allowed_root=coder_root)
         coder_tools.append(subagent_tool)
 
         reviewer_tools = [
-            FileReadTool(allowed_root=effective_root),
-            GrepTool(allowed_root=effective_root),
-            FindTool(allowed_root=effective_root),
-            GitTool(allowed_root=effective_root),
-            TerminalTool(allowed_cwd=effective_root),
+            FileReadTool(allowed_root=reviewer_root),
+            GrepTool(allowed_root=reviewer_root),
+            FindTool(allowed_root=reviewer_root),
+            GitTool(allowed_root=reviewer_root),
+            TerminalTool(allowed_cwd=reviewer_root),
         ]
+
+        # Load MCP tools (best-effort). Tools are appended to both
+        # roles' toolset so the agent can call them; the underlying
+        # subprocess registry is owned by the runtime so we can
+        # close it on shutdown.
+        try:
+            mcp_tools = self._attach_mcp(project, coder_root)
+            coder_tools.extend(mcp_tools)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("MCP attach failed for %s: %s", project.id, e)
+            project.runtime.attach_errors.append(f"mcp: {e}")
 
         yaml_prompts = self._load_yaml_prompts()
 
@@ -309,6 +364,152 @@ class Orchestrator:
             project.id, "reviewer", Reviewer, reviewer_provider, reviewer_tools,
             self.message_bus, yaml_prompts,
         )
+
+        # Output guardrail on the Coder: the project Reviewer double-
+        # checks the Coder's final text and records a GuardrailResult
+        # on the AgentTask. We use post-construction assignment
+        # because the guardrail needs the Reviewer (created just
+        # above) and the KairosAgent constructor expects it up-front.
+        try:
+            from kairos.guardrails import OutputGuardrail
+            project.runtime.output_guardrail = OutputGuardrail(
+                reviewer=project.reviewer,
+                blocking=False,
+                message_bus=self.message_bus,
+            )
+            project.coder._output_guardrail = project.runtime.output_guardrail
+        except Exception as e:  # noqa: BLE001
+            logger.warning("OutputGuardrail attach failed for %s: %s",
+                           project.id, e)
+            project.runtime.attach_errors.append(f"guardrail: {e}")
+
+        # Live-reload of skills for this project. The watcher polls
+        # once a second; if no project_dir is set we skip it.
+        try:
+            self._attach_skills_watcher(project, effective_root)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("SkillsWatcher attach failed for %s: %s",
+                           project.id, e)
+            project.runtime.attach_errors.append(f"watcher: {e}")
+
+        # Manifest: load + apply (model-router override currently a
+        # no-op — we record the loaded manifest on the runtime for
+        # the API layer to surface).
+        try:
+            self._attach_manifest(project, effective_root)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Manifest load failed for %s: %s", project.id, e)
+            project.runtime.attach_errors.append(f"manifest: {e}")
+
+        project.runtime.attached_at = time.time()
+
+    # ---- integration helpers (P2 + Round-3 wiring) ----
+    #
+    # Each helper is best-effort: a failure (MCP server not running,
+    # no git in the project, no skills dir) is recorded in
+    # `project.runtime.attach_errors` and the rest of the project
+    # continues. None of the helpers raise unless the caller wraps
+    # them in try/except (which _create_agents does).
+
+    def _create_role_worktrees(self, work_dir: str):
+        """Create per-role worktrees if `work_dir` is inside a git repo.
+
+        Returns (coder_wt, reviewer_wt). Each is a Worktree or None.
+        Raises on hard failure (git missing, malformed repo) — caller
+        logs and continues.
+        """
+        from kairos.worktree import WorktreeManager
+        if not work_dir:
+            return (None, None)
+        try:
+            mgr = WorktreeManager(repo_path=Path(work_dir))
+        except Exception:
+            # Not a git repo (or no git installed) — silently skip.
+            return (None, None)
+        coder_wt = mgr.create(branch_name=WorktreeManager.unique_branch_name("coder"))
+        reviewer_wt = mgr.create(branch_name=WorktreeManager.unique_branch_name("reviewer"))
+        return (coder_wt, reviewer_wt)
+
+    def _attach_mcp(self, project: Project, work_dir: str) -> List[Any]:
+        """Load MCP servers from `<work_dir>/.kairos/mcp.yaml` and
+        start them. Returns the list of MCP-sourced tools (Kairos
+        BaseTool instances) ready to append to a role's toolset.
+
+        The registry is stored on `project.runtime.mcp_registry` so
+        it can be closed on shutdown.
+        """
+        from kairos.mcp_client import McpRegistry
+        if not work_dir:
+            return []
+        reg = McpRegistry()
+        try:
+            reg.load(project_dir=Path(work_dir))
+        except Exception as e:  # noqa: BLE001
+            logger.debug("MCP load skipped for %s: %s", project.id, e)
+            return []
+        # start_all is async; for the synchronous _create_agents
+        # path we run it via asyncio.run if there's a loop, else
+        # we skip (MCP servers will be started on first async tick).
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Fire-and-forget: schedule start_all on the running loop.
+                loop.create_task(reg.start_all())
+            else:
+                loop.run_until_complete(reg.start_all())
+        except RuntimeError:
+            # No event loop — start synchronously (start_all is
+            # an async coroutine; we use asyncio.run).
+            try:
+                asyncio.run(reg.start_all())
+            except Exception as e:  # noqa: BLE001
+                logger.debug("MCP start_all failed for %s: %s", project.id, e)
+                return []
+        project.runtime.mcp_registry = reg
+        return list(reg.all_tools())
+
+    def _attach_manifest(self, project: Project, work_dir: str) -> None:
+        """Load the project's manifest and apply its settings.
+
+        Currently this just records the manifest on the runtime; the
+        per-role provider override and trust path list are surfaced
+        through the API but don't yet mutate the live providers. The
+        ground is laid here so callers can read `project.runtime.
+        manifest` without re-reading the YAML.
+        """
+        from kairos.manifest import load as load_manifest
+        if not work_dir:
+            return
+        manifest = load_manifest(project_dir=Path(work_dir))
+        project.runtime.manifest = manifest
+
+    def _attach_skills_watcher(self, project: Project, work_dir: str) -> None:
+        """Start a SkillsWatcher on `<work_dir>/.kairos/skills/`.
+
+        The watcher polls once a second for added / modified /
+        removed skill files. On change it calls a callback that
+        currently just logs — wiring the callback into a live
+        SkillsLoader is left to the API/UI layer (which can call
+        `kairos.skills.SkillsLoader.refresh()`).
+        """
+        from kairos.skills_watcher import SkillsWatcher
+        if not work_dir:
+            return
+        skills_dir = Path(work_dir) / ".kairos" / "skills"
+        if not skills_dir.exists():
+            return
+        watcher = SkillsWatcher(skill_dirs=[skills_dir], interval_s=1.0)
+        # `start()` is async; we run it synchronously via asyncio.run
+        # when no loop is running, or schedule it on the running loop.
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(watcher.start())
+            else:
+                loop.run_until_complete(watcher.start())
+        except RuntimeError:
+            asyncio.run(watcher.start())
+        project.runtime.skills_watcher = watcher
 
     def _instantiate_specialists(self, project_id: str,
                                 specialist_names: List[str]) -> List[Any]:
@@ -420,6 +621,78 @@ class Orchestrator:
                           project.reviewer.agent_id if project.reviewer else None]:
             if agent_id:
                 self._agents.pop(agent_id, None)
+        # Tear down per-project runtime resources.
+        self._close_project_runtime(project)
+
+    def _close_project_runtime(self, project: Project) -> None:
+        """Stop the watchers, close MCP subprocesses, remove worktrees.
+
+        Best-effort: each subsystem is closed in its own try/except so
+        one failure doesn't prevent the others from cleaning up.
+
+        This is the **sync** path: it handles SkillsWatcher.stop()
+        and WorktreeManager.cleanup() which are sync. The async
+        MCP close_all is handled in `close()` (async) instead.
+        """
+        rt = project.runtime
+        # 1) SkillsWatcher (sync stop)
+        if rt.skills_watcher is not None:
+            try:
+                rt.skills_watcher.stop_sync()
+            except Exception as e:  # noqa: BLE001
+                logger.debug("skills_watcher stop failed: %s", e)
+            rt.skills_watcher = None
+        # 2) Worktrees
+        for wt_attr in ("coder_worktree", "reviewer_worktree"):
+            wt = getattr(rt, wt_attr, None)
+            if wt is None:
+                continue
+            try:
+                from kairos.worktree import WorktreeManager
+                mgr = WorktreeManager(repo_path=Path(project.work_dir
+                                                     or project.workspace))
+                mgr.cleanup(wt, remove_branch=True)
+            except Exception as e:  # noqa: BLE001
+                logger.debug("worktree cleanup failed for %s: %s", wt_attr, e)
+            setattr(rt, wt_attr, None)
+
+    async def _close_project_runtime_async(self, project: Project) -> None:
+        """Async counterpart: closes the MCP registry's subprocesses.
+
+        The sync path (`_close_project_runtime`) handles watchers and
+        worktrees; this adds the MCP close_all which is async.
+        """
+        rt = project.runtime
+        if rt.mcp_registry is not None:
+            try:
+                await rt.mcp_registry.close_all()
+            except Exception as e:  # noqa: BLE001
+                logger.debug("MCP close_all failed: %s", e)
+            rt.mcp_registry = None
+
+    async def close(self) -> None:
+        """Tear down the orchestrator: stop every project's runtime.
+
+        Called from FastAPI's lifespan shutdown. Idempotent — calling
+        twice is a no-op.
+        """
+        for project in list(self._projects.values()):
+            # Sync cleanup first (watchers, worktrees), then async
+            # (MCP subprocesses).
+            self._close_project_runtime(project)
+            await self._close_project_runtime_async(project)
+        for agent in list(self._agents.values()):
+            try:
+                await agent._llm.close()
+            except Exception:
+                pass
+
+    def close_sync(self) -> None:
+        """Sync counterpart of `close()` for non-async callers
+        (e.g. tests, CLI shutdown). Best-effort: any async-only
+        resources (MCP) are skipped here."""
+        for project in list(self._projects.values()):
+            self._close_project_runtime(project)
 
     def save_requirements(self, project_id: str, requirements: str):
         project = self._projects.get(project_id)

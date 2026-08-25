@@ -168,10 +168,53 @@ finally 恢复 real orchestrator。详情见 memory entry `Pytest module-level o
 
 ---
 
+## 4b. Round 4 — Integration + Landlock 完成
+
+**完成日期**：2026-08-26
+
+**Round 4 全部完成**：
+
+### Integration：5 个子系统接入 Orchestrator
+
+| ID | 接入点 | 实现 |
+|----|--------|------|
+| INT-1 | MCP tools into `_create_agents` | `McpRegistry` 加载 `<work_dir>/.kairos/mcp.yaml`，`all_tools()` 拼到 coder_tools / reviewer_tools |
+| INT-2 | Worktree per role in `_create_team` | `WorktreeManager(repo_path)` → 创建 `kairos-coder-<8hex>` + `kairos-reviewer-<8hex>` 两个独立 worktree，agent 的 `effective_root` 切到对应 worktree 路径 |
+| INT-3 | Manifest consumed by Orchestrator | `kairos.manifest.load(project_dir=work_dir)` → 存到 `project.runtime.manifest` |
+| INT-4 | OutputGuardrail hung on Coder | `OutputGuardrail(reviewer=project.reviewer, blocking=False, message_bus=…)` → 赋给 `project.coder._output_guardrail`（post-construction，因为 guardrail 需要 reviewer）|
+| INT-5 | SkillsWatcher wired to live session | `SkillsWatcher(skill_dirs=[work_dir/.kairos/skills])` → `start()` 后存到 `project.runtime.skills_watcher` |
+
+**架构关键**：
+- 新增 `ProjectRuntime` dataclass：每个项目带 manifest / mcp_registry / coder_worktree / reviewer_worktree / skills_watcher / output_guardrail / attached_at / attach_errors
+- 每个子系统独立 `try/except`：失败时 append 到 `attach_errors`，**不**阻止项目创建
+- `Orchestrator.close()` async 方法：sync 路径（watchers + worktrees）+ async 路径（MCP registry）
+- `Orchestrator.close_sync()`：CLI / 测试用，纯 sync 清理
+- `delete_project()` 同步清理 runtime
+- `SkillsWatcher.stop_sync()`：async `stop()` 的 sync 变体（`set + cancel + 清 _task`），不 await
+
+### Landlock ctypes 完整实现
+
+- ABI v1 三 syscall：`landlock_create_ruleset` (444) / `landlock_add_rule` (445) / `landlock_restrict_self` (446)
+- x86_64 + aarch64 syscall 表，其他架构 early-return None
+- `LandlockRulesetAttr`（u64×3）和 `LandlockPathBeneathAttr`（u64 + i32）ctypes Structure
+- `libc.syscall.restype = c_long; argtypes = [c_long]` variadic 写法（x86_64 ABI 用 6 个寄存器传第 2~7 个参数）
+- 13 个 `LANDLOCK_ACCESS_FS_*` 位（含 REFER = 1<<13）
+- `O_PATH = 0o10000000` + `O_DIRECTORY = 0o0200000`（不在 os module）
+- `landlock_rule_path_beneath = 1`
+
+**新增测试**：
+- `tests/test_integration.py`（20 个）— runtime 字段、guardrail 挂载、worktree 启停、manifest 加载、skills watcher、MCP registry、close 清理
+- `tests/test_sandbox.py`（+4 个）— Landlock non-Linux 跳过、空 allowed_root、bad root 不抛、arch gate
+- `tests/test_skills_watcher.py`（+2 个）— `stop_sync()` 行为、未启动的 watcher 调 `stop_sync` 不抛
+
+**总测试数**：588 → 613 PASS（+25），0 破坏，12 skip。
+
+---
+
 ## 5. 一句话总结
 
-> **P0 (3) + P1 (7) + 加分 (3) + P2 (6) = 19/19 全部完成**。测试 283 → 588 PASS（+305，2.08x），0 破坏。
-> 所有模块零新 pip 依赖（stdlib only：asyncio/urllib/zlib/struct/wave/threading/mimetypes/ctypes）。
+> **P0 (3) + P1 (7) + 加分 (3) + P2 (6) + Integration (5) + Landlock (1) = 25/25 全部完成**。测试 283 → 613 PASS（+330，2.17x），0 破坏。
+> 所有模块零新 pip 依赖（stdlib only：asyncio/urllib/zlib/struct/wave/threading/mimetypes/ctypes/dataclasses）。
 
 ### 3.1 MCP 接入
 ```python

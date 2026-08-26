@@ -114,6 +114,85 @@ def _auto_checkpoint(session, round_no, score, approved, summary):
         logger.debug("auto-checkpoint failed", exc_info=True)
         return None
 
+
+async def _run_loop_reflection(session, gate: str, round_no: int, bus) -> None:
+    """Best-effort Coder self-reflection at the end of a loop.
+
+    Looks for a Coder agent on the session (via ``session.agents`` or
+    the orchestrator's registry) and feeds it the round history. The
+    reflection is saved to the project's memory and emitted on the
+    bus as ``reflection.recorded``. Any failure is logged and
+    swallowed; the loop outcome is unaffected.
+    """
+    try:
+        from kairos.reflection import run_reflection
+    except ImportError:
+        return
+
+    coder = None
+    # Heuristics to find the Coder agent on the session. Different
+    # session implementations use different attribute names; we try
+    # them all.
+    for attr in ("coder", "agents", "_agents"):
+        obj = getattr(session, attr, None)
+        if obj is None:
+            continue
+        if hasattr(obj, "generate") or hasattr(obj, "agenerate"):
+            coder = obj
+            break
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                if hasattr(v, "generate") or hasattr(v, "agenerate"):
+                    coder = v
+                    break
+            if coder:
+                break
+    if coder is None:
+        return
+
+    history = list(getattr(session, "history", []) or [])
+    digests: list = []
+    for entry in history:
+        rev = entry.get("review") if isinstance(entry, dict) else None
+        if not isinstance(rev, dict):
+            continue
+        digests.append({
+            "round": entry.get("round", 0),
+            "score": rev.get("score", 0),
+            "approve": rev.get("approve", False),
+            "notes": (rev.get("summary") or "")[:200],
+        })
+
+    requirement = getattr(getattr(session, "project", None), "requirement", "") or ""
+    last_review = history[-1].get("review") if history else {}
+    last_score = float(last_review.get("score", 0)) if isinstance(last_review, dict) else 0.0
+
+    refl = await run_reflection(
+        project_id=session.project.id,
+        coder_agent=coder,
+        requirement=str(requirement),
+        outcome=gate,
+        rounds=round_no,
+        round_digests=digests,
+        final_score=last_score,
+    )
+
+    try:
+        await bus.publish(Message(
+            sender="orchestrator",
+            topic="reflection.recorded",
+            content=refl.to_json(),
+            msg_type="result",
+            metadata={
+                "project_id": session.project.id,
+                "session_id": session.session_id,
+                "outcome": gate,
+                "rounds": round_no,
+            },
+        ))
+    except Exception:
+        logger.debug("reflection: failed to publish (non-fatal)", exc_info=True)
+
 async def _wait_for_plan_decision(session, round_no, bus):
     if session.plan_decision == "reject":
         await bus.publish(Message(
@@ -305,7 +384,12 @@ async def _check_gates(session, round_no, bus):
          looping on the same error). Requires score >= 60 so that
          genuinely stuck low-score rounds are caught by no_progress.
       6. safety_cap — hard round ceiling; the absolute backstop.
+
+    Every return path also bumps the ``kairos_loop_rounds_total``
+    Prometheus counter so dashboards can see how loops end over time.
     """
+    from kairos.metrics import record_loop_round
+
     history = list(getattr(session, "history", []) or [])
     last_review = history[-1].get("review") if history else {}
     critical = any(
@@ -321,6 +405,7 @@ async def _check_gates(session, round_no, bus):
                       "session_id": session.session_id,
                       "score": session.last_score, "rounds": round_no},
         ))
+        record_loop_round("approved")
         return "approved"
     if session.total_tokens_used >= COST_TOKEN_CAP:
         await bus.publish(Message(
@@ -330,6 +415,7 @@ async def _check_gates(session, round_no, bus):
             metadata={"project_id": session.project.id,
                       "session_id": session.session_id},
         ))
+        record_loop_round("cost_cap")
         return "cost_cap"
     if session.infra_failure_streak >= INFRA_FAILURE_LIMIT:
         await bus.publish(Message(
@@ -339,6 +425,7 @@ async def _check_gates(session, round_no, bus):
             metadata={"project_id": session.project.id,
                       "session_id": session.session_id},
         ))
+        record_loop_round("infra_streak")
         return "infra_streak"
     if session.no_progress_count >= NO_PROGRESS_LIMIT:
         await bus.publish(Message(
@@ -348,6 +435,7 @@ async def _check_gates(session, round_no, bus):
             metadata={"project_id": session.project.id,
                       "session_id": session.session_id},
         ))
+        record_loop_round("no_progress")
         return "no_progress"
     score_window = list(getattr(session, "score_window", []) or [])
     if (len(score_window) >= STAGNATION_WINDOW
@@ -364,6 +452,7 @@ async def _check_gates(session, round_no, bus):
             metadata={"project_id": session.project.id,
                       "session_id": session.session_id},
         ))
+        record_loop_round("stagnation")
         return "stagnation"
     if session.round >= LOOP_SAFETY_CAP:
         await bus.publish(Message(
@@ -373,6 +462,7 @@ async def _check_gates(session, round_no, bus):
             metadata={"project_id": session.project.id,
                       "session_id": session.session_id},
         ))
+        record_loop_round("safety_cap")
         return "safety_cap"
     return None
 
@@ -716,6 +806,12 @@ async def run_loop(session, requirement):
                 logger.debug("auto-checkpoint failed", exc_info=True)
             gate = await _check_gates(session, round_no, bus)
             if gate:
+                # Best-effort Coder self-reflection. The loop is already
+                # over; failure here must not crash the orchestrator.
+                try:
+                    await _run_loop_reflection(session, gate, round_no, bus)
+                except Exception:
+                    logger.debug("post-loop reflection failed (non-fatal)", exc_info=True)
                 return
         await bus.publish(Message(
             sender="orchestrator", topic="loop.finished",

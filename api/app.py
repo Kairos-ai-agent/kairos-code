@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 
 from kairos import __version__
 from kairos.config.settings import settings
+from kairos.metrics import install_middleware, install_metrics_endpoint
 from api.deps import orchestrator
 from api.routes.agents import router as agents_router
 from api.routes.projects import router as projects_router
@@ -56,6 +57,10 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
 )
+
+# Prometheus metrics: request count + latency histogram, exposed at /metrics
+install_middleware(app)
+install_metrics_endpoint(app)
 
 # Include routers
 app.include_router(agents_router, prefix="/api/agents", tags=["agents"])

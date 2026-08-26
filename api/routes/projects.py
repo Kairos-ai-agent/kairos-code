@@ -336,6 +336,51 @@ async def get_best_of_n(project_id: str):
     project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+    return {"project_id": project_id, "best_of_n": project.best_of_n}
+
+
+@router.post("/{project_id}/coder_mode")
+async def set_coder_mode(project_id: str, request: dict):
+    """Set the Coder sub-mode for a project.
+
+    Body: ``{"mode": "default" | "read_only" | "sandbox"}``.
+
+    The change takes effect on the next agent rebuild. For a running
+    project, we also push the new mode into the existing Coder agent's
+    metadata so the prompt hint updates immediately (the tool list
+    itself is rebuilt only at agent construction time, which is when
+    the policy actually filters tools).
+    """
+    from kairos.coder_modes import CoderMode
+    project = _orch().get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+    raw = (request or {}).get("mode", "default")
+    mode = CoderMode.parse(raw)
+    project.metadata = dict(project.metadata or {})
+    project.metadata["coder_mode"] = mode.value
+    project.runtime.coder_mode = mode.value
+    return {
+        "project_id": project_id,
+        "mode": mode.value,
+        "effective_next_rebuild": True,
+    }
+
+
+@router.get("/{project_id}/coder_mode")
+async def get_coder_mode(project_id: str):
+    from kairos.coder_modes import CoderMode
+    project = _orch().get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+    return {
+        "project_id": project_id,
+        "mode": getattr(project.runtime, "coder_mode", "default"),
+        "policy": getattr(project.runtime, "coder_policy", None),
+        "hint": __import__("kairos.coder_modes", fromlist=["hint_for_mode"]).hint_for_mode(
+            CoderMode.parse(getattr(project.runtime, "coder_mode", "default"))
+        ),
+    }
     return {"best_of_n": getattr(project, "best_of_n", 1) or 1}
 
 

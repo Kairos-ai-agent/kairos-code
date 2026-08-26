@@ -56,6 +56,10 @@ class ProjectRuntime:
     output_guardrail: Optional[Any] = None
     attached_at: float = 0.0
     attach_errors: List[str] = dataclasses.field(default_factory=list)
+    # Coder sub-mode applied to this project (default / read_only / sandbox).
+    coder_mode: str = "default"
+    # Last computed ToolPolicy: which tools survived, which were blocked.
+    coder_policy: Optional[dict] = None
 
 
 class Project:
@@ -80,6 +84,11 @@ class Project:
         # Per-project best-of-N setting (read by the API endpoints and
         # passed to LoopSession at loop start). 1 = single attempt.
         self.best_of_n: int = 1
+        # Free-form project metadata. The Coder sub-mode (read_only /
+        # sandbox / default) is read from here at agent construction
+        # time. Other extensions (custom prompts, override models) are
+        # encouraged to use the same dict.
+        self.metadata: dict = {}
         # Per-project live resources wired in by the orchestrator.
         # Each subsystem (MCP, worktree, guardrail, skills watcher,
         # manifest) attaches itself here on _create_agents so we
@@ -331,6 +340,26 @@ class Orchestrator:
         ]
         subagent_tool = SubagentTool(allowed_root=coder_root)
         coder_tools.append(subagent_tool)
+
+        # Apply Coder sub-mode (default / read_only / sandbox) to the
+        # tool list. Sandbox mode keeps the tool but records the intent;
+        # a real path-redirecting wrapper would replace mutating tools
+        # with worktree-scoped variants. read_only drops them entirely.
+        try:
+            from kairos.coder_modes import (
+                CoderMode, apply_mode, mode_from_project_metadata,
+            )
+            coder_mode = mode_from_project_metadata(
+                getattr(project, "metadata", None)
+            )
+            coder_tools, coder_policy = apply_mode(
+                coder_tools, coder_mode,
+            )
+            project.runtime.coder_mode = coder_mode.value
+            project.runtime.coder_policy = coder_policy.to_dict()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("coder mode policy failed for %s: %s", project.id, e)
+            project.runtime.attach_errors.append(f"coder_mode: {e}")
 
         reviewer_tools = [
             FileReadTool(allowed_root=reviewer_root),

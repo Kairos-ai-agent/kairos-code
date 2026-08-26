@@ -25,6 +25,7 @@ Design:
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import struct
@@ -235,6 +236,119 @@ class WhisperSTTProvider:
                 Path(tmp).unlink()
             except OSError:
                 pass
+
+
+# ---------------------------------------------------------------------------
+# Real TTS: edge-tts (Microsoft Edge's online TTS, free, no key needed)
+# ---------------------------------------------------------------------------
+
+
+class EdgeTTSProvider:
+    """Real TTS backed by Microsoft Edge's read-aloud endpoint.
+
+    Wraps the official ``edge-tts`` package (already in the project's
+    runtime dependencies). Synthesizes text to MP3 in-memory and
+    returns raw bytes. Voice selection uses the standard Edge short
+    names like ``en-US-AriaNeural`` or ``zh-CN-XiaoxiaoNeural``.
+
+    This is the **online** path — the project gets real, high-quality
+    speech for free. For fully-offline use, swap in a local engine
+    (Piper, pyttsx3, Coqui) and pass it to :class:`VoiceSession`.
+
+    Usage::
+
+        tts = EdgeTTSProvider(voice="zh-CN-XiaoxiaoNeural")
+        mp3_bytes = tts.synthesize("你好世界")
+    """
+
+    DEFAULT_VOICE = "en-US-AriaNeural"
+    SUPPORTED_VOICES_HINT = (
+        "Common: en-US-AriaNeural, en-US-GuyNeural, "
+        "zh-CN-XiaoxiaoNeural, zh-CN-YunxiNeural, "
+        "ja-JP-NanamiNeural, de-DE-KatjaNeural"
+    )
+
+    def __init__(self, voice: str = DEFAULT_VOICE,
+                 rate: str = "+0%",
+                 volume: str = "+0%",
+                 pitch: str = "+0Hz"):
+        self.voice = voice
+        self.rate = rate
+        self.volume = volume
+        self.pitch = pitch
+        self.name = f"edge-tts:{voice}"
+
+    def synthesize(self, text: str, *, voice: str = "default",
+                   mime_type: str = "audio/mpeg") -> bytes:
+        if not text or not text.strip():
+            raise VoiceError("empty text")
+        try:
+            import edge_tts  # type: ignore
+        except ImportError as exc:  # pragma: no cover - dep missing
+            raise VoiceError(
+                "edge-tts is not installed; pip install edge-tts"
+            ) from exc
+
+        chosen_voice = self.voice if voice in (None, "", "default") else voice
+
+        async def _run() -> bytes:
+            comm = edge_tts.Communicate(
+                text,
+                voice=chosen_voice,
+                rate=self.rate,
+                volume=self.volume,
+                pitch=self.pitch,
+            )
+            buf = bytearray()
+            try:
+                async for chunk in comm.stream():
+                    # Edge also emits metadata events (WordBoundary etc).
+                    # They are dicts without "data"; only audio chunks carry bytes.
+                    if not isinstance(chunk, dict):
+                        continue
+                    if chunk.get("type") == "audio":
+                        data = chunk.get("data")
+                        if data:
+                            buf.extend(data)
+            except Exception as exc:
+                raise VoiceError(f"edge-tts stream failed: {exc}") from exc
+            return bytes(buf)
+
+        try:
+            # Re-use a running loop if one exists, else spin one up.
+            asyncio.get_running_loop()
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                return ex.submit(lambda: asyncio.run(_run())).result()
+        except RuntimeError:
+            # No running loop — safe to call asyncio.run directly.
+            return asyncio.run(_run())
+
+    @staticmethod
+    async def list_voices_async(locale_filter: str = "") -> list:
+        """Return the list of available Edge voices.
+
+        Hits the public voices.list endpoint, caches nothing. Pass
+        ``locale_filter="zh-"`` to keep only Chinese voices, etc.
+        """
+        try:
+            import edge_tts  # type: ignore
+        except ImportError as exc:  # pragma: no cover - dep missing
+            raise VoiceError(
+                "edge-tts is not installed; pip install edge-tts"
+            ) from exc
+        raw = await edge_tts.list_voices()
+        if locale_filter:
+            raw = [v for v in raw if v.get("Locale", "").startswith(locale_filter)]
+        return [
+            {
+                "name": v.get("ShortName"),
+                "gender": v.get("Gender"),
+                "locale": v.get("Locale"),
+                "friendly": v.get("FriendlyName"),
+            }
+            for v in raw
+        ]
 
 
 # ---------------------------------------------------------------------------

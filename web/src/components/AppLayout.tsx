@@ -32,12 +32,14 @@ import {
 
 import { useThemeStore } from '../stores/themeStore';
 import { useChatStore } from '../stores/chatStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import { LAYOUT } from '../styles/theme';
 import api from '../api/client';
 import type { Project } from '../types';
 import ChatSidebar from './ChatSidebar';
 import FolderPicker from './FolderPicker';
+import { SettingsDrawer } from './SettingsDrawer';
 
 const { Header, Sider, Content } = Layout;
 
@@ -53,6 +55,9 @@ const AppLayout: React.FC = () => {
   const setCurrentProject = useChatStore((s) => s.setCurrentProject);
   const sidebarCollapsed = useChatStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useChatStore((s) => s.toggleSidebar);
+  const settingsOpen = useSettingsStore((s) => s.drawerOpen);
+  const openSettings = useSettingsStore((s) => s.openDrawer);
+  const closeSettings = useSettingsStore((s) => s.closeDrawer);
 
   // First-time projects load. Done once at mount.
   useEffect(() => {
@@ -161,7 +166,7 @@ const AppLayout: React.FC = () => {
           menu={{
             items: [
               { key: 'settings', icon: <SettingOutlined />,
-                label: 'Settings', onClick: () => navigate('/settings') },
+                label: 'Settings', onClick: () => openSettings() },
             ],
           }}
         >
@@ -193,6 +198,8 @@ const AppLayout: React.FC = () => {
           <Outlet />
         </Content>
       </Layout>
+
+      <SettingsDrawer open={settingsOpen} onClose={closeSettings} />
     </Layout>
   );
 };

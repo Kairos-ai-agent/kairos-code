@@ -6,9 +6,13 @@
  *   /chat         → Chat (new conversation)
  *   /chat/:sid    → Chat (specific session)
  *   /today        → Today (stats + recent activity)
- *   /settings     → Settings
  *   /projects     → Projects (legacy page, kept for project CRUD)
  *   /loop         → Loop (legacy page, kept for advanced diagnostics)
+ *
+ * Settings now lives in a right-side Drawer (see
+ * `components/SettingsDrawer.tsx`), opened from the avatar
+ * dropdown. The `/settings` route is kept as a fallback redirect
+ * to /chat for users who bookmarked the old URL.
  */
 import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
@@ -16,7 +20,6 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import AppLayout from './components/AppLayout';
 import Chat from './pages/Chat';
 import Today from './pages/Today';
-import SettingsPage from './pages/Settings';
 import ProjectPage from './pages/Project';
 import Loop from './pages/Loop';
 import Trace from './pages/Trace';
@@ -37,7 +40,7 @@ const App: React.FC = () => {
         <Route path="/trace" element={<Navigate to="/chat" replace />} />
         <Route path="/trace/:projectId" element={<Trace />} />
         <Route path="/trace/:projectId/:sessionId" element={<Trace />} />
-        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/settings" element={<Navigate to="/chat" replace />} />
         <Route path="/projects" element={<ProjectPage />} />
         <Route path="/loop" element={<Loop />} />
         <Route path="*" element={<Navigate to="/chat" replace />} />

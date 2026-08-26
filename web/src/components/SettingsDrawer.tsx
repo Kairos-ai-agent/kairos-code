@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Drawer, Tabs, Select, Switch, Input, Button, Divider, Tag, Space, Typography } from 'antd';
+import React, { useState, useEffect, useRef } from 'react';
+import { Drawer, Tabs, Select, Switch, Input, Button, Divider, Tag, Space, Typography, message } from 'antd';
 import {
   SettingOutlined,
   CodeOutlined,
@@ -8,9 +8,15 @@ import {
   ToolOutlined,
   LineChartOutlined,
   InfoCircleOutlined,
+  ApiOutlined,
+  RobotOutlined,
+  ThunderboltOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
-import { useSettingsStore, CoderMode, TtsProvider, SttProvider } from '../stores/settingsStore';
+import { useSettingsStore, CoderMode, TtsProvider, SttProvider, LlmProvider } from '../stores/settingsStore';
+import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
+import api from '../api/client';
 
 const { Title, Text } = Typography;
 
@@ -307,6 +313,175 @@ const MetricsPanel: React.FC = () => {
   );
 };
 
+
+// ---------------------------------------------------------------------------
+// Provider panel (round 8)
+// ---------------------------------------------------------------------------
+
+const ProviderPanel: React.FC = () => {
+  const tokens = useThemeTokens();
+  const provider = useSettingsStore((s) => s.provider);
+  const setProvider = useSettingsStore((s) => s.setProvider);
+
+  return (
+    <Space direction="vertical" size={12} style={{ width: '100%' }}>
+      <Text style={{ color: tokens.labelSecondary }}>
+        Pick which LLM provider the Coder/Reviewer agents use.
+        Local Ollama is the cheapest option (no API key, runs
+        offline); OpenAI / Anthropic / DeepSeek require a key in
+        the corresponding environment variable.
+      </Text>
+      <div>
+        <Text style={{ color: tokens.labelPrimary }}>Active provider</Text>
+        <Select
+          style={{ width: '100%', marginTop: 4 }}
+          value={provider.active}
+          onChange={(v) => setProvider({ active: v })}
+          options={[
+            { value: 'openai', label: 'OpenAI (gpt-4o, gpt-4o-mini, o1, o3-mini)' },
+            { value: 'anthropic', label: 'Anthropic (claude-3-5-sonnet, opus)' },
+            { value: 'deepseek', label: 'DeepSeek (chat, reasoner)' },
+            { value: 'ollama', label: 'Ollama (local; no API key needed)' },
+            { value: 'custom', label: 'Custom (configured in settings.json)' },
+          ]}
+        />
+      </div>
+      {provider.active === 'ollama' && (
+        <>
+          <div>
+            <Text style={{ color: tokens.labelPrimary }}>Ollama base URL</Text>
+            <Input
+              style={{ marginTop: 4 }}
+              value={provider.ollamaBaseUrl}
+              onChange={(e) => setProvider({ ollamaBaseUrl: e.target.value })}
+              placeholder="http://127.0.0.1:11434"
+            />
+          </div>
+          <div>
+            <Text style={{ color: tokens.labelPrimary }}>Ollama model</Text>
+            <Input
+              style={{ marginTop: 4 }}
+              value={provider.ollamaModel}
+              onChange={(e) => setProvider({ ollamaModel: e.target.value })}
+              placeholder="qwen2.5-coder:7b"
+            />
+            <Text style={{ color: tokens.labelTertiary, fontSize: 11 }}>
+              Try <code>ollama pull qwen2.5-coder:7b</code> first; it
+              scores well on HumanEval and runs on most laptops.
+            </Text>
+          </div>
+        </>
+      )}
+      {provider.active !== 'ollama' && (
+        <div>
+          <Text style={{ color: tokens.labelPrimary }}>API key env var</Text>
+          <Input
+            style={{ marginTop: 4 }}
+            value={provider.apiKeyEnv}
+            onChange={(e) => setProvider({ apiKeyEnv: e.target.value })}
+            placeholder={provider.active === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'OPENAI_API_KEY'}
+          />
+          <Text style={{ color: tokens.labelTertiary, fontSize: 11 }}>
+            The actual key is read from this env var on the
+            backend. We never store the key in the frontend.
+          </Text>
+        </div>
+      )}
+    </Space>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Section: Skills (round 8 — hot-reload)
+// ---------------------------------------------------------------------------
+
+const SkillsPanel: React.FC<{ projectId: string | null }> = ({ projectId }) => {
+  const tokens = useThemeTokens();
+  const [busy, setBusy] = useState(false);
+  const [skills, setSkills] = useState<string[]>([]);
+  const [count, setCount] = useState<number | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Auto-load the skill list when the panel mounts / project changes.
+  useEffect(() => {
+    if (projectId) {
+      refresh();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+
+  const refresh = async () => {
+    if (!projectId) {
+      setErr('No project selected');
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await api.post(`/projects/${projectId}/skills/reload`);
+      const data = r.data || {};
+      setCount(typeof data.count === 'number' ? data.count : 0);
+      setSkills(Array.isArray(data.names) ? data.names : []);
+    } catch (e: any) {
+      setErr(e?.response?.data?.detail || e?.message || 'Reload failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Space direction="vertical" size={12} style={{ width: '100%' }}>
+      <Text style={{ color: tokens.labelSecondary }}>
+        Skills are reusable instruction snippets discovered from
+        <code> .kairos/skills/</code> in your project. The
+        SkillsWatcher polls every second and reloads on change —
+        use this button to force an immediate refresh.
+      </Text>
+      <Space>
+        <Button
+          icon={<ReloadOutlined />}
+          loading={busy}
+          onClick={refresh}
+          disabled={!projectId}
+        >
+          Reload now
+        </Button>
+        {count !== null && (
+          <Tag color="blue">{count} skill{count === 1 ? '' : 's'}</Tag>
+        )}
+      </Space>
+      {err && <Text type="danger" style={{ fontSize: 12 }}>{err}</Text>}
+      {skills.length > 0 && (
+        <div
+          style={{
+            maxHeight: 220,
+            overflow: 'auto',
+            border: `1px solid ${tokens.border}`,
+            borderRadius: 6,
+            padding: 8,
+            background: tokens.bgLay1,
+          }}
+        >
+          {skills.map((name) => (
+            <div
+              key={name}
+              style={{
+                padding: '4px 6px',
+                fontSize: 12,
+                color: tokens.labelPrimary,
+                fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+              }}
+            >
+              <ThunderboltOutlined style={{ marginRight: 6, color: tokens.brand }} />
+              {name}
+            </div>
+          ))}
+        </div>
+      )}
+    </Space>
+  );
+};
+
 // ---------------------------------------------------------------------------
 // Section: About
 // ---------------------------------------------------------------------------
@@ -336,6 +511,49 @@ const AboutPanel: React.FC = () => {
 export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
   const tokens = useThemeTokens();
   const [tab, setTab] = useState('coder');
+  // Use the current project (from chat store) for the Skills tab.
+  const currentProject = useChatStore((s) => s.currentProject);
+  const projectId = currentProject?.id ?? null;
+
+  // Debounced sync to /api/projects/settings so the user's knobs
+  // survive a server restart. Coder mode is synced separately
+  // (per-project) via the /coder_mode endpoint.
+  const voice = useSettingsStore((s) => s.voice);
+  const mcp = useSettingsStore((s) => s.mcp);
+  const cloud = useSettingsStore((s) => s.cloud);
+  const metrics = useSettingsStore((s) => s.metrics);
+  const provider = useSettingsStore((s) => s.provider);
+  const setVoice = useSettingsStore((s) => s.setVoice);
+  const setMcp = useSettingsStore((s) => s.setMcp);
+  const setCloud = useSettingsStore((s) => s.setCloud);
+  const setMetrics = useSettingsStore((s) => s.setMetrics);
+  const setProvider = useSettingsStore((s) => s.setProvider);
+
+  // Initial load (only once per open, to avoid clobbering user edits
+  // mid-session if the backend is briefly unreachable).
+  const didLoad = useRef(false);
+  useEffect(() => {
+    if (!open || didLoad.current) return;
+    didLoad.current = true;
+    api.get('/projects/settings').then((r) => {
+      const d = r.data || {};
+      if (d.voice) setVoice(d.voice);
+      if (d.mcp) setMcp(d.mcp);
+      if (d.cloud) setCloud(d.cloud);
+      if (d.metrics) setMetrics(d.metrics);
+      if (d.provider) setProvider(d.provider);
+    }).catch(() => { /* offline / first paint — keep defaults */ });
+  }, [open, setVoice, setMcp, setCloud, setMetrics, setProvider]);
+
+  // Debounced save on any change to voice/mcp/cloud/metrics/provider.
+  useEffect(() => {
+    if (!didLoad.current) return;
+    const t = setTimeout(() => {
+      api.post('/projects/settings', { voice, mcp, cloud, metrics, provider })
+        .catch(() => message.error('Failed to save settings'));
+    }, 400);
+    return () => clearTimeout(t);
+  }, [voice, mcp, cloud, metrics, provider]);
 
   return (
     <Drawer
@@ -382,6 +600,16 @@ export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
             key: 'metrics',
             label: <span><LineChartOutlined /> Metrics</span>,
             children: <MetricsPanel />,
+          },
+          {
+            key: 'provider',
+            label: <span><RobotOutlined /> Provider</span>,
+            children: <ProviderPanel />,
+          },
+          {
+            key: 'skills',
+            label: <span><ThunderboltOutlined /> Skills</span>,
+            children: <SkillsPanel projectId={projectId} />,
           },
           {
             key: 'about',

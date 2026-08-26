@@ -324,8 +324,8 @@ class TuiController:
 
 
 def build_textual_app(controller: TuiController):
-    """Construct the Textual App. Imported lazily so the rest of
-    the package stays importable in headless test envs.
+    """Construct the Textual App *class*. Imported lazily so the
+    rest of the package stays importable in headless test envs.
     """
     from textual.app import App, ComposeResult
     from textual.binding import Binding
@@ -388,7 +388,7 @@ def build_textual_app(controller: TuiController):
             self.controller.state.turns.clear()
             self._refresh_thread()
 
-    return KairosTuiApp(controller)
+    return KairosTuiApp
 
 
 # ---------------------------------------------------------------------------

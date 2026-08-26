@@ -951,6 +951,38 @@ class Orchestrator:
         project.loop_session.reject_plan()
         return True
 
+    def reload_skills(self, project_id: str) -> dict:
+        """Manually trigger a skills re-discovery for *project_id*.
+
+        The ``SkillsWatcher`` already polls mtimes once a second and
+        will pick up changes automatically. This endpoint exists for
+        the Settings drawer "Reload now" button and for tests: it
+        forces an immediate ``SkillsLoader.discover()`` and reports
+        the names it found.
+
+        Returns a dict with ``count`` and ``names``. If the project
+        has no ``work_dir`` or no skills directory yet, returns
+        ``count=0`` and an empty list.
+        """
+        project = self._projects.get(project_id)
+        if not project:
+            return {"count": 0, "names": [], "error": "project_not_found"}
+        work_dir = getattr(project, "work_dir", None) or getattr(
+            project, "workspace", None
+        )
+        if not work_dir:
+            return {"count": 0, "names": [], "error": "no_work_dir"}
+        try:
+            from pathlib import Path
+            from kairos.skills import SkillsLoader
+            loader = SkillsLoader(project_dir=Path(work_dir))
+            skills = loader.discover()
+            names = [s.name for s in skills]
+            return {"count": len(names), "names": names}
+        except Exception as e:  # noqa: BLE001
+            logger.warning("reload_skills failed for %s: %s", project_id, e)
+            return {"count": 0, "names": [], "error": str(e)}
+
     def get_plan_visualization(self, project_id: str) -> Optional[dict]:
         from kairos.review.mermaid import plan_to_mermaid, plan_to_file_tree
         plan = self.get_plan(project_id)

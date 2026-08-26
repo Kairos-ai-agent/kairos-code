@@ -34,6 +34,8 @@ import ctypes.util
 import logging
 import os
 import re
+import shlex
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -444,7 +446,7 @@ def apply_to_subprocess(
     """
     kwargs = dict(popen_kwargs)
     # Tier 1 (deny-list) is the caller's job; we don't redo it here.
-    # Tier 2: Landlock.
+    # Tier 2: Landlock (Linux).
     if sys.platform.startswith("linux"):
         fd = _linux_landlock_sandbox(policy)
         if fd is not None:
@@ -455,10 +457,76 @@ def apply_to_subprocess(
                 kwargs.setdefault("pass_fds", (fd,))
             except Exception:
                 pass
+    # Tier 2b: macOS Seatbelt (Darwin).
+    elif sys.platform == "darwin":
+        profile = _macos_seatbelt_profile(policy)
+        if profile:
+            # Pass the profile via -S to sandbox-exec; the actual
+            # command must come AFTER the -p / profile file. We don't
+            # do that here — the caller (terminal tool) is expected
+            # to either: (a) prefix the command with
+            # `sandbox-exec -p '<profile>'` when launching, or
+            # (b) call `wrap_command_in_sandbox_exec` to do the
+            # wrapping automatically.
+            kwargs.setdefault("__kairos_seatbelt_profile", profile)
     # Tier 3 (Windows Job Object) is applied AFTER the child spawns
     # because we need the PID. Callers should run
     # `assign_child_to_sandbox(policy, pid)` once the process exists.
     return kwargs
+
+
+def _macos_seatbelt_profile(policy: "SandboxPolicy") -> str:
+    """Build a sandbox-exec profile from a SandboxPolicy.
+
+    Returns an empty string if Seatbelt can't help (e.g. we're
+    not on Darwin, or the policy is empty). The caller decides
+    whether to actually invoke ``sandbox-exec``.
+    """
+    if sys.platform != "darwin":
+        return ""
+    rules: list[str] = ["(version 1)", "(deny default)"]
+    # Allow everything by default
+    rules.append("(allow process-exec)")
+    rules.append("(allow process-fork)")
+    rules.append("(allow sysctl-read)")
+    # Allow network if policy says so. The real SandboxPolicy
+    # field is ``network`` (a bool).
+    network_allowed = bool(getattr(policy, "network", True))
+    if network_allowed:
+        rules.append("(allow network*)")
+    # Allow reads of the project's working dir (and below) — the
+    # sub-process needs at least this to do its work.
+    allowed_root = getattr(policy, "allowed_root", None)
+    if allowed_root:
+        cwd = str(allowed_root)
+        rules.append(f'(allow file-read* (subpath "{cwd}"))')
+    else:
+        # No cwd constraint — just allow everything (permissive
+        # default; the deny-list is the caller's job).
+        rules.append("(allow file*)")
+    return "\n".join(rules)
+
+
+def wrap_command_in_sandbox_exec(command: str, profile: str) -> str:
+    """Prepend ``sandbox-exec -p <profile>`` to a shell command.
+
+    The profile is passed inline; for long profiles callers
+    should write the profile to a temp file and use
+    ``wrap_command_in_sandbox_exec_file`` instead.
+    """
+    if not profile:
+        return command
+    # Use single-quotes around the profile; escape any embedded
+    # single quotes by closing/reopening the quoted string.
+    escaped = profile.replace("'", "'\\''")
+    return f"sandbox-exec -p '{escaped}' /bin/sh -c {shlex.quote(command)}"
+
+
+def macos_seatbelt_available() -> bool:
+    """Return True iff ``sandbox-exec`` is on PATH (macOS only)."""
+    if sys.platform != "darwin":
+        return False
+    return shutil.which("sandbox-exec") is not None
 
 
 def assign_child_to_sandbox(policy: SandboxPolicy, pid: int) -> None:

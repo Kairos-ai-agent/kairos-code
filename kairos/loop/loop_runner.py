@@ -193,6 +193,47 @@ async def _run_loop_reflection(session, gate: str, round_no: int, bus) -> None:
     except Exception:
         logger.debug("reflection: failed to publish (non-fatal)", exc_info=True)
 
+
+async def _fire_session_lifecycle_hooks(
+    session, when: str, requirement: str = "", outcome: str = "",
+) -> None:
+    """Run ``SessionStart`` (when="start") or ``SessionEnd``
+    (when="end") hooks against the default registry. No-op when
+    the hook system isn't installed or the registry is empty.
+
+    Errors are logged and swallowed so a misbehaving hook can
+    never break the loop.
+    """
+    try:
+        from kairos.hooks import (
+            HookContext, HookEvent, get_default_registry,
+        )
+    except ImportError:
+        return
+    if when == "start":
+        event = HookEvent.SESSION_START
+    elif when == "end":
+        event = HookEvent.SESSION_END
+    else:
+        return
+    reg = get_default_registry()
+    if not reg.hooks_for(event):
+        return
+    ctx = HookContext(
+        event=event,
+        project_id=getattr(session.project, "id", ""),
+        metadata={
+            "session_id": getattr(session, "session_id", ""),
+            "requirement": requirement[:1000],
+            "outcome": outcome,
+            "round": getattr(session, "round", 0),
+        },
+    )
+    try:
+        await reg.run(ctx)
+    except Exception:
+        logger.debug("session %s hook failed (non-fatal)", when, exc_info=True)
+
 async def _wait_for_plan_decision(session, round_no, bus):
     if session.plan_decision == "reject":
         await bus.publish(Message(
@@ -649,6 +690,16 @@ async def run_loop(session, requirement):
         msg_type="result",
         metadata={"project_id": session.project.id, "session_id": session.session_id},
     ))
+
+    # Round 5: fire SessionStart hooks. Best-effort — failures
+    # never block the loop from running.
+    try:
+        await _fire_session_lifecycle_hooks(
+            session, "start", requirement=requirement,
+        )
+    except Exception:
+        logger.debug("SessionStart hooks failed (non-fatal)", exc_info=True)
+
     try:
         while not session.user_stopped and session.round < LOOP_SAFETY_CAP:
             session.round += 1
@@ -812,6 +863,13 @@ async def run_loop(session, requirement):
                     await _run_loop_reflection(session, gate, round_no, bus)
                 except Exception:
                     logger.debug("post-loop reflection failed (non-fatal)", exc_info=True)
+                # Round 5: fire SessionEnd hooks (mirrors SessionStart).
+                try:
+                    await _fire_session_lifecycle_hooks(
+                        session, "end", outcome=gate,
+                    )
+                except Exception:
+                    logger.debug("SessionEnd hooks failed (non-fatal)", exc_info=True)
                 return
         await bus.publish(Message(
             sender="orchestrator", topic="loop.finished",

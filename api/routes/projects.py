@@ -40,6 +40,35 @@ async def create_project(request: "CreateProjectRequest"):
     return project.to_dict()
 
 
+# --- Literal routes for /settings and /cost MUST be registered BEFORE
+# /{project_id} — otherwise Starlette matches "settings" as a project_id
+# and returns 404. Keep these above the {project_id} catch-all.
+@router.get("/settings")
+async def get_global_settings():
+    """Return the global settings (Voice / MCP / Cloud / Metrics / Ollama)."""
+    from kairos.settings_store import get_store, _to_dict
+    return _to_dict(get_store().get())
+
+
+@router.post("/settings")
+async def update_global_settings(patch: dict):
+    """Merge a partial settings dict into the global settings."""
+    from kairos.settings_store import get_store, _to_dict
+    s = get_store().update(patch or {})
+    return _to_dict(s)
+
+
+@router.get("/cost")
+async def get_global_cost():
+    """Global cost summary across all projects (in-process records)."""
+    from kairos.cost import get_tracker
+    tracker = get_tracker()
+    return {
+        "global": tracker.summary(),
+        "by_project": {pid: s.to_dict() for pid, s in tracker.by_project().items()},
+    }
+
+
 @router.get("/{project_id}")
 async def get_project(project_id: str):
     project = _orch().get_project(project_id)
@@ -107,6 +136,36 @@ async def reject_plan(project_id: str):
     ok = _orch().reject_plan(project_id)
     return {"status": "rejected" if ok else "no_plan_pending",
             "project_id": project_id}
+
+
+# ---------------------------------------------------------------------------
+# Skills hot-reload (round 8)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{project_id}/skills/reload")
+async def reload_skills(project_id: str):
+    """Force a re-scan of the project's skills directory.
+
+    The SkillsWatcher already polls mtimes once a second, but the
+    Settings drawer has a "Reload now" button for users who want
+    immediate feedback after editing a skill file.
+    """
+    project = _orch().get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+    result = _orch().reload_skills(project_id)
+    return {"project_id": project_id, **result}
+
+
+@router.get("/{project_id}/skills")
+async def list_skills(project_id: str):
+    """Return the names of all skills currently discovered for the project."""
+    project = _orch().get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+    result = _orch().reload_skills(project_id)
+    return {"project_id": project_id, **result}
 
 
 class AskAnswerRequest(BaseModel):
@@ -250,6 +309,46 @@ async def get_session_rounds(project_id: str, session_id: str):
     return {"project_id": project_id, "session_id": session_id, "rounds": rows}
 
 
+@router.get("/{project_id}/settings")
+async def get_project_settings(project_id: str):
+    """Per-project settings (currently just the Coder sub-mode + env overrides)."""
+    project = _orch().get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+    md = dict(project.metadata or {})
+    return {
+        "project_id": project_id,
+        "coder_mode": md.get("coder_mode", "default"),
+        "metadata": md,
+    }
+
+
+@router.post("/{project_id}/settings")
+async def update_project_settings(project_id: str, patch: dict):
+    """Update per-project settings (e.g. Coder sub-mode).
+
+    Currently the only meaningful field is ``coder_mode``. The
+    endpoint is structured so additional per-project knobs can be
+    added without changing the URL.
+    """
+    project = _orch().get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+    md = dict(project.metadata or {})
+    if "coder_mode" in (patch or {}):
+        from kairos.coder_modes import CoderMode
+        mode = CoderMode.parse(patch["coder_mode"])
+        md["coder_mode"] = mode.value
+        project.metadata = md
+        if hasattr(project.runtime, "coder_mode"):
+            project.runtime.coder_mode = mode.value
+    return {
+        "project_id": project_id,
+        "coder_mode": md.get("coder_mode", "default"),
+        "metadata": md,
+    }
+
+
 @router.get("/{project_id}/cost")
 async def get_project_cost(project_id: str):
     """Token usage + USD cost summary for a project.
@@ -283,17 +382,6 @@ async def get_project_cost(project_id: str):
     return {
         "project": proj_summary.to_dict(),
         "global": tracker.summary(),
-    }
-
-
-@router.get("/cost")
-async def get_global_cost():
-    """Global cost summary across all projects (in-process records)."""
-    from kairos.cost import get_tracker
-    tracker = get_tracker()
-    return {
-        "global": tracker.summary(),
-        "by_project": {pid: s.to_dict() for pid, s in tracker.by_project().items()},
     }
 
 

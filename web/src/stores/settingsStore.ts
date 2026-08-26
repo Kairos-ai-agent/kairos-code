@@ -5,31 +5,42 @@ export type CoderMode = 'default' | 'read_only' | 'sandbox';
 export type TtsProvider = 'mock' | 'edge';
 export type SttProvider = 'mock' | 'whisper';
 
+// LLM provider the Coder/Reviewer agents use. Each value maps to a
+// concrete kairos.llm.providers.* implementation on the backend.
+export type LlmProvider = 'openai' | 'anthropic' | 'ollama' | 'deepseek' | 'custom';
+
 export interface VoiceSettings {
   ttsProvider: TtsProvider;
-  ttsVoice: string;          // e.g. "en-US-AriaNeural", "default"
+  ttsVoice: string;
   sttProvider: SttProvider;
-  sttLanguage: string;       // e.g. "en", "zh"
+  sttLanguage: string;
   autoPlay: boolean;
 }
 
 export interface McpSettings {
-  // local MCP server list (the user can drop in pre-configured
-  // servers; the rest comes from server config in YAML)
-  enabledServers: string[];   // names
-  permissionPrompt: boolean;  // ask before invoking MCP tools
+  enabledServers: string[];
+  permissionPrompt: boolean;
 }
 
 export interface CloudSettings {
   s3Bucket: string;
   s3Region: string;
-  s3Endpoint: string;          // empty = AWS
+  s3Endpoint: string;
   addressingStyle: 'auto' | 'virtual' | 'path';
-  // credentials are never stored client-side; the backend uses IAM.
 }
 
 export interface MetricsSettings {
   showInFooter: boolean;
+}
+
+export interface ProviderSettings {
+  // Active provider — drives ModelRouter.get_provider_for_role()
+  active: LlmProvider;
+  // Per-provider detail
+  ollamaBaseUrl: string;
+  ollamaModel: string;
+  // Free-form env-var name for the active provider's API key.
+  apiKeyEnv: string;
 }
 
 export interface SettingsState {
@@ -39,6 +50,7 @@ export interface SettingsState {
   mcp: McpSettings;
   cloud: CloudSettings;
   metrics: MetricsSettings;
+  provider: ProviderSettings;
 
   openDrawer: () => void;
   closeDrawer: () => void;
@@ -47,11 +59,12 @@ export interface SettingsState {
   setMcp: (patch: Partial<McpSettings>) => void;
   setCloud: (patch: Partial<CloudSettings>) => void;
   setMetrics: (patch: Partial<MetricsSettings>) => void;
+  setProvider: (patch: Partial<ProviderSettings>) => void;
 }
 
 const DEFAULT: Omit<SettingsState,
   'openDrawer' | 'closeDrawer' | 'setCoderMode' | 'setVoice' | 'setMcp' |
-  'setCloud' | 'setMetrics'
+  'setCloud' | 'setMetrics' | 'setProvider'
 > = {
   drawerOpen: false,
   coderMode: 'default',
@@ -75,6 +88,12 @@ const DEFAULT: Omit<SettingsState,
   metrics: {
     showInFooter: true,
   },
+  provider: {
+    active: 'openai',
+    ollamaBaseUrl: 'http://127.0.0.1:11434',
+    ollamaModel: 'qwen2.5-coder:7b',
+    apiKeyEnv: 'OPENAI_API_KEY',
+  },
 };
 
 export const useSettingsStore = create<SettingsState>((set) => ({
@@ -86,4 +105,5 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setMcp: (patch) => set((s) => ({ mcp: { ...s.mcp, ...patch } })),
   setCloud: (patch) => set((s) => ({ cloud: { ...s.cloud, ...patch } })),
   setMetrics: (patch) => set((s) => ({ metrics: { ...s.metrics, ...patch } })),
+  setProvider: (patch) => set((s) => ({ provider: { ...s.provider, ...patch } })),
 }));

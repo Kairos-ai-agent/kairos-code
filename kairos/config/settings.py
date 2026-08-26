@@ -26,6 +26,15 @@ class Settings(BaseSettings):
     host: str = Field(default="0.0.0.0", alias="KAIROS_HOST")
     port: int = Field(default=8900, alias="KAIROS_PORT")
     debug: bool = Field(default=False, alias="KAIROS_DEBUG")
+    # Number of uvicorn worker processes. 0 = auto-pick
+    # ``min(8, 2 * cpu + 1)`` per the textbook formula (capped
+    # to keep memory bounded). Set to 1 in tests / single-machine
+    # dev to avoid forking a process pool you don't need.
+    workers: int = Field(default=0, alias="KAIROS_WORKERS")
+    # Loop implementation: "auto" picks uvloop on POSIX, the
+    # built-in asyncio loop on Windows. "uvloop" forces uvloop
+    # even on Windows (will raise); "asyncio" disables.
+    loop: str = Field(default="auto", alias="KAIROS_LOOP")
 
     # Paths
     workspace_dir: Path = Path("./workspace")

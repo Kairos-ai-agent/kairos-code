@@ -63,6 +63,8 @@ __all__ = [
 class HookEvent(str, Enum):
     PRE_TOOL_USE = "PreToolUse"
     POST_TOOL_USE = "PostToolUse"
+    SESSION_START = "SessionStart"
+    SESSION_END = "SessionEnd"
     STOP = "Stop"
 
 
@@ -74,10 +76,21 @@ class HookDecision(str, Enum):
 
 @dataclass
 class HookContext:
-    """Inputs and outputs passed to a hook."""
+    """Inputs and outputs passed to a hook.
+
+    For ``PreToolUse`` / ``PostToolUse``: ``tool_name`` and
+    ``tool_input`` (and ``tool_output`` for Post) are populated.
+
+    For ``SessionStart``: ``tool_name`` is empty; ``metadata`` may
+    contain the new session id and the requirement string.
+
+    For ``SessionEnd`` / ``Stop``: ``tool_name`` is empty;
+    ``metadata`` carries the final score, total rounds, and
+    outcome gate name.
+    """
     event: HookEvent
     project_id: str
-    tool_name: str
+    tool_name: str = ""
     tool_input: Dict[str, Any] = field(default_factory=dict)
     tool_output: Optional[Any] = None
     tool_error: Optional[str] = None
@@ -122,6 +135,11 @@ class HookSpec:
     timeout_s: float = 10.0
 
     def matches(self, tool_name: str) -> bool:
+        # Session lifecycle events have no tool name; if the hook
+        # is bound to one of them, the matcher is irrelevant.
+        if self.event in (HookEvent.SESSION_START, HookEvent.SESSION_END,
+                          HookEvent.STOP):
+            return True
         if self.matcher is None:
             return True
         return bool(re.search(self.matcher, tool_name))

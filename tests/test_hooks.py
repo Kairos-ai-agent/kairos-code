@@ -404,3 +404,137 @@ def test_load_project_hooks(tmp_path: Path):
     n = load_project_hooks(proj, user)
     assert n == 2
     assert len(get_default_registry().hooks_for(HookEvent.STOP)) == 2
+
+
+# ---------------------------------------------------------------------------
+# Round 5: SessionStart / SessionEnd
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_session_start_event_fires():
+    reg = HookRegistry()
+    fired = []
+
+    def hook(ctx: HookContext) -> HookResult:
+        fired.append((ctx.event.value, ctx.metadata.get("session_id")))
+        return HookResult()
+
+    reg.register_builtin(HookEvent.SESSION_START, hook)
+    ctx = HookContext(
+        event=HookEvent.SESSION_START,
+        project_id="p1",
+        metadata={"session_id": "s-123", "requirement": "build a thing"},
+    )
+    res = await reg.run(ctx)
+    assert res.decision == HookDecision.ALLOW
+    assert fired == [("SessionStart", "s-123")]
+
+
+@pytest.mark.asyncio
+async def test_session_end_event_fires():
+    reg = HookRegistry()
+    fired = []
+
+    def hook(ctx: HookContext) -> HookResult:
+        fired.append((ctx.event.value, ctx.metadata.get("outcome")))
+        return HookResult()
+
+    reg.register_builtin(HookEvent.SESSION_END, hook)
+    ctx = HookContext(
+        event=HookEvent.SESSION_END,
+        project_id="p1",
+        metadata={"session_id": "s-456", "outcome": "approved"},
+    )
+    await reg.run(ctx)
+    assert fired == [("SessionEnd", "approved")]
+
+
+@pytest.mark.asyncio
+async def test_session_start_command_hook_runs():
+    """SessionStart command hooks receive the right env vars."""
+    import tempfile
+    fd, out_path_str = tempfile.mkstemp(prefix="hook-", suffix=".txt")
+    os.close(fd)
+    out_path = Path(out_path_str)
+    script = out_path.parent / "_session_start_writer.py"
+    script.write_text(
+        "import os, pathlib\n"
+        f"pathlib.Path({str(out_path)!r}).write_text(\n"
+        "    os.environ.get('KAIROS_EVENT', '') + '|' +\n"
+        "    os.environ.get('KAIROS_PROJECT_ID', '') + '|' +\n"
+        "    os.environ.get('SESSION_ID', '__no_session__')\n"
+        ")\n",
+        encoding="utf-8",
+    )
+    try:
+        reg = HookRegistry()
+        reg.register(HookSpec(
+            event=HookEvent.SESSION_START, matcher=None,
+            hook_type="command", command=f"python {str(script)}",
+        ))
+        await reg.run(HookContext(
+            event=HookEvent.SESSION_START,
+            project_id="my-proj",
+            metadata={"session_id": "s-abc"},
+        ))
+        body = out_path.read_text(encoding="utf-8")
+        # KAIROS_EVENT and KAIROS_PROJECT_ID come from _env_for
+        # The SESSION_ID one is in our test script only — it may
+        # not be set. Just check the two known ones.
+        assert "SessionStart" in body
+        assert "my-proj" in body
+    finally:
+        try:
+            out_path.unlink()
+        except OSError:
+            pass
+        try:
+            script.unlink()
+        except OSError:
+            pass
+
+
+def test_hook_event_enum_has_all_five():
+    """The HookEvent enum should have all 5 events the project
+    needs (PreToolUse, PostToolUse, SessionStart, SessionEnd,
+    Stop)."""
+    names = {e.value for e in HookEvent}
+    assert names == {"PreToolUse", "PostToolUse", "SessionStart",
+                     "SessionEnd", "Stop"}
+
+
+def test_session_start_hooks_for_empty_when_no_registration():
+    """When no SessionStart hook is registered, hooks_for returns []. """
+    reset_default_registry()
+    reg = get_default_registry()
+    assert reg.hooks_for(HookEvent.SESSION_START) == []
+    assert reg.hooks_for(HookEvent.SESSION_END) == []
+
+
+@pytest.mark.asyncio
+async def test_session_start_yaml_loading():
+    """Round 5: YAML can register SessionStart / SessionEnd hooks."""
+    yaml = """
+hooks:
+  SessionStart:
+    - type: command
+      command: "echo starting"
+  SessionEnd:
+    - matcher: "ignored"
+      type: command
+      command: "echo ending"
+"""
+    import tempfile
+    fd, path_str = tempfile.mkstemp(suffix=".yaml")
+    os.close(fd)
+    p = Path(path_str)
+    p.write_text(yaml, encoding="utf-8")
+    try:
+        reg = HookRegistry()
+        n = reg.load_yaml(p)
+        assert n == 2
+        assert len(reg.hooks_for(HookEvent.SESSION_START)) == 1
+        assert len(reg.hooks_for(HookEvent.SESSION_END)) == 1
+    finally:
+        p.unlink(missing_ok=True)

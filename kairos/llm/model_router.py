@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 import yaml
 from pathlib import Path
@@ -16,7 +17,22 @@ from kairos.llm.base import BaseLLMProvider, LLMConfig
 from kairos.llm.provider_registry import create_provider
 from kairos.llm.resilient import wrap_with_resilience
 
-SETTINGS_FILE = Path(__file__).parent.parent.parent / "data" / "settings.json"
+SETTINGS_FILE = (
+    Path(os.environ.get("KAIROS_DATA_DIR", Path(__file__).parent.parent.parent / "data"))
+    / "settings.json"
+)
+
+
+def settings_path() -> Path:
+    """Resolve the live settings.json path on every call (not at import
+    time). This matters for tests that monkeypatch ``KAIROS_DATA_DIR``
+    after the module is already loaded; reading the env at import time
+    would freeze the path to the original value.
+    """
+    return (
+        Path(os.environ.get("KAIROS_DATA_DIR", Path(__file__).parent.parent.parent / "data"))
+        / "settings.json"
+    )
 
 class ModelRouter:
     """Routes agents to their assigned LLM models with caching."""
@@ -45,9 +61,10 @@ class ModelRouter:
 
     def _load_custom_models(self):
         """Load custom model configs from settings file."""
-        if SETTINGS_FILE.exists():
+        sf = settings_path()
+        if sf.exists():
             try:
-                settings = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+                settings = json.loads(sf.read_text(encoding="utf-8"))
                 custom_models = settings.get("custom_models", [])
                 for m in custom_models:
                     key = f"custom:{m['name']}"
@@ -87,25 +104,27 @@ class ModelRouter:
         self._save_role_mappings()
 
     def _save_role_mappings(self):
-        if not SETTINGS_FILE.exists():
-            SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        sf = settings_path()
+        if not sf.exists():
+            sf.parent.mkdir(parents=True, exist_ok=True)
             settings = {}
         else:
             try:
-                settings = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+                settings = json.loads(sf.read_text(encoding="utf-8"))
             except Exception:
                 settings = {}
         settings["role_mappings"] = dict(self._role_mapping)
         try:
-            SETTINGS_FILE.write_text(json.dumps(settings, indent=2, ensure_ascii=False), encoding="utf-8")
+            sf.write_text(json.dumps(settings, indent=2, ensure_ascii=False), encoding="utf-8")
         except Exception:
             import logging
             logging.getLogger(__name__).debug("Failed to save role mappings", exc_info=True)
 
     def _load_role_mappings(self):
-        if SETTINGS_FILE.exists():
+        sf = settings_path()
+        if sf.exists():
             try:
-                settings = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+                settings = json.loads(sf.read_text(encoding="utf-8"))
                 saved = settings.get("role_mappings", {})
                 if saved:
                     self._role_mapping.update(saved)
@@ -165,10 +184,11 @@ class ModelRouter:
         return provider
 
     def _create_dynamic_config(self, model_name: str) -> Optional[LLMConfig]:
-        if not SETTINGS_FILE.exists():
+        sf = settings_path()
+        if not sf.exists():
             return None
         try:
-            settings = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+            settings = json.loads(sf.read_text(encoding="utf-8"))
         except Exception:
             import logging
             logging.getLogger(__name__).debug("Failed to read settings for dynamic config", exc_info=True)
@@ -194,6 +214,16 @@ class ModelRouter:
                         model=m["model"], api_key=m.get("api_key", ""),
                         base_url=m.get("base_url"),
                     )
+
+        if model_name.startswith("ollama:"):
+            # Round-7: local Ollama. Read the model name + base URL
+            # from settings (written by providers.integration).
+            model = model_name.split(":", 1)[1]
+            base_url = settings.get("ollama_base_url", "http://127.0.0.1:11434")
+            return LLMConfig(
+                provider="ollama", model=model,
+                api_key="", base_url=base_url,
+            )
 
         return None
 

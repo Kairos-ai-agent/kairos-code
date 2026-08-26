@@ -1,0 +1,35 @@
+{
+  "voice": {
+    "ttsProvider": "edge",
+    "ttsVoice": "fr-FR-DeniseNeural",
+    "sttProvider": "mock",
+    "sttLanguage": "en",
+    "autoPlay": true
+  },
+  "mcp": {
+    "enabledServers": [
+      "filesystem"
+    ],
+    "permissionPrompt": true
+  },
+  "cloud": {
+    "s3Bucket": "my-bucket",
+    "s3Region": "us-east-1",
+    "s3Endpoint": "",
+    "addressingStyle": "auto"
+  },
+  "metrics": {
+    "showInFooter": true
+  },
+  "ollama_base_url": "",
+  "provider_env_map": {},
+  "active_provider": "ollama",
+  "provider": {
+    "active": "ollama",
+    "ollamaBaseUrl": "http://10.0.0.5:11434",
+    "ollamaModel": "qwen2.5-coder:14b",
+    "apiKeyEnv": "OPENAI_API_KEY"
+  },
+  "memory_user_path": "",
+  "memory_project_path": ""
+}

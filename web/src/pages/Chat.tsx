@@ -69,105 +69,14 @@ const Chat: React.FC = () => {
   } | null>(null);
   const [wsState, setWsState] = useState<'connecting' | 'open' | 'closed'>('closed');
 
-  // ----- WebSocket plumbing -----
-  useEffect(() => {
-    const offMsg = onWebSocketMessage((data) => {
-      // The orchestrator sends a JSON message for every agent message.
-      // Anything that looks like a Message lands in the thread; loop
-      // state updates (round, score) update the topbar; round.completed
-      // triggers a sessions refetch.
-      const t = (data.topic || data.type || '').toString();
-      if (t === 'plan.pending' || t === 'ask.pending') {
-        // The orchestrator is asking the user to make a decision.
-        // We don't have a dedicated plan/ask channel in the message
-        // bus yet, so refetch via the REST endpoint to make sure
-        // the banner shows.
-        if (currentProject) {
-          if (t === 'plan.pending') {
-            api.get(`/projects/${currentProject.id}/plan`)
-              .then((r) => setPlanState(r.data || null)).catch(() => {});
-          } else {
-            api.get(`/projects/${currentProject.id}/ask`)
-              .then((r) => setAskState(r.data || null)).catch(() => {});
-          }
-        }
-        return;
-      }
-      if (t === 'plan.cleared' || t === 'ask.cleared') {
-        if (t === 'plan.cleared') setPlanState(null);
-        else setAskState(null);
-        return;
-      }
-      if (t === 'loop.round_completed' || t === 'round.completed') {
-        // Refetch sessions so the sidebar reflects the new round.
-        if (currentProject) {
-          api.get<{ sessions: LoopSession[] }>(`/projects/${currentProject.id}/sessions`)
-            .then((r) => setSessions(r.data.sessions || []))
-            .catch(() => { /* offline / transient */ });
-        }
-        // Refetch loop state for the topbar.
-        if (currentProject) {
-          api.get(`/projects/${currentProject.id}/loop`).then((r) => {
-            setLoopState(r.data);
-            // If we're viewing this session, refetch its rounds.
-            if (r.data?.session_id === sessionId) {
-              loadSessionHistory(currentProject.id, r.data.session_id);
-            }
-          }).catch(() => {});
-        }
-      } else if (t === 'loop.session_completed' || t === 'session.completed') {
-        // Loop reached its terminal state. Refresh sessions + state.
-        if (currentProject) {
-          api.get<{ sessions: LoopSession[] }>(`/projects/${currentProject.id}/sessions`)
-            .then((r) => setSessions(r.data.sessions || []));
-          api.get(`/projects/${currentProject.id}/loop`).then((r) => setLoopState(r.data));
-        }
-      } else if (t === 'agent.message' || t === 'message') {
-        const m: Message = {
-          id: data.id || `ws-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-          sender: data.sender || 'agent',
-          receiver: data.receiver || '',
-          topic: data.topic || '',
-          content: data.content ?? '',
-          msg_type: data.msg_type || 'text',
-          timestamp: data.timestamp || Date.now() / 1000,
-          metadata: data.metadata || {},
-        };
-        appendMessage(m);
-      } else if (t === 'loop.started' || t === 'session.started') {
-        // Backend just kicked off a new session — push its id into
-        // the chat store and let the page re-route to /chat/{sid}.
-        const newSid = data.session_id || data.sessionId;
-        if (newSid) {
-          setCurrentSessionId(newSid);
-          setCurrentMessages([]);
-          // Refetch sessions so it shows in the sidebar.
-          if (currentProject) {
-            api.get<{ sessions: LoopSession[] }>(`/projects/${currentProject.id}/sessions`)
-              .then((r) => setSessions(r.data.sessions || []));
-          }
-          // Update URL without re-mounting.
-          navigate(`/chat/${newSid}`, { replace: true });
-          // Re-fetch loop state for the topbar.
-          if (currentProject) {
-            api.get(`/projects/${currentProject.id}/loop`).then((r) => setLoopState(r.data))
-              .catch(() => {});
-          }
-        }
-      }
-    });
-    const offState = onWebSocketState((s) => setWsState(s));
-    return () => { offMsg(); offState(); };
-  }, [currentProject, sessionId, navigate,
-     setCurrentMessages, appendMessage, setCurrentSessionId, setSessions]);
-
-  // ----- Load session history on mount / session change -----
+  // ----- Helpers -----
+  // Load one session's full history from the backend and rehydrate
+  // the chat thread with Message-like bubbles.
   const loadSessionHistory = useCallback(async (pid: string, sid: string) => {
     try {
       const r = await api.get<{ rounds: SessionRound[] }>(
         `/projects/${pid}/sessions/${sid}/rounds`);
       const rounds = r.data.rounds || [];
-      // Convert rounds into Message-like bubbles for the thread.
       const msgs: Message[] = [];
       for (const rd of rounds) {
         if (rd.coder_summary) {
@@ -205,6 +114,132 @@ const Chat: React.FC = () => {
       setCurrentMessages([]);
     }
   }, [setCurrentMessages]);
+
+  // ----- WebSocket plumbing -----
+  //
+  // The backend sends three envelope types:
+  //   { type: "init", agents, messages }       — sent on connect
+  //   { type: "agent_update", agents }        — agent state refresh
+  //   { type: "activity", message }           — agent activity event
+  //
+  // Activity events carry a `message` whose own `topic` field is the
+  // actual event name (e.g. "loop.coder_started", "agent.response",
+  // "tool.call"). The Loop.tsx page is the reference for the full
+  // topic vocabulary.
+  useEffect(() => {
+    const offMsg = onWebSocketMessage((data) => {
+      const envType = (data.type || '').toString();
+
+      // ----- init / agent_update -----
+      if (envType === 'init' || envType === 'agent_update') {
+        return;  // nothing chat-specific to do; legacy Loop uses these
+      }
+
+      if (envType !== 'activity' || !data.message) {
+        return;  // unknown envelope; ignore
+      }
+
+      // ----- activity: dispatch on the inner topic -----
+      const msg = data.message;
+      const topic = (msg.topic || '').toString();
+
+      // User-visible chat bubbles: any agent activity that's worth
+      // showing in the thread. Topics we surface:
+      //   agent.thinking  — Coder started a new turn
+      //   agent.response   — Coder produced a final response
+      //   agent.chat       — generic agent chat (e.g. reviewer ask)
+      //   tool.call        — tool invocation
+      //   tool.result      — tool returned
+      //   task.error       — agent hit an error
+      //   task.result      — task finished
+      //   stream.chunk     — streaming text delta (collapse into one bubble)
+      if (topic === 'agent.thinking' || topic === 'agent.response'
+          || topic === 'agent.chat' || topic === 'tool.call'
+          || topic === 'tool.result' || topic === 'task.error'
+          || topic === 'task.result') {
+        appendMessage({
+          id: msg.id || `ws-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          sender: msg.sender || 'agent',
+          receiver: msg.receiver || '',
+          topic,
+          content: msg.content ?? '',
+          msg_type: msg.msg_type || 'text',
+          timestamp: msg.timestamp || Date.now() / 1000,
+          metadata: msg.metadata || {},
+        });
+        return;
+      }
+
+      if (topic === 'stream.chunk') {
+        // Streaming output — append a single bubble with the
+        // accumulated content. For simplicity we just push each
+        // chunk as its own message; the chat thread de-dupes by id.
+        appendMessage({
+          id: `stream-${msg.metadata?.request_id || msg.timestamp || Date.now()}`,
+          sender: msg.sender || 'agent',
+          receiver: msg.receiver || '',
+          topic,
+          content: typeof msg.content === 'string' ? msg.content
+                  : JSON.stringify(msg.content || ''),
+          msg_type: 'stream',
+          timestamp: msg.timestamp || Date.now() / 1000,
+          metadata: msg.metadata || {},
+        });
+        return;
+      }
+
+      // Loop lifecycle.
+      if (topic === 'loop.coder_started' || topic === 'loop.plan_started'
+          || topic === 'loop.completed' || topic === 'loop.finished'
+          || topic === 'loop.approved' || topic === 'loop.rejected') {
+        // The session is now running (or done). Refetch loop state
+        // for the topbar and refresh the session list so the sidebar
+        // picks up the new entry.
+        if (currentProject) {
+          // The message metadata usually carries session_id; use it
+          // directly so the URL switches without waiting for the
+          // /loop GET. Fall back to the GET when the message doesn't
+          // have it (loop.finished, loop.completed, etc.).
+          const wsSid = msg.metadata?.session_id;
+          if (wsSid && wsSid !== sessionId) {
+            setCurrentSessionId(wsSid);
+            navigate(`/chat/${wsSid}`, { replace: true });
+            loadSessionHistory(currentProject.id, wsSid);
+          }
+          api.get<{ sessions: LoopSession[] }>(`/projects/${currentProject.id}/sessions`)
+            .then((r) => setSessions(r.data.sessions || []))
+            .catch(() => {});
+          api.get(`/projects/${currentProject.id}/loop`).then((r) => {
+            setLoopState(r.data);
+            const fetchedSid = r.data?.session_id;
+            if (fetchedSid && !wsSid) {
+              // The WS message didn't carry session_id; use the
+              // fetched one. Switch the URL if it's new.
+              if (fetchedSid !== sessionId) {
+                setCurrentSessionId(fetchedSid);
+                navigate(`/chat/${fetchedSid}`, { replace: true });
+                loadSessionHistory(currentProject.id, fetchedSid);
+              } else {
+                loadSessionHistory(currentProject.id, fetchedSid);
+              }
+            }
+          }).catch(() => {});
+        }
+        // Plan / Ask state — the orchestrator doesn't publish these
+        // over WS, so the polling effect below picks them up.
+        return;
+      }
+
+      // All other topics (loop.* details, precheck.*, regression.*,
+      // cost_cap, safety_cap, etc.) are surfaced by the session
+      // list / topbar / Trace page — we don't render them in the
+      // thread itself.
+    });
+    const offState = onWebSocketState((s) => setWsState(s));
+    return () => { offMsg(); offState(); };
+  }, [currentProject, sessionId, navigate,
+     setCurrentMessages, appendMessage, setCurrentSessionId, setSessions,
+     loadSessionHistory]);
 
   useEffect(() => {
     if (!currentProject) return;

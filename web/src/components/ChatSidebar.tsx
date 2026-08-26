@@ -38,7 +38,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Spin, Empty, Tooltip } from 'antd';
 import {
-  PlusOutlined, MessageOutlined, ThunderboltOutlined,
+  MessageOutlined, ThunderboltOutlined,
   CheckCircleFilled, CloseCircleFilled, DownOutlined,
   UpOutlined, ProjectOutlined,
 } from '@ant-design/icons';
@@ -46,6 +46,7 @@ import {
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import api from '../api/client';
+import NewChatButton from './NewChatButton';
 import type { LoopSession, Project } from '../types';
 
 const DEFAULT_PROJECT_LIMIT = 10;
@@ -107,17 +108,6 @@ const ChatSidebar: React.FC = () => {
     navigate('/chat');
   };
 
-  const startNew = () => {
-    if (!currentProject) {
-      // No project selected — bounce to /today so the user can
-      // either add a folder or pick from the project list.
-      navigate('/today');
-      return;
-    }
-    setCurrentSessionId(null);
-    navigate('/chat');
-  };
-
   return (
     <div style={{
       height: `calc(100vh - 52px)`,
@@ -125,19 +115,7 @@ const ChatSidebar: React.FC = () => {
       padding: '12px 8px',
       boxSizing: 'border-box',
     }}>
-      <Button
-        type="primary"
-        icon={<PlusOutlined />}
-        onClick={startNew}
-        block
-        style={{
-          background: tokens.labelPrimary, color: tokens.bgBase,
-          border: 'none', fontWeight: 500,
-          marginBottom: 12,
-        }}
-      >
-        New chat
-      </Button>
+      <NewChatButton />
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 4px' }}>
         {/* ------------------- Projects list ------------------- */}

@@ -17,10 +17,10 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 // Mock the api client. The Chat page uses api.get for initial loads;
 // we stub it so those don't try to hit a real backend.
 vi.mock('../api/client', () => {
-  const noop = vi.fn(() => Promise.resolve({ data: {} }));
+  const noop = vi.fn((_url?: string) => Promise.resolve({ data: {} }));
   return {
     default: {
-      get: vi.fn((url: string) => {
+      get: vi.fn((url?: string) => {
         if (typeof url === 'string' && url.includes('/loop')) {
           return Promise.resolve({ data: {
             running: false, round: 0, last_score: 0, last_approve: false,
@@ -134,6 +134,7 @@ describe('Chat WebSocket message routing', () => {
     });
     const msgs = useChatStore.getState().currentMessages;
     expect(msgs.some((m) => m.topic === 'agent.response'
+                          && typeof m.content === 'string'
                           && m.content.includes('refactored'))).toBe(true);
   });
 

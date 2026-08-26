@@ -46,7 +46,18 @@ function basename(p: string): string {
   return p.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || p;
 }
 
-const FolderPicker: React.FC = () => {
+interface FolderPickerProps {
+  /**
+   * If set, the picker is fully controlled: `open` toggles the modal,
+   * and `onClose` is called when the user dismisses it. Used by
+   * the "New chat" button in the sidebar (see NewChatButton).
+   * If undefined, the picker manages its own internal state.
+   */
+  open?: boolean;
+  onClose?: () => void;
+}
+
+const FolderPicker: React.FC<FolderPickerProps> = ({ open: openProp, onClose }) => {
   const tokens = useThemeTokens();
   const { message: msgApi } = AntdApp.useApp();
   const projects = useChatStore((s) => s.projects);
@@ -54,7 +65,7 @@ const FolderPicker: React.FC = () => {
   const setCurrentProject = useChatStore((s) => s.setCurrentProject);
   const currentProject = useChatStore((s) => s.currentProject);
   const [recent, setRecent] = useState<string[]>(loadRecent);
-  const [manualOpen, setManualOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
   const [manualPath, setManualPath] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -62,6 +73,16 @@ const FolderPicker: React.FC = () => {
   // have any recents. Helps the user resume work.
   const noProjects = projects.length === 0;
   const showRecents = noProjects && recent.length > 0;
+
+  // Computed modal state: prefer the controlled `open` prop when the
+  // parent manages the picker (e.g. NewChatButton), fall back to the
+  // internal state when the picker is used standalone (the topbar
+  // button).
+  const manualOpen = openProp !== undefined ? openProp : internalOpen;
+  const closeModal = () => {
+    if (onClose) onClose();
+    else setInternalOpen(false);
+  };
 
   const pickFolder = async () => {
     // Try the FS Access API first; fall back to the manual modal.
@@ -80,14 +101,16 @@ const FolderPicker: React.FC = () => {
         // the path exists, but the backend will 404 anyway if it
         // doesn't.)
         setManualPath('');
-        setManualOpen(true);
+        if (onClose) onClose();
+        else setInternalOpen(true);
         return;
       } catch (e: any) {
         if (e?.name === 'AbortError') return;  // user cancelled
       }
     }
     setManualPath('');
-    setManualOpen(true);
+    if (onClose) onClose();
+    else setInternalOpen(true);
   };
 
   const selectFolder = async (path: string, _name: string) => {
@@ -110,7 +133,7 @@ const FolderPicker: React.FC = () => {
       const next = [path, ...recent.filter((p) => p !== path)].slice(0, MAX_RECENT);
       setRecent(next);
       saveRecent(next);
-      setManualOpen(false);
+      closeModal();
       msgApi.success(`Folder "${basename(path)}" added as project.`);
     } catch (e: any) {
       const detail = e?.response?.data?.detail || 'Failed to add folder';
@@ -130,7 +153,10 @@ const FolderPicker: React.FC = () => {
             style={{ minWidth: 180 }}
             onChange={(value) => {
               if (value === '__browse__') pickFolder();
-              else if (value === '__manual__') setManualOpen(true);
+              else if (value === '__manual__') {
+                if (onClose) onClose();
+                else setInternalOpen(true);
+              }
               else selectFolder(value, basename(value));
             }}
             options={[
@@ -164,7 +190,7 @@ const FolderPicker: React.FC = () => {
       <Modal
         title="Add a folder workspace"
         open={manualOpen}
-        onCancel={() => setManualOpen(false)}
+        onCancel={closeModal}
         onOk={() => selectFolder(manualPath, basename(manualPath))}
         confirmLoading={busy}
         okText="Add"

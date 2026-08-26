@@ -26,7 +26,7 @@ import { Layout, Button, Dropdown, Tooltip, Avatar, theme } from 'antd';
 import {
   MenuFoldOutlined, MenuUnfoldOutlined,
   SunOutlined, MoonOutlined, SettingOutlined,
-  PlusOutlined, AppstoreOutlined, MessageOutlined,
+  AppstoreOutlined, MessageOutlined,
   GithubOutlined, BookOutlined, ToolOutlined,
 } from '@ant-design/icons';
 
@@ -162,8 +162,6 @@ const AppLayout: React.FC = () => {
             items: [
               { key: 'settings', icon: <SettingOutlined />,
                 label: 'Settings', onClick: () => navigate('/settings') },
-              { key: 'new', icon: <PlusOutlined />,
-                label: 'New project', onClick: () => navigate('/projects') },
             ],
           }}
         >

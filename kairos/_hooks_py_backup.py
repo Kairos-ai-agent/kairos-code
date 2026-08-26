@@ -1,21 +1,45 @@
-"""Hook system for Kairos.
+"""Hooks system for Kairos.
 
-This subpackage exposes two complementary hook systems:
+Mirrors Claude Code's lifecycle hook model. Three event types:
 
-  1. **Programmatic registry** (``HookRegistry``) — the rich
-     YAML-configurable system added in Round 5. Supports
-     ``PreToolUse`` / ``PostToolUse`` / ``Stop`` events with
-     command, python-module, and built-in Python hooks.
+  - ``PreToolUse``   — fires before a tool runs. The hook can
+    ``allow``, ``deny``, or ``modify`` the call. Returning ``deny``
+    aborts the tool; the agent sees an error.
+  - ``PostToolUse``  — fires after a tool runs. Hooks can log,
+    transform the result, or trigger side effects (e.g. re-format
+    files after a ``file_edit``).
+  - ``Stop``         — fires when an agent loop ends. Hooks can
+    emit a final summary, run a verifier, or decide whether to
+    continue.
 
-  2. **Data-directory hook files** (``HookRunner``) — the original
-     system from earlier rounds. Users drop Python files into
-     ``data/hooks/*.py`` defining ``pre_tool_use``,
-     ``post_tool_use``, ``loop_round``, ``loop_completed``
-     functions. Re-exported here for backwards compatibility.
+Hooks are configured in YAML::
 
-Most new code should use the registry (system 1) — it has better
-typing, async support, YAML config, and per-hook error handling.
-The data-dir system is kept for users who already have hook files.
+    # .kairos/hooks.yaml
+    hooks:
+      PreToolUse:
+        - matcher: "terminal"
+          type: command
+          command: "echo 'about to run: $TOOL_INPUT'"
+      PostToolUse:
+        - matcher: "file_edit"
+          type: command
+          command: "ruff format $FILE"
+      Stop:
+        - type: command
+          command: "echo 'session done'"
+
+Three hook types are supported:
+
+  - ``command`` — runs a shell command. The hook receives a
+    environment with ``$TOOL_NAME``, ``$TOOL_INPUT``, ``$TOOL_OUTPUT``,
+    ``$PROJECT_ID``, etc.
+  - ``python`` — imports a function from a module and calls it.
+  - ``builtin`` — registers a Python callable directly via the API.
+
+The runner is safe-by-default: a hook that fails (non-zero exit,
+import error, exception) is logged and the original tool call
+proceeds. ``PreToolUse`` can be configured to *block* the tool on
+failure (``on_error: deny``) when security matters.
 """
 from __future__ import annotations
 
@@ -24,40 +48,16 @@ import json
 import logging
 import os
 import re
+import shlex
+import subprocess
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Union
 
 import yaml
 
 logger = logging.getLogger(__name__)
-
-
-# Re-export the old data-dir hook system for backwards compatibility.
-from kairos.hooks.runner import HookRunner, get_runner  # noqa: F401
-
-
-__all__ = [
-    # Old data-dir system
-    "HookRunner",
-    "get_runner",
-    # New registry system
-    "HookEvent",
-    "HookDecision",
-    "HookContext",
-    "HookResult",
-    "HookSpec",
-    "HookRegistry",
-    "get_default_registry",
-    "reset_default_registry",
-    "load_project_hooks",
-]
-
-
-# ---------------------------------------------------------------------------
-# New registry-based system
-# ---------------------------------------------------------------------------
 
 
 class HookEvent(str, Enum):
@@ -79,8 +79,8 @@ class HookContext:
     project_id: str
     tool_name: str
     tool_input: Dict[str, Any] = field(default_factory=dict)
-    tool_output: Optional[Any] = None
-    tool_error: Optional[str] = None
+    tool_output: Optional[Any] = None  # only set on PostToolUse
+    tool_error: Optional[str] = None   # only set on PostToolUse if the tool failed
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -101,6 +101,8 @@ class HookResult:
     reason: str = ""
     modified_input: Optional[Dict[str, Any]] = None
     modified_output: Optional[Any] = None
+    # When non-empty, this text is appended to the agent's
+    # transcript ("Hook said: ...").
     message: str = ""
 
 
@@ -112,19 +114,24 @@ PythonHook = Callable[[HookContext], Union[HookResult, Awaitable[HookResult]]]
 class HookSpec:
     """A single configured hook."""
     event: HookEvent
-    matcher: Optional[str]
+    matcher: Optional[str]  # tool name regex, or None to match all
     hook_type: str  # "command" | "python" | "builtin"
     command: str = ""
     module: str = ""
     function: str = ""
     builtin: Optional[PythonHook] = None
-    on_error: str = "allow"
+    on_error: str = "allow"  # what to do if the hook itself fails: allow | deny
     timeout_s: float = 10.0
 
     def matches(self, tool_name: str) -> bool:
         if self.matcher is None:
             return True
         return bool(re.search(self.matcher, tool_name))
+
+
+# ---------------------------------------------------------------------------
+# Hook registry
+# ---------------------------------------------------------------------------
 
 
 class HookRegistry:
@@ -134,6 +141,7 @@ class HookRegistry:
 
     def __init__(self) -> None:
         self._hooks: Dict[HookEvent, List[HookSpec]] = {e: [] for e in HookEvent}
+        self._python_hooks: Dict[str, PythonHook] = {}
 
     # -- registration ----------------------------------------------------
 
@@ -165,7 +173,22 @@ class HookRegistry:
 
     # -- loading from YAML ----------------------------------------------
 
-    def load_yaml(self, path) -> int:
+    def load_yaml(self, path: Union[str, Path]) -> int:
+        """Load hooks from a YAML file. Returns the count loaded.
+
+        Format::
+
+            hooks:
+              PreToolUse:
+                - matcher: "terminal"   # optional
+                  type: command
+                  command: "echo $TOOL_INPUT"
+                  on_error: deny
+              PostToolUse:
+                - type: python
+                  module: mypkg.hooks
+                  function: reformat
+        """
         p = Path(path)
         if not p.is_file():
             return 0
@@ -179,6 +202,7 @@ class HookRegistry:
         return self.load_dict(data)
 
     def load_dict(self, data: Dict[str, Any]) -> int:
+        """Load hooks from a dict (e.g. the parsed YAML)."""
         count = 0
         hooks = data.get("hooks") or {}
         if not isinstance(hooks, dict):
@@ -219,21 +243,33 @@ class HookRegistry:
     # -- execution -------------------------------------------------------
 
     async def run(self, ctx: HookContext) -> HookResult:
+        """Run all matching hooks and merge their decisions.
+
+        Merging rules:
+          - First DENY wins, the rest are skipped.
+          - Otherwise the last MODIFY's modified_input is used.
+          - The first ALLOW (or any no-op) is the default.
+        """
         result = HookResult()
         for spec in self.hooks_for(ctx.event, ctx.tool_name):
             single = await self._run_one(spec, ctx)
             if single is None:
+                # hook errored — apply on_error policy
                 if spec.on_error == "deny":
                     return HookResult(
                         decision=HookDecision.DENY,
                         reason=f"hook {spec.matcher or '*'} failed",
                     )
                 continue
+            # First DENY wins.
             if single.decision == HookDecision.DENY:
                 return single
+            # Keep the most recent MODIFY.
             if single.decision == HookDecision.MODIFY:
                 result = single
                 continue
+            # Carry forward messages even on ALLOW so the agent can
+            # see what the hook did.
             if single.message:
                 result.message = (result.message + "\n" + single.message).strip()
         return result
@@ -264,7 +300,11 @@ class HookRegistry:
                 proc.communicate(), timeout=spec.timeout_s,
             )
         except asyncio.TimeoutError:
-            await self._force_kill(proc)
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass
             logger.warning("hook command timed out after %.1fs: %s",
                            spec.timeout_s, spec.command[:200])
             return HookResult()
@@ -274,6 +314,7 @@ class HookRegistry:
 
         out = (stdout or b"").decode("utf-8", errors="replace")
         err = (stderr or b"").decode("utf-8", errors="replace")
+        # We use exit code to decide ALLOW vs DENY for PreToolUse.
         decision = HookDecision.DENY if proc.returncode != 0 else HookDecision.ALLOW
         return HookResult(
             decision=decision,
@@ -289,6 +330,7 @@ class HookRegistry:
         except (ImportError, AttributeError) as exc:
             logger.warning("python hook import failed: %s", exc)
             return HookResult()
+        # Allow both sync and async hooks.
         result = fn(ctx)
         if hasattr(result, "__await__"):
             result = await result
@@ -307,6 +349,11 @@ class HookRegistry:
         return result
 
     def _env_for(self, ctx: HookContext) -> Dict[str, str]:
+        """Build the env passed to a command hook.
+
+        Exposes the common fields as both $TOOL_NAME and structured
+        JSON in $TOOL_INPUT_JSON, so shells can use either.
+        """
         out = dict(os.environ)
         out["KAIROS_EVENT"] = ctx.event.value
         out["KAIROS_PROJECT_ID"] = ctx.project_id
@@ -322,39 +369,29 @@ class HookRegistry:
             out["TOOL_ERROR"] = ctx.tool_error
         return out
 
-    @staticmethod
-    async def _force_kill(proc) -> None:
-        """Best-effort kill that works on both POSIX and Windows.
 
-        On Windows, ``proc.kill()`` only sends ``TerminateProcess`` to
-        the immediate child, which leaves grandchildren alive. We
-        use ``taskkill /T /F /PID`` to recursively kill the tree.
-        """
-        try:
-            if os.name == "nt":
-                # taskkill is built-in on Windows. /T = tree, /F = force.
-                tk = await asyncio.create_subprocess_exec(
-                    "taskkill", "/T", "/F", "/PID", str(proc.pid),
-                    stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL,
-                )
-                try:
-                    await asyncio.wait_for(tk.wait(), timeout=2.0)
-                except asyncio.TimeoutError:
-                    pass
-            else:
-                # POSIX: kill the whole process group.
-                try:
-                    import signal
-                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-                except (ProcessLookupError, PermissionError):
-                    pass
-        except Exception:
-            pass
-        try:
-            await asyncio.wait_for(proc.wait(), timeout=2.0)
-        except (asyncio.TimeoutError, Exception):
-            pass
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _render_modify(modify_str: str, ctx: HookContext) -> Optional[Dict[str, Any]]:
+    """Parse a hook's ``--modify '{...}'`` style output.
+
+    Used when a command hook wants to return a JSON patch. We
+    accept either:
+      - ``modify: {"key": "value"}`` (line-based)
+      - a single JSON object on stdout
+    """
+    s = (modify_str or "").strip()
+    if not s:
+        return None
+    if s.startswith("modify:"):
+        s = s[len("modify:"):].strip()
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -377,9 +414,11 @@ def reset_default_registry() -> None:
     _global_registry = None
 
 
-def load_project_hooks(project_dir, user_dir=None) -> int:
+def load_project_hooks(project_dir: Union[str, Path],
+                       user_dir: Optional[Union[str, Path]] = None) -> int:
     """Load hooks from ``<project>/.kairos/hooks.yaml`` +
-    ``<user>/hooks.yaml`` (project wins on order).
+    ``<user>/hooks.yaml`` (project wins on conflicts because it is
+    loaded second and the registry is order-preserving).
     """
     reg = get_default_registry()
     count = 0

@@ -250,6 +250,53 @@ async def get_session_rounds(project_id: str, session_id: str):
     return {"project_id": project_id, "session_id": session_id, "rounds": rows}
 
 
+@router.get("/{project_id}/cost")
+async def get_project_cost(project_id: str):
+    """Token usage + USD cost summary for a project.
+
+    Returns the project's aggregate plus the global cost
+    summary so the UI can show a per-project card and a
+    site-wide total in one request.
+    """
+    from kairos.cost import get_tracker
+    project = _orch().get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+    tracker = get_tracker()
+    by_proj = tracker.by_project()
+    proj_summary = by_proj.get(project_id)
+    if proj_summary is None:
+        # No usage recorded yet — return an empty summary
+        proj_summary = type("Empty", (), {
+            "to_dict": lambda self: {
+                "project_id": project_id,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cost_usd": 0.0,
+                "calls": 0,
+                "by_agent": {},
+                "by_model": {},
+                "by_day": {},
+            }
+        })()
+    return {
+        "project": proj_summary.to_dict(),
+        "global": tracker.summary(),
+    }
+
+
+@router.get("/cost")
+async def get_global_cost():
+    """Global cost summary across all projects (in-process records)."""
+    from kairos.cost import get_tracker
+    tracker = get_tracker()
+    return {
+        "global": tracker.summary(),
+        "by_project": {pid: s.to_dict() for pid, s in tracker.by_project().items()},
+    }
+
+
 @router.get("/{project_id}/health")
 async def get_loop_health(project_id: str):
     """Real-time loop health score (0-100). 100 = green, <=20 = critical.

@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import shlex
+import time
 from pathlib import Path
-from typing import Optional
+from typing import Callable, List, Optional, Tuple
 
 from kairos.tools.base import BaseTool, ToolResult
 
@@ -139,7 +141,44 @@ class TerminalTool(BaseTool):
             raise PermissionError(f"cwd outside allowed path: {target}")
         return target
 
-    async def execute(self, command: str = "", cwd: Optional[str] = None, **kwargs) -> ToolResult:
+    async def execute(self, command: str = "", cwd: Optional[str] = None,
+                      *,
+                      timeout_s: Optional[float] = None,
+                      env: Optional[dict] = None,
+                      stdin: Optional[str] = None,
+                      stream: bool = False,
+                      on_stdout: Optional[Callable[[str], None]] = None,
+                      on_stderr: Optional[Callable[[str], None]] = None,
+                      kill_process_group: bool = True,
+                      **kwargs) -> ToolResult:
+        """Run a shell command with full Bash semantics.
+
+        New parameters (all optional, all backwards compatible):
+
+        - ``timeout_s`` — per-call override of the 60s default. Set
+          to a large number (or ``None`` for the default) for slow
+          operations like ``pytest -x``.
+        - ``env`` — extra environment variables merged on top of
+          ``os.environ``. Useful for setting ``PYTHONPATH``,
+          ``HTTP_PROXY``, etc., without leaking them into the
+          agent's outer process.
+        - ``stdin`` — string piped to the child's stdin. Useful for
+          feeding input to ``python -c`` snippets or ``bc``.
+        - ``stream`` + ``on_stdout`` / ``on_stderr`` — when ``stream``
+          is true, the tool invokes the callbacks on every chunk
+          the child writes, instead of waiting for completion. The
+          final ``ToolResult`` still carries the full output, so the
+          agent can keep doing "show me the result" without
+          re-running the command.
+        - ``kill_process_group`` — when true (default), the entire
+          process group is killed on timeout / cancel, not just
+          the leader. This prevents orphaned children from holding
+          a port or a file lock after the parent dies.
+
+        Returns a :class:`ToolResult` with metadata fields:
+          ``return_code``, ``cwd``, ``duration_s``, ``timed_out``,
+          ``command``.
+        """
         if not command:
             return ToolResult(success=False, output="", error="No command provided")
 
@@ -154,22 +193,67 @@ class TerminalTool(BaseTool):
         except PermissionError as e:
             return ToolResult(success=False, output="", error=str(e))
 
+        effective_timeout = float(timeout_s) if timeout_s is not None else 60.0
+        full_env = dict(os.environ)
+        if env:
+            for k, v in env.items():
+                if v is None:
+                    full_env.pop(k, None)
+                else:
+                    full_env[str(k)] = str(v)
+
+        start = time.perf_counter()
+        timed_out = False
         try:
+            # On POSIX, start_new_session=True puts the child in its
+            # own process group so we can SIGTERM the whole tree on
+            # timeout. On Windows we don't have process groups, so
+            # this is a no-op; the child process is killed directly.
+            if os.name == "nt":
+                new_session_kw = {}
+            else:
+                new_session_kw = {"start_new_session": True}
+
             process = await asyncio.create_subprocess_shell(
                 command,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                stdin=asyncio.subprocess.PIPE if stdin else None,
                 cwd=str(safe_cwd),
+                env=full_env,
+                **new_session_kw,
             )
-            try:
-                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=60.0)
-            except asyncio.TimeoutError:
-                process.kill()
-                await process.wait()
-                return ToolResult(success=False, output="", error="Command timed out after 60s")
 
-            output = stdout.decode("utf-8", errors="replace")
-            error_output = stderr.decode("utf-8", errors="replace")
+            if stdin is not None:
+                try:
+                    process.stdin.write(stdin.encode("utf-8"))
+                    await process.stdin.drain()
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+                try:
+                    process.stdin.close()
+                except Exception:
+                    pass
+
+            if stream and (on_stdout or on_stderr):
+                stdout_bytes, stderr_bytes = await self._stream_process(
+                    process, on_stdout, on_stderr, effective_timeout,
+                )
+                if stdout_bytes is None:
+                    timed_out = True
+                    stdout_bytes, stderr_bytes = b"", b""
+            else:
+                try:
+                    stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                        process.communicate(), timeout=effective_timeout,
+                    )
+                except asyncio.TimeoutError:
+                    timed_out = True
+                    await self._kill_tree(process, kill_process_group)
+                    stdout_bytes, stderr_bytes = b"", b""
+
+            output = stdout_bytes.decode("utf-8", errors="replace")
+            error_output = stderr_bytes.decode("utf-8", errors="replace")
 
             if len(output) > self.max_output:
                 output = output[:self.max_output] + "\n... (truncated)"
@@ -180,11 +264,128 @@ class TerminalTool(BaseTool):
             if error_output:
                 combined += f"\n[stderr]\n{error_output}"
 
+            duration = time.perf_counter() - start
+            success = (process.returncode == 0) and not timed_out
+            err_msg = None
+            if timed_out:
+                err_msg = f"Command timed out after {effective_timeout}s"
+            elif process.returncode != 0:
+                err_msg = error_output or f"exit code {process.returncode}"
+
             return ToolResult(
-                success=process.returncode == 0,
+                success=success,
                 output=combined,
-                error=error_output if process.returncode != 0 else None,
-                metadata={"return_code": process.returncode, "cwd": str(safe_cwd)},
+                error=err_msg,
+                metadata={
+                    "return_code": process.returncode,
+                    "cwd": str(safe_cwd),
+                    "duration_s": round(duration, 3),
+                    "timed_out": timed_out,
+                    "command": command[:500],
+                    "env_overrides": list((env or {}).keys()),
+                    "had_stdin": stdin is not None,
+                    "streamed": bool(stream),
+                },
             )
         except Exception as e:
             return ToolResult(success=False, output="", error=str(e))
+
+    # -- helpers ----------------------------------------------------------
+
+    async def _stream_process(
+        self,
+        process: "asyncio.subprocess.Process",
+        on_stdout: Optional[Callable[[str], None]],
+        on_stderr: Optional[Callable[[str], None]],
+        timeout_s: float,
+    ) -> Tuple[Optional[bytes], Optional[bytes]]:
+        """Stream child output to callbacks while collecting the final bytes.
+
+        Returns ``(stdout_bytes, stderr_bytes)``. Either may be ``None``
+        if the process was killed because of a timeout.
+        """
+        import asyncio as _asyncio
+
+        out_chunks: List[bytes] = []
+        err_chunks: List[bytes] = []
+
+        async def _drain(stream, sink: List[bytes], cb) -> None:
+            assert stream is not None
+            while True:
+                chunk = await stream.read(4096)
+                if not chunk:
+                    return
+                sink.append(chunk)
+                if cb:
+                    try:
+                        cb(chunk.decode("utf-8", errors="replace"))
+                    except Exception:
+                        pass
+
+        try:
+            await _asyncio.wait_for(
+                _asyncio.gather(
+                    _drain(process.stdout, out_chunks, on_stdout),
+                    _drain(process.stderr, err_chunks, on_stderr),
+                ),
+                timeout=timeout_s,
+            )
+        except _asyncio.TimeoutError:
+            await self._kill_tree(process, True)
+            return None, None
+
+        # Drain anything still in the pipe buffers.
+        try:
+            rest_out, rest_err = await process.communicate()
+            if rest_out:
+                out_chunks.append(rest_out)
+            if rest_err:
+                err_chunks.append(rest_err)
+        except Exception:
+            pass
+        return b"".join(out_chunks), b"".join(err_chunks)
+
+    async def _kill_tree(
+        self, process: "asyncio.subprocess.Process", use_group: bool,
+    ) -> None:
+        """Kill the child (and its group, on POSIX) and wait for it."""
+        try:
+            if use_group and os.name != "nt":
+                # POSIX: kill the whole process group.
+                import signal
+                try:
+                    pgid = os.getpgid(process.pid)
+                    os.killpg(pgid, signal.SIGTERM)
+                except (ProcessLookupError, PermissionError):
+                    pass
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=2.0)
+                    return
+                except asyncio.TimeoutError:
+                    pass
+                try:
+                    os.killpg(pgid, signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    pass
+            else:
+                # Windows or no group requested.
+                try:
+                    process.terminate()
+                except ProcessLookupError:
+                    pass
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=2.0)
+                    return
+                except asyncio.TimeoutError:
+                    pass
+                try:
+                    process.kill()
+                except ProcessLookupError:
+                    pass
+            try:
+                await asyncio.wait_for(process.wait(), timeout=2.0)
+            except asyncio.TimeoutError:
+                pass
+        except Exception:
+            # Swallow — best-effort cleanup.
+            pass

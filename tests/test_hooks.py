@@ -1,0 +1,406 @@
+"""Tests for the kairos.hooks system."""
+from __future__ import annotations
+
+import asyncio
+import os
+import sys
+from pathlib import Path
+
+import pytest
+
+from kairos.hooks import (
+    HookContext,
+    HookDecision,
+    HookEvent,
+    HookRegistry,
+    HookResult,
+    HookSpec,
+    get_default_registry,
+    load_project_hooks,
+    reset_default_registry,
+)
+
+
+@pytest.fixture(autouse=True)
+def _reset():
+    reset_default_registry()
+    yield
+    reset_default_registry()
+
+
+# ---------------------------------------------------------------------------
+# Registration
+# ---------------------------------------------------------------------------
+
+
+def test_register_command_hook():
+    reg = HookRegistry()
+    spec = HookSpec(event=HookEvent.PRE_TOOL_USE, matcher="terminal",
+                    hook_type="command", command="echo hi")
+    reg.register(spec)
+    assert reg.hooks_for(HookEvent.PRE_TOOL_USE, "terminal") == [spec]
+    assert reg.hooks_for(HookEvent.PRE_TOOL_USE, "file_read") == []
+
+
+def test_register_builtin_hook():
+    reg = HookRegistry()
+
+    def my_hook(ctx: HookContext) -> HookResult:
+        return HookResult(decision=HookDecision.ALLOW, reason="ok")
+
+    reg.register_builtin(HookEvent.STOP, my_hook)
+    assert len(reg.hooks_for(HookEvent.STOP)) == 1
+
+
+def test_matcher_filters_tools():
+    reg = HookRegistry()
+    reg.register(HookSpec(event=HookEvent.PRE_TOOL_USE, matcher=r"^file_",
+                          hook_type="command", command="true"))
+    assert reg.hooks_for(HookEvent.PRE_TOOL_USE, "file_read")
+    assert reg.hooks_for(HookEvent.PRE_TOOL_USE, "file_edit")
+    assert not reg.hooks_for(HookEvent.PRE_TOOL_USE, "terminal")
+
+
+def test_matcher_none_matches_all():
+    reg = HookRegistry()
+    reg.register(HookSpec(event=HookEvent.STOP, matcher=None,
+                          hook_type="command", command="true"))
+    assert reg.hooks_for(HookEvent.STOP, "anything")
+    assert reg.hooks_for(HookEvent.STOP, "x")
+
+
+def test_clear_resets_registry():
+    reg = HookRegistry()
+    reg.register(HookSpec(event=HookEvent.STOP, matcher=None,
+                          hook_type="command", command="true"))
+    assert reg.hooks_for(HookEvent.STOP)
+    reg.clear()
+    assert not reg.hooks_for(HookEvent.STOP)
+
+
+# ---------------------------------------------------------------------------
+# YAML loading
+# ---------------------------------------------------------------------------
+
+
+def test_load_yaml_pre_and_post(tmp_path: Path):
+    yaml = """
+hooks:
+  PreToolUse:
+    - matcher: "terminal"
+      type: command
+      command: "echo about-to"
+      on_error: deny
+  PostToolUse:
+    - matcher: "file_edit"
+      type: command
+      command: "true"
+"""
+    p = tmp_path / "hooks.yaml"
+    p.write_text(yaml, encoding="utf-8")
+    reg = HookRegistry()
+    n = reg.load_yaml(p)
+    assert n == 2
+    assert len(reg.hooks_for(HookEvent.PRE_TOOL_USE, "terminal")) == 1
+    assert len(reg.hooks_for(HookEvent.POST_TOOL_USE, "file_edit")) == 1
+
+
+def test_load_yaml_invalid_returns_zero(tmp_path: Path):
+    p = tmp_path / "bad.yaml"
+    p.write_text("hooks: [[[", encoding="utf-8")  # invalid YAML
+    reg = HookRegistry()
+    assert reg.load_yaml(p) == 0
+
+
+def test_load_yaml_unknown_event_skipped(tmp_path: Path):
+    yaml = """
+hooks:
+  NotAnEvent:
+    - type: command
+      command: "true"
+  PreToolUse:
+    - type: command
+      command: "true"
+"""
+    p = tmp_path / "hooks.yaml"
+    p.write_text(yaml, encoding="utf-8")
+    reg = HookRegistry()
+    n = reg.load_yaml(p)
+    assert n == 1  # only the valid one
+
+
+def test_load_yaml_bad_spec_skipped(tmp_path: Path):
+    yaml = """
+hooks:
+  PreToolUse:
+    - type: bogus-type
+      command: "true"
+    - type: command
+      command: "echo ok"
+"""
+    p = tmp_path / "hooks.yaml"
+    p.write_text(yaml, encoding="utf-8")
+    reg = HookRegistry()
+    n = reg.load_yaml(p)
+    assert n == 1  # only the valid one
+
+
+def test_load_yaml_missing_file(tmp_path: Path):
+    reg = HookRegistry()
+    assert reg.load_yaml(tmp_path / "nonexistent.yaml") == 0
+
+
+# ---------------------------------------------------------------------------
+# Command hook execution
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_command_hook_exit_0_allows():
+    reg = HookRegistry()
+    reg.register(HookSpec(event=HookEvent.PRE_TOOL_USE, matcher="terminal",
+                          hook_type="command", command="python -c \"pass\""))
+    ctx = HookContext(event=HookEvent.PRE_TOOL_USE,
+                      project_id="p1", tool_name="terminal",
+                      tool_input={"command": "ls"})
+    result = await reg.run(ctx)
+    assert result.decision == HookDecision.ALLOW
+
+
+@pytest.mark.asyncio
+async def test_command_hook_exit_nonzero_denies():
+    reg = HookRegistry()
+    reg.register(HookSpec(event=HookEvent.PRE_TOOL_USE, matcher="terminal",
+                          hook_type="command", command="python -c \"import sys; sys.exit(3)\""))
+    ctx = HookContext(event=HookEvent.PRE_TOOL_USE,
+                      project_id="p1", tool_name="terminal",
+                      tool_input={"command": "ls"})
+    result = await reg.run(ctx)
+    assert result.decision == HookDecision.DENY
+    assert "exit=" in result.reason
+
+
+@pytest.mark.asyncio
+async def test_command_hook_receives_env():
+    """$TOOL_NAME, $TOOL_INPUT, $KAIROS_PROJECT_ID are set."""
+    reg = HookRegistry()
+    import tempfile
+    fd, out_path_str = tempfile.mkstemp(prefix="hook-", suffix=".txt")
+    os.close(fd)
+    out_path = Path(out_path_str)
+    # Use a here-doc / script file so we don't fight shell escaping.
+    script = tmp_path = out_path.parent / "_hook_writer.py"
+    script.write_text(
+        "import os, pathlib\n"
+        f"pathlib.Path({str(out_path)!r}).write_text(\n"
+        "    os.environ.get('TOOL_NAME', '') + '|' +\n"
+        "    os.environ.get('KAIROS_PROJECT_ID', '') + '|' +\n"
+        "    os.environ.get('TOOL_INPUT', '')\n"
+        ")\n",
+        encoding="utf-8",
+    )
+    try:
+        # On Windows cmd.exe, single quotes around the path get stripped
+        # and break the call. Use a path without spaces and no quotes.
+        script_path = str(script)
+        assert " " not in script_path, f"test path has spaces, can't bypass quoting: {script_path}"
+        reg.register(HookSpec(event=HookEvent.PRE_TOOL_USE, matcher="terminal",
+                              hook_type="command",
+                              command=f"python {script_path}"))
+        ctx = HookContext(event=HookEvent.PRE_TOOL_USE,
+                          project_id="my-proj", tool_name="terminal",
+                          tool_input={"command": "ls"})
+        result = await reg.run(ctx)
+        body = out_path.read_text(encoding="utf-8") if out_path.exists() else ""
+        if not body:
+            assert False, f"hook output: {result.message!r}"
+        assert "terminal" in body, body
+        assert "my-proj" in body
+        assert "ls" in body
+    finally:
+        try:
+            out_path.unlink()
+        except OSError:
+            pass
+        try:
+            script.unlink()
+        except OSError:
+            pass
+
+
+@pytest.mark.asyncio
+async def test_command_hook_timeout_does_not_hang():
+    reg = HookRegistry()
+    reg.register(HookSpec(event=HookEvent.PRE_TOOL_USE, matcher="x",
+                          hook_type="command",
+                          command="python -c \"import time; time.sleep(5)\"",
+                          timeout_s=0.5, on_error="allow"))
+    ctx = HookContext(event=HookEvent.PRE_TOOL_USE,
+                      project_id="p", tool_name="x")
+    loop = asyncio.get_event_loop()
+    start = loop.time()
+    result = await reg.run(ctx)
+    elapsed = loop.time() - start
+    assert elapsed < 4.0, f"timeout should have fired fast, took {elapsed:.1f}s"
+    # on_error=allow means the failure is logged and we proceed.
+    assert result.decision == HookDecision.ALLOW
+
+
+# ---------------------------------------------------------------------------
+# Builtin hook
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_builtin_hook_can_deny():
+    reg = HookRegistry()
+
+    def deny_hook(ctx: HookContext) -> HookResult:
+        if ctx.tool_input.get("command") == "rm":
+            return HookResult(decision=HookDecision.DENY, reason="no rm")
+        return HookResult(decision=HookDecision.ALLOW)
+
+    reg.register_builtin(HookEvent.PRE_TOOL_USE, deny_hook)
+    ctx = HookContext(event=HookEvent.PRE_TOOL_USE,
+                      project_id="p", tool_name="terminal",
+                      tool_input={"command": "rm"})
+    result = await reg.run(ctx)
+    assert result.decision == HookDecision.DENY
+    assert "no rm" in result.reason
+
+
+@pytest.mark.asyncio
+async def test_builtin_async_hook_works():
+    reg = HookRegistry()
+
+    async def async_hook(ctx: HookContext) -> HookResult:
+        await asyncio.sleep(0.01)
+        return HookResult(decision=HookDecision.ALLOW, message="async ok")
+
+    reg.register_builtin(HookEvent.POST_TOOL_USE, async_hook)
+    ctx = HookContext(event=HookEvent.POST_TOOL_USE,
+                      project_id="p", tool_name="x",
+                      tool_output="ok")
+    result = await reg.run(ctx)
+    assert result.decision == HookDecision.ALLOW
+    assert "async ok" in result.message
+
+
+@pytest.mark.asyncio
+async def test_builtin_hook_exception_caught():
+    reg = HookRegistry()
+
+    def boom(ctx: HookContext) -> HookResult:
+        raise RuntimeError("oops")
+
+    reg.register_builtin(HookEvent.STOP, boom, on_error="allow")
+    ctx = HookContext(event=HookEvent.STOP, project_id="p", tool_name="x")
+    result = await reg.run(ctx)
+    # on_error=allow means the failure is silent and we proceed.
+    assert result.decision == HookDecision.ALLOW
+
+
+@pytest.mark.asyncio
+async def test_builtin_hook_exception_with_on_error_deny():
+    reg = HookRegistry()
+
+    def boom(ctx: HookContext) -> HookResult:
+        raise RuntimeError("oops")
+
+    reg.register_builtin(HookEvent.PRE_TOOL_USE, boom, on_error="deny")
+    ctx = HookContext(event=HookEvent.PRE_TOOL_USE, project_id="p", tool_name="x")
+    result = await reg.run(ctx)
+    assert result.decision == HookDecision.DENY
+
+
+# ---------------------------------------------------------------------------
+# First-DENY-wins
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_first_deny_wins():
+    reg = HookRegistry()
+    reg.register(HookSpec(event=HookEvent.PRE_TOOL_USE, matcher="terminal",
+                          hook_type="command", command="python -c \"import sys; sys.exit(1)\""))  # DENY
+    reg.register_builtin(
+        HookEvent.PRE_TOOL_USE,
+        lambda c: HookResult(message="this never runs"),
+    )
+    ctx = HookContext(event=HookEvent.PRE_TOOL_USE, project_id="p",
+                      tool_name="terminal")
+    result = await reg.run(ctx)
+    assert result.decision == HookDecision.DENY
+
+
+# ---------------------------------------------------------------------------
+# Python module hook
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_python_module_hook_calls_function(monkeypatch, tmp_path: Path):
+    """A python hook imports a module and calls a named function."""
+    # Create a real module file.
+    mod_dir = tmp_path / "myhooks"
+    mod_dir.mkdir()
+    (mod_dir / "__init__.py").write_text("", encoding="utf-8")
+    (mod_dir / "h.py").write_text(
+        "from kairos.hooks import HookResult, HookDecision\n"
+        "def my_hook(ctx):\n"
+        "    return HookResult(decision=HookDecision.ALLOW,\n"
+        "                       message=f'from-mod: {ctx.tool_name}')\n",
+        encoding="utf-8",
+    )
+    sys.path.insert(0, str(tmp_path))
+    try:
+        reg = HookRegistry()
+        reg.register(HookSpec(event=HookEvent.POST_TOOL_USE,
+                              matcher=None,
+                              hook_type="python",
+                              module="myhooks.h",
+                              function="my_hook"))
+        ctx = HookContext(event=HookEvent.POST_TOOL_USE,
+                          project_id="p", tool_name="x",
+                          tool_output="ok")
+        result = await reg.run(ctx)
+        assert "from-mod: x" in result.message
+    finally:
+        sys.path.remove(str(tmp_path))
+
+
+@pytest.mark.asyncio
+async def test_python_module_hook_missing_function_returns_allow():
+    reg = HookRegistry()
+    reg.register(HookSpec(event=HookEvent.STOP, matcher=None,
+                          hook_type="python",
+                          module="nonexistent_module_xyz",
+                          function="missing"))
+    ctx = HookContext(event=HookEvent.STOP, project_id="p", tool_name="x")
+    # Hook errored silently → on_error default is "allow".
+    result = await reg.run(ctx)
+    assert result.decision == HookDecision.ALLOW
+
+
+# ---------------------------------------------------------------------------
+# Project/user hook loading
+# ---------------------------------------------------------------------------
+
+
+def test_load_project_hooks(tmp_path: Path):
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    user = tmp_path / "user"
+    user.mkdir()
+    (proj / ".kairos").mkdir()
+    (proj / ".kairos" / "hooks.yaml").write_text(
+        "hooks:\n  Stop:\n    - type: command\n      command: 'echo proj'\n",
+        encoding="utf-8",
+    )
+    (user / "hooks.yaml").write_text(
+        "hooks:\n  Stop:\n    - type: command\n      command: 'echo user'\n",
+        encoding="utf-8",
+    )
+    n = load_project_hooks(proj, user)
+    assert n == 2
+    assert len(get_default_registry().hooks_for(HookEvent.STOP)) == 2

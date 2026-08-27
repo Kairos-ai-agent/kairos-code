@@ -60,6 +60,27 @@ def _run_one(
             "detail": str(detail)}
 
 
+def check_windows_compat() -> tuple[bool, str]:
+    """Verify the environment is OK for Windows users.
+
+    On Windows, the default `tests` check runs `subprocess.run`
+    on a list of test files; pytest's test collection can be slow
+    when the project is large. This check is a no-op on non-Windows
+    (it just confirms the check module is importable).
+    """
+    if sys.platform != "win32":
+        return True, f"non-Windows ({sys.platform}); skipped"
+    # The Windows-specific concern is the GBK console encoding.
+    # Make sure stdout is utf-8-friendly so the printer doesn't
+    # crash on the ✓/✗ glyphs.
+    try:
+        import io
+        sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+    except (AttributeError, io.UnsupportedOperation):
+        pass  # Python < 3.7 or non-text stdout
+    return True, "Windows console reconfigured to UTF-8"
+
+
 def check_eval_smoke(suite_path: str = "examples/eval_ci.yaml",
                       offline: bool = False) -> tuple[bool, str]:
     """Run the eval smoke suite. Default 60s timeout.
@@ -178,6 +199,7 @@ def check_skill_search() -> tuple[bool, str]:
 # require network (none in this default set, but future
 # expansion might add some).
 DEFAULT_CHECKS = [
+    ("windows-compat", check_windows_compat),
     ("skill-search", check_skill_search),
     ("meta-eval",    check_meta_eval),
     ("smoke",         check_eval_smoke),

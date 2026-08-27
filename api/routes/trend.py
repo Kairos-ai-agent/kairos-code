@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/trend")
+@router.get("")
 async def trend(
     directory: str = Query("results",
                             description="Directory of run-*.json files"),
@@ -51,4 +51,4 @@ async def per_case_trend(
     except Exception as exc:
         logger.warning("per-case trend failed: %s", exc)
         raise HTTPException(status_code=500, detail=f"per-case failed: {exc}")
-    return report
+    return report.to_dict()

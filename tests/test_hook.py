@@ -17,6 +17,7 @@ from kairos.hook import (
     check_meta_eval,
     check_eval_smoke,
     check_tests,
+    check_windows_compat,
     main,
     run_default,
 )
@@ -78,6 +79,27 @@ def test_check_eval_smoke_missing_suite_fails(tmp_path: Path):
     ok, detail = check_eval_smoke(str(tmp_path / "missing.yaml"))
     assert ok is False
     assert "not found" in detail
+
+
+def test_check_windows_compat_non_windows_skipped():
+    """On non-Windows, the check returns True with a skip message."""
+    if sys.platform == "win32":
+        # On Windows we can't test the skip path; skip this test.
+        import pytest
+        pytest.skip("Windows-only path; can't test on Windows")
+    ok, detail = check_windows_compat()
+    assert ok is True
+    assert "skipped" in detail
+
+
+def test_check_windows_compat_on_windows():
+    """On Windows, the check re-encodes stdout to UTF-8."""
+    if sys.platform != "win32":
+        import pytest
+        pytest.skip("Windows-only check")
+    # On Windows, just verify the check returns True.
+    ok, detail = check_windows_compat()
+    assert ok is True
 
 
 def test_check_tests_runs_pytest():

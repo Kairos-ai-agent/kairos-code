@@ -14,6 +14,7 @@ import PlanPanel from '../components/PlanPanel';
 import PlanHistoryPanel from '../components/PlanHistoryPanel';
 import CostDashboard from '../components/CostDashboard';
 import EvalPanel from '../components/EvalPanel';
+import TrendPanel from '../components/TrendPanel';
 import SkillSearchPalette from '../components/SkillSearchPalette';
 import api, { revertFile } from '../api/client';
 import { useAgentStore } from '../stores/agentStore';
@@ -707,6 +708,12 @@ const Loop: React.FC = () => {
               from the web without touching the CLI. */}
           <div style={{ marginBottom: 12 }}>
             <EvalPanel />
+          </div>
+
+          {/* Round 25: trend panel — multi-run pass_rate / cost
+              over time, plus a per-case flaky list. */}
+          <div style={{ marginBottom: 12 }}>
+            <TrendPanel />
           </div>
 
           {/* Diff viewer */}

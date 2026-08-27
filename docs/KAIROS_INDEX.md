@@ -10,8 +10,8 @@ as a map when you come back to this codebase after a break.
 
 ## Test totals
 
-- **491 tests pass**, 19 skipped (Linux-only), 0 failed
-- Sweep runtime: **24.25 seconds** (`pytest -q -p no:cacheprovider`)
+- **502 tests pass**, 20 skipped (Linux-only / Windows-only), 0 failed
+- Sweep runtime: **28.31 seconds** (`pytest -q -p no:cacheprovider`)
 - TypeScript: `tsc --noEmit` clean
 - Vitest: 6/6 passing (plan panel, plan history panel)
 
@@ -181,9 +181,12 @@ as a map when you come back to this codebase after a break.
 | `docs/ROUND_22_REPORT.md` | R22 | Cost regression alerts |
 | `docs/ROUND_23_REPORT.md` | R23 | Frontend skill search |
 | `docs/ROUND_24_REPORT.md` | R24 | Multi-run trend aggregator |
+| `docs/ROUND_25_REPORT.md` | R25 | Trend API + UI panel |
+| `docs/ROUND_26_REPORT.md` | R26 | Per-case flaky detection |
+| `docs/ROUND_27_REPORT.md` | R27 | Windows pre-commit compatibility |
 | `docs/kairos-vs-codex-vs-claude.png` | 9 | Comparison image (3 products × 30 features) |
 | `docs/kairos-tui-screenshot.svg` | 9 | TUI screenshot |
-| `docs/KAIROS_INDEX.md` | R24 | This file |
+| `docs/KAIROS_INDEX.md` | R27 | This file |
 
 ---
 

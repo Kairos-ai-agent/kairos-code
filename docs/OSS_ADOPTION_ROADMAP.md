@@ -164,7 +164,10 @@ contain patterns / architectures worth studying:
 | 22 | Cost regression alerts (engine + webhook dispatcher) | ✅ done |
 | 23 | Frontend skill search UI (Ctrl+K palette) | ✅ done |
 | 24 | Multi-run trend aggregator | ✅ done |
-| 25+ | Per-case trend; trend UI panel; alert webhooks in CI; long-running app harness | as needed |
+| 25 | Trend API + UI panel (Overview + Per-case) | ✅ done |
+| 26 | Per-case flaky detection (R24+R25 follow-up) | ✅ done |
+| 27 | Windows pre-commit compatibility check | ✅ done |
+| 28+ | Long-running app harness; alert webhooks in CI; COGS dashboard | as needed |
 
 ---
 

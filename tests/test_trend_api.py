@@ -93,9 +93,9 @@ def test_aggregate_per_case_trend_empty_dir(tmp_path: Path):
 
 def test_aggregate_per_case_trend_basic(tmp_path: Path):
     # 3 runs, case 'a' is stable (passes), case 'b' is flaky
-    _write_run(tmp_path, "r1.json", cases_passed={"a": True, "b": True})
-    _write_run(tmp_path, "r2.json", cases_passed={"a": True, "b": False})
-    _write_run(tmp_path, "r3.json", cases_passed={"a": True, "b": True})
+    _write_run(tmp_path, "run-1.json", cases_passed={"a": True, "b": True})
+    _write_run(tmp_path, "run-2.json", cases_passed={"a": True, "b": False})
+    _write_run(tmp_path, "run-3.json", cases_passed={"a": True, "b": True})
     report = aggregate_per_case_trend(tmp_path)
     assert report.n_runs == 3
     assert len(report.cases) == 2
@@ -110,9 +110,9 @@ def test_aggregate_per_case_trend_basic(tmp_path: Path):
 
 def test_aggregate_per_case_trend_flaky_first(tmp_path: Path):
     """The result is sorted with flaky cases first (most actionable)."""
-    _write_run(tmp_path, "r1.json",
+    _write_run(tmp_path, "run-1.json",
                cases_passed={"stable": True, "flaky": False})
-    _write_run(tmp_path, "r2.json",
+    _write_run(tmp_path, "run-2.json",
                cases_passed={"stable": True, "flaky": True})
     report = aggregate_per_case_trend(tmp_path)
     names = [c.case_name for c in report.cases]

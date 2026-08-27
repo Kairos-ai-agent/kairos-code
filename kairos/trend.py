@@ -187,6 +187,86 @@ def aggregate_trend_from_dir(
     return aggregate_trend(files, suite_name=suite_name, window=window)
 
 
+@dataclass
+class CaseTrendPoint:
+    """One case's pass/fail history across runs."""
+    case_name: str
+    pass_rate: float              # 0.0 - 1.0
+    n_runs: int
+    n_passed: int
+    n_failed: int
+    flaky: bool                  # True if both pass and fail observed
+    history: List[bool] = field(default_factory=list)  # newest last
+
+
+@dataclass
+class CaseTrendReport:
+    """Per-case trend across the last N runs."""
+    cases: List[CaseTrendPoint] = field(default_factory=list)
+    n_runs: int = 0
+    window: int = 0
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = asdict(self)
+        return d
+
+
+def aggregate_per_case_trend(
+    directory: Path, *,
+    window: int = 20,
+    pattern: str = "run-*.json",
+) -> CaseTrendReport:
+    """For each case name, return its pass/fail history across
+    the last ``window`` runs.
+
+    A case is flagged ``flaky`` if it passed at least once and
+    failed at least once in the window — i.e. non-deterministic
+    behavior. This is the "which case has been flaky" answer.
+    """
+    p = Path(directory)
+    if not p.exists():
+        return CaseTrendReport(window=window)
+    files = sorted(p.glob(pattern), key=lambda x: x.stat().st_mtime)
+    if window > 0 and len(files) > window:
+        files = files[-window:]
+
+    # case_name -> list[bool] (newest last)
+    by_case: Dict[str, List[bool]] = {}
+    n_runs = 0
+    for run_path in files:
+        try:
+            with open(run_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+        cases = data.get("cases", []) or []
+        n_runs += 1
+        for c in cases:
+            name = c.get("name")
+            if not name:
+                continue
+            by_case.setdefault(name, []).append(bool(c.get("passed")))
+
+    out: List[CaseTrendPoint] = []
+    for name, history in by_case.items():
+        n = len(history)
+        n_pass = sum(1 for x in history if x)
+        n_fail = n - n_pass
+        pr = n_pass / n if n else 0.0
+        out.append(CaseTrendPoint(
+            case_name=name,
+            pass_rate=pr,
+            n_runs=n,
+            n_passed=n_pass,
+            n_failed=n_fail,
+            flaky=(n_pass > 0 and n_fail > 0),
+            history=history,
+        ))
+    # Sort: flaky first (most actionable), then by lowest pass_rate
+    out.sort(key=lambda p: (not p.flaky, p.pass_rate, p.case_name))
+    return CaseTrendReport(cases=out, n_runs=n_runs, window=window)
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------

@@ -130,7 +130,7 @@ def test_aggregate_per_case_trend_window(tmp_path: Path):
     """
     import time as _time
     for i in range(10):
-        _write_run(tmp_path, f"r{i}.json",
+        _write_run(tmp_path, f"run-{i}.json",
                    cases_passed={"a": i % 2 == 0})
         _time.sleep(0.01)  # ensure monotonic mtime
     report = aggregate_per_case_trend(tmp_path, window=4)
@@ -149,9 +149,9 @@ def test_aggregate_per_case_trend_window(tmp_path: Path):
 
 
 def test_per_case_endpoint(tmp_path: Path, client):
-    _write_run(tmp_path, "r1.json",
+    _write_run(tmp_path, "run-1.json",
                cases_passed={"a": True, "b": True})
-    _write_run(tmp_path, "r2.json",
+    _write_run(tmp_path, "run-2.json",
                cases_passed={"a": True, "b": False})
     r = client.get("/api/trend/per_case",
                     params={"directory": str(tmp_path)})

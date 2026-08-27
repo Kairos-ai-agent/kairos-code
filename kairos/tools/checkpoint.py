@@ -58,11 +58,18 @@ def ensure_repo(workspace: Path) -> bool:
     return True
 
 def checkpoint_round(workspace: Path, round_no: int, score: int,
-                     summary: str, approved: bool) -> Optional[str]:
+                     summary: str, approved: bool,
+                     plan: Optional[dict] = None) -> Optional[str]:
     """Auto-checkpoint a round: stage everything, commit, return SHA.
 
     No-op (returns None) if there's nothing to commit or git fails.
     The commit message is structured so the UI can parse it back.
+
+    Round 12: ``plan`` (a JSON-safe dict from
+    ``Plan.to_dict()``) is appended to the commit message so the
+    git history doubles as a Plan history. ``git log`` can be
+    parsed back to reconstruct the agent's plan at any past
+    commit.
     """
     workspace = Path(workspace)
     if not ensure_repo(workspace):
@@ -77,6 +84,18 @@ def checkpoint_round(workspace: Path, round_no: int, score: int,
         f"kairos: round {round_no} {verdict} (score {score})\n\n"
         f"{summary[:200]}"
     )
+    if plan and isinstance(plan, dict) and plan.get("todos"):
+        # Render the plan as a Markdown block so it's grep-friendly
+        # from the command line.
+        from kairos.loop.plan import render_plan_block
+        from kairos.loop.plan import Plan
+        try:
+            block = render_plan_block(Plan.from_dict(plan))
+            if block:
+                msg = msg + "\n\n# Plan at this round\n\n" + block
+        except Exception:
+            # Plan rendering is best-effort; never break the commit.
+            pass
     rc, out, err = _git(["commit", "-q", "-m", msg], workspace)
     if rc != 0:
         logger.warning("git commit failed for round %d: %s", round_no, err)

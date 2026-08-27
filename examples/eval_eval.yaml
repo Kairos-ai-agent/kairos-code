@@ -1,0 +1,59 @@
+# Meta-eval — use the eval framework to test the eval framework itself.
+#
+# Each case asserts a property of a grader behavior. We run this suite
+# against a stub target that returns canned outputs, so it runs in
+# <1s with zero API cost.
+#
+# Run with:
+#   python -m kairos.eval run --suite examples/eval_eval.yaml
+#
+# If this suite ever regresses, we want the failure to be obvious —
+# the team trusts the eval framework, and a silent grader bug would
+# hide real regressions.
+name: eval-eval-meta
+threshold: 0.5
+cases:
+  - name: contains-grader-positive
+    input: "output that has hello world"
+    graders:
+      - contains: ["hello", "world"]
+
+  - name: contains-grader-negative
+    input: "output that lacks the needle"
+    graders:
+      - contains: ["MISSING_NEEDLE_XYZ"]
+
+  - name: regex-grader-positive
+    input: "def my_func(x): return x"
+    graders:
+      - regex: "def\\s+\\w+\\("
+
+  - name: regex-grader-negative
+    input: "no function defs here at all"
+    graders:
+      - regex: "def\\s+specific_name_xyz_"
+
+  - name: exact-grader-positive
+    input: "exactly this string"
+    graders:
+      - exact: "exactly this string"
+
+  - name: exact-grader-negative
+    input: "slightly different"
+    graders:
+      - exact: "exactly this string"
+
+  - name: latency-grader-fast
+    input: "fast"
+    graders:
+      - latency_max_ms: 60000  # the test target reports fast timing
+
+  - name: tools-called-grader-positive
+    input: "called write_file"
+    graders:
+      - tools_called: ["write_file"]
+
+  - name: tools-called-grader-missing
+    input: "called bash only"
+    graders:
+      - tools_called: ["nonexistent_tool_xyz"]

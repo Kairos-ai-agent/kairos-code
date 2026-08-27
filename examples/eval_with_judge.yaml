@@ -1,0 +1,47 @@
+# Eval with per-case LLM judge (Round 20).
+#
+# Each case can mix mechanical graders (contains, regex, exact)
+# and LLM-judge graders. The LLM judge is invoked with the
+# rubric + the agent's output and returns a 0-1 score; the case
+# passes if the score meets the per-grader ``threshold``.
+#
+# Run with the LiteLLM judge:
+#   python -m kairos.eval run --suite examples/eval_with_judge.yaml \\
+#     --judge kairos.eval:make_litellm_judge
+#
+# Without --judge, the LLM-judge cases fail open (return 1.0),
+# so the suite still runs (just without subjective grading).
+name: eval-with-judge
+threshold: 0.5
+cases:
+  - name: docstring-quality
+    input: "Write a Python function that adds two numbers and include a docstring"
+    graders:
+      # Mechanical first
+      - contains: ["def ", "return"]
+      - regex: "def\\s+\\w+\\s*\\([^)]*\\):"
+      - latency_max_ms: 30000
+      # Subjective second — judge grades the docstring
+      - llm_judge:
+          prompt: |
+            Rate the docstring of the agent's code on three criteria:
+            1. Describes the function's purpose (0-0.4)
+            2. Documents parameters (0-0.3)
+            3. Documents the return value (0-0.3)
+            End your response with: score: <number 0-1>
+          threshold: 0.6
+
+  - name: error-handling-presence
+    input: "Write a function that fetches a URL and handles network errors"
+    graders:
+      - contains: ["def ", "fetch", "url"]
+      - regex: "(?i)try|except|raise"
+      - latency_max_ms: 30000
+      - llm_judge:
+          prompt: |
+            Rate the error handling on a 0-1 scale:
+            - 1.0 = explicit try/except for known failure modes
+            - 0.5 = try/except for everything (too broad)
+            - 0.0 = no error handling
+            End with: score: <number>
+          threshold: 0.7

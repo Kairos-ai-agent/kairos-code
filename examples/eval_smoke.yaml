@@ -1,0 +1,32 @@
+# Sample Kairos eval suite — 4 smoke cases for the Coder agent.
+# Run with:  python -m kairos.eval run --suite examples/eval_smoke.yaml
+# This file is committed so contributors can verify the eval pipeline
+# end-to-end. The cases are deliberately simple (no LLM call) so the
+# suite is fast and cheap.
+name: code-smoke
+cases:
+  - name: reverses-a-string
+    input: "Write a Python function reverse(s) that returns the string reversed."
+    graders:
+      - contains: ["def ", "return", "reverse"]
+      - regex: "def\\s+reverse\\s*\\("
+      - latency_max_ms: 30000
+
+  - name: fizzbuzz
+    input: "Write a function fizzbuzz(n) that prints numbers 1..n, replacing multiples of 3 with 'Fizz', 5 with 'Buzz', 15 with 'FizzBuzz'."
+    graders:
+      - contains: ["def ", "fizzbuzz", "Fizz", "Buzz"]
+      - tools_called: ["write_file"]
+      - max_usd: 0.05
+
+  - name: simple-greeting
+    input: "Write a function hello() that returns 'Hello, world!'."
+    graders:
+      - contains: ["def ", "Hello"]
+      - exact: "Hello, world!"  # bonus: only matched if hello() returns the literal
+
+  - name: parse-json
+    input: "Write a function parse_json(s) that uses json.loads and returns the dict."
+    graders:
+      - contains: ["def ", "json.loads", "return"]
+      - regex: "import\\s+json"

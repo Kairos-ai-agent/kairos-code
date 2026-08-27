@@ -1,260 +1,209 @@
-"""Tests for the kairos.cost module."""
+"""Tests for kairos.cost (Round 14 cost tracking)."""
 from __future__ import annotations
 
+import json
+import os
 import time
+from pathlib import Path
+from typing import Any, Dict
+from unittest.mock import MagicMock
 
 import pytest
 
 from kairos.cost import (
-    CostTracker,
-    DEFAULT_PRICING,
-    ProjectCostSummary,
-    UsageRecord,
-    _normalize_model,
-    estimate_cost,
-    get_tracker,
-    reset_tracker,
+    CostEntry,
+    clear_buffer,
+    cost_by_model,
+    cost_summary,
+    get_buffer,
+    install_cost_callbacks,
+    litellm_cost_callback,
+    set_log_path,
+    total_cost,
 )
 
 
 @pytest.fixture(autouse=True)
-def _reset():
-    reset_tracker()
+def _reset_cost():
+    """Reset the in-memory cost buffer + log path between tests."""
+    clear_buffer()
+    set_log_path(Path(os.environ.get("TEMP", "/tmp")) / "kairos-test-cost.jsonl")
     yield
-    reset_tracker()
+    clear_buffer()
+
+
+def _make_litellm_response(model: str, prompt_tokens: int,
+                           completion_tokens: int, cost_usd: float):
+    """Build a fake litellm ModelResponse with cost in _hidden_params."""
+    resp = MagicMock()
+    resp.usage = MagicMock(prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            total_tokens=prompt_tokens + completion_tokens)
+    resp.model = model
+    # Cost is on _hidden_params for litellm >= 1.40
+    resp._hidden_params = {"response_cost": cost_usd}
+    return resp
 
 
 # ---------------------------------------------------------------------------
-# Model name normalization
+# litellm_cost_callback
 # ---------------------------------------------------------------------------
 
 
-def test_normalize_strips_provider_prefix():
-    assert _normalize_model("openai/gpt-4o") == "gpt-4o"
-    assert _normalize_model("anthropic/claude-3-5-sonnet") == "claude-3-5-sonnet"
-
-
-def test_normalize_strips_date_suffix():
-    assert _normalize_model("gpt-4o-2024-08-06") == "gpt-4o"
-    assert _normalize_model("claude-3-5-sonnet-20241022") == "claude-3-5-sonnet"
-
-
-def test_normalize_handles_case():
-    assert _normalize_model("GPT-4o") == "gpt-4o"
-
-
-def test_normalize_empty():
-    assert _normalize_model("") == ""
-
-
-# ---------------------------------------------------------------------------
-# estimate_cost
-# ---------------------------------------------------------------------------
-
-
-def test_estimate_gpt4o():
-    # gpt-4o: $2.50 in / $10.00 out per 1M tokens
-    # 1M input + 1M output = 2.50 + 10.00 = 12.50
-    cost = estimate_cost("gpt-4o", 1_000_000, 1_000_000)
-    assert abs(cost - 12.50) < 1e-6
-
-
-def test_estimate_claude_sonnet():
-    cost = estimate_cost("claude-3-5-sonnet", 500_000, 200_000)
-    # 0.5M * 3.00 = 1.50; 0.2M * 15.00 = 3.00; total 4.50
-    assert abs(cost - 4.50) < 1e-6
-
-
-def test_estimate_unknown_model_is_zero():
-    assert estimate_cost("no-such-model-xyz", 1000, 1000) == 0.0
-
-
-def test_estimate_ollama_is_free():
-    assert estimate_cost("ollama", 10_000_000, 10_000_000) == 0.0
-
-
-def test_estimate_with_provider_prefix():
-    # openai/gpt-4o-2024-08-06 normalizes to gpt-4o
-    cost = estimate_cost("openai/gpt-4o-2024-08-06", 1_000_000, 1_000_000)
-    assert abs(cost - 12.50) < 1e-6
-
-
-def test_estimate_negative_tokens_clamped_to_zero():
-    assert estimate_cost("gpt-4o", -100, 100) == 0.0
-    assert estimate_cost("gpt-4o", 100, -100) == 0.0
-
-
-def test_custom_pricing_overrides_default():
-    custom = {"foo": {"input": 1.0, "output": 2.0}}
-    cost = estimate_cost("foo", 1_000_000, 1_000_000, pricing=custom)
-    assert cost == 3.0
-
-
-# ---------------------------------------------------------------------------
-# CostTracker
-# ---------------------------------------------------------------------------
-
-
-def test_record_returns_usage_record():
-    t = CostTracker()
-    rec = t.record(
-        project_id="p1", agent="coder", role="code",
-        model="gpt-4o", prompt_tokens=100, completion_tokens=50,
+def test_callback_records_basic_entry():
+    resp = _make_litellm_response("gpt-4o", 100, 50, 0.001)
+    litellm_cost_callback(
+        kwargs={"model": "gpt-4o"},
+        completion_response=resp,
+        start_time=time.time() - 0.5,
+        end_time=time.time(),
     )
-    assert isinstance(rec, UsageRecord)
-    assert rec.project_id == "p1"
-    assert rec.cost_usd > 0
+    entries = get_buffer()
+    assert len(entries) == 1
+    e = entries[0]
+    assert e.model == "gpt-4o"
+    # No "/" in the model name → provider is inferred from the
+    # model prefix (gpt-* → openai)
+    assert e.provider == "openai"
+    assert e.prompt_tokens == 100
+    assert e.completion_tokens == 50
+    assert e.cost_usd == 0.001
+    assert e.duration_ms >= 500
 
 
-def test_record_collects_in_memory():
-    t = CostTracker()
-    t.record(project_id="p1", agent="coder", role="code", model="gpt-4o",
-             prompt_tokens=100, completion_tokens=50)
-    t.record(project_id="p1", agent="reviewer", role="review", model="gpt-4o",
-             prompt_tokens=200, completion_tokens=100)
-    t.record(project_id="p2", agent="coder", role="code", model="gpt-4o",
-             prompt_tokens=300, completion_tokens=150)
-    assert len(t.all_records()) == 3
+def test_callback_extracts_provider_from_slash_model():
+    """For 'anthropic/claude-3-5-sonnet', provider is 'anthropic'."""
+    resp = _make_litellm_response("anthropic/claude-3-5-sonnet-20241022", 200, 100, 0.003)
+    litellm_cost_callback(
+        kwargs={"model": "anthropic/claude-3-5-sonnet-20241022"},
+        completion_response=resp, start_time=0, end_time=1.0,
+    )
+    e = get_buffer()[0]
+    assert e.provider == "anthropic"
+    assert "claude" in e.model
 
 
-def test_by_project_aggregates():
-    t = CostTracker()
-    t.record(project_id="p1", agent="coder", role="code", model="gpt-4o",
-             prompt_tokens=100, completion_tokens=50)
-    t.record(project_id="p1", agent="coder", role="code", model="gpt-4o",
-             prompt_tokens=200, completion_tokens=100)
-    t.record(project_id="p2", agent="coder", role="code", model="gpt-4o",
-             prompt_tokens=50, completion_tokens=25)
-    s = t.by_project()
-    assert set(s.keys()) == {"p1", "p2"}
-    assert s["p1"].prompt_tokens == 300
-    assert s["p1"].completion_tokens == 150
-    assert s["p1"].calls == 2
-    assert s["p2"].calls == 1
+def test_callback_handles_missing_cost():
+    """Older litellm versions don't set _hidden_params['response_cost']."""
+    resp = MagicMock()
+    resp.usage = MagicMock(prompt_tokens=10, completion_tokens=5)
+    resp._hidden_params = {}
+    litellm_cost_callback(
+        kwargs={"model": "m"}, completion_response=resp,
+        start_time=0, end_time=0.5,
+    )
+    e = get_buffer()[0]
+    assert e.cost_usd == 0.0  # graceful default
+    assert e.prompt_tokens == 10
 
 
-def test_by_project_by_agent_breakdown():
-    t = CostTracker()
-    t.record(project_id="p1", agent="coder", role="code", model="gpt-4o",
-             prompt_tokens=100, completion_tokens=50)
-    t.record(project_id="p1", agent="reviewer", role="review", model="gpt-4o",
-             prompt_tokens=200, completion_tokens=100)
-    t.record(project_id="p1", agent="coder", role="code", model="gpt-4o",
-             prompt_tokens=50, completion_tokens=25)
-    s = t.by_project()["p1"]
-    assert s.by_agent == {"coder": 2, "reviewer": 1}
+def test_callback_never_raises_on_garbage_response():
+    """A bad response shape must not break the LLM call."""
+    bad = object()  # no attributes
+    litellm_cost_callback(
+        kwargs={"model": "m"}, completion_response=bad,
+        start_time=0, end_time=1.0,
+    )
+    # Either an entry was recorded or no entry was — but no exception
+    assert isinstance(get_buffer(), list)
 
 
-def test_by_project_by_model_breakdown():
-    t = CostTracker()
-    t.record(project_id="p1", agent="coder", role="code", model="gpt-4o",
-             prompt_tokens=100, completion_tokens=50)
-    t.record(project_id="p1", agent="reviewer", role="review", model="claude-3-5-sonnet",
-             prompt_tokens=200, completion_tokens=100)
-    s = t.by_project()["p1"]
-    assert s.by_model == {"gpt-4o": 1, "claude-3-5-sonnet": 1}
-
-
-def test_summary_global():
-    t = CostTracker()
-    t.record(project_id="p1", agent="coder", role="code", model="gpt-4o",
-             prompt_tokens=100, completion_tokens=50)
-    t.record(project_id="p2", agent="coder", role="code", model="gpt-4o",
-             prompt_tokens=200, completion_tokens=100)
-    s = t.summary()
-    assert s["calls"] == 2
-    assert s["prompt_tokens"] == 300
-    assert s["completion_tokens"] == 150
-    assert s["total_tokens"] == 450
-
-
-def test_clear_resets_tracker():
-    t = CostTracker()
-    t.record(project_id="p1", agent="coder", role="code", model="gpt-4o",
-             prompt_tokens=100, completion_tokens=50)
-    assert len(t.all_records()) == 1
-    t.clear()
-    assert len(t.all_records()) == 0
-
-
-def test_set_pricing_overrides_default():
-    t = CostTracker()
-    t.set_pricing({"foo": {"input": 1.0, "output": 2.0}})
-    rec = t.record(project_id="p1", agent="coder", role="code", model="foo",
-                   prompt_tokens=1_000_000, completion_tokens=1_000_000)
-    assert abs(rec.cost_usd - 3.0) < 1e-6
-
-
-def test_get_pricing_returns_copy():
-    t = CostTracker()
-    p = t.get_pricing()
-    p["bogus"] = {"input": 0, "output": 0}
-    # mutating the returned dict must not affect the tracker's state
-    assert "bogus" not in t.get_pricing()
+def test_callback_writes_to_jsonl_log(tmp_path: Path):
+    """The on-disk JSONL sink receives one line per call."""
+    log = tmp_path / "cost.jsonl"
+    set_log_path(log)
+    resp = _make_litellm_response("m", 5, 3, 0.0001)
+    litellm_cost_callback(
+        kwargs={"model": "m"}, completion_response=resp,
+        start_time=0, end_time=0.1,
+    )
+    assert log.exists()
+    lines = [l for l in log.read_text(encoding="utf-8").splitlines() if l]
+    assert len(lines) == 1
+    entry = json.loads(lines[0])
+    assert entry["model"] == "m"
+    assert entry["cost_usd"] == 0.0001
 
 
 # ---------------------------------------------------------------------------
-# Module-level singleton
+# Aggregation
 # ---------------------------------------------------------------------------
 
 
-def test_get_tracker_returns_singleton():
-    a = get_tracker()
-    b = get_tracker()
-    assert a is b
+def test_cost_by_model_aggregates():
+    """Multiple calls to the same model aggregate into one entry."""
+    for i in range(3):
+        resp = _make_litellm_response("gpt-4o", 100, 50, 0.001)
+        litellm_cost_callback(
+            kwargs={"model": "gpt-4o"}, completion_response=resp,
+            start_time=0, end_time=0.5,
+        )
+    for i in range(2):
+        resp = _make_litellm_response("claude-3-5-sonnet", 200, 100, 0.003)
+        litellm_cost_callback(
+            kwargs={"model": "claude-3-5-sonnet"}, completion_response=resp,
+            start_time=0, end_time=0.5,
+        )
+    agg = cost_by_model()
+    assert "gpt-4o" in agg
+    assert "claude-3-5-sonnet" in agg
+    assert agg["gpt-4o"]["calls"] == 3
+    assert agg["gpt-4o"]["cost_usd"] == 0.003
+    assert agg["claude-3-5-sonnet"]["calls"] == 2
+    assert agg["claude-3-5-sonnet"]["cost_usd"] == 0.006
 
 
-def test_reset_tracker_replaces_singleton():
-    a = get_tracker()
-    a.record(project_id="p1", agent="coder", role="code", model="gpt-4o",
-             prompt_tokens=100, completion_tokens=50)
-    reset_tracker()
-    b = get_tracker()
-    assert a is not b
-    assert len(b.all_records()) == 0
+def test_cost_summary_includes_totals():
+    for i in range(5):
+        resp = _make_litellm_response("m", 1, 1, 0.01)
+        litellm_cost_callback(
+            kwargs={"model": "m"}, completion_response=resp,
+            start_time=0, end_time=0.5,
+        )
+    summary = cost_summary()
+    assert summary["calls"] == 5
+    assert summary["cost_usd"] == 0.05
+    assert "m" in summary["models"]
+
+
+def test_cost_summary_empty_buffer():
+    """An empty buffer returns a zero-cost summary."""
+    summary = cost_summary()
+    assert summary["calls"] == 0
+    assert summary["cost_usd"] == 0.0
+    assert summary["models"] == {}
+
+
+def test_total_cost():
+    """total_cost() sums the in-memory buffer."""
+    assert total_cost() == 0.0
+    for i in range(4):
+        resp = _make_litellm_response("m", 1, 1, 0.005)
+        litellm_cost_callback(
+            kwargs={"model": "m"}, completion_response=resp,
+            start_time=0, end_time=0.1,
+        )
+    assert total_cost() == pytest.approx(0.02)
+
+
+def test_clear_buffer():
+    """clear_buffer() resets the in-memory state."""
+    resp = _make_litellm_response("m", 1, 1, 0.01)
+    litellm_cost_callback(
+        kwargs={"model": "m"}, completion_response=resp,
+        start_time=0, end_time=0.1,
+    )
+    assert len(get_buffer()) == 1
+    clear_buffer()
+    assert len(get_buffer()) == 0
 
 
 # ---------------------------------------------------------------------------
-# ProjectCostSummary
+# install_cost_callbacks
 # ---------------------------------------------------------------------------
 
 
-def test_project_summary_to_dict_shape():
-    s = ProjectCostSummary(project_id="p1")
-    s.prompt_tokens = 100
-    s.completion_tokens = 50
-    s.cost_usd = 0.001
-    s.calls = 1
-    s.by_agent = {"coder": 1}
-    d = s.to_dict()
-    assert d["project_id"] == "p1"
-    assert d["total_tokens"] == 150
-    assert d["cost_usd"] == 0.001
-    assert d["by_agent"] == {"coder": 1}
-
-
-# ---------------------------------------------------------------------------
-# Concurrent safety
-# ---------------------------------------------------------------------------
-
-
-def test_tracker_thread_safe():
-    import threading
-    t = CostTracker()
-
-    def worker():
-        for _ in range(50):
-            t.record(project_id="p", agent="coder", role="code", model="gpt-4o",
-                     prompt_tokens=10, completion_tokens=5)
-
-    threads = [threading.Thread(target=worker) for _ in range(8)]
-    for th in threads:
-        th.start()
-    for th in threads:
-        th.join()
-    # 8 * 50 = 400 records
-    assert len(t.all_records()) == 400
-    s = t.by_project()["p"]
-    assert s.calls == 400
-    assert s.prompt_tokens == 4000
-    assert s.completion_tokens == 2000
+def test_install_cost_callbacks_returns_int():
+    """The install function returns 0 (no litellm) or 1 (installed)."""
+    n = install_cost_callbacks()
+    assert n in (0, 1)

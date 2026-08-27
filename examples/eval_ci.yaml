@@ -1,0 +1,53 @@
+# CI regression suite — run before merging any change to a
+# code-generating agent. Designed to be fast (<60s) and free
+# (no LLM judge by default; pass ``--judge`` to enable the
+# LLM-judge cases).
+#
+# Invoke from the command line:
+#   python -m kairos.eval run --suite examples/eval_ci.yaml
+#   python -m kairos.eval run --suite examples/eval_ci.yaml --judge kairos.eval:make_litellm_judge
+#
+# In GitHub Actions, see examples/eval_ci_workflow.yaml.
+name: eval-ci-baseline
+threshold: 0.6
+cases:
+  # --- Tier 1: mechanical (always-on) ---
+
+  - name: code-fences-present
+    input: "Write a Python function that reverses a string"
+    graders:
+      - contains: ["def ", "return", "reverse"]
+      - latency_max_ms: 30000
+
+  - name: no-trivial-hallucinations
+    # Coder must not claim it 'read' a file that doesn't exist.
+    input: "Read settings.yaml"
+    graders:
+      # Either: it actually read a real file (the output mentions
+      # file contents); or it said it didn't find the file. Either
+      # is fine. The fail mode is claiming it read fictional content.
+      - contains: ["settings.yaml"]
+      - regex: "(?i)does not exist|cannot find|not found|here is|here's|contents?"
+      - latency_max_ms: 30000
+
+  - name: python-syntax
+    input: "Write a function that adds two numbers"
+    graders:
+      - contains: ["def ", "return"]
+      - regex: "def\\s+\\w+\\s*\\([^)]*\\)"
+      - max_usd: 0.05
+
+  - name: no-empty-output
+    # The Coder must not return an empty string for a real task.
+    input: "Write a hello-world function"
+    graders:
+      - contains: ["def ", "hello"]
+      - latency_max_ms: 30000
+
+  - name: no-tool-overflow
+    # The Coder must not call write_file more than 3 times for
+    # a simple single-file task (a sign of getting stuck).
+    input: "Add a function that prints 'hi'."
+    graders:
+      - contains: ["def ", "hi"]
+      - latency_max_ms: 30000

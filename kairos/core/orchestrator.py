@@ -951,7 +951,10 @@ class Orchestrator:
         project.loop_session.reject_plan()
         return True
 
-    def reload_skills(self, project_id: str) -> dict:
+    def reload_skills(
+        self, project_id: str, *, bundled_dir: Optional["Path"] = None,
+        skip_bundled: bool = False,
+    ) -> dict:
         """Manually trigger a skills re-discovery for *project_id*.
 
         The ``SkillsWatcher`` already polls mtimes once a second and
@@ -959,6 +962,11 @@ class Orchestrator:
         the Settings drawer "Reload now" button and for tests: it
         forces an immediate ``SkillsLoader.discover()`` and reports
         the names it found.
+
+        By default the loader also picks up the package-bundled
+        skills (``kairos/skills/*.md``). Pass ``skip_bundled=True`` to
+        scope the result to user + project skills only — useful for
+        tests that want to assert against project-local skills only.
 
         Returns a dict with ``count`` and ``names``. If the project
         has no ``work_dir`` or no skills directory yet, returns
@@ -975,7 +983,12 @@ class Orchestrator:
         try:
             from pathlib import Path
             from kairos.skills import SkillsLoader
-            loader = SkillsLoader(project_dir=Path(work_dir))
+            loader_kwargs: Dict[str, Any] = {"project_dir": Path(work_dir)}
+            if skip_bundled:
+                loader_kwargs["bundled_dir"] = SkillsLoader._SKIP_BUNDLED
+            elif bundled_dir is not None:
+                loader_kwargs["bundled_dir"] = bundled_dir
+            loader = SkillsLoader(**loader_kwargs)
             skills = loader.discover()
             names = [s.name for s in skills]
             return {"count": len(names), "names": names}

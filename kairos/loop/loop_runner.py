@@ -40,6 +40,25 @@ from kairos.loop.reviewers import run_reviewer_round
 
 logger = logging.getLogger(__name__)
 
+
+def _plan_snapshot(session) -> Optional[dict]:
+    """Return a JSON-safe snapshot of the current plan, or None.
+
+    Round 12: every history entry records the plan state at the
+    end of that round so a future round (or a future session
+    loading from disk) can reconstruct what the agent committed
+    to. We deliberately only store the dict form (no Plan object
+    instance) so the history is JSON-roundtrip-safe.
+    """
+    plan = getattr(session, "plan_todos", None)
+    if plan is None:
+        return None
+    try:
+        return plan.to_dict()
+    except Exception:
+        logger.debug("plan snapshot failed (non-fatal)", exc_info=True)
+        return None
+
 async def _run_coder_round(session, requirement, round_no, plan_mode=False):
     bus = session.message_bus
     coder = session.coder
@@ -109,7 +128,8 @@ def _auto_checkpoint(session, round_no, score, approved, summary):
         workspace = Path(getattr(session.project, "work_dir", None) or getattr(session.project, "workspace", ""))
         if not workspace:
             return None
-        return checkpoint_round(Path(workspace), round_no, score, summary[:200], approved)
+        return checkpoint_round(Path(workspace), round_no, score, summary[:200], approved,
+                                plan=_plan_snapshot(session))
     except Exception:
         logger.debug("auto-checkpoint failed", exc_info=True)
         return None
@@ -360,6 +380,7 @@ def _maybe_rollback_on_regression(session, coder_result: str) -> bool:
                 "round": session.round,
                 "rollback": True,
                 "reason": f"score regressed {prev_best}->{new_score}",
+                "plan": _plan_snapshot(session),
             })
         session._best_score = max(prev_best, new_score)
         return bool(ok)
@@ -673,6 +694,17 @@ async def _maybe_auto_approve_plan(session, round_no, bus, requirement: str):
 
 async def run_loop(session, requirement):
     bus = session.message_bus
+    # Round 11: attach a Plan tracker to the Coder so its
+    # `write_todos` tool calls are intercepted and the structured
+    # plan rides along into the next round's system prompt.
+    try:
+        from kairos.loop.plan import Plan
+        if getattr(session, "plan_todos", None) is None:
+            session.plan_todos = Plan()
+        if getattr(session, "coder", None) is not None:
+            session.coder.plan_tracker = session.plan_todos
+    except Exception:
+        logger.debug("plan_tracker attach failed (non-fatal)", exc_info=True)
     history_digest = load_history_digest(session.persistence, session.project.id)
     if history_digest:
         requirement = history_digest + "\n\nCurrent requirement:\n" + requirement
@@ -772,7 +804,12 @@ async def run_loop(session, requirement):
             except Exception:
                 logger.debug("round summary build failed (non-fatal)", exc_info=True)
             _update_progress(session, review)
-            session.history.append({"round": round_no, "review": review, "coder": coder_result[:2000]})
+            session.history.append({
+                "round": round_no,
+                "review": review,
+                "coder": coder_result[:2000],
+                "plan": _plan_snapshot(session),
+            })
 
             # ---- Memory writes: persist this round's digest + record
             # working-fix patterns so the next round can short-circuit

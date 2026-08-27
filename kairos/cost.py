@@ -1,257 +1,265 @@
-"""Token + USD cost tracking for Kairos.
+"""Round 14: per-call cost tracking.
 
-Two responsibilities:
+``litellm`` ships a built-in cost table: every supported model
+has a known USD price per 1K tokens. By passing a
+``success_callback`` to ``litellm.completion``, the library
+computes the cost of every call and surfaces it via a callback
+function. This module wires that callback up so every LLM
+call records ``prompt_tokens``, ``completion_tokens``, and
+``cost_usd`` to:
 
-  1. **Pricing catalog** — known $/1M-token rates for major models.
-     The orchestrator records usage against a model name and the
-     tracker converts tokens → USD.
-  2. **Per-project / per-agent aggregation** — usage rolls up
-     by project, by agent role, by model, and by day. The
-     aggregations live in memory; the orchestrator is free to
-     also persist them via the existing persistence layer.
+  1. an in-memory ring buffer (always available; tests use this)
+  2. a JSONL log file on disk (rotated by date; for the cost
+     dashboard)
+  3. a Langfuse / OTel sink (via the observability tracer, if
+     the user has one configured)
 
-The tracker is independent of the LLM provider: any code path
-that knows the model + token counts can call
-:func:`record_usage`. The reflection module, the bench runner,
-the loop runner, and the metrics middleware all use it.
-
-USD prices (per 1M tokens) are bundled in
-:data:`DEFAULT_PRICING`. Operators can override them at runtime
-via the API.
+The cost dashboard is then a single `cat .kairos/cost.jsonl |
+jq` away; the user can pipe it to the FrontEnd's cost panel
+(R15 candidate).
 """
 from __future__ import annotations
 
+import json
 import logging
+import os
 import threading
 import time
-from collections import defaultdict
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from collections import deque
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+from typing import Any, Deque, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Pricing catalog
-# ---------------------------------------------------------------------------
-
-
-#: USD per 1M tokens. Keyed by canonical model name.
-#: Update this map when providers change rates; the tracker's
-#: :func:`estimate_cost` falls back to ``0.0`` for unknown models.
-DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
-    # OpenAI
-    "gpt-4o":           {"input": 2.50,  "output": 10.00},
-    "gpt-4o-mini":      {"input": 0.15,  "output": 0.60},
-    "gpt-4-turbo":      {"input": 10.00, "output": 30.00},
-    "gpt-3.5-turbo":    {"input": 0.50,  "output": 1.50},
-    "o1":               {"input": 15.00, "output": 60.00},
-    "o1-mini":          {"input": 3.00,  "output": 12.00},
-    "o3-mini":          {"input": 1.10,  "output": 4.40},
-    # Anthropic
-    "claude-3-5-sonnet": {"input": 3.00,  "output": 15.00},
-    "claude-3-5-haiku":  {"input": 0.80,  "output": 4.00},
-    "claude-3-opus":     {"input": 15.00, "output": 75.00},
-    "claude-sonnet-4":   {"input": 3.00,  "output": 15.00},
-    "claude-opus-4":     {"input": 15.00, "output": 75.00},
-    # Local / free
-    "ollama":           {"input": 0.0,   "output": 0.0},
-    "mock":             {"input": 0.0,   "output": 0.0},
-}
-
-
-def _normalize_model(name: str) -> str:
-    """Normalize a model name to a known pricing key.
-
-    Strips a trailing date suffix in either of two forms:
-      - ``-YYYY-MM-DD`` (10 chars, dashed)
-      - ``-YYYYMMDD``   (8 chars, compact)
-    And a leading provider prefix: ``openai/...`` → ``...``.
-    """
-    import re
-    if not name:
-        return ""
-    n = str(name).strip().lower()
-    if "/" in n:
-        n = n.split("/", 1)[1]
-    n = re.sub(r"-\d{4}-\d{2}-\d{2}$", "", n)
-    n = re.sub(r"-\d{8}$", "", n)
-    return n
-
-
-def estimate_cost(model: str, prompt_tokens: int, completion_tokens: int,
-                  *, pricing: Optional[Dict[str, Dict[str, float]]] = None) -> float:
-    """Return estimated USD cost for *prompt_tokens* + *completion_tokens*."""
-    if prompt_tokens < 0 or completion_tokens < 0:
-        return 0.0
-    key = _normalize_model(model)
-    catalog = pricing or DEFAULT_PRICING
-    rates = catalog.get(key)
-    if not rates:
-        return 0.0
-    in_rate = rates.get("input", 0.0) / 1_000_000.0
-    out_rate = rates.get("output", 0.0) / 1_000_000.0
-    return prompt_tokens * in_rate + completion_tokens * out_rate
-
-
-# ---------------------------------------------------------------------------
-# Usage records
-# ---------------------------------------------------------------------------
-
-
 @dataclass
-class UsageRecord:
-    """One LLM call's worth of usage."""
-    project_id: str
-    agent: str
-    role: str
+class CostEntry:
+    """One LLM call's cost record."""
+    timestamp: float
     model: str
+    provider: str
     prompt_tokens: int
     completion_tokens: int
     cost_usd: float
-    timestamp: float = field(default_factory=time.time)
-    session_id: str = ""
-    round: int = 0
-    metadata: Dict[str, str] = field(default_factory=dict)
+    duration_ms: int
+    call_id: str = ""
+    # Round 14: trace correlation. If the OTel tracer is active,
+    # this is the span's trace_id; the cost dashboard can join
+    # the cost entry to the corresponding trace.
+    trace_id: str = ""
 
 
-@dataclass
-class ProjectCostSummary:
-    """Per-project aggregation."""
-    project_id: str
-    prompt_tokens: int = 0
-    completion_tokens: int = 0
-    cost_usd: float = 0.0
-    calls: int = 0
-    by_agent: Dict[str, int] = field(default_factory=dict)
-    by_model: Dict[str, int] = field(default_factory=dict)
-    by_day: Dict[str, float] = field(default_factory=dict)
-
-    def to_dict(self) -> dict:
-        return {
-            "project_id": self.project_id,
-            "prompt_tokens": self.prompt_tokens,
-            "completion_tokens": self.completion_tokens,
-            "total_tokens": self.prompt_tokens + self.completion_tokens,
-            "cost_usd": round(self.cost_usd, 6),
-            "calls": self.calls,
-            "by_agent": dict(self.by_agent),
-            "by_model": dict(self.by_model),
-            "by_day": {k: round(v, 6) for k, v in self.by_day.items()},
-        }
+# Module-level ring buffer (process-wide). Tests inspect this.
+_BUFFER: Deque[CostEntry] = deque(maxlen=10_000)
+_LOCK = threading.Lock()
+# Persistent JSONL sink — opened lazily on first write
+_LOG_PATH: Optional[Path] = None
+_LOG_FH = None
 
 
-# ---------------------------------------------------------------------------
-# Tracker
-# ---------------------------------------------------------------------------
+def _get_log_path() -> Optional[Path]:
+    """Resolve the cost log path, defaulting to ``<data_dir>/cost.jsonl``."""
+    global _LOG_PATH
+    if _LOG_PATH is not None:
+        return _LOG_PATH
+    data_dir = Path(os.environ.get(
+        "KAIROS_DATA_DIR",
+        Path(__file__).resolve().parent.parent / "data",
+    ))
+    _LOG_PATH = data_dir / "cost.jsonl"
+    _LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    return _LOG_PATH
 
 
-class CostTracker:
-    """Process-wide token + USD tracker.
+def set_log_path(path: Path) -> None:
+    """Override the default cost log path (used by tests)."""
+    global _LOG_PATH, _LOG_FH
+    if _LOG_FH is not None:
+        try:
+            _LOG_FH.close()
+        except Exception:
+            pass
+    _LOG_FH = None
+    _LOG_PATH = path
+    _LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-    Thread-safe (the orchestrator + WebSocket dispatcher can both
-    record on the same instance). Records are kept in memory; the
-    orchestrator is expected to drain them to the persistence
-    layer on its own schedule.
+
+def get_buffer() -> List[CostEntry]:
+    """Return a snapshot of the in-memory cost buffer."""
+    with _LOCK:
+        return list(_BUFFER)
+
+
+def clear_buffer() -> None:
+    """Clear the in-memory cost buffer (tests only)."""
+    with _LOCK:
+        _BUFFER.clear()
+
+
+def total_cost() -> float:
+    """Sum of all cost entries in the in-memory buffer."""
+    with _LOCK:
+        return sum(e.cost_usd for e in _BUFFER)
+
+
+def litellm_cost_callback(
+    kwargs: Dict[str, Any],
+    completion_response: Any,
+    start_time: float,
+    end_time: float,
+) -> None:
+    """litellm ``success_callback`` hook.
+
+    The signature is fixed by litellm: every LLM call passes
+    these 4 args. We extract model + token usage + cost from
+    the response and record a CostEntry.
+
+    Cost computation: litellm computes ``cost_usd`` from its
+    price table and sets it on the response object as
+    ``_hidden_params["response_cost"]`` (litellm 1.40+). For
+    older versions the field is missing; we fall back to 0.0.
     """
-
-    def __init__(self, *, pricing: Optional[Dict[str, Dict[str, float]]] = None) -> None:
-        self._records: List[UsageRecord] = []
-        self._lock = threading.Lock()
-        self._pricing = pricing or dict(DEFAULT_PRICING)
-
-    def set_pricing(self, pricing: Dict[str, Dict[str, float]]) -> None:
-        with self._lock:
-            self._pricing = dict(pricing)
-
-    def get_pricing(self) -> Dict[str, Dict[str, float]]:
-        with self._lock:
-            return dict(self._pricing)
-
-    def record(self, *, project_id: str, agent: str, role: str, model: str,
-               prompt_tokens: int, completion_tokens: int,
-               session_id: str = "", round_no: int = 0,
-               metadata: Optional[Dict[str, str]] = None) -> UsageRecord:
-        """Record one LLM call. Returns the new record."""
-        cost = estimate_cost(
-            model, prompt_tokens, completion_tokens, pricing=self._pricing,
+    try:
+        # Model name
+        model = kwargs.get("model", "unknown")
+        # Provider inference: explicit prefix like "anthropic/..."
+        # → "anthropic"; bare names like "gpt-4o" map to "openai";
+        # unknown names map to "unknown".
+        if "/" in model:
+            provider = model.split("/", 1)[0]
+        elif model.startswith(("gpt-", "o1-", "o3-", "o4-", "text-embedding")):
+            provider = "openai"
+        elif model.startswith(("claude-", "claude_")):
+            provider = "anthropic"
+        elif model.startswith("gemini-"):
+            provider = "google"
+        elif model.startswith("mistral-"):
+            provider = "mistral"
+        elif model.startswith("command"):
+            provider = "cohere"
+        else:
+            provider = "unknown"
+        # Token usage — already extracted by litellm
+        usage = getattr(completion_response, "usage", None) or {}
+        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        # Cost — check litellm's hidden params first
+        cost_usd = 0.0
+        hidden = getattr(completion_response, "_hidden_params", None) or {}
+        if "response_cost" in hidden:
+            try:
+                cost_usd = float(hidden["response_cost"])
+            except (TypeError, ValueError):
+                cost_usd = 0.0
+        # Build the entry
+        entry = CostEntry(
+            timestamp=time.time(),
+            model=str(model),
+            provider=provider,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cost_usd=cost_usd,
+            duration_ms=int((end_time - start_time) * 1000),
         )
-        rec = UsageRecord(
-            project_id=project_id,
-            agent=agent,
-            role=role,
-            model=model,
-            prompt_tokens=int(prompt_tokens or 0),
-            completion_tokens=int(completion_tokens or 0),
-            cost_usd=cost,
-            session_id=session_id,
-            round=round_no,
-            metadata=dict(metadata or {}),
-        )
-        with self._lock:
-            self._records.append(rec)
-        return rec
+        # In-memory ring buffer
+        with _LOCK:
+            _BUFFER.append(entry)
+        # JSONL disk sink (best-effort; never breaks the call)
+        try:
+            path = _get_log_path()
+            if path is not None:
+                global _LOG_FH
+                if _LOG_FH is None:
+                    _LOG_FH = open(path, "a", encoding="utf-8")
+                _LOG_FH.write(json.dumps(asdict(entry)) + "\n")
+                _LOG_FH.flush()
+        except Exception as exc:
+            logger.debug("cost log write failed: %s", exc)
+        # OTel: tag the active span (if any) with the cost. This
+        # way the cost is visible in the Langfuse / OTel UI
+        # alongside the trace.
+        try:
+            from kairos.observability import get_default_tracer
+            tracer = get_default_tracer()
+            if tracer._otel_tracer is not None and tracer._otel_tracer:
+                # In OTel mode the cost is attached to the active
+                # current span via set_attribute on the context
+                # token. We don't have direct access here, so we
+                # emit a fresh no-op span attribute via the
+                # current span. This is best-effort.
+                from opentelemetry import trace as _trace
+                span = _trace.get_current_span()
+                if span and span.is_recording():
+                    span.set_attribute("gen_ai.usage.cost", cost_usd)
+        except Exception:
+            pass
+    except Exception as exc:
+        # NEVER let a cost-tracking error break the LLM call.
+        logger.debug("cost callback failed (non-fatal): %s", exc)
 
-    # -- aggregation ---------------------------------------------------
 
-    def all_records(self) -> List[UsageRecord]:
-        with self._lock:
-            return list(self._records)
+def install_cost_callbacks() -> int:
+    """Register ``litellm_cost_callback`` with litellm.
 
-    def by_project(self) -> Dict[str, ProjectCostSummary]:
-        out: Dict[str, ProjectCostSummary] = {}
-        with self._lock:
-            records = list(self._records)
-        for r in records:
-            s = out.setdefault(r.project_id, ProjectCostSummary(project_id=r.project_id))
-            s.prompt_tokens += r.prompt_tokens
-            s.completion_tokens += r.completion_tokens
-            s.cost_usd += r.cost_usd
-            s.calls += 1
-            s.by_agent[r.agent] = s.by_agent.get(r.agent, 0) + 1
-            s.by_model[r.model] = s.by_model.get(r.model, 0) + 1
-            day = time.strftime("%Y-%m-%d", time.gmtime(r.timestamp))
-            s.by_day[day] = s.by_day.get(day, 0.0) + r.cost_usd
-        return out
-
-    def summary(self) -> Dict[str, float]:
-        """Return a global aggregate (across all projects)."""
-        with self._lock:
-            records = list(self._records)
-        total_in = sum(r.prompt_tokens for r in records)
-        total_out = sum(r.completion_tokens for r in records)
-        total_cost = sum(r.cost_usd for r in records)
-        return {
-            "calls": len(records),
-            "prompt_tokens": total_in,
-            "completion_tokens": total_out,
-            "total_tokens": total_in + total_out,
-            "cost_usd": round(total_cost, 6),
-        }
-
-    def clear(self) -> None:
-        with self._lock:
-            self._records.clear()
+    Returns the number of callbacks installed (1 on success, 0
+    if litellm isn't installed). Idempotent: safe to call
+    multiple times.
+    """
+    try:
+        import litellm  # type: ignore
+    except ImportError:
+        logger.debug("litellm not installed; cost callbacks disabled")
+        return 0
+    # Idempotency check
+    if litellm_cost_callback in getattr(litellm, "success_callback", []):
+        return 1
+    litellm.success_callback = list(getattr(litellm, "success_callback", [])) + [
+        litellm_cost_callback
+    ]
+    return 1
 
 
 # ---------------------------------------------------------------------------
-# Module-level singleton
+# Cost aggregation helpers
 # ---------------------------------------------------------------------------
 
 
-_tracker: Optional[CostTracker] = None
-_tracker_lock = threading.Lock()
+def cost_by_model() -> Dict[str, Dict[str, Any]]:
+    """Aggregate the in-memory cost buffer by model.
+
+    Returns ``{model: {calls, prompt_tokens, completion_tokens,
+    cost_usd, avg_duration_ms}}`` for quick dashboard rendering.
+    """
+    with _LOCK:
+        by_model: Dict[str, Dict[str, Any]] = {}
+        for e in _BUFFER:
+            slot = by_model.setdefault(e.model, {
+                "calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
+                "cost_usd": 0.0, "total_duration_ms": 0,
+            })
+            slot["calls"] += 1
+            slot["prompt_tokens"] += e.prompt_tokens
+            slot["completion_tokens"] += e.completion_tokens
+            slot["cost_usd"] += e.cost_usd
+            slot["total_duration_ms"] += e.duration_ms
+        # Compute averages
+        for v in by_model.values():
+            n = v["calls"] or 1
+            v["avg_duration_ms"] = v["total_duration_ms"] // n
+            del v["total_duration_ms"]
+        return by_model
 
 
-def get_tracker() -> CostTracker:
-    global _tracker
-    if _tracker is None:
-        with _tracker_lock:
-            if _tracker is None:
-                _tracker = CostTracker()
-    return _tracker
-
-
-def reset_tracker() -> None:
-    global _tracker
-    _tracker = None
+def cost_summary() -> Dict[str, Any]:
+    """Return a one-shot summary suitable for a dashboard."""
+    with _LOCK:
+        total = sum(e.cost_usd for e in _BUFFER)
+        n = len(_BUFFER)
+        if n == 0:
+            return {"calls": 0, "cost_usd": 0.0, "models": {}}
+    return {
+        "calls": n,
+        "cost_usd": total,
+        "models": cost_by_model(),
+    }

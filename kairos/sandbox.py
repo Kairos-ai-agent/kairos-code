@@ -74,10 +74,22 @@ class SandboxPolicy:
     `allowed_root` is a Path. Cwd stays inside it. `network` toggles
     Landlock's network filter. `extra_deny` augments the built-in
     deny-list (e.g. project-specific secrets paths).
+
+    The nsjail-specific fields (max_memory_mb / max_cpu_seconds /
+    max_processes / deny_paths / use_nsjail) are ignored when the
+    nsjail tier isn't active — they only take effect when
+    `apply_to_subprocess` chooses the nsjail path or the caller
+    explicitly uses ``wrap_command_in_nsjail``.
     """
     allowed_root: Path
     network: bool = False
     extra_deny: List[str] = field(default_factory=list)
+    # --- nsjail-only knobs (cross-tier safe to leave at defaults) ---
+    max_memory_mb: int = 512
+    max_cpu_seconds: int = 10
+    max_processes: int = 64
+    deny_paths: List[str] = field(default_factory=list)
+    use_nsjail: bool = False
 
     def all_deny(self) -> List[re.Pattern]:
         patterns = list(DEFAULT_DENY_PATTERNS) + list(self.extra_deny)
@@ -545,10 +557,217 @@ def describe_capabilities() -> dict:
         "platform": sys.platform,
         "deny_list": True,
         "landlock": False,
+        "nsjail": False,
+        "gvisor": False,
+        "firecracker": False,
         "job_object": False,
+        "seatbelt": False,
     }
     if sys.platform.startswith("linux"):
         caps["landlock"] = landlock_available()
+        caps["nsjail"] = nsjail_available()
+        caps["gvisor"] = gvisor_available()
+        caps["firecracker"] = firecracker_available()
     elif sys.platform.startswith("win"):
         caps["job_object"] = windows_job_object_available()
+    elif sys.platform == "darwin":
+        caps["seatbelt"] = macos_seatbelt_available()
     return caps
+
+
+# ---------------------------------------------------------------------------
+# Tier 2d: gVisor (Linux) — Google's user-space kernel container runtime
+# ---------------------------------------------------------------------------
+# gVisor (``runsc``) is an OCI-compatible runtime that intercepts every
+# syscall in userspace before it hits the host kernel. Drop-in for runc
+# on any Linux host (no KVM needed for the default ``ptrace`` platform;
+# ``kvm`` platform is faster but requires /dev/kvm).
+#
+# Integration: register runsc as a Docker runtime via
+#     sudo runsc install
+# then run containers with ``--runtime=runsc``. gVisor-managed
+# containers get kernel-level syscall filtering without the cost of
+# a microVM.
+#
+# For our agent's purposes we don't spawn Docker containers; we use
+# the Landlock (in-process) + nsjail (process-tree) tiers. gVisor
+# here is a **detection** + **documented integration** layer so the
+# Settings UI can tell the user "gVisor is available, opt in via
+# Docker CLI". When the user is running the agent inside a container
+# already managed by runsc, ``gvisor_available()`` returns True and
+# the UI can show it.
+# ---------------------------------------------------------------------------
+
+
+def gvisor_available() -> bool:
+    """True iff ``runsc`` (gVisor) is on PATH on a Linux host."""
+    if not sys.platform.startswith("linux"):
+        return False
+    import shutil
+    if shutil.which("runsc") is None:
+        return False
+    # runsc exists; the runtime is also registered in Docker's
+    # daemon.json. We don't read daemon.json (it would require JSON
+    # parsing + path lookup) — we just confirm the binary is there.
+    return True
+
+
+def gvisor_install_instructions() -> str:
+    """Human-readable install instructions, shown in the Settings UI
+    when gvisor_available() returns False."""
+    return (
+        "gVisor (runsc) is not installed. To enable it:\n"
+        "  # Add the gVisor APT repository and install:\n"
+        "  curl -fsSL https://gvisor.dev/archive.key | \\\n"
+        "    sudo gpg --dearmor -o /usr/share/keyrings/gvisor-archive-keyring.gpg\n"
+        "  echo \"deb [arch=$(dpkg --print-architecture) \" \\\n"
+        "    \"signed-by=/usr/share/keyrings/gvisor-archive-keyring.gpg] \" \\\n"
+        "    \"https://storage.googleapis.com/gvisor/releases release main\" | \\\n"
+        "    sudo tee /etc/apt/sources.list.d/gvisor.list > /dev/null\n"
+        "  sudo apt-get update && sudo apt-get install -y runsc\n"
+        "  # Register runsc as a Docker runtime:\n"
+        "  sudo runsc install\n"
+        "  sudo systemctl restart docker\n"
+        "  # Run a container with gVisor:\n"
+        "  docker run --rm --runtime=runsc hello-world\n"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tier 2e: Firecracker (Linux + KVM) — AWS Lambda's microVM
+# ---------------------------------------------------------------------------
+# Firecracker is the strongest isolation tier Kairos can detect:
+# each process gets its own microVM with a separate kernel. Boot
+# time is ~125ms; per-VM memory overhead is <5MB. Used in
+# production by AWS Lambda, Fly Machines, and dozens of
+# multi-tenant serverless platforms.
+#
+# Integration: Firecracker is invoked via the containerd
+# runc-compatible shim, so registering ``kata-runtime`` (or
+# firecracker-containerd) as a Docker runtime is the standard
+# path. The function below is detection + install-instructions
+# only; we don't try to spawn a VM from inside Kairos itself.
+# ---------------------------------------------------------------------------
+
+
+def firecracker_available() -> bool:
+    """True iff firecracker is on PATH on a Linux+KVM host."""
+    if not sys.platform.startswith("linux"):
+        return False
+    import shutil
+    if shutil.which("firecracker") is None:
+        return False
+    # KVM is required for Firecracker to actually boot a VM
+    # (there's a "no-KVM" jailer mode for testing but it's not
+    # production-grade). Detect /dev/kvm as a heuristic.
+    kvm_path = Path("/dev/kvm")
+    if not kvm_path.exists():
+        return False
+    return True
+
+
+def firecracker_install_instructions() -> str:
+    """Human-readable install instructions for the Settings UI."""
+    return (
+        "Firecracker is not installed (or /dev/kvm is missing).\n"
+        "  # Install Firecracker (Linux + KVM required):\n"
+        "  # Option A: snap (Ubuntu)\n"
+        "  sudo snap install firecracker --classic\n"
+        "  # Option B: download a release tarball\n"
+        "  ARCH=$(uname -m)\n"
+        "  release=\"$(curl -fsSL https://github.com/firecracker-microvm/firecracker/releases/latest\"\n"
+        "           \"| grep -oP 'v\\\\d+\\\\.\\\\d+\\\\.\\\\d+_$ARCH' | head -1)\"\n"
+        "  wget -O /tmp/fc.tar.gz \\\n"
+        "    \"https://github.com/firecracker-microvm/firecracker/releases/download/$release/firecracker-$release-$ARCH.tgz\"\n"
+        "  tar -xzf /tmp/fc.tar.gz -C /opt/\n"
+        "  ln -sf /opt/firecracker-$release-$ARCH/firecracker /usr/local/bin/firecracker\n"
+        "  # Verify KVM is available:\n"
+        "  ls -la /dev/kvm\n"
+        "  # Optional: register as a Docker runtime (kata-runtime or\n"
+        "  # firecracker-containerd) for `docker run --runtime=fc`.\n"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tier 2c: nsjail (Linux) — Google nsjail process sandbox
+# ---------------------------------------------------------------------------
+# Unlike Landlock (which restricts the *current* process via a kernel
+# ruleset), nsjail spawns a new process tree inside a fully isolated
+# namespace. The agent's command is wrapped as:
+#
+#     nsjail --config <generated.cfg> -- <command> [args...]
+#
+# We auto-generate the cfg from a SandboxPolicy mirroring the same
+# allowed_root / deny_paths / network restrictions that Landlock uses,
+# so the two tiers are semantically consistent.
+# ---------------------------------------------------------------------------
+
+
+def nsjail_available() -> bool:
+    """True iff ``nsjail`` is on PATH and we're on Linux."""
+    if not sys.platform.startswith("linux"):
+        return False
+    import shutil
+    return shutil.which("nsjail") is not None
+
+
+def nsjail_config_path(policy: "SandboxPolicy") -> str:
+    """Return a writable path for the generated nsjail cfg."""
+    import tempfile
+    fd, path = tempfile.mkstemp(prefix="kairos-nsjail-", suffix=".cfg")
+    os.close(fd)
+    return path
+
+
+def _linux_nsjail_profile(policy: "SandboxPolicy") -> str:
+    """Generate a nsjail config from a SandboxPolicy.
+
+    Mirrors the Landlock semantics: read-only access to
+    ``allowed_root``, deny-list patterns, network controlled by
+    ``policy.network``. The cfg file is returned as a string — the
+    caller writes it to disk (we don't keep it in memory; nsjail
+    needs a path).
+    """
+    lines = [
+        "# Generated by kairos.sandbox — do not edit by hand",
+        "name: \"kairos-agent\"",
+        "mode: ONCE",  # one-shot: parent waits for child
+        "time_limit: 30",  # hard 30s wall clock cap
+        f"rlimit_as: {policy.max_memory_mb or 512}",
+        f"rlimit_cpu: {policy.max_cpu_seconds or 10}",
+        f"rlimit_nproc: {policy.max_processes or 64}",
+        "rlimit_fsize: 64",  # 64 MB max file size
+        "rlimit_nofile: 256",
+        # Filesystem
+        "mount: {\n  procfs: /proc\n  tmpfs: /tmp\n}",
+        "cwd: \"/\"",
+        f"mount_rdonly: \"{policy.allowed_root}\"" if policy.allowed_root else "# mount_rdonly: (none)",
+        "tmpfs: /tmp:size=16m",
+    ]
+    # Explicit deny list — translates Landlock's ban_path patterns
+    # to nsjail's `deny_src`. Substring match for portability with
+    # the Landlock deny semantics.
+    for deny in policy.deny_paths or []:
+        lines.append(f'deny_src: "{deny}"')
+    # Network — default deny
+    if not policy.network:
+        lines.append("# network: blocked (default)")
+    else:
+        # Bind-mount /etc/resolv.conf and /etc/ssl so HTTPS still works
+        lines.append("mount_bind: /etc/resolv.conf")
+        lines.append("mount_bind: /etc/ssl/certs")
+    return "\n".join(lines) + "\n"
+
+
+def wrap_command_in_nsjail(command: list, policy: "SandboxPolicy") -> list:
+    """Wrap ``command`` with ``nsjail --config <file> --``.
+
+    Writes the cfg to a temp file, prepends the nsjail invocation, and
+    returns the new argv. Caller is responsible for deleting the
+    cfg (use ``os.unlink`` on the path returned by
+    ``nsjail_config_path``).
+    """
+    cfg_path = nsjail_config_path(policy)
+    with open(cfg_path, "w", encoding="utf-8") as f:
+        f.write(_linux_nsjail_profile(policy))
+    return ["nsjail", "--config", cfg_path, "--", *command]

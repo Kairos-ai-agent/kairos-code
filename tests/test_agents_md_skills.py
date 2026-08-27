@@ -12,6 +12,12 @@ if str(ROOT) not in sys.path:
 
 import pytest
 
+from kairos.skills import SkillsLoader as _SkillsLoader
+
+_NO_BUNDLED = _SkillsLoader._SKIP_BUNDLED
+
+from kairos.skills import Skill, SkillsLoader, _parse_skill
+
 from kairos.agents_md import (
     AgentsMd,
     AgentsMdLoader,
@@ -234,7 +240,7 @@ project body
 """,
         encoding="utf-8",
     )
-    loader = SkillsLoader(project_dir=proj, global_dir=g_dir)
+    loader = SkillsLoader(project_dir=proj, global_dir=g_dir, bundled_dir=_NO_BUNDLED)
     skills = loader.discover()
     assert len(skills) == 1
     assert skills[0].description == "project version"
@@ -258,7 +264,7 @@ def test_skills_loader_recurses_into_subdirs(tmp_path):
         "---\nname: docs\ndescription: x\n---\n\ntop body\n",
         encoding="utf-8",
     )
-    loader = SkillsLoader(project_dir=proj)
+    loader = SkillsLoader(project_dir=proj, bundled_dir=_NO_BUNDLED)
     skills = loader.discover()
     by_name = {s.name for s in skills}
     # Nested skills get a `__`-separated prefix.
@@ -305,7 +311,7 @@ this is the body
 """,
         encoding="utf-8",
     )
-    loader = SkillsLoader(project_dir=proj)
+    loader = SkillsLoader(project_dir=proj, bundled_dir=_NO_BUNDLED)
     out = loader.render(loader.match({}))
     assert "# Active Skills" in out
     assert "## demo" in out
@@ -329,7 +335,7 @@ bar
 """,
         encoding="utf-8",
     )
-    loader = SkillsLoader(project_dir=proj)
+    loader = SkillsLoader(project_dir=proj, bundled_dir=_NO_BUNDLED)
     out = loader.for_context({"description": "needs foo"})
     assert "bar" in out
     # No match → empty string

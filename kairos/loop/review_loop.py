@@ -104,6 +104,10 @@ class LoopSession:
     ask_answer: str = ""
     ask_event: Optional[asyncio.Event] = None
     review_focus: List[str] = field(default_factory=list)
+    # Round 11: structured plan tracking (TodoWrite-style). The Coder
+    # agent emits a `write_todos` tool call; we apply the diff to this
+    # Plan and surface it on the bus for the UI. See kairos.loop.plan.
+    plan_todos: Any = None  # kairos.loop.plan.Plan instance (lazy)
 
     def answer_ask(self, answer: str):
         self.ask_answer = answer

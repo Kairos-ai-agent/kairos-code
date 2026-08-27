@@ -1,270 +1,227 @@
-"""Tests for the Kairos TUI controller and backend client.
-
-We exercise the :class:`TuiController` end-to-end against a fake
-backend (no real Textual event loop, no real HTTP) so the tests
-are fast and deterministic.
-"""
+"""Tests for kairos.tui (Round 18 Textual TUI)."""
 from __future__ import annotations
 
-import asyncio
-from typing import Any, Dict, List, Optional
-from unittest.mock import AsyncMock
+import json
+import os
+from pathlib import Path
+from typing import Any, Dict, List
 
 import pytest
 
-from kairos.tui import BackendClient, TuiController, TuiState, Turn
+from kairos.tui_textual import (
+    _HAS_TEXTUAL,
+    _load_cost_log,
+    _render_cost_table,
+    _render_skills_table,
+    _render_recent_log,
+    main,
+)
 
 
 # ---------------------------------------------------------------------------
-# Fake backend
+# Conditional skip: these tests run even without textual so the
+# rendering functions can be unit-tested in any environment.
 # ---------------------------------------------------------------------------
-
-
-class FakeBackend:
-    """In-memory replacement for the FastAPI backend.
-
-    The TUI tests don't need real network — we hand the controller
-    a fake that returns canned responses for the few endpoints the
-    TUI calls.
-    """
-
-    def __init__(self) -> None:
-        self.coder_mode = "default"
-        self.sessions = [{"id": "s1", "round": 2}]
-        self.ask_id = 0
-        self.messages: List[Dict[str, Any]] = []
-        self.answers: List[Dict[str, Any]] = []
-        # Pre-baked response
-        self.next_post_response: Dict[str, Any] = {
-            "status": "ok", "ask_id": "", "response": "(stub)",
-        }
-
-    # Mirrors the BackendClient interface.
-    async def list_projects(self):
-        return [{"id": "p1", "name": "demo"}]
-
-    async def list_sessions(self, project_id: str):
-        return list(self.sessions)
-
-    async def get_session_rounds(self, project_id: str, session_id: str):
-        return []
-
-    async def post_message(self, project_id: str, text: str):
-        self.messages.append({"project_id": project_id, "text": text})
-        return dict(self.next_post_response)
-
-    async def post_answer(self, project_id: str, ask_id: str, text: str):
-        self.answers.append({"project_id": project_id, "ask_id": ask_id, "text": text})
-        return {"status": "ok", "response": "thanks for clarifying"}
-
-    async def start_loop(self, project_id: str, requirement: str):
-        return {"status": "started", "session_id": "s1"}
-
-    async def stop_loop(self, project_id: str):
-        return {"status": "stopped"}
-
-    async def set_coder_mode(self, project_id: str, mode: str):
-        self.coder_mode = mode
-        return {"mode": mode}
-
-    async def get_coder_mode(self, project_id: str):
-        return {"mode": self.coder_mode}
 
 
 @pytest.fixture
-def fake_backend():
-    return FakeBackend()
-
-
-# ---------------------------------------------------------------------------
-# Turn + state
-# ---------------------------------------------------------------------------
-
-
-def test_turn_render_user():
-    t = Turn(role="user", content="hi")
-    out = t.render()
-    assert "you" in out
-    assert "hi" in out
-
-
-def test_turn_render_coder():
-    t = Turn(role="coder", content="hello")
-    out = t.render()
-    assert "coder" in out
-
-
-def test_turn_render_with_tool():
-    t = Turn(role="tool", content="ls", tool="terminal")
-    out = t.render()
-    assert "tool" in out
-    assert "(terminal)" in out
-
-
-def test_state_add_and_transcript():
-    s = TuiState(project_id="p1", project_name="demo")
-    s.add_turn("user", "hi")
-    s.add_turn("coder", "hello")
-    transcript = s.transcript()
-    assert "you" in transcript
-    assert "hi" in transcript
-    assert "coder" in transcript
-    assert "hello" in transcript
-
-
-def test_state_header_shape():
-    s = TuiState(project_id="p1", project_name="demo",
-                 coder_mode="sandbox", round=3)
-    out = s.header()
-    assert "demo" in out
-    assert "sandbox" in out
-    assert "round=3" in out
-    assert "running=no" in out
-
-
-def test_state_running_flag_flips_header():
-    s = TuiState()
-    s.running = True
-    assert "running=yes" in s.header()
-
-
-# ---------------------------------------------------------------------------
-# Controller
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_refresh_pulls_session_and_mode(fake_backend):
-    fake_backend.coder_mode = "read_only"
-    controller = TuiController(backend=None, project_id="p1")  # type: ignore[arg-type]
-    # patch refresh to use our fake
-    controller.backend = fake_backend  # type: ignore[assignment]
-    await controller.refresh()
-    assert controller.state.coder_mode == "read_only"
-    assert controller.state.session_id == "s1"
-    assert controller.state.round == 2
-
-
-@pytest.mark.asyncio
-async def test_submit_sends_to_backend(fake_backend):
-    controller = TuiController(backend=None, project_id="p1")  # type: ignore[arg-type]
-    controller.backend = fake_backend  # type: ignore[assignment]
-    fake_backend.next_post_response = {
-        "status": "ok", "ask_id": "", "response": "hi back",
-    }
-    await controller.submit("hello agent")
-    assert fake_backend.messages == [{"project_id": "p1", "text": "hello agent"}]
-    # User + coder turns recorded
-    assert any(t.role == "user" and t.content == "hello agent" for t in controller.state.turns)
-    assert any(t.role == "coder" and t.content == "hi back" for t in controller.state.turns)
-
-
-@pytest.mark.asyncio
-async def test_submit_records_pending_ask(fake_backend):
-    controller = TuiController(backend=None, project_id="p1")  # type: ignore[arg-type]
-    controller.backend = fake_backend  # type: ignore[assignment]
-    fake_backend.next_post_response = {
-        "status": "pending", "ask_id": "ask-42", "response": "which file?",
-    }
-    await controller.submit("do the thing")
-    assert controller.state.pending_ask == {
-        "status": "pending", "ask_id": "ask-42", "response": "which file?",
-    }
-    # system turn announcing clarification
-    assert any(
-        t.role == "system" and "clarification" in t.content
-        for t in controller.state.turns
+def cost_log_with_data(tmp_path: Path) -> Path:
+    """A cost.jsonl with 3 entries (2 models)."""
+    log = tmp_path / "cost.jsonl"
+    log.write_text(
+        json.dumps({"timestamp": 100.0, "model": "gpt-4o",
+                    "provider": "openai", "prompt_tokens": 100,
+                    "completion_tokens": 50, "cost_usd": 0.001,
+                    "duration_ms": 200}) + "\n" +
+        json.dumps({"timestamp": 200.0, "model": "gpt-4o",
+                    "provider": "openai", "prompt_tokens": 200,
+                    "completion_tokens": 100, "cost_usd": 0.002,
+                    "duration_ms": 300}) + "\n" +
+        json.dumps({"timestamp": 300.0, "model": "claude-3-5-sonnet",
+                    "provider": "anthropic", "prompt_tokens": 50,
+                    "completion_tokens": 25, "cost_usd": 0.005,
+                    "duration_ms": 400}) + "\n",
+        encoding="utf-8",
     )
+    return log
 
 
-@pytest.mark.asyncio
-async def test_answer_pending_uses_ask_id(fake_backend):
-    controller = TuiController(backend=None, project_id="p1")  # type: ignore[arg-type]
-    controller.backend = fake_backend  # type: ignore[assignment]
-    fake_backend.next_post_response = {
-        "status": "pending", "ask_id": "ask-9", "response": "which?",
-    }
-    await controller.submit("hi")
-    assert controller.state.pending_ask
-    await controller.answer_pending("the file is x.py")
-    assert fake_backend.answers == [{
-        "project_id": "p1", "ask_id": "ask-9", "text": "the file is x.py",
-    }]
-    assert controller.state.pending_ask is None
-    # assistant response recorded
-    assert any(
-        t.role == "coder" and t.content == "thanks for clarifying"
-        for t in controller.state.turns
-    )
+# ---------------------------------------------------------------------------
+# _load_cost_log
+# ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_answer_pending_when_no_ask_logs(fake_backend):
-    controller = TuiController(backend=None, project_id="p1")  # type: ignore[arg-type]
-    controller.backend = fake_backend  # type: ignore[assignment]
-    await controller.answer_pending("blah")
-    assert any("no pending ask" in t.content for t in controller.state.turns)
+def test_load_cost_log_returns_entries_newest_first(cost_log_with_data: Path):
+    entries = _load_cost_log(cost_log_with_data)
+    assert len(entries) == 3
+    # Newest first
+    assert entries[0]["model"] == "claude-3-5-sonnet"
+    assert entries[-1]["model"] == "gpt-4o"
 
 
-@pytest.mark.asyncio
-async def test_submit_empty_string_is_noop(fake_backend):
-    controller = TuiController(backend=None, project_id="p1")  # type: ignore[arg-type]
-    controller.backend = fake_backend  # type: ignore[assignment]
-    await controller.submit("")
-    await controller.submit("   ")
-    assert fake_backend.messages == []
+def test_load_cost_log_missing_file_returns_empty(tmp_path: Path):
+    entries = _load_cost_log(tmp_path / "does-not-exist.jsonl")
+    assert entries == []
 
 
-@pytest.mark.asyncio
-async def test_slash_command_runs_locally(fake_backend):
-    controller = TuiController(backend=None, project_id="p1")  # type: ignore[arg-type]
-    controller.backend = fake_backend  # type: ignore[assignment]
-    # /help is a built-in slash command — must not hit the backend
-    await controller.submit("/help")
-    assert fake_backend.messages == []
-    assert any(t.role == "system" and "/test" in t.content for t in controller.state.turns)
+def test_load_cost_log_corrupt_lines_skipped(tmp_path: Path):
+    log = tmp_path / "bad.jsonl"
+    log.write_text('{"good": true}\n{not json\n{"also": "good"}\n',
+                   encoding="utf-8")
+    entries = _load_cost_log(log)
+    assert len(entries) == 2
 
 
-@pytest.mark.asyncio
-async def test_slash_command_error_logged(fake_backend):
-    controller = TuiController(backend=None, project_id="p1")  # type: ignore[arg-type]
-    controller.backend = fake_backend  # type: ignore[assignment]
-    await controller.submit("/no_such_command")
-    assert any("error" in t.content for t in controller.state.turns)
+def test_load_cost_log_respects_path_env(tmp_path: Path, monkeypatch):
+    """When no path is given, the KAIROS_DATA_DIR env var wins."""
+    log = tmp_path / "cost.jsonl"
+    log.write_text('{"model": "m", "cost_usd": 0.1, "prompt_tokens": 1, '
+                   '"completion_tokens": 1, "timestamp": 0, "duration_ms": 1}\n',
+                   encoding="utf-8")
+    monkeypatch.setenv("KAIROS_DATA_DIR", str(tmp_path))
+    entries = _load_cost_log()
+    assert len(entries) == 1
 
 
-@pytest.mark.asyncio
-async def test_submit_records_running_flag(fake_backend):
-    controller = TuiController(backend=None, project_id="p1")  # type: ignore[arg-type]
-    controller.backend = fake_backend  # type: ignore[assignment]
-    fake_backend.next_post_response = {
-        "status": "ok", "ask_id": "", "response": "ok",
-    }
-    # Capture running flag during the call.
-    observed = []
-
-    original = fake_backend.post_message
-    async def spy(project_id, text):
-        observed.append(controller.state.running)
-        return await original(project_id, text)
-    fake_backend.post_message = spy  # type: ignore[assignment]
-
-    await controller.submit("hi")
-    # While the call was in flight, running was True
-    assert observed == [True]
-    # After completion, running is back to False
-    assert controller.state.running is False
+# ---------------------------------------------------------------------------
+# _render_cost_table
+# ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_network_error_recorded(fake_backend):
-    controller = TuiController(backend=None, project_id="p1")  # type: ignore[arg-type]
-    controller.backend = fake_backend  # type: ignore[assignment]
+def test_render_cost_table_empty():
+    out = _render_cost_table([])
+    assert "No cost data" in out
 
-    async def boom(*a, **kw):
-        raise RuntimeError("connection refused")
-    fake_backend.post_message = boom  # type: ignore[assignment]
 
-    await controller.submit("hi")
-    assert any("network error" in t.content for t in controller.state.turns)
-    assert controller.state.running is False
+def test_render_cost_table_aggregates_by_model(cost_log_with_data: Path):
+    entries = _load_cost_log(cost_log_with_data)
+    out = _render_cost_table(entries)
+    # Both models should be mentioned
+    assert "gpt-4o" in out
+    assert "claude-3-5-sonnet" in out
+    # The header is present
+    assert "Model" in out or "Calls" in out
+    # Total line
+    assert "Total:" in out
+    # Total cost: 0.001 + 0.002 + 0.005 = 0.008
+    assert "0.008000" in out or "0.00800" in out or "8e-0" in out or "0.008" in out
+
+
+def test_render_cost_table_sorts_by_cost_desc(cost_log_with_data: Path):
+    entries = _load_cost_log(cost_log_with_data)
+    out = _render_cost_table(entries)
+    # claude (0.005) should appear before gpt-4o (0.003) in the output
+    assert out.index("claude-3-5-sonnet") < out.index("gpt-4o")
+
+
+# ---------------------------------------------------------------------------
+# _render_skills_table
+# ---------------------------------------------------------------------------
+
+
+class _FakeSkill:
+    def __init__(self, name: str, body: str = "", priority: float = 0.5,
+                 source_path: str = "/fake.md"):
+        self.name = name
+        self.body = body
+        self.priority = priority
+        self.source_path = source_path
+
+
+def test_render_skills_table_empty():
+    out = _render_skills_table([])
+    assert "No skills" in out
+
+
+def test_render_skills_table_lists_all():
+    skills = [
+        _FakeSkill("a", body="alpha body"),
+        _FakeSkill("b", body="beta body", priority=0.9),
+    ]
+    out = _render_skills_table(skills)
+    assert "2 skills" in out
+    assert "alpha" in out
+    assert "beta" in out
+
+
+def test_render_skills_table_filter_by_query():
+    skills = [
+        _FakeSkill("pytest", body="use pytest for tests"),
+        _FakeSkill("react", body="react stuff"),
+    ]
+    out = _render_skills_table(skills, query="pytest")
+    assert "pytest" in out
+    assert "react" not in out
+
+
+def test_render_skills_table_no_match():
+    skills = [_FakeSkill("a", body="alpha")]
+    out = _render_skills_table(skills, query="xyzzz")
+    assert "No skills match" in out
+
+
+def test_render_skills_table_truncates_at_20():
+    """A list of 30 skills shows the count but only 20 entries."""
+    skills = [_FakeSkill(f"s{i}") for i in range(30)]
+    out = _render_skills_table(skills)
+    assert "30 skills" in out
+    # The body lines are capped at 20; the names start with "s0" through "s19"
+    assert "s19" in out
+    assert "s29" not in out  # capped
+
+
+# ---------------------------------------------------------------------------
+# _render_recent_log
+# ---------------------------------------------------------------------------
+
+
+def test_render_recent_log_empty():
+    out = _render_recent_log([])
+    assert "No calls" in out
+
+
+def test_render_recent_log_lists_entries(cost_log_with_data: Path):
+    entries = _load_cost_log(cost_log_with_data)
+    out = _render_recent_log(entries)
+    # Newest first
+    assert "claude-3-5-sonnet" in out
+    assert "gpt-4o" in out
+
+
+def test_render_recent_log_caps_at_30(cost_log_with_data: Path):
+    # Build a 50-entry log from scratch (no seed entries)
+    entries = []
+    for i in range(50):
+        entries.append({
+            "timestamp": 1000 + i, "model": f"m{i:02d}", "cost_usd": 0.0001,
+            "prompt_tokens": 1, "completion_tokens": 1, "duration_ms": 1,
+        })
+    out = _render_recent_log(entries)
+    # The renderer is capped at 30 (so the highest-numbered m is m29)
+    assert "m00" in out
+    assert "m29" in out
+    assert "m30" not in out
+
+
+# ---------------------------------------------------------------------------
+# main() entry point
+# ---------------------------------------------------------------------------
+
+
+def test_main_returns_1_when_textual_missing(monkeypatch):
+    """If textual isn't installed, main() returns 1 and prints a message."""
+    from kairos import tui_textual as tui_mod
+    monkeypatch.setattr(tui_mod, "_HAS_TEXTUAL", False)
+    import sys
+    captured_err = []
+    monkeypatch.setattr(sys, "stderr", type("S", (), {
+        "write": lambda s, x: captured_err.append(x)
+    })())
+    rc = main([])
+    assert rc == 1
+    assert any("Textual" in s for s in captured_err)
+
+
+def test_has_textual_is_bool():
+    """The flag is a real bool (so the entrypoint check works)."""
+    assert isinstance(_HAS_TEXTUAL, bool)

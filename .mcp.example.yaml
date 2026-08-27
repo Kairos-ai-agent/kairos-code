@@ -1,0 +1,114 @@
+# Kairos MCP server configuration (example)
+# ------------------------------------------
+#
+# Kairos auto-loads MCP servers from `.mcp.yaml` at the project root
+# (or `~/.kairos/mcp.yaml` for user-global servers) at startup. Each
+# server contributes tools to the Coder / Reviewer agents; the agent
+# loop will surface them in the LLM tool_schemas payload and route
+# tool calls to the matching stdio / HTTP endpoint.
+#
+# This file is the curated "Tier 1" starter pack drawn from the
+# round-9 OSS adoption survey — see docs/OSS_ADOPTION_ROADMAP.md
+# for the full list, scoring, and alternatives.
+#
+# Drop this file in your repo root (or merge its contents into your
+# existing .mcp.yaml) to enable the recommended servers. Each entry
+# below is self-contained; delete any you don't want.
+
+servers:
+  # -------------------------------------------------------------------
+  # 1. context7 — Live, version-pinned library documentation
+  #    https://github.com/upstash/context7
+  #    Solves "the LLM is using a deprecated API" — pulls the actual
+  #    current docs for ~5,000 libraries into the prompt on demand.
+  # -------------------------------------------------------------------
+  - name: context7
+    transport: stdio
+    command: npx
+    args: ["-y", "@upstash/context7-mcp"]
+
+  # -------------------------------------------------------------------
+  # 2. github — Official GitHub MCP (issues, PRs, code search)
+  #    https://github.com/github/github-mcp-server
+  #    Lets the Coder open a PR / create an issue / search code
+  #    without leaving the agent loop. Requires GITHUB_TOKEN env.
+  # -------------------------------------------------------------------
+  - name: github
+    transport: stdio
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-github"]
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_TOKEN}
+
+  # -------------------------------------------------------------------
+  # 3. playwright — Browser automation
+  #    https://github.com/microsoft/playwright-mcp
+  #    Powers webapp-testing (and the Kairos webapp-testing skill in
+  #    kairos/skills/). Real Chromium, accessibility-tree targeting.
+  # -------------------------------------------------------------------
+  - name: playwright
+    transport: stdio
+    command: npx
+    args: ["-y", "@playwright/mcp@latest"]
+
+  # -------------------------------------------------------------------
+  # 4. markitdown — PDF/Office/HTML/image → Markdown
+  #    https://github.com/microsoft/markitdown
+  #    Lets the Coder ingest reference documents the user pastes in.
+  # -------------------------------------------------------------------
+  - name: markitdown
+    transport: stdio
+    command: python
+    args: ["-m", "markitdown_mcp"]
+
+  # -------------------------------------------------------------------
+  # 5. filesystem — official reference filesystem server
+  #    https://github.com/modelcontextprotocol/servers
+  #    Sandboxed file ops with an allowlist of root directories.
+  #    Replace the path with the user's actual workspace.
+  # -------------------------------------------------------------------
+  - name: filesystem
+    transport: stdio
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "."]
+
+  # -------------------------------------------------------------------
+  # 6. fetch — generic web fetcher (HTTP → markdown)
+  #    Part of the official modelcontextprotocol/servers monorepo.
+  #    Useful for "read the docs" / "summarize this URL" prompts.
+  # -------------------------------------------------------------------
+  - name: fetch
+    transport: stdio
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-fetch"]
+
+  # -------------------------------------------------------------------
+  # 7. sequential-thinking — chain-of-thought scratchpad
+  #    https://github.com/modelcontextprotocol/servers
+  #    Lets the LLM think through complex multi-step problems in a
+  #    structured way before committing to a tool call.
+  # -------------------------------------------------------------------
+  - name: sequential-thinking
+    transport: stdio
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+
+  # -------------------------------------------------------------------
+  # 8. memory — official knowledge-graph memory backend
+  #    https://github.com/modelcontextprotocol/servers
+  #    Drop-in replacement for the current flat-file memory_hierarchy;
+  #    see docs/OSS_ADOPTION_ROADMAP.md § "Memory migration" for
+  #    the trade-offs vs. Zep / Graphiti / Cognee.
+  # -------------------------------------------------------------------
+  - name: memory
+    transport: stdio
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-memory"]
+
+# ---------------------------------------------------------------------
+# Authentication
+# ---------------------------------------------------------------------
+# Most servers are public (no auth). For private ones (github, sentry,
+# postgres, supabase, ...), put the token in your environment and
+# reference it as ${ENV_VAR} in the env block above. Tokens are never
+# stored in this file.

@@ -103,10 +103,19 @@ class KairosAgent:
         chunk_seq = 0
 
         try:
-            stream_ctx = self._llm.stream(messages, tools=tools, temperature=self.temperature)
+            with self._traced_llm_call(messages, tools) as _trace_span:
+                stream_ctx = self._llm.stream(messages, tools=tools, temperature=self.temperature)
         except Exception as e:
             logger.debug("stream() unavailable, falling back to complete(): %s", e)
-            return await self._llm.complete(messages, tools=tools, temperature=self.temperature)
+            with self._traced_llm_call(messages, tools) as _trace_span:
+                resp = await self._llm.complete(messages, tools=tools, temperature=self.temperature)
+            _trace_span.set_output(
+                content=resp.content,
+                prompt_tokens=resp.usage.get("prompt_tokens", 0),
+                completion_tokens=resp.usage.get("completion_tokens", 0),
+                finish_reason=resp.finish_reason,
+            )
+            return resp
 
         # Iterate chunks. The provider's stream() is an AsyncIterator[str]
         # — OpenAI emits raw delta strings AND a final sentinel
@@ -154,11 +163,31 @@ class KairosAgent:
             logger.debug("Stream interrupted mid-way (%s); falling back", e)
             # Fall back to non-stream so we still get a final answer.
             try:
-                return await self._llm.complete(messages, tools=tools, temperature=self.temperature)
+                with self._traced_llm_call(messages, tools) as _trace_span:
+                    resp = await self._llm.complete(messages, tools=tools, temperature=self.temperature)
+                _trace_span.set_output(
+                    content=resp.content,
+                    prompt_tokens=resp.usage.get("prompt_tokens", 0),
+                    completion_tokens=resp.usage.get("completion_tokens", 0),
+                    finish_reason=resp.finish_reason,
+                )
+                return resp
             except Exception:
                 # Re-raise the original stream error if complete also fails.
                 raise
 
+        # Record the streaming call's output on the trace span
+        # (started at the top of _stream_complete). usage is populated
+        # by the underlying provider if it tracks it; otherwise empty.
+        try:
+            _trace_span.set_output(
+                content=accumulated_text[:500] if accumulated_text else "",
+                prompt_tokens=int(usage.get("prompt_tokens", 0)) if usage else 0,
+                completion_tokens=int(usage.get("completion_tokens", 0)) if usage else 0,
+                finish_reason=finish_reason,
+            )
+        except Exception:
+            pass
         return LLMResponse(
             content=accumulated_text,
             model=model_name,
@@ -178,6 +207,7 @@ class KairosAgent:
         tools: Optional[List[Any]] = None,
         project_dir: Optional[str] = None,
         output_guardrail: Optional[Any] = None,
+        plan_tracker: Optional[Any] = None,
     ):
         self.agent_id = agent_id
         self.name = name
@@ -189,6 +219,12 @@ class KairosAgent:
         # LLM
         self._llm = create_provider(llm_config)
         self._llm_config = llm_config
+
+        # Round 11: structured plan tracker (TodoWrite-style). If set,
+        # the agent intercepts the ``write_todos`` tool call and
+        # applies the diff to the plan instead of dispatching it as a
+        # real tool. See kairos.loop.plan.Plan.
+        self.plan_tracker = plan_tracker
 
         # State
         self.status = AgentStatus.IDLE
@@ -306,6 +342,100 @@ class KairosAgent:
         """Execute a tool call and return the result."""
         return await self._dispatch_tool_with_args(tool_call, None)
 
+    # ------------------------------------------------------------------
+    # Observability (Round 11)
+    # ------------------------------------------------------------------
+    def _traced_llm_call(self, messages, tools=None):
+        """Return a context manager that wraps an LLM call in a tracer
+        span. The default tracer is a no-op (in-memory) so this is
+        safe to call from any code path; production users wire
+        Langfuse / OTLP via ``init_default_tracer()``.
+
+        Usage:
+            with self._traced_llm_call(messages, tools) as span:
+                response = await self._llm.complete(messages, tools=tools)
+                span.set_output(...)
+        """
+        from kairos.observability import get_default_tracer
+        tracer = get_default_tracer()
+        # Build a list-shaped copy for the message_count attribute
+        msgs_list = list(messages) if messages else []
+        return tracer.llm_call(
+            model=getattr(self._llm_config, "model", "unknown"),
+            provider=getattr(self._llm_config, "provider", ""),
+            messages=msgs_list,
+        )
+
+    async def _handle_write_todos(
+        self, arguments: Dict[str, Any],
+        task: "AgentTask", turn: int,
+    ) -> ToolResult:
+        """Apply a ``write_todos`` tool call to ``self.plan_tracker``.
+
+        Round 11 wiring. The LLM emits a fresh plan as a tool call
+        (Anthropic / DeepAgents pattern); we diff it against the
+        current plan and publish the diff on the bus so the UI
+        can render a live "Current plan" panel.
+
+        Returns a synthetic ``ToolResult`` so the agent's tool loop
+        continues without a real tool being invoked.
+        """
+        from kairos.loop.plan import apply_write_todos
+        from kairos.tools.base import ToolResult
+        try:
+            diffs = apply_write_todos(self.plan_tracker, arguments or {})
+        except Exception as exc:  # malformed input — surface as tool error
+            logger.debug("write_todos apply failed: %s", exc)
+            return ToolResult(
+                success=False,
+                output="",
+                error=f"write_todos failed: {exc}",
+            )
+        # `apply_write_todos` returns a list of diff strings; if
+        # the only entry starts with "write_todos: invalid", the
+        # input was malformed and the apply was a no-op.
+        if diffs and len(diffs) == 1 and diffs[0].startswith("write_todos: invalid"):
+            return ToolResult(
+                success=False,
+                output="",
+                error=diffs[0],
+            )
+        diff_text = "\n".join(diffs) if diffs else "(no changes)"
+        # Publish on the bus so the UI can update its plan panel.
+        try:
+            await self.message_bus.publish(Message(
+                sender=self.agent_id,
+                topic="plan.updated",
+                content=diff_text,
+                msg_type="text",
+                metadata={
+                    "task_id": task.id,
+                    "turn": turn + 1,
+                    "plan": self.plan_tracker.to_dict(),
+                },
+            ))
+        except Exception:
+            logger.debug("plan.updated publish failed (non-fatal)",
+                          exc_info=True)
+        return ToolResult(
+            success=True,
+            output=(
+                f"Plan updated. Current state:\n"
+                f"{self._render_plan_inline()}"
+            ),
+        )
+
+    def _render_plan_inline(self) -> str:
+        """Compact inline rendering of the current plan, used in
+        the synthetic tool output so the model can see its own plan
+        state in subsequent turns.
+        """
+        try:
+            from kairos.loop.plan import render_plan_block
+            return render_plan_block(self.plan_tracker) or "(empty plan)"
+        except Exception:
+            return "(plan render failed)"
+
     async def _dispatch_tool_with_args(self, tool_call: ToolCall,
                                         override_args) -> ToolResult:
         """Like _dispatch_tool but `override_args` (a dict) replaces the
@@ -370,6 +500,20 @@ class KairosAgent:
                     system = f"{system}\n\n{skills_block}"
             except Exception as exc:
                 logger.debug("skills injection failed: %s", exc)
+
+        # Round 12: inject the TodoWrite-style plan into the system
+        # prompt so the Coder can see what it committed to last turn.
+        # The plan is short (max ~6KB at DEFAULT_MAX_ACTIVE=3 todos) so
+        # this is cheap; the agent can use it to avoid re-doing done
+        # work and to know what's in_progress right now.
+        if self.plan_tracker is not None and not self.plan_tracker.is_empty:
+            try:
+                from kairos.loop.plan import render_plan_block
+                plan_block = render_plan_block(self.plan_tracker)
+                if plan_block:
+                    system = f"{system}\n\n{plan_block}"
+            except Exception as exc:
+                logger.debug("plan injection failed: %s", exc)
 
         # Inject retained-reasoning summary (Codex-Harness-style) as a
         # second system message, immediately after the role + skills
@@ -443,9 +587,16 @@ class KairosAgent:
                 )
             else:
                 prompt += f"# Turns to summarize:\n{transcript}"
-            response = await self._llm.complete([
-                LLMMessage(role="user", content=prompt)
-            ])
+            with self._traced_llm_call([LLMMessage(role="user", content=prompt)]) as _trace_span:
+                response = await self._llm.complete([
+                    LLMMessage(role="user", content=prompt)
+                ])
+                _trace_span.set_output(
+                    content=(response.content or "")[:500],
+                    prompt_tokens=response.usage.get("prompt_tokens", 0),
+                    completion_tokens=response.usage.get("completion_tokens", 0),
+                    finish_reason=response.finish_reason,
+                )
             new_summary = (response.content or "").strip()
             if new_summary:
                 self._memory_summary = new_summary
@@ -609,6 +760,37 @@ class KairosAgent:
                         project_id=getattr(self, "_current_project_id", ""),
                     )
 
+                    # Round 11: built-in ``write_todos`` interception.
+                    # The LLM emits TodoWrite-style plan updates as a
+                    # tool call; we apply the diff to the plan_tracker
+                    # and short-circuit the dispatch so the tool
+                    # itself is never actually invoked.
+                    if tc.name == "write_todos" and self.plan_tracker is not None:
+                        tool_result = await self._handle_write_todos(
+                            tc.arguments if isinstance(tc.arguments, dict) else {},
+                            task=task, turn=turn,
+                        )
+                        self.current_tool = None
+                        # Memory injection (matches real tool result shape)
+                        self._memory.append(LLMMessage(
+                            role="tool",
+                            content=tool_result.output if tool_result.success else f"Error: {tool_result.error}",
+                            tool_call_id=tc.id,
+                            name=tc.name,
+                        ))
+                        # Publish result on the bus so the chat history
+                        # shows the agent's plan update.
+                        await self.message_bus.publish(Message(
+                            sender=self.agent_id,
+                            topic="tool.result",
+                            content=tool_result.output[:500] if tool_result.success else f"Error: {tool_result.error}",
+                            msg_type="text",
+                            metadata={"task_id": task.id, "tool": tc.name,
+                                      "turn": turn + 1,
+                                      "success": tool_result.success},
+                        ))
+                        continue
+
                     tool_result = await self._dispatch_tool_with_args(tc, tc_args)
                     self.current_tool = None
 
@@ -746,9 +928,16 @@ class KairosAgent:
             self._truncate_memory()
             messages = [LLMMessage(role="system", content=chat_system)] + self._memory
             try:
-                response = await asyncio.wait_for(
-                    self._llm.complete(messages, tools=tool_schemas, temperature=self.temperature),
-                    timeout=self._llm_timeout_s,
+                with self._traced_llm_call(messages, tool_schemas) as _trace_span:
+                    response = await asyncio.wait_for(
+                        self._llm.complete(messages, tools=tool_schemas, temperature=self.temperature),
+                        timeout=self._llm_timeout_s,
+                    )
+                _trace_span.set_output(
+                    content=(response.content or "")[:500],
+                    prompt_tokens=response.usage.get("prompt_tokens", 0),
+                    completion_tokens=response.usage.get("completion_tokens", 0),
+                    finish_reason=response.finish_reason,
                 )
             except asyncio.TimeoutError:
                 return (

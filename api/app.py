@@ -23,6 +23,8 @@ from api.routes.teams import router as teams_router
 from api.routes.checkpoints import router as checkpoints_router
 from api.routes.traces import router as traces_router
 from api.routes.cloud import router as cloud_router
+from api.routes.cost import router as cost_router
+from api.routes.skill_search import router as skill_search_router
 
 log = logging.getLogger(__name__)
 
@@ -73,6 +75,8 @@ app.include_router(teams_router, prefix="/api/projects", tags=["teams"])
 app.include_router(checkpoints_router, prefix="/api/projects", tags=["checkpoints"])
 app.include_router(traces_router, prefix="/api/projects", tags=["traces"])
 app.include_router(cloud_router, prefix="/api/projects", tags=["cloud"])
+app.include_router(cost_router, prefix="/api/cost", tags=["cost"])
+app.include_router(skill_search_router, prefix="/api/skill_search", tags=["skill_search"])
 
 # Global message stream — mounted at /api/messages (not under /projects
 # because FastAPI's path-param matching can shadow literal /messages

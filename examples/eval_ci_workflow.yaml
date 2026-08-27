@@ -1,0 +1,144 @@
+# GitHub Actions workflow template — kairos eval CI
+#
+# Drop this into .github/workflows/eval.yml to gate PRs on the
+# regression suite. The base run produces results/runs/<id>.json;
+# the compare step diffs against the latest baseline.
+#
+# Prerequisites: pip install litellm pyyaml
+# Optional: set LANGFUSE_API_KEY or LLM_API_KEY for the judge.
+
+name: agent-regression
+
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Standardized env so the eval target can talk to the Coder.
+      KAIROS_API_KEY: ${{ secrets.KAIROS_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Fetch enough history to compare against the main branch.
+          fetch-depth: 50
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Kairos + deps
+        run: |
+          pip install -e .
+          pip install litellm pyyaml
+
+      - name: Derive regression cases from git log (Round 14)
+        # R13 added ``kairos eval derive``: scan the recent git log
+        # for kairos checkpoint commits, extract their # Plan at this
+        # round blocks, and synthesize a YAML suite that pins every
+        # todo content as a contains-needle. This makes the CI
+        # suite grow automatically as the team lands more work.
+        run: |
+          mkdir -p .kairos-ci
+          # Combine the hand-written smoke suite with the derived one.
+          python -m kairos.eval derive \
+            --repo . \
+            --out .kairos-ci/derived.yaml \
+            --limit 30 \
+            --name auto-derived
+
+      - name: Run eval suite (PR head)
+        id: run_pr
+        run: |
+          # Run both the hand-written CI suite and the derived one
+          # (if any cases were synthesized).
+          python -m kairos.eval run \
+            --suite examples/eval_ci.yaml \
+            --out .kairos-ci/head-ci.json
+          if [ -s .kairos-ci/derived.yaml ] && \
+             grep -q '^cases:' .kairos-ci/derived.yaml && \
+             ! grep -q '^cases: \[\]' .kairos-ci/derived.yaml; then
+            python -m kairos.eval run \
+              --suite .kairos-ci/derived.yaml \
+              --out .kairos-ci/head-derived.json
+          fi
+        env:
+          # Tighten latency to fail CI on a regression that
+          # doubles the time budget.
+          KAIROS_EVAL_LATENCY_BUDGET_MS: "30000"
+        id: baseline
+        run: |
+          mkdir -p .kairos-ci
+          # Use the last green run from main as the baseline; fall
+          # back to a fresh "empty" baseline on first run.
+          if [ -f .kairos-ci/baseline.json ]; then
+            echo "baseline=.kairos-ci/baseline.json" >> $GITHUB_OUTPUT
+          else
+            echo "baseline=empty" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run eval suite (PR head)
+        id: run_pr
+        run: |
+          python -m kairos.eval run \
+            --suite examples/eval_ci.yaml \
+            --out .kairos-ci/head.json
+        env:
+          # Tighten latency to fail CI on a regression that
+          # doubles the time budget.
+          KAIROS_EVAL_LATENCY_BUDGET_MS: "30000"
+
+      - name: Compare against baseline (only on PRs)
+        if: github.event_name == 'pull_request' && steps.baseline.outputs.baseline != 'empty'
+        run: |
+          python -m kairos.eval compare \
+            ${{ steps.baseline.outputs.baseline }} .kairos-ci/head.json \
+            --alpha 0.05 \
+            | tee .kairos-ci/diff.json
+        # compare exits 2 on regression; we want that to fail CI.
+
+      - name: Promote baseline (only on main push)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          cp .kairos-ci/head.json .kairos-ci/baseline.json
+          # Persist as a workflow artifact so the next PR can diff
+          # against this latest green run.
+          mkdir -p .kairos-ci/artifacts
+          cp .kairos-ci/head.json .kairos-ci/artifacts/baseline-${{ github.run_id }}.json
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results-${{ github.run_id }}
+          path: .kairos-ci/
+
+      - name: Summarize
+        if: always()
+        run: |
+          python -c "
+          import json, sys
+          with open('.kairos-ci/head.json') as f:
+              data = json.load(f)
+          cases = data.get('cases', [])
+          passed = sum(1 for c in cases if c.get('passed'))
+          total = len(cases)
+          rate = data.get('pass_rate', 0)
+          print(f'::notice title=Agent Regression:: '
+                f'{passed}/{total} cases passed '
+                f'(pass_rate={rate:.0%}, '
+                f'cost=${data.get(\"total_cost_usd\", 0):.4f})')
+          for c in cases:
+              mark = '✓' if c.get('passed') else '✗'
+              print(f'  {mark} {c[\"name\"]} (score={c[\"score\"]:.2f})')
+          "

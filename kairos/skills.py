@@ -45,7 +45,10 @@ import yaml
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_ACTIVE = 3
-DEFAULT_MAX_BODY_BYTES = 6144  # Keep each skill under 6KB so we don't blow context.
+DEFAULT_MAX_BODY_BYTES = 16384  # 16KB — long enough for battle-tested skills
+                                  # (e.g. obra/superpowers). Priority is still
+                                  # the top-N gate so total injected bytes
+                                  # stay bounded.
 
 _FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n(.*)\Z", re.DOTALL)
 
@@ -135,12 +138,31 @@ def _parse_skill(path: Path) -> Optional[Skill]:
 
 
 class SkillsLoader:
-    """Discover and match skills from disk."""
+    """Discover and match skills from disk.
+
+    Three scopes, in increasing priority order:
+    - **bundled**: ``<package>/skills/*.md`` (ships with the Kairos
+      install — battle-tested community skills like
+      obra/superpowers). Last to be overridden, but
+      the loader picks them up first so the user sees them
+      immediately even with an empty ``~/.kairos/skills``.
+    - **global**:  ``~/.kairos/skills/*.md`` (user-global)
+    - **project**: ``<project.work_dir>/.kairos/skills/*.md``
+
+    Higher priority wins on name collision (project > global > bundled).
+    """
+
+    # Sentinel for "explicitly skip the bundled scope" (vs the default
+    # of "use the package's bundled dir"). Plain `None` historically
+    # meant "use default"; we keep that behavior but expose this
+    # sentinel so tests / tools can opt out.
+    _SKIP_BUNDLED = object()
 
     def __init__(
         self,
         project_dir: Optional[Path] = None,
         global_dir: Optional[Path] = None,
+        bundled_dir: Optional[Path] = None,
         max_active: int = DEFAULT_MAX_ACTIVE,
     ):
         self.project_dir = Path(project_dir) if project_dir else None
@@ -148,11 +170,18 @@ class SkillsLoader:
             Path(global_dir) if global_dir
             else (Path.home() / ".kairos" / "skills")
         )
+        # Default bundled dir: <package>/skills/ next to skills.py.
+        # Pass `SkillsLoader._SKIP_BUNDLED` to skip the bundled scope.
+        if bundled_dir is None:
+            bundled_dir = Path(__file__).parent / "skills"
+        if bundled_dir is SkillsLoader._SKIP_BUNDLED:
+            self.bundled_dir = None
+        else:
+            self.bundled_dir = Path(bundled_dir) if bundled_dir else None
         self.max_active = max_active
 
     def discover(self) -> List[Skill]:
-        """Return all skills found at both scopes, project wins on
-        duplicate names.
+        """Return all skills found across all three scopes.
 
         Discovery is **recursive**: in a monorepo, every service
         can ship its own ``.kairos/skills/<service>/<name>.md`` and
@@ -160,18 +189,22 @@ class SkillsLoader:
         namespaced with ``__`` to avoid collisions — ``backend/deploy.md``
         becomes the skill name ``backend__deploy`` (matching Claude
         Code 2.1's nested-skill loading convention).
+
+        Scope order: bundled (lowest) → global → project (highest).
+        Later scopes override earlier ones on name collision.
         """
+        scopes: List[Tuple[Optional[Path], int]] = []
+        if self.bundled_dir and self.bundled_dir.exists():
+            scopes.append((self.bundled_dir, 0))  # lowest priority
+        if self.global_dir and self.global_dir.exists():
+            scopes.append((self.global_dir, 1))
+        if self.project_dir:
+            project_skills = self.project_dir / ".kairos" / "skills"
+            if project_skills.exists():
+                scopes.append((project_skills, 2))  # highest
+
         skills: Dict[str, Skill] = {}
-        for scope_root, project_scope in (
-            (self.global_dir, False),
-            (
-                self.project_dir / ".kairos" / "skills"
-                if self.project_dir else None,
-                True,
-            ),
-        ):
-            if not scope_root or not scope_root.exists():
-                continue
+        for scope_root, _scope_idx in scopes:
             for md in sorted(scope_root.rglob("*.md")):
                 s = _parse_skill(md)
                 if not s:
@@ -188,10 +221,10 @@ class SkillsLoader:
                     namespaced = f"{prefix}__{s.name}"
                 else:
                     namespaced = s.name
-                # Project wins on name collision.
-                if project_scope or namespaced not in skills:
-                    s.name = namespaced
-                    skills[namespaced] = s
+                # Later (higher-priority) scope wins on name collision
+                # — simply overwrite.
+                s.name = namespaced
+                skills[namespaced] = s
         return list(skills.values())
 
     def match(self, context: Dict[str, Any]) -> List[Skill]:

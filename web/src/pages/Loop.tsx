@@ -10,6 +10,11 @@ import {
 } from '@ant-design/icons';
 import { Modal, Tabs, Tooltip, Select, Alert } from 'antd';
 import MermaidRenderer from '../components/MermaidRenderer';
+import PlanPanel from '../components/PlanPanel';
+import PlanHistoryPanel from '../components/PlanHistoryPanel';
+import CostDashboard from '../components/CostDashboard';
+import EvalPanel from '../components/EvalPanel';
+import SkillSearchPalette from '../components/SkillSearchPalette';
 import api, { revertFile } from '../api/client';
 import { useAgentStore } from '../stores/agentStore';
 import { onWebSocketMessage, onWebSocketState } from '../api/client';
@@ -362,6 +367,7 @@ const Loop: React.FC = () => {
 
   return (
     <div style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
+      <SkillSearchPalette />
       <Space style={{ marginBottom: 12 }}>
         <Title level={3} style={{ margin: 0 }}>Loop Review</Title>
         <Tag color={loop?.running ? 'processing' : 'default'}>
@@ -675,6 +681,33 @@ const Loop: React.FC = () => {
               ]} />
             </Card>
           )}
+
+          {/* Round 13: live TodoWrite-style plan checklist. */}
+          <div style={{ marginBottom: 12 }}>
+            <PlanPanel messages={messages} />
+          </div>
+
+          {/* Round 14: plan history timeline — the diff between
+              each round's plan snapshot. Sourced from session.history
+              (R12.2 added the per-round plan field). */}
+          {loop?.history && Array.isArray(loop.history) && loop.history.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <PlanHistoryPanel history={loop.history} />
+            </div>
+          )}
+
+          {/* Round 16: cost dashboard. Reads from /api/cost/summary
+              + /api/cost/recent (litellm cost_callback logs in
+              kairos/cost.py). Polls every 30s. */}
+          <div style={{ marginBottom: 12 }}>
+            <CostDashboard />
+          </div>
+
+          {/* Round 19: eval panel — list datasets, record/replay/derive
+              from the web without touching the CLI. */}
+          <div style={{ marginBottom: 12 }}>
+            <EvalPanel />
+          </div>
 
           {/* Diff viewer */}
           {checkpoints.length >= 2 && (

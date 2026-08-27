@@ -253,3 +253,129 @@ async def derive_from_git_endpoint(
     n = derive_and_write_suite(Path(repo_path), out, name="api-derived",
                                 limit=limit)
     return {"cases": n, "out_path": str(out)}
+
+
+# ---------------------------------------------------------------------------
+# Round 35: cost-of-goods-sold (COGS) value metrics
+# ---------------------------------------------------------------------------
+
+
+def _count_dataset_outcomes(datasets_dir: Path) -> Dict[str, int]:
+    """Count pass/fail/total across all datasets/*.jsonl.
+
+    Each line in a dataset JSONL is a case record. The pass/fail
+    is the ``passed`` boolean (R13 record_run format). Returns
+    aggregate totals.
+    """
+    total = 0
+    passed = 0
+    failed = 0
+    if not datasets_dir.exists():
+        return {"total": 0, "passed": 0, "failed": 0}
+    for p in sorted(datasets_dir.glob("*.jsonl")):
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+            for line in text.splitlines():
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                total += 1
+                if rec.get("passed"):
+                    passed += 1
+                else:
+                    failed += 1
+        except OSError:
+            continue
+    return {"total": total, "passed": passed, "failed": failed}
+
+
+@router.get("/value")
+async def cost_value_metrics() -> Dict[str, Any]:
+    """COGS (cost of goods sold) value metrics.
+
+    Combines:
+      - ``data/cost.jsonl`` (every LLM call's cost)        — R14
+      - ``data/datasets/*.jsonl`` (eval pass/fail records)  — R13/R19
+      - ``data/alerts.jsonl`` (fired alerts)                — R28
+
+    Returns derived metrics:
+      - ``cost_per_case``     : total_cost / total_cases
+      - ``cost_per_passing``  : total_cost / passing_cases
+      - ``cost_per_alert``    : total_cost / alert_count
+      - ``efficiency``        : passing / total (0-1)
+      - ``approval_yield``    : 1 - critical_alert_ratio (proxy for "fraction
+                                 of work that didn't need human intervention")
+
+    If a denominator is zero, the corresponding metric is
+    ``None`` (not 0 or NaN) so the UI can render "N/A" cleanly.
+    """
+    from kairos.cost import _get_log_path
+    from kairos.alerts_dispatcher import _get_history_path
+
+    # Total cost (disk-only — the in-memory ring buffer is process-local
+    # and the dashboard already exposes it via /summary)
+    cost_path = _get_log_path()
+    total_cost = 0.0
+    n_calls = 0
+    if cost_path.exists():
+        for line in cost_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+                total_cost += float(rec.get("cost_usd", 0.0))
+                n_calls += 1
+            except (json.JSONDecodeError, ValueError, TypeError):
+                continue
+
+    # Dataset outcomes
+    datasets_dir = cost_path.parent / "datasets"
+    outcomes = _count_dataset_outcomes(datasets_dir)
+    total_cases = outcomes["total"]
+    passing = outcomes["passed"]
+    failed = outcomes["failed"]
+
+    # Alert counts
+    alert_path = _get_history_path()
+    n_alerts = 0
+    n_critical = 0
+    if alert_path.exists():
+        for line in alert_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+                n_alerts += 1
+                if rec.get("severity") == "critical":
+                    n_critical += 1
+            except json.JSONDecodeError:
+                continue
+
+    def _ratio(num: float, den: float) -> Optional[float]:
+        return round(num / den, 6) if den > 0 else None
+
+    return {
+        "total_cost_usd": round(total_cost, 6),
+        "n_llm_calls": n_calls,
+        "dataset": {
+            "total_cases": total_cases,
+            "passed": passing,
+            "failed": failed,
+        },
+        "alerts": {
+            "total": n_alerts,
+            "critical": n_critical,
+        },
+        "metrics": {
+            "cost_per_case": _ratio(total_cost, total_cases),
+            "cost_per_passing": _ratio(total_cost, passing),
+            "cost_per_alert": _ratio(total_cost, n_alerts),
+            "efficiency": _ratio(passing, total_cases),
+            "approval_yield": (
+                round(1.0 - (n_critical / n_alerts), 6) if n_alerts > 0 else None
+            ),
+        },
+    }

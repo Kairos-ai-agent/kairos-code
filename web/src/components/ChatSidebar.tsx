@@ -1,7 +1,7 @@
 /**
  * ChatSidebar — left rail of the chat UI.
  *
- * Layout (DSH / ChatGPT beta style):
+ * Layout (R37 — minimax-code inspired):
  *
  *   ┌──────────────────────────────┐
  *   │  [ +  New chat             ]  │  ← primary CTA
@@ -19,8 +19,8 @@
  *   │   • Try /plan   85          │
  *   │  Yesterday                   │
  *   │   • ...                      │
- *   │  ──────────────────────────  │
- *   │   [empty space flex]         │
+ *   │  ──────────────────────────  │  ← footer (R37: moved here from
+ *   │  Today  Tools  ⚙   ☀ Light │     the topbar)
  *   └──────────────────────────────┘
  *
  * Projects are loaded once at the topbar level (see AppLayout) and
@@ -30,9 +30,10 @@
  * chat store's currentProject and navigates to /chat (resets the
  * session thread because sessions are scoped per project).
  *
- * Sessions for the current project are grouped by `last_activity`:
- *   - Today (last 24h) / Yesterday (24-48h) /
- *     Previous 7 days (2-7d) / Older (>7d)
+ * R37 footer (new): Today / Tools / Settings / Theme live at the
+ * bottom of the left rail. They were previously icons in the
+ * topbar; the user requested moving them to the bottom-left so
+ * the topbar can stay minimal.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -41,9 +42,13 @@ import {
   MessageOutlined, ThunderboltOutlined,
   CheckCircleFilled, CloseCircleFilled, DownOutlined,
   UpOutlined, ProjectOutlined,
+  AppstoreOutlined, ToolOutlined, SettingOutlined,
+  SunOutlined, MoonOutlined,
 } from '@ant-design/icons';
 
 import { useChatStore } from '../stores/chatStore';
+import { useThemeStore } from '../stores/themeStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import api from '../api/client';
 import NewChatButton from './NewChatButton';
@@ -117,7 +122,8 @@ const ChatSidebar: React.FC = () => {
     }}>
       <NewChatButton />
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 4px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 4px', minHeight: 0 }}>
+        {/* ------------------- Projects list ------------------- */}
         {/* ------------------- Projects list ------------------- */}
         {projects.length > 0 && (
           <div style={{ marginBottom: 12 }}>
@@ -244,6 +250,123 @@ const ChatSidebar: React.FC = () => {
             style={{ marginTop: 32 }}
           />
         )}
+      </div>
+
+      {/* ------------------- Footer (R37) ------------------- */}
+      <SidebarFooter />
+    </div>
+  );
+};
+
+
+// ---------------------------------------------------------------------------
+// SidebarFooter — bottom-left controls (Today / Tools / Settings / Theme)
+// ---------------------------------------------------------------------------
+//
+// R37: these used to be icons in the topbar. The user requested they
+// all move to the bottom-left (minimax-code style). They sit at the
+// very bottom of the ChatSidebar so the active project's history
+// stays visually anchored above them.
+
+// Exported so the vitest tests can mount it in isolation. Production
+// code uses it via ChatSidebar's render tree.
+export const SidebarFooter: React.FC = () => {
+  const tokens = useThemeTokens();
+  const navigate = useNavigate();
+  const mode = useThemeStore((s) => s.mode);
+  const toggle = useThemeStore((s) => s.toggle);
+  const openSettings = useSettingsStore((s) => s.openDrawer);
+
+  // Match the visual weight of the existing ProjectRow / SessionRow
+  // buttons (padding 7px 10px, borderRadius 8, fontSize 13). This
+  // keeps the footer feeling native to the sidebar instead of a
+  // generic "settings" panel.
+  const baseBtn = {
+    flex: 1,
+    padding: '7px 6px',
+    borderRadius: 8,
+    background: 'transparent',
+    border: 'none',
+    color: tokens.labelSecondary,
+    fontSize: 12,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    cursor: 'pointer',
+    transition: 'background 0.12s, color 0.12s',
+  } as const;
+
+  return (
+    <div
+      data-testid="sidebar-footer"
+      style={{
+        borderTop: `1px solid ${tokens.border}`,
+        marginTop: 8,
+        paddingTop: 8,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+      }}
+    >
+      <div style={{ display: 'flex', gap: 4 }}>
+        <Tooltip title="Today" placement="top">
+          <button
+            type="button"
+            data-testid="footer-today"
+            onClick={() => navigate('/today')}
+            style={baseBtn}
+            onMouseEnter={(e) => { e.currentTarget.style.background = tokens.bgLay1; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <AppstoreOutlined style={{ fontSize: 14 }} />
+            <span>Today</span>
+          </button>
+        </Tooltip>
+        <Tooltip title="Tools" placement="top">
+          <button
+            type="button"
+            data-testid="footer-tools"
+            onClick={() => navigate('/tools')}
+            style={baseBtn}
+            onMouseEnter={(e) => { e.currentTarget.style.background = tokens.bgLay1; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <ToolOutlined style={{ fontSize: 14 }} />
+            <span>Tools</span>
+          </button>
+        </Tooltip>
+      </div>
+      <div style={{ display: 'flex', gap: 4 }}>
+        <Tooltip title="Settings (LLM, voice, MCP, ...)" placement="top">
+          <button
+            type="button"
+            data-testid="footer-settings"
+            onClick={openSettings}
+            style={baseBtn}
+            onMouseEnter={(e) => { e.currentTarget.style.background = tokens.bgLay1; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <SettingOutlined style={{ fontSize: 14 }} />
+            <span>Settings</span>
+          </button>
+        </Tooltip>
+        <Tooltip
+          title={mode === 'dark' ? 'Switch to light' : 'Switch to dark'}
+          placement="top"
+        >
+          <button
+            type="button"
+            data-testid="footer-theme"
+            onClick={toggle}
+            style={baseBtn}
+            onMouseEnter={(e) => { e.currentTarget.style.background = tokens.bgLay1; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            {mode === 'dark' ? <SunOutlined style={{ fontSize: 14 }} /> : <MoonOutlined style={{ fontSize: 14 }} />}
+            <span>{mode === 'dark' ? 'Light' : 'Dark'}</span>
+          </button>
+        </Tooltip>
       </div>
     </div>
   );

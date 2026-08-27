@@ -299,3 +299,129 @@ async def save_loop_config(request: LoopConfigRequest):
         return {"status": "ok", "loop_config": existing["loop_config"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Round 37: LLM test-connection (OpenAI / Anthropic compatible)
+# ============================================================================
+
+import logging
+import urllib.error
+import urllib.request
+from pydantic import BaseModel
+from fastapi import Body, HTTPException
+
+logger = logging.getLogger(__name__)
+
+
+class TestConnectionRequest(BaseModel):
+    """Payload for the test-connection endpoint.
+
+    `provider` is one of: ``"openai"`` (any OpenAI-compatible server)
+    or ``"anthropic"``. The endpoint appends the right path
+    (``/v1/models`` or ``/v1/messages``) and sends a minimal probe.
+    """
+    provider: str
+    base_url: str
+    api_key: str
+    model: str = ""  # optional, only used for anthropic (in the body)
+
+
+def _probe_get(base_url: str, api_key: str, timeout: float = 5.0):
+    """Issue a GET ``/v1/models`` against an OpenAI-compatible base."""
+    url = base_url.rstrip("/") + "/v1/models"
+    req = urllib.request.Request(url, method="GET")
+    req.add_header("Authorization", f"Bearer {api_key}")
+    req.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return {
+                "ok": 200 <= resp.status < 400,
+                "status": resp.status,
+                "detail": f"GET {url} -> {resp.status}",
+            }
+    except urllib.error.HTTPError as exc:
+        body = ""
+        try:
+            body = exc.read().decode("utf-8", errors="replace")[:200]
+        except Exception:
+            pass
+        return {
+            "ok": False,
+            "status": exc.code,
+            "detail": f"HTTP {exc.code}: {body or exc.reason}",
+        }
+    except (urllib.error.URLError, OSError) as exc:
+        return {
+            "ok": False,
+            "status": 0,
+            "detail": f"connection failed: {exc}",
+        }
+
+
+def _probe_post_anthropic(base_url, api_key, model, timeout: float = 10.0):
+    """Issue a minimal POST ``/v1/messages`` for Anthropic-compatible base."""
+    url = base_url.rstrip("/") + "/v1/messages"
+    body = json.dumps({
+        "model": model or "claude-3-5-sonnet-latest",
+        "max_tokens": 1,
+        "messages": [{"role": "user", "content": "ping"}],
+    }).encode("utf-8")
+    req = urllib.request.Request(url, data=body, method="POST")
+    req.add_header("x-api-key", api_key)
+    req.add_header("anthropic-version", "2023-06-01")
+    req.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return {
+                "ok": 200 <= resp.status < 400,
+                "status": resp.status,
+                "detail": f"POST {url} -> {resp.status}",
+            }
+    except urllib.error.HTTPError as exc:
+        body = ""
+        try:
+            body = exc.read().decode("utf-8", errors="replace")[:200]
+        except Exception:
+            pass
+        return {
+            "ok": False,
+            "status": exc.code,
+            "detail": f"HTTP {exc.code}: {body or exc.reason}",
+        }
+    except (urllib.error.URLError, OSError) as exc:
+        return {
+            "ok": False,
+            "status": 0,
+            "detail": f"connection failed: {exc}",
+        }
+
+
+@router.post("/test_connection")
+async def test_connection(req: TestConnectionRequest = Body(...)):
+    """Verify that the user-supplied base URL + API key actually work.
+
+    Returns ``{ok, status, detail}``:
+      - ``{ok: true,  status: 200, detail: "GET ... -> 200"}`` on success
+      - ``{ok: false, status: 401, detail: "HTTP 401: ..."}`` on auth failure
+      - ``{ok: false, status: 0,   detail: "connection failed: ..."}`` on network error
+    """
+    if not req.base_url.strip():
+        raise HTTPException(status_code=400, detail="base_url is required")
+    if not req.api_key.strip():
+        raise HTTPException(status_code=400, detail="api_key is required")
+    provider = req.provider.strip().lower()
+    if provider not in ("openai", "anthropic"):
+        raise HTTPException(
+            status_code=400,
+            detail="provider must be 'openai' or 'anthropic'")
+    if provider == "openai":
+        result = _probe_get(req.base_url.strip(), req.api_key.strip())
+    else:
+        result = _probe_post_anthropic(
+            req.base_url.strip(), req.api_key.strip(), req.model.strip())
+    # Log the result for ops visibility (without the key).
+    masked = req.api_key.strip()[:4] + "..." + req.api_key.strip()[-2:]
+    logger.info("test_connection provider=%s ok=%s status=%s key=%s",
+                provider, result["ok"], result["status"], masked)
+    return result

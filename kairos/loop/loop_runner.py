@@ -516,7 +516,7 @@ async def _check_gates(session, round_no, bus):
         ))
         record_loop_round("stagnation")
         return "stagnation"
-    if session.round >= LOOP_SAFETY_CAP:
+    if session.round >= LOOP_SAFETY_CAP and not getattr(session, "_unbounded", False):
         await bus.publish(Message(
             sender="orchestrator", topic="loop.safety_cap",
             content=f"Round {session.round} reached safety cap {LOOP_SAFETY_CAP}",
@@ -692,8 +692,32 @@ async def _maybe_auto_approve_plan(session, round_no, bus, requirement: str):
         pass
     return True
 
-async def run_loop(session, requirement):
+async def run_loop(session, requirement, *, unbounded: bool = False):
+    """Run the Coder <-> Reviewer loop until approval, stagnation, or stop.
+
+    Parameters
+    ----------
+    session : LoopSession
+        The session to drive. The loop mutates ``session.round``,
+        ``session.history``, etc. in place.
+    requirement : str
+        The user's request (already prepended with any reference
+        / preferences / memory blocks by the orchestrator).
+    unbounded : bool, default False
+        When True, the ``LOOP_SAFETY_CAP`` hard ceiling is removed
+        and the loop runs until the user stops it, the Coder
+        reports completion, or the Reviewer approves. Use for
+        new-project bootstraps where the cap is unhelpful — the
+        developer explicitly wants the loop to keep going until
+        they hit Stop.
+
+        Defaults to False so the existing safety guarantee
+        (a stuck loop can never run forever) is preserved.
+    """
     bus = session.message_bus
+    # Round 37: stash the unbounded flag on the session so the
+    # per-round safety check sees it.
+    session._unbounded = bool(unbounded)
     # Round 11: attach a Plan tracker to the Coder so its
     # `write_todos` tool calls are intercepted and the structured
     # plan rides along into the next round's system prompt.
@@ -733,7 +757,13 @@ async def run_loop(session, requirement):
         logger.debug("SessionStart hooks failed (non-fatal)", exc_info=True)
 
     try:
-        while not session.user_stopped and session.round < LOOP_SAFETY_CAP:
+        # Round 37: the safety cap is skipped in unbounded mode.
+        cap_check = (
+            lambda: session.round < LOOP_SAFETY_CAP
+            if not getattr(session, "_unbounded", False)
+            else True
+        )
+        while not session.user_stopped and cap_check():
             session.round += 1
             round_no = session.round
             try:

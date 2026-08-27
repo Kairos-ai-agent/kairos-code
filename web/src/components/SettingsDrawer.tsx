@@ -315,7 +315,7 @@ const MetricsPanel: React.FC = () => {
 
 
 // ---------------------------------------------------------------------------
-// Provider panel (round 8)
+// Provider panel (Round 37 — focused on OpenAI / Anthropic custom URLs)
 // ---------------------------------------------------------------------------
 
 const ProviderPanel: React.FC = () => {
@@ -326,67 +326,215 @@ const ProviderPanel: React.FC = () => {
   return (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
       <Text style={{ color: tokens.labelSecondary }}>
-        Pick which LLM provider the Coder/Reviewer agents use.
-        Local Ollama is the cheapest option (no API key, runs
-        offline); OpenAI / Anthropic / DeepSeek require a key in
-        the corresponding environment variable.
+        Pick the LLM the Coder and Reviewer agents use. Both providers
+        accept a custom base URL so you can point Kairos at OpenAI,
+        Anthropic, or any compatible proxy (Azure, Together, vLLM,
+        LiteLLM, etc.). Click <strong>Test connection</strong> to
+        verify your key + URL before saving.
       </Text>
       <div>
         <Text style={{ color: tokens.labelPrimary }}>Active provider</Text>
         <Select
           style={{ width: '100%', marginTop: 4 }}
           value={provider.active}
-          onChange={(v) => setProvider({ active: v })}
+          onChange={(v: LlmProvider) => setProvider({ active: v })}
           options={[
-            { value: 'openai', label: 'OpenAI (gpt-4o, gpt-4o-mini, o1, o3-mini)' },
-            { value: 'anthropic', label: 'Anthropic (claude-3-5-sonnet, opus)' },
-            { value: 'deepseek', label: 'DeepSeek (chat, reasoner)' },
-            { value: 'ollama', label: 'Ollama (local; no API key needed)' },
-            { value: 'custom', label: 'Custom (configured in settings.json)' },
+            { value: 'openai', label: 'OpenAI (or any OpenAI-compatible API)' },
+            { value: 'anthropic', label: 'Anthropic (or any Anthropic-compatible API)' },
           ]}
         />
       </div>
-      {provider.active === 'ollama' && (
-        <>
-          <div>
-            <Text style={{ color: tokens.labelPrimary }}>Ollama base URL</Text>
-            <Input
-              style={{ marginTop: 4 }}
-              value={provider.ollamaBaseUrl}
-              onChange={(e) => setProvider({ ollamaBaseUrl: e.target.value })}
-              placeholder="http://127.0.0.1:11434"
-            />
-          </div>
-          <div>
-            <Text style={{ color: tokens.labelPrimary }}>Ollama model</Text>
-            <Input
-              style={{ marginTop: 4 }}
-              value={provider.ollamaModel}
-              onChange={(e) => setProvider({ ollamaModel: e.target.value })}
-              placeholder="qwen2.5-coder:7b"
-            />
-            <Text style={{ color: tokens.labelTertiary, fontSize: 11 }}>
-              Try <code>ollama pull qwen2.5-coder:7b</code> first; it
-              scores well on HumanEval and runs on most laptops.
-            </Text>
-          </div>
-        </>
+      {provider.active === 'openai' ? (
+        <OpenAICompatForm
+          value={provider.openai}
+          onChange={(patch) => setProvider({ openai: { ...provider.openai, ...patch } })}
+        />
+      ) : (
+        <AnthropicCompatForm
+          value={provider.anthropic}
+          onChange={(patch) => setProvider({ anthropic: { ...provider.anthropic, ...patch } })}
+        />
       )}
-      {provider.active !== 'ollama' && (
-        <div>
-          <Text style={{ color: tokens.labelPrimary }}>API key env var</Text>
-          <Input
-            style={{ marginTop: 4 }}
-            value={provider.apiKeyEnv}
-            onChange={(e) => setProvider({ apiKeyEnv: e.target.value })}
-            placeholder={provider.active === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'OPENAI_API_KEY'}
-          />
-          <Text style={{ color: tokens.labelTertiary, fontSize: 11 }}>
-            The actual key is read from this env var on the
-            backend. We never store the key in the frontend.
-          </Text>
-        </div>
-      )}
+      <div style={{ fontSize: 11, color: tokens.labelTertiary,
+                    borderTop: `1px solid ${tokens.border}`, paddingTop: 8 }}>
+        Keys are stored in the frontend only (localStorage via
+        zustand persist). The backend never sees them unless you
+        click <em>Test connection</em>.
+      </div>
+    </Space>
+  );
+};
+
+const OpenAICompatForm: React.FC<{
+  value: { baseUrl: string; apiKey: string; model: string };
+  onChange: (patch: Partial<{ baseUrl: string; apiKey: string; model: string }>) => void;
+}> = ({ value, onChange }) => {
+  const tokens = useThemeTokens();
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<null | { ok: boolean; detail: string }>(null);
+
+  const test = async () => {
+    if (!value.baseUrl.trim() || !value.apiKey.trim()) {
+      setTestResult({ ok: false, detail: 'Base URL and API key are both required.' });
+      return;
+    }
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const r = await api.post<{ ok: boolean; status: number; detail: string }>(
+        '/config/test_connection',
+        { provider: 'openai', base_url: value.baseUrl, api_key: value.apiKey,
+          model: value.model },
+      );
+      setTestResult({ ok: !!r.data.ok, detail: r.data.detail || '(no detail)' });
+    } catch (e: any) {
+      setTestResult({ ok: false,
+        detail: e?.response?.data?.detail || e?.message || 'request failed' });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <Space direction="vertical" size={10} style={{ width: '100%' }}>
+      <div>
+        <Text style={{ color: tokens.labelPrimary }}>Base URL</Text>
+        <Input
+          style={{ marginTop: 4 }}
+          value={value.baseUrl}
+          onChange={(e) => onChange({ baseUrl: e.target.value })}
+          placeholder="https://api.openai.com/v1"
+        />
+        <Text style={{ color: tokens.labelTertiary, fontSize: 11 }}>
+          Defaults to OpenAI. Point at a proxy (Azure, Together, vLLM, …)
+          by setting a different URL.
+        </Text>
+      </div>
+      <div>
+        <Text style={{ color: tokens.labelPrimary }}>API key</Text>
+        <Input.Password
+          style={{ marginTop: 4 }}
+          value={value.apiKey}
+          onChange={(e) => onChange({ apiKey: e.target.value })}
+          placeholder="sk-…"
+        />
+      </div>
+      <div>
+        <Text style={{ color: tokens.labelPrimary }}>Model</Text>
+        <Input
+          style={{ marginTop: 4 }}
+          value={value.model}
+          onChange={(e) => onChange({ model: e.target.value })}
+          placeholder="gpt-4o, gpt-4o-mini, o1-mini, …"
+        />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Button
+          data-testid="openai-test-connection"
+          onClick={test}
+          loading={testing}
+          disabled={testing}
+        >
+          Test connection
+        </Button>
+        {testResult && (
+          <Tag color={testResult.ok ? 'green' : 'red'}
+               data-testid="openai-test-result"
+               style={{ maxWidth: 280, overflow: 'hidden',
+                       textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+               title={testResult.detail}>
+            {testResult.ok ? 'OK · ' : 'Fail · '}
+            {testResult.detail}
+          </Tag>
+        )}
+      </div>
+    </Space>
+  );
+};
+
+const AnthropicCompatForm: React.FC<{
+  value: { baseUrl: string; apiKey: string; model: string };
+  onChange: (patch: Partial<{ baseUrl: string; apiKey: string; model: string }>) => void;
+}> = ({ value, onChange }) => {
+  const tokens = useThemeTokens();
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<null | { ok: boolean; detail: string }>(null);
+
+  const test = async () => {
+    if (!value.baseUrl.trim() || !value.apiKey.trim()) {
+      setTestResult({ ok: false, detail: 'Base URL and API key are both required.' });
+      return;
+    }
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const r = await api.post<{ ok: boolean; status: number; detail: string }>(
+        '/config/test_connection',
+        { provider: 'anthropic', base_url: value.baseUrl, api_key: value.apiKey,
+          model: value.model },
+      );
+      setTestResult({ ok: !!r.data.ok, detail: r.data.detail || '(no detail)' });
+    } catch (e: any) {
+      setTestResult({ ok: false,
+        detail: e?.response?.data?.detail || e?.message || 'request failed' });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <Space direction="vertical" size={10} style={{ width: '100%' }}>
+      <div>
+        <Text style={{ color: tokens.labelPrimary }}>Base URL</Text>
+        <Input
+          style={{ marginTop: 4 }}
+          value={value.baseUrl}
+          onChange={(e) => onChange({ baseUrl: e.target.value })}
+          placeholder="https://api.anthropic.com"
+        />
+        <Text style={{ color: tokens.labelTertiary, fontSize: 11 }}>
+          Anthropic-compatible proxies (LiteLLM, AWS Bedrock with
+          an adapter) work too — just point at the right host.
+        </Text>
+      </div>
+      <div>
+        <Text style={{ color: tokens.labelPrimary }}>API key</Text>
+        <Input.Password
+          style={{ marginTop: 4 }}
+          value={value.apiKey}
+          onChange={(e) => onChange({ apiKey: e.target.value })}
+          placeholder="sk-ant-…"
+        />
+      </div>
+      <div>
+        <Text style={{ color: tokens.labelPrimary }}>Model</Text>
+        <Input
+          style={{ marginTop: 4 }}
+          value={value.model}
+          onChange={(e) => onChange({ model: e.target.value })}
+          placeholder="claude-3-5-sonnet-latest, claude-3-opus-…"
+        />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Button
+          data-testid="anthropic-test-connection"
+          onClick={test}
+          loading={testing}
+          disabled={testing}
+        >
+          Test connection
+        </Button>
+        {testResult && (
+          <Tag color={testResult.ok ? 'green' : 'red'}
+               data-testid="anthropic-test-result"
+               style={{ maxWidth: 280, overflow: 'hidden',
+                       textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+               title={testResult.detail}>
+            {testResult.ok ? 'OK · ' : 'Fail · '}
+            {testResult.detail}
+          </Tag>
+        )}
+      </div>
     </Space>
   );
 };
@@ -530,7 +678,10 @@ export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
   const setProvider = useSettingsStore((s) => s.setProvider);
 
   // Initial load (only once per open, to avoid clobbering user edits
-  // mid-session if the backend is briefly unreachable).
+  // mid-session if the backend is briefly unreachable). R37: also
+  // gracefully handle the old (R8) provider shape that the backend
+  // might still have on disk (apiKeyEnv/ollamaBaseUrl/...); the new
+  // shape is { active, openai:{...}, anthropic:{...} }.
   const didLoad = useRef(false);
   useEffect(() => {
     if (!open || didLoad.current) return;
@@ -541,7 +692,26 @@ export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
       if (d.mcp) setMcp(d.mcp);
       if (d.cloud) setCloud(d.cloud);
       if (d.metrics) setMetrics(d.metrics);
-      if (d.provider) setProvider(d.provider);
+      if (d.provider) {
+        // Migrate legacy {apiKeyEnv, ollamaBaseUrl, ollamaModel} shape
+        // if the user has it on disk.
+        if ('apiKeyEnv' in d.provider || 'ollamaBaseUrl' in d.provider) {
+          // Treat the old apiKeyEnv as a hint for the active
+          // provider's key. If it was OPENAI_API_KEY the key was the
+          // env-var NAME not the value, so we can't recover it —
+          // the user has to re-paste the key. Leave apiKey blank.
+          const active = d.provider.active || 'openai';
+          setProvider({
+            active: active === 'anthropic' ? 'anthropic' : 'openai',
+            openai: { baseUrl: 'https://api.openai.com/v1',
+                      apiKey: '', model: 'gpt-4o' },
+            anthropic: { baseUrl: 'https://api.anthropic.com',
+                          apiKey: '', model: 'claude-3-5-sonnet-latest' },
+          });
+        } else {
+          setProvider(d.provider);
+        }
+      }
     }).catch(() => { /* offline / first paint — keep defaults */ });
   }, [open, setVoice, setMcp, setCloud, setMetrics, setProvider]);
 
@@ -603,7 +773,7 @@ export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
           },
           {
             key: 'provider',
-            label: <span><RobotOutlined /> Provider</span>,
+            label: <span><RobotOutlined /> LLM Models</span>,
             children: <ProviderPanel />,
           },
           {

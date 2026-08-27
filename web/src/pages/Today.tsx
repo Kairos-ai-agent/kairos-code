@@ -21,6 +21,8 @@ import { useThemeTokens } from '../hooks/useThemeTokens';
 import { useChatStore } from '../stores/chatStore';
 import api from '../api/client';
 import type { LoopSession, Project } from '../types';
+import AlertPanel from '../components/AlertPanel';
+import CogsPanel from '../components/CogsPanel';
 
 const Today: React.FC = () => {
   const tokens = useThemeTokens();
@@ -179,6 +181,13 @@ const Today: React.FC = () => {
             <Button type="link" onClick={() => navigate('/chat')}>
               Open the chat →
             </Button>
+          </div>
+
+          <div style={{ marginTop: 24 }}>
+            <AlertPanel />
+          </div>
+          <div style={{ marginTop: 16 }}>
+            <CogsPanel />
           </div>
         </>
       )}

@@ -1,6 +1,6 @@
 # Kairos Code — Open-Source Adoption Roadmap
 
-> Status: **Round 9 / 2026-08-26**.
+> Status: **Round 36 / 2026-08-27**.
 > Tier 1 quick wins are landed (14 bundled superpowers skills, body
 > cap raised, example `.mcp.yaml`). Tier 2/3 are scoped but
 > unscheduled. This document is the single source of truth for
@@ -167,7 +167,16 @@ contain patterns / architectures worth studying:
 | 25 | Trend API + UI panel (Overview + Per-case) | ✅ done |
 | 26 | Per-case flaky detection (R24+R25 follow-up) | ✅ done |
 | 27 | Windows pre-commit compatibility check | ✅ done |
-| 28+ | Long-running app harness; alert webhooks in CI; COGS dashboard | as needed |
+| 28 | Real Slack integration + alert history (`kairos.alerts_dispatcher`) | ✅ done |
+| 29 | Long-running app harness — `.har/` contract + resume runtime (`kairos.har`) | ✅ done |
+| 30 | Alert UI panel — API + React + server-side mutes (`api/routes/alerts.py`, `AlertPanel.tsx`) | ✅ done |
+| 31 | Anthropic skills adapted (webapp-testing / mcp-builder / frontend-design / skill-creator / theme-factory / doc-coauthoring) | ✅ done |
+| 32 | `kairos doctor` — 14-check self-diagnostic CLI (settings / data / LLM / skills / FTS5 / MCP) | ✅ done |
+| 33 | 3 more Anthropic skills adapted (algorithmic-art / canvas-design / brand-guidelines) — 9 total | ✅ done |
+| 34 | First community skills (alirezarezvani/claude-skills) — 3 engineering: senior-architect / tdd-guide / code-reviewer | ✅ done |
+| 35 | COGS value metrics endpoint (`GET /api/cost/value`) — cost / value ratios for the dashboard | ✅ done |
+| 36 | CogsPanel.tsx — R35 metrics in the web UI (Today page) | ✅ done |
+| 37+ | More community skills; per-model COGS; trend over time; Tier 3 picks | as needed |
 
 ---
 

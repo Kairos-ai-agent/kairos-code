@@ -540,6 +540,30 @@ class Orchestrator:
             asyncio.run(watcher.start())
         project.runtime.skills_watcher = watcher
 
+    def _is_new_project(self, project_id: str) -> bool:
+        """True when the project has no prior sessions.
+
+        Round 37: drives the "new project bootstrap" behavior in
+        ``start_loop()`` (unbounded cap + bug-only reviewer). We
+        probe the messages + loop_rounds tables (the canonical
+        source of truth — there's no dedicated sessions table)
+        and treat "no rows" as "new project".
+
+        **Conservative default: False on any error.** If the DB
+        is down or the query fails for any reason, we assume
+        the project is NOT new. This avoids accidentally
+        applying the unbounded cap to a project that may
+        actually have prior history we can't see right now.
+        """
+        try:
+            msgs = self._db.load_messages(limit=1, project_id=project_id) or []
+            rounds = self._db.load_loop_rounds(project_id, limit=1) or []
+        except Exception:
+            logger.debug("_is_new_project query failed; defaulting to False",
+                         exc_info=True)
+            return False
+        return len(msgs) == 0 and len(rounds) == 0
+
     def _instantiate_specialists(self, project_id: str,
                                 specialist_names: List[str]) -> List[Any]:
         """Create one agent instance per requested specialist role.
@@ -869,6 +893,19 @@ class Orchestrator:
         The loop runs in the background as a single asyncio.Task. The HTTP
         handler returns immediately. The UI watches the loop via WS events.
 
+        Round 37 — new-project bootstrap:
+          When the project has *no prior sessions*, the loop runs in
+          ``unbounded=True`` mode (no LOOP_SAFETY_CAP) and the review
+          focus is auto-set to ``["bug_reviewer"]`` (only check for
+          actual bugs; do not nitpick style / architecture / security).
+          The dev can still hit Stop from the UI. This is a UX win
+          for the most common first-run case: a brand-new project
+          where the cap is artificial and the reviewer nitpicking
+          is more annoying than helpful.
+
+          Existing projects keep the original behavior (cap + the
+          review focus the user configured).
+
         If the project has reference files uploaded, a digest of them is
         prepended to the requirement so the Coder can use them as context
         in its first round. Subsequent rounds don't re-inject.
@@ -905,6 +942,18 @@ class Orchestrator:
         except Exception:
             logger.debug("review-focus auto-route failed (non-fatal)", exc_info=True)
 
+        # Round 37: detect a brand-new project (no prior sessions).
+        # On first run we lift the LOOP_SAFETY_CAP and narrow the
+        # reviewer to bug detection only. The dev can still hit Stop.
+        is_new_project = self._is_new_project(project_id)
+        unbounded = is_new_project
+        if is_new_project and not review_focus:
+            # Only override when the user hasn't already configured
+            # a custom focus. The "bug_reviewer" focus scopes the
+            # reviewer to "look for actual bugs" and explicitly tells
+            # it NOT to comment on style / security / architecture.
+            review_focus = ["bug_reviewer"]
+
         specialist_reviewers = self._instantiate_specialists(
             project_id, list(loop_cfg.get("specialists") or [])
         )
@@ -921,7 +970,7 @@ class Orchestrator:
         )
         project.loop_session = session
         project.loop_task = asyncio.create_task(
-            run_loop(session, requirement),
+            run_loop(session, requirement, unbounded=unbounded),
             name=f"loop-{project_id}",
         )
         project.loop_task.add_done_callback(

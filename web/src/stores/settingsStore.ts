@@ -5,9 +5,11 @@ export type CoderMode = 'default' | 'read_only' | 'sandbox';
 export type TtsProvider = 'mock' | 'edge';
 export type SttProvider = 'mock' | 'whisper';
 
-// LLM provider the Coder/Reviewer agents use. Each value maps to a
-// concrete kairos.llm.providers.* implementation on the backend.
-export type LlmProvider = 'openai' | 'anthropic' | 'ollama' | 'deepseek' | 'custom';
+// R37: LLM provider is now exclusively one of two custom endpoints
+// (OpenAI-compatible or Anthropic-compatible). The "ollama /
+// deepseek / custom" options from R8 are gone — the user wanted a
+// focused, simple UI for the two providers that matter.
+export type LlmProvider = 'openai' | 'anthropic';
 
 export interface VoiceSettings {
   ttsProvider: TtsProvider;
@@ -33,14 +35,22 @@ export interface MetricsSettings {
   showInFooter: boolean;
 }
 
+export interface OpenAIConfig {
+  baseUrl: string;        // e.g. https://api.openai.com/v1
+  apiKey: string;         // user-supplied; never persisted server-side
+  model: string;          // e.g. gpt-4o
+}
+
+export interface AnthropicConfig {
+  baseUrl: string;        // e.g. https://api.anthropic.com
+  apiKey: string;
+  model: string;          // e.g. claude-3-5-sonnet-latest
+}
+
 export interface ProviderSettings {
-  // Active provider — drives ModelRouter.get_provider_for_role()
   active: LlmProvider;
-  // Per-provider detail
-  ollamaBaseUrl: string;
-  ollamaModel: string;
-  // Free-form env-var name for the active provider's API key.
-  apiKeyEnv: string;
+  openai: OpenAIConfig;
+  anthropic: AnthropicConfig;
 }
 
 export interface SettingsState {
@@ -90,9 +100,16 @@ const DEFAULT: Omit<SettingsState,
   },
   provider: {
     active: 'openai',
-    ollamaBaseUrl: 'http://127.0.0.1:11434',
-    ollamaModel: 'qwen2.5-coder:7b',
-    apiKeyEnv: 'OPENAI_API_KEY',
+    openai: {
+      baseUrl: 'https://api.openai.com/v1',
+      apiKey: '',
+      model: 'gpt-4o',
+    },
+    anthropic: {
+      baseUrl: 'https://api.anthropic.com',
+      apiKey: '',
+      model: 'claude-3-5-sonnet-latest',
+    },
   },
 };
 

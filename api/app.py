@@ -26,6 +26,7 @@ from api.routes.cloud import router as cloud_router
 from api.routes.cost import router as cost_router
 from api.routes.skill_search import router as skill_search_router
 from api.routes.trend import router as trend_router
+from api.routes.alerts import router as alerts_router
 
 log = logging.getLogger(__name__)
 
@@ -79,6 +80,7 @@ app.include_router(cloud_router, prefix="/api/projects", tags=["cloud"])
 app.include_router(cost_router, prefix="/api/cost", tags=["cost"])
 app.include_router(skill_search_router, prefix="/api/skill_search", tags=["skill_search"])
 app.include_router(trend_router, prefix="/api/trend", tags=["trend"])
+app.include_router(alerts_router, prefix="/api/alerts", tags=["alerts"])
 
 # Global message stream — mounted at /api/messages (not under /projects
 # because FastAPI's path-param matching can shadow literal /messages

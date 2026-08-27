@@ -1,60 +1,66 @@
 /**
- * ChatComposer — sticky bottom-of-thread input box.
+ * ChatComposer — sticky bottom-of-thread input box (R37 update).
  *
- * Layout (ChatGPT beta style, post-Auto-mode):
+ * R37 changes (from user feedback):
+ *   1. **Run-as-task toggle** — the composer now has a small toggle
+ *      next to the send button. OFF (default): the message is sent
+ *      as a single-turn chat to the Coder (no loop kicked off). ON:
+ *      the message kicks off the full Coder <-> Reviewer loop. This
+ *      fixes the "every conversation becomes a task" issue —
+ *      casual questions stay as chat; only the messages the user
+ *      explicitly tags as tasks spawn a loop.
+ *   2. **FolderPicker above the input** — the user wanted the
+ *      project picker near the chat input instead of in the topbar.
+ *      We render it as a small "switch project" pill above the
+ *      input box (the topbar still has one too for quick access).
  *
- *   ┌──────────────────────────────────────────────────┐
- *   │  ┌────────────────────────────────────┐         │
- *   │  │ Describe a task — the Auto router…  │    ↑   │
- *   │  │                                    │  send  │
- *   │  └────────────────────────────────────┘         │
- *   │  Enter to send · Shift+Enter for new line        │
- *   └──────────────────────────────────────────────────┘
- *
- * Behaviour:
- *   - The Loop / Plan / Ask mode selector is **hidden**. Every
- *     submission goes through the Auto router which the chat page
- *     implements (it decides whether the input triggers a fresh loop
- *     or an ask-answer based on backend state — see Chat.tsx).
- *   - Auto-grow textarea (up to 240px / 12 lines).
- *   - Cmd/Ctrl+Enter or click the send button: submit.
- *   - Enter alone: also submit (chat-style default).
- *   - Shift+Enter: insert a literal newline.
- *   - Disabled when no project/folder is selected, or while a
- *     submission is in flight (`busy`).
- *
- * Rationale for the simplification: the user shouldn't have to pick
- * between Loop / Plan / Ask — the loop already exposes a PlanBanner
- * (the Coder's draft, with approve/reject) and an AskBanner (the
- * Reviewer's question, with an answer input). Both are surfaced in
- * the chat thread at the right moment, so the user never has to
- * declare a mode up front.
+ * Layout:
+ *   ┌─────────────────────────────────────────────┐
+ *   │  [▼ /path/to/project]   ← switch project   │  ← R37
+ *   ├─────────────────────────────────────────────┤
+ *   │  ┌────────────────────────────────────┐     │
+ *   │  │ Describe a task — the Auto router…  │ ☐ │  ← R37: Run as task
+ *   │  │                                    │   │
+ *   │  └────────────────────────────────────┘ ↑  │
+ *   │  Enter to send · Shift+Enter for newline  │
+ *   └─────────────────────────────────────────────┘
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { Button, Tooltip, App as AntdApp } from 'antd';
+import { Button, Tooltip, App as AntdApp, Switch } from 'antd';
 import {
-  ArrowUpOutlined, PaperClipOutlined,
+  ArrowUpOutlined, PaperClipOutlined, ThunderboltOutlined,
+  MessageOutlined,
 } from '@ant-design/icons';
 
 import { useThemeTokens } from '../hooks/useThemeTokens';
+import FolderPicker from './FolderPicker';
 
 interface Props {
   value?: string;
   onChange?: (v: string) => void;
-  onSubmit: (text: string) => Promise<void> | void;
+  /**
+   * Called when the user submits. The boolean is the new
+   * ``runAsTask`` toggle state: ``true`` means the user wants
+   * the full loop, ``false`` means a single-turn chat.
+   */
+  onSubmit: (text: string, runAsTask: boolean) => Promise<void> | void;
   placeholder?: string;
   busy?: boolean;
   disabled?: boolean;
   disabledHint?: string;
+  /** Initial value for the runAsTask toggle. */
+  defaultRunAsTask?: boolean;
 }
 
 const MAX_TEXTAREA_HEIGHT = 240;
 
 const ChatComposer: React.FC<Props> = ({
   value, onChange, onSubmit, placeholder, busy, disabled, disabledHint,
+  defaultRunAsTask = false,
 }) => {
   const tokens = useThemeTokens();
   const [text, setText] = useState(value || '');
+  const [runAsTask, setRunAsTask] = useState<boolean>(defaultRunAsTask);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Sync external value updates (e.g. parent resetting after submit).
@@ -75,7 +81,7 @@ const ChatComposer: React.FC<Props> = ({
     const trimmed = text.trim();
     if (!trimmed || disabled || busy) return;
     try {
-      await onSubmit(trimmed);
+      await onSubmit(trimmed, runAsTask);
       setText('');
     } catch {
       // Caller surfaces the error; keep the text so the user can retry.
@@ -89,11 +95,38 @@ const ChatComposer: React.FC<Props> = ({
     }
   };
 
+  // Compute the send-button color depending on mode:
+  //   - chat mode (toggle off) → brand color
+  //   - task mode (toggle on)  → a "thunder" color so the user can
+  //     see at a glance "this is going to spin up the loop"
+  const sendColor = runAsTask ? tokens.warning : tokens.labelPrimary;
+  const sendTitle = runAsTask
+    ? 'Send as task (start the Coder <-> Reviewer loop)'
+    : 'Send as chat (single-turn, no loop)';
+
   return (
     <div style={{
       padding: '8px 16px 20px',
       background: 'linear-gradient(to top, ' + tokens.bgBase + ' 60%, transparent 100%)',
     }}>
+      {/* R37: project picker above the input so the user can switch
+          projects without scrolling back to the top. */}
+      <div
+        data-testid="composer-folder"
+        style={{
+          maxWidth: 768, margin: '0 auto 6px',
+          display: 'flex', alignItems: 'center', gap: 8,
+          fontSize: 12, color: tokens.labelTertiary,
+        }}
+      >
+        <FolderPicker />
+        <span style={{ opacity: 0.6 }}>
+          · {runAsTask
+            ? 'Tasks start the Coder ↔ Reviewer loop'
+            : 'Chat is single-turn (no loop)'}
+        </span>
+      </div>
+
       <div style={{
         maxWidth: 768, margin: '0 auto',
         background: tokens.bgLay1,
@@ -114,7 +147,9 @@ const ChatComposer: React.FC<Props> = ({
           disabled={disabled || busy}
           placeholder={disabled
             ? (disabledHint || 'Pick a project or folder to start chatting')
-            : (placeholder || 'Describe a task — the Auto router picks the right mode.')}
+            : (placeholder || (runAsTask
+                ? 'Describe a task — the loop will run until approved.'
+                : 'Ask anything — single chat reply, no loop.'))}
           style={{
             width: '100%', border: 'none', outline: 'none',
             background: 'transparent', color: tokens.labelPrimary,
@@ -128,24 +163,60 @@ const ChatComposer: React.FC<Props> = ({
           display: 'flex', alignItems: 'center', gap: 8,
           paddingTop: 4,
         }}>
+          {/* R37: Run-as-task toggle on the left of the action row */}
+          <Tooltip
+            title={runAsTask
+              ? 'Currently: Task mode. Click to switch to Chat (no loop).'
+              : 'Currently: Chat mode. Click to switch to Task (run the loop).'}
+            placement="top"
+          >
+            <label
+              data-testid="run-as-task-toggle"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '2px 8px', borderRadius: 10,
+                background: runAsTask ? tokens.warning + '22' : 'transparent',
+                color: runAsTask ? tokens.warning : tokens.labelTertiary,
+                fontSize: 11, cursor: 'pointer', userSelect: 'none',
+                transition: 'background 0.15s, color 0.15s',
+              }}
+              onClick={() => setRunAsTask((v) => !v)}
+              role="button"
+            >
+              {runAsTask
+                ? <ThunderboltOutlined style={{ fontSize: 12 }} />
+                : <MessageOutlined style={{ fontSize: 12 }} />}
+              <span>{runAsTask ? 'Task' : 'Chat'}</span>
+              <Switch
+                size="small"
+                checked={runAsTask}
+                onChange={(checked) => setRunAsTask(checked)}
+                onClick={(_, e) => e.stopPropagation()}
+                style={{ marginLeft: 2 }}
+              />
+            </label>
+          </Tooltip>
           <div style={{ flex: 1 }} />
           <Tooltip title="Attach file (coming soon)">
             <Button type="text" icon={<PaperClipOutlined />} disabled
                     style={{ color: tokens.labelTertiary }} />
           </Tooltip>
-          <Button
-            type="primary"
-            shape="circle"
-            icon={<ArrowUpOutlined />}
-            onClick={submit}
-            disabled={disabled || busy || !text.trim()}
-            loading={busy}
-            style={{
-              background: tokens.labelPrimary, color: tokens.bgBase,
-              border: 'none',
-            }}
-            aria-label="Send"
-          />
+          <Tooltip title={sendTitle}>
+            <Button
+              type="primary"
+              shape="circle"
+              icon={runAsTask ? <ThunderboltOutlined /> : <ArrowUpOutlined />}
+              onClick={submit}
+              disabled={disabled || busy || !text.trim()}
+              loading={busy}
+              style={{
+                background: sendColor, color: tokens.bgBase,
+                border: 'none',
+              }}
+              data-testid="composer-send"
+              aria-label="Send"
+            />
+          </Tooltip>
         </div>
       </div>
       <div style={{

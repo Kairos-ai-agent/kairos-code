@@ -79,7 +79,7 @@ async def get_project(project_id: str):
 
 @router.post("/{project_id}/start")
 async def start_loop(project_id: str, request: "StartLoopRequest"):
-    """Start the Coder 鈫?Reviewer loop. Returns immediately; the loop
+    """Start the Coder <-> Reviewer loop. Returns immediately; the loop
     runs in the background and emits progress over the WebSocket."""
     project = _orch().get_project(project_id)
     if not project:
@@ -91,6 +91,79 @@ async def start_loop(project_id: str, request: "StartLoopRequest"):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return {"status": "started", "project_id": project_id, "session_id": session_id}
+
+
+# ---------------------------------------------------------------------------
+# Round 37: single-turn chat (no loop)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{project_id}/chat")
+async def chat(project_id: str, request: "ChatRequest"):
+    """Send a single user message to the Coder and return the reply.
+
+    Unlike ``/start`` this does NOT kick off the Coder <-> Reviewer
+    loop. It's a conversational endpoint: the user types something,
+    the Coder responds once, the response comes back over the wire
+    + a WebSocket event so the chat thread can render it.
+
+    Use cases (Round 37):
+      - "What does this function do?"
+      - "Explain the difference between X and Y."
+      - "Suggest a name for this module."
+      - Quick questions that don't need a multi-round loop.
+
+    For anything that involves writing files / running tools / making
+    commits, the user clicks "Run as task" and the chat composer
+    posts to ``/start`` instead.
+    """
+    from kairos.agents.base import AgentTask
+    from kairos.core.message_bus import Message
+
+    project = _orch().get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404,
+                            detail=f"Project not found: {project_id}")
+    if not project.coder:
+        raise HTTPException(status_code=503,
+                            detail="No Coder agent wired for this project")
+
+    text = (request.message or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="message is required")
+
+    # Build a minimal task and call the Coder's run() directly.
+    # No plan tracking, no plan approval, no Reviewer — just one
+    # round of text. The Reply is returned synchronously over HTTP
+    # *and* published on the message bus for any open WS client.
+    bus = project.message_bus
+    import uuid as _uuid
+    task = AgentTask(
+        id=_uuid.uuid4().hex[:12],
+        title="Chat",
+        description=text,
+        instruction=text,
+        context={"mode": "chat", "single_turn": True},
+    )
+    try:
+        reply = await project.coder.run(task)
+    except Exception as exc:
+        raise HTTPException(status_code=500,
+                            detail=f"Coder chat failed: {exc}")
+    # Best-effort publish so the WS thread updates.
+    try:
+        await bus.publish(Message(
+            sender="coder",
+            receiver="user",
+            topic="agent.chat_reply",
+            content=reply,
+            msg_type="text",
+            metadata={"project_id": project_id, "mode": "chat"},
+        ))
+    except Exception:
+        logger.debug("chat reply WS publish failed (non-fatal)",
+                     exc_info=True)
+    return {"project_id": project_id, "reply": reply, "mode": "chat"}
 
 
 @router.post("/{project_id}/stop")
@@ -645,6 +718,11 @@ class CreateProjectRequest(BaseModel):
 
 class StartLoopRequest(BaseModel):
     requirement: str
+
+
+class ChatRequest(BaseModel):
+    """Round 37: payload for the single-turn /chat endpoint."""
+    message: str
 
 class RevertFileRequest(BaseModel):
     sha: str

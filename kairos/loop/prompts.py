@@ -4,6 +4,17 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable
 
 _REVIEW_FOCUS_LABELS = {
+    "bug_reviewer": (
+        "BUGS ONLY. Look exclusively for runtime errors, exceptions, "
+        "null-pointer / index-out-of-bounds risks, infinite loops, "
+        "race conditions, unhandled error paths, broken control flow, "
+        "and any code that obviously does not do what the requirement "
+        "asks. Do NOT comment on style, naming, performance, security "
+        "best-practices, architecture, test coverage, or any other "
+        "subjective quality dimension. A file that runs correctly and "
+        "matches the requirement is APPROVED with score 100, even if "
+        "you would have written it differently. Only flag actual bugs."
+    ),
     "security_reviewer": "security, authentication, authorization, secrets, and OWASP risks",
     "perf_reviewer": "performance, latency, memory, I/O, concurrency, and scalability",
     "design_reviewer": "architecture, maintainability, UX, accessibility, and visual regressions",

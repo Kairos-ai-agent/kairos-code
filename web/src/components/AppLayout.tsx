@@ -1,33 +1,41 @@
 /**
- * AppLayout — the top-level shell.
+ * AppLayout — the top-level shell (R37 update: bottom-left controls).
  *
- * Layout (ChatGPT beta / DSH Desktop style):
+ * Layout (minimax-code inspired):
  *
  *   ┌──────────────────────────────────────────────────────────┐
- *   │  Topbar: logo · project picker · spacer · theme · ⚙       │  52px
+ *   │  ☰  K  Kairos                                            │  ← topbar (minimal)
  *   ├────────────┬─────────────────────────────────────────────┤
  *   │            │                                             │
  *   │  Sidebar   │              Main (Outlet)                  │
  *   │  (chat     │                                             │
  *   │  history)  │                                             │
  *   │            │                                             │
- *   │  280px     │             flex 1                          │
  *   │            │                                             │
- *   └────────────┴─────────────────────────────────────────────┘
+ *   ├────────────┴─────────────────────────────────────────────┤
+ *   │  Today  Tools                                            │  ← bottom-left footer
+ *   │  ⚙ Settings  ☀ Theme                                    │  (continued)
+ *   └──────────────────────────────────────────────────────────┘
  *
- * The Topbar is always visible (no scrolling). The Sidebar is
- * collapsible — when collapsed, a thin 0-width strip remains so the
- * menu toggle in the topbar can re-open it. The Main area scrolls
- * independently (chat thread + composer inside the page).
+ * R37 changes (from user feedback):
+ *   1. The topbar is now MINIMAL — sidebar toggle + logo only. The
+ *      Today / Tools / Settings / Theme controls are moved to a
+ *      footer at the bottom of the LEFT rail (so they live in the
+ *      same column as the chat history — minimax-code style).
+ *   2. The avatar / settings dropdown is GONE from the topbar.
+ *   3. The FolderPicker is GONE from the topbar. The project picker
+ *      now lives above the chat input (see `ChatComposer.tsx`).
+ *      This was a dedup pass: rendering the picker in two places
+ *      was confusing, so the composer is the canonical location.
+ *
+ * The footer is implemented in ChatSidebar (it has the full
+ * sidebar context including flex / theming).
  */
-import React, { useEffect, useState } from 'react';
-import { Outlet, useNavigate, useLocation, NavLink } from 'react-router-dom';
-import { Layout, Button, Dropdown, Tooltip, Avatar, theme } from 'antd';
+import React, { useEffect } from 'react';
+import { Outlet, useNavigate } from 'react-router-dom';
+import { Layout, Button } from 'antd';
 import {
   MenuFoldOutlined, MenuUnfoldOutlined,
-  SunOutlined, MoonOutlined, SettingOutlined,
-  AppstoreOutlined, MessageOutlined,
-  GithubOutlined, BookOutlined, ToolOutlined,
 } from '@ant-design/icons';
 
 import { useThemeStore } from '../stores/themeStore';
@@ -38,14 +46,12 @@ import { LAYOUT } from '../styles/theme';
 import api from '../api/client';
 import type { Project } from '../types';
 import ChatSidebar from './ChatSidebar';
-import FolderPicker from './FolderPicker';
 import { SettingsDrawer } from './SettingsDrawer';
 
 const { Header, Sider, Content } = Layout;
 
 const AppLayout: React.FC = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const tokens = useThemeTokens();
   const mode = useThemeStore((s) => s.mode);
   const toggle = useThemeStore((s) => s.toggle);
@@ -63,8 +69,6 @@ const AppLayout: React.FC = () => {
   useEffect(() => {
     api.get<{ projects: Project[] }>('/projects').then((r) => {
       setProjects(r.data.projects || []);
-      // If we don't yet have a current project, default to the most
-      // recent one. The chat sidebar / chat page will pick it up.
       const list = r.data.projects || [];
       if (list.length > 0 && !useChatStore.getState().currentProject) {
         setCurrentProject(list[0]);
@@ -87,6 +91,7 @@ const AppLayout: React.FC = () => {
 
   return (
     <Layout style={{ minHeight: '100vh', background: tokens.bgBase }}>
+      {/* ----- Topbar: minimal — sidebar toggle + logo only ----- */}
       <Header
         style={{
           position: 'sticky', top: 0, zIndex: 100,
@@ -124,59 +129,6 @@ const AppLayout: React.FC = () => {
           >K</span>
           Kairos
         </div>
-
-        <FolderPicker />
-
-        <div style={{ flex: 1 }} />
-
-        <Tooltip title="Today">
-          <Button
-            type="text"
-            icon={<AppstoreOutlined />}
-            onClick={() => navigate('/today')}
-            style={{ color: tokens.labelSecondary }}
-          />
-        </Tooltip>
-        <Tooltip title="Tools">
-          <Button
-            type="text"
-            icon={<ToolOutlined />}
-            onClick={() => navigate('/tools')}
-            style={{ color: tokens.labelSecondary }}
-          />
-        </Tooltip>
-        <Tooltip title={mode === 'dark' ? 'Switch to light' : 'Switch to dark'}>
-          <Button
-            type="text"
-            onClick={toggle}
-            style={{
-              color: tokens.labelSecondary,
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              fontSize: 13,
-            }}
-            data-testid="theme-toggle"
-          >
-            {mode === 'dark' ? <SunOutlined /> : <MoonOutlined />}
-            <span style={{ fontWeight: 500 }}>
-              {mode === 'dark' ? 'Light' : 'Dark'}
-            </span>
-          </Button>
-        </Tooltip>
-        <Dropdown
-          menu={{
-            items: [
-              { key: 'settings', icon: <SettingOutlined />,
-                label: 'Settings', onClick: () => openSettings() },
-            ],
-          }}
-        >
-          <Button type="text" style={{ color: tokens.labelSecondary }}>
-            <Avatar size={26} style={{ background: tokens.labelPrimary,
-                                        color: tokens.bgBase, fontSize: 12 }}>
-              {(currentProject?.name || '?').charAt(0).toUpperCase()}
-            </Avatar>
-          </Button>
-        </Dropdown>
       </Header>
 
       <Layout>
@@ -205,4 +157,3 @@ const AppLayout: React.FC = () => {
 };
 
 export default AppLayout;
-

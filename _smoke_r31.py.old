@@ -1,0 +1,16 @@
+from kairos.skill_search import fts5_available, build_index_from_loader, search
+from kairos.skills import SkillsLoader
+from pathlib import Path
+
+loader = SkillsLoader()
+db_path = Path("data") / "skill_index_r31.db"
+db_path.parent.mkdir(exist_ok=True)
+if fts5_available():
+    build_index_from_loader(loader, db_path)
+    for q in ("playwright", "mcp server", "frontend design", "doc coauthoring"):
+        results = search(q, loader=loader, db_path=db_path, limit=3)
+        print(f"\nQuery: {q!r}")
+        for r in results:
+            print(f"  name={r.get('name'):30s}  score={r.get('score', 0):.2f}")
+else:
+    print("FTS5 not available")

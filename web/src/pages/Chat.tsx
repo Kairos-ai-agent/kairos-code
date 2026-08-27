@@ -281,12 +281,14 @@ const Chat: React.FC = () => {
 
   // ----- Actions -----
   //
-  // The Auto router is dead simple:
-  //   - If a Reviewer question is pending, submit the answer.
-  //   - Otherwise, kick off a new loop with the requirement.
-  // Plan / Ask as user-selectable modes are gone (the loop surfaces
-  // a PlanBanner / AskBanner at the right time instead).
-  const handleSubmit = async (text: string) => {
+  // R37 split: chat vs task. The composer now passes a
+  // ``runAsTask`` boolean.
+  //   - runAsTask=false  → POST /chat (single-turn; no loop)
+  //   - runAsTask=true   → POST /start (kicks off the Coder
+  //                                <-> Reviewer loop)
+  //   - If a Reviewer ask is pending, the composer collapses the
+  //     toggle and just answers the question.
+  const handleSubmit = async (text: string, runAsTask: boolean) => {
     if (!currentProject) {
       msgApi.warning('Pick a project or folder first.');
       return;
@@ -305,14 +307,29 @@ const Chat: React.FC = () => {
       if (askState?.pending) {
         await api.post(`/projects/${currentProject.id}/ask/answer`,
                        { answer: text });
-        // Optimistic: clear the banner immediately. The next poll
-        // cycle (≤ 2s) will confirm the backend updated.
         setAskState(null);
-      } else {
+      } else if (runAsTask) {
         await api.post(`/projects/${currentProject.id}/start`,
                        { requirement: text });
-        // session.started arrives via WS and our handler navigates
-        // to /chat/{sid} + refetches sessions.
+      } else {
+        // Single-turn chat. POST and wait for the reply, then
+        // append it as a coder bubble so the thread reads like a
+        // conversation. No loop is started.
+        const r = await api.post<{ reply: string; mode: string }>(
+          `/projects/${currentProject.id}/chat`, { message: text });
+        const reply = (r.data?.reply || '').trim();
+        if (reply) {
+          appendMessage({
+            id: `chat-reply-${Date.now()}`,
+            sender: 'coder',
+            receiver: 'user',
+            topic: 'agent.chat_reply',
+            content: reply,
+            msg_type: 'text',
+            timestamp: Date.now() / 1000,
+            metadata: { mode: 'chat' },
+          });
+        }
       }
     } catch (e: any) {
       msgApi.error(e?.response?.data?.detail || 'Failed to submit');

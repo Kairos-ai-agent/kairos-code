@@ -286,3 +286,201 @@ def test_api_post_provider_nested(client):
     # GET reads it back
     r2 = client.get("/api/projects/settings")
     assert r2.json()["provider"]["active"] == "ollama"
+
+
+# ---------------------------------------------------------------------------
+# R38.6 — openai / anthropic per-provider config round-trip
+# ---------------------------------------------------------------------------
+#
+# The frontend's R37+ redesign stores LLM settings as
+# {provider: {active, openai: {endpointUrl, baseUrl, apiKey, model},
+#             anthropic: {...}}}. Before R38.6 the backend's
+# ``update()`` only handled the legacy R8 shape
+# (provider.ollamaBaseUrl, etc.) and silently DROPPED the new
+# keys — so the user's settings were lost on backend restart.
+# These tests pin the new behavior: write the new shape, restart
+# the store, the new keys are still there.
+
+
+def test_settings_store_persists_openai_anthropic_configs(tmp_path: Path):
+    """R38.6: the per-provider openai / anthropic configs
+    (endpointUrl, baseUrl, apiKey, model) must round-trip through
+    SettingsStore so the user's LLM settings survive a backend
+    restart. Before this fix, the backend's update() only handled
+    the legacy R8 shape (provider.ollamaBaseUrl, etc.) and silently
+    dropped the new keys."""
+    from kairos import settings_store as _ss
+    import json
+
+    path = tmp_path / "settings.json"
+
+    # Round 1: write the new shape, read it back.
+    _ss._store = _ss.SettingsStore(path)
+    patch = {
+        "provider": {
+            "active": "openai",
+            "openai": {
+                "endpointUrl": "https://apihub.agnes-ai.com/v1/chat/completions",
+                "baseUrl": "https://apihub.agnes-ai.com/v1",
+                "apiKey": "sk-test-openai-1234",
+                "model": "agnes-2.5-flash",
+            },
+            "anthropic": {
+                "endpointUrl": "https://api.anthropic.com/v1/messages",
+                "baseUrl": "https://api.anthropic.com",
+                "apiKey": "sk-ant-test-5678",
+                "model": "claude-3-5-sonnet-latest",
+            },
+        },
+    }
+    _ss._store.update(patch)
+
+    # Verify the file on disk has the new keys (in both the
+    # nested ``provider.openai`` and the top-level
+    # ``provider_openai`` positions — the migration code reads
+    # both shapes).
+    on_disk = json.loads(path.read_text(encoding="utf-8"))
+    assert on_disk["provider"]["openai"]["model"] == "agnes-2.5-flash"
+    assert on_disk["provider"]["openai"]["apiKey"] == "sk-test-openai-1234"
+    assert on_disk["provider"]["openai"]["endpointUrl"] == \
+        "https://apihub.agnes-ai.com/v1/chat/completions"
+    assert on_disk["provider"]["anthropic"]["model"] == \
+        "claude-3-5-sonnet-latest"
+    # Top-level mirror for legacy readers (e.g. the model router).
+    assert on_disk["provider_openai"]["model"] == "agnes-2.5-flash"
+    assert on_disk["provider_anthropic"]["model"] == \
+        "claude-3-5-sonnet-latest"
+
+    # Round 2: simulate a backend restart — read the file back
+    # through a fresh SettingsStore instance.
+    _ss._store = _ss.SettingsStore(path)
+    s = _ss._store.get()
+    assert s.provider_openai.apiKey == "sk-test-openai-1234"
+    assert s.provider_openai.model == "agnes-2.5-flash"
+    assert s.provider_openai.endpointUrl == \
+        "https://apihub.agnes-ai.com/v1/chat/completions"
+    assert s.provider_anthropic.apiKey == "sk-ant-test-5678"
+    assert s.provider_anthropic.model == "claude-3-5-sonnet-latest"
+    assert s.active_provider == "openai"
+
+
+def test_settings_store_legacy_provider_shape_migrates_to_nested(tmp_path: Path):
+    """A settings.json from the R8 era (flat active_provider /
+    provider_ollama_base_url / etc.) should be readable as the
+    new R37+ nested shape — backwards-compat."""
+    from kairos import settings_store as _ss
+    import json
+
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({
+        "active_provider": "anthropic",
+        "provider_ollama_base_url": "http://localhost:11434",
+        "provider_ollama_model": "qwen2.5",
+        "provider_api_key_env": "ANTHROPIC_API_KEY",
+    }), encoding="utf-8")
+    _ss._store = _ss.SettingsStore(path)
+    s = _ss._store.get()
+    # Legacy fields round-trip.
+    assert s.active_provider == "anthropic"
+    assert s.provider_ollama_base_url == "http://localhost:11434"
+    # New nested fields are still defaulted.
+    assert s.provider_openai.model == "gpt-4o"
+    assert s.provider_anthropic.model == "claude-3-5-sonnet-latest"
+
+
+def test_api_post_provider_nested_openai_anthropic(client):
+    """R38.6: POST /api/projects/settings with the new R37+ nested
+    shape (provider.openai.* and provider.anthropic.*) must round-
+    trip through the API and persist. Before the fix, these keys
+    were silently dropped — the user thought their settings were
+    saved but the backend was throwing them away."""
+    r = client.post("/api/projects/settings", json={
+        "provider": {
+            "active": "openai",
+            "openai": {
+                "endpointUrl": "https://apihub.agnes-ai.com/v1/chat/completions",
+                "baseUrl": "https://apihub.agnes-ai.com/v1",
+                "apiKey": "sk-test-1234",
+                "model": "agnes-2.5-flash",
+            },
+            "anthropic": {
+                "endpointUrl": "https://api.anthropic.com/v1/messages",
+                "baseUrl": "https://api.anthropic.com",
+                "apiKey": "sk-ant-5678",
+                "model": "claude-3-5-sonnet-latest",
+            },
+        },
+    })
+    assert r.status_code == 200
+    # GET reads it back — the user's settings survived the
+    # round-trip.
+    r2 = client.get("/api/projects/settings")
+    body = r2.json()
+    assert body["provider"]["openai"]["apiKey"] == "sk-test-1234"
+    assert body["provider"]["openai"]["model"] == "agnes-2.5-flash"
+    assert body["provider"]["anthropic"]["apiKey"] == "sk-ant-5678"
+    assert body["provider"]["anthropic"]["model"] == "claude-3-5-sonnet-latest"
+
+
+def test_model_router_loads_r37_openai_config_from_settings(tmp_path: Path, monkeypatch):
+    """R38.6: the ModelRouter should pick up the openai / anthropic
+    configs from settings.json (set by the Settings UI) and register
+    them as usable LLMConfigs. Without this, the LLM call used
+    whatever was in custom_models / api_keys (legacy fields) and
+    ignored the user's UI-configured provider."""
+    from kairos.llm import model_router as _mr
+    from kairos.llm.model_router import ModelRouter
+    import json
+
+    # The model_router reads from kairos.llm.model_router.settings_path()
+    # which honors KAIROS_DATA_DIR at call time (not import time).
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({
+        "provider": {
+            "active": "openai",
+            "openai": {
+                "apiKey": "sk-test-1234",
+                "baseUrl": "https://apihub.agnes-ai.com/v1",
+                "model": "agnes-2.5-flash",
+            },
+            "anthropic": {
+                "apiKey": "sk-ant-5678",
+                "baseUrl": "https://api.anthropic.com",
+                "model": "claude-3-5-sonnet-latest",
+            },
+        },
+    }), encoding="utf-8")
+    monkeypatch.setenv("KAIROS_DATA_DIR", str(tmp_path))
+    router = ModelRouter(config_path=None)
+    active = router._model_configs.get("__active__")
+    assert active is not None, (
+        "ModelRouter did not register the R37+ openai config "
+        "from settings.json. The user's LLM settings will be "
+        "ignored by the actual LLM call."
+    )
+    assert active.model == "agnes-2.5-flash"
+    assert active.api_key == "sk-test-1234"
+    assert active.base_url == "https://apihub.agnes-ai.com/v1"
+    assert active.provider == "openai"
+
+
+def test_model_router_picks_active_provider_from_settings(tmp_path: Path, monkeypatch):
+    """When active=anthropic, the __active__ config should be the
+    anthropic one, not the openai one."""
+    from kairos.llm.model_router import ModelRouter
+    import json
+
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({
+        "provider": {
+            "active": "anthropic",
+            "openai": {"apiKey": "sk-o", "baseUrl": "https://x", "model": "gpt"},
+            "anthropic": {"apiKey": "sk-a", "baseUrl": "https://y", "model": "claude"},
+        },
+    }), encoding="utf-8")
+    monkeypatch.setenv("KAIROS_DATA_DIR", str(tmp_path))
+    router = ModelRouter(config_path=None)
+    active = router._model_configs.get("__active__")
+    assert active is not None
+    assert active.provider == "anthropic"
+    assert active.model == "claude"

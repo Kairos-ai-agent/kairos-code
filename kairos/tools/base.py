@@ -28,6 +28,12 @@ class BaseTool(ABC):
 
     def __init__(self, allowed_root: str | Path = "."):
         self._allowed_root = Path(allowed_root).resolve()
+        # R38.6 §30: optional auto-checkpointer. Tools that write
+        # files call ``self._checkpointer.before_write(path)``
+        # right before the write. The checkpointer is wired by
+        # the orchestrator at agent construction time. Tools
+        # that don't write files leave it ``None``.
+        self._checkpointer = None
 
     def _resolve_safe(self, path: str) -> Path:
         """Resolve a path safely within the allowed root directory.

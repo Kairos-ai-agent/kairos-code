@@ -37,11 +37,11 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Button, Spin, Empty, Tooltip } from 'antd';
+import { Button, Spin, Empty, Tooltip, Popconfirm, App as AntdApp } from 'antd';
 import {
   MessageOutlined, ThunderboltOutlined,
   CheckCircleFilled, CloseCircleFilled, DownOutlined,
-  UpOutlined, ProjectOutlined,
+  UpOutlined, ProjectOutlined, DeleteOutlined,
   AppstoreOutlined, ToolOutlined, SettingOutlined,
   SunOutlined, MoonOutlined,
 } from '@ant-design/icons';
@@ -60,7 +60,9 @@ const ChatSidebar: React.FC = () => {
   const tokens = useThemeTokens();
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId?: string }>();
+  const { message: msgApi } = AntdApp.useApp();
   const projects = useChatStore((s) => s.projects);
+  const setProjects = useChatStore((s) => s.setProjects);
   const currentProject = useChatStore((s) => s.currentProject);
   const setCurrentProject = useChatStore((s) => s.setCurrentProject);
   const sessions = useChatStore((s) => s.sessions);
@@ -113,6 +115,26 @@ const ChatSidebar: React.FC = () => {
     navigate('/chat');
   };
 
+  // Delete a project. Backend removes it (plus its sessions and
+  // reference files); we update the local store. If the deleted
+  // project was the current one, switch to the next available
+  // project (or clear if none remain).
+  const deleteProject = async (p: Project) => {
+    try {
+      await api.delete(`/projects/${p.id}`);
+      const next = projects.filter((x) => x.id !== p.id);
+      setProjects(next);
+      if (currentProject?.id === p.id) {
+        setCurrentProject(next[0] || null);
+        if (next[0]) navigate('/chat');
+      }
+      msgApi.success(`Deleted "${p.name || p.id}"`);
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail || 'Failed to delete project';
+      msgApi.error(detail);
+    }
+  };
+
   return (
     <div style={{
       height: `calc(100vh - 52px)`,
@@ -149,6 +171,7 @@ const ChatSidebar: React.FC = () => {
                 project={p}
                 active={currentProject?.id === p.id}
                 onClick={() => selectProject(p)}
+                onDelete={() => deleteProject(p)}
               />
             ))}
             {hiddenCount > 0 && !projectsExpanded && (
@@ -376,8 +399,21 @@ const ProjectRow: React.FC<{
   project: Project;
   active: boolean;
   onClick: () => void;
-}> = ({ project, active, onClick }) => {
+  onDelete: () => void;
+}> = ({ project, active, onClick, onDelete }) => {
   const tokens = useThemeTokens();
+  const [hover, setHover] = useState(false);
+  // stopPropagation so clicking the delete icon doesn't also
+  // select the project. Popconfirm handles the confirm UI.
+  // The signature accepts both React.MouseEvent (Button onClick) and
+  // MouseEvent (Popconfirm's onConfirm) since antd v5 uses the native
+  // type for the latter.
+  const stop = (e?: unknown) => {
+    const evt = e as { stopPropagation?: () => void } | undefined;
+    if (evt && typeof evt.stopPropagation === 'function') {
+      evt.stopPropagation();
+    }
+  };
   return (
     <Tooltip
       title={project.description && project.description !== project.name
@@ -389,6 +425,8 @@ const ProjectRow: React.FC<{
         role="button"
         tabIndex={0}
         onKeyDown={(e) => { if (e.key === 'Enter') onClick(); }}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
         data-testid={`project-row-${project.id}`}
         style={{
           display: 'flex', alignItems: 'center', gap: 8,
@@ -397,12 +435,6 @@ const ProjectRow: React.FC<{
           background: active ? tokens.bgLay2 : 'transparent',
           color: active ? tokens.labelPrimary : tokens.labelSecondary,
           transition: 'background 0.12s',
-        }}
-        onMouseEnter={(e) => {
-          if (!active) e.currentTarget.style.background = tokens.bgLay1;
-        }}
-        onMouseLeave={(e) => {
-          if (!active) e.currentTarget.style.background = 'transparent';
         }}
       >
         {active && (
@@ -421,6 +453,35 @@ const ProjectRow: React.FC<{
         }}>
           {project.name || project.id}
         </div>
+        {/* Delete button — only visible on hover (or when active).
+            Uses Popconfirm so the user gets one extra click before
+            the project is gone. */}
+        <Popconfirm
+          title={`Delete "${project.name || project.id}"?`}
+          description="This removes the project and all its sessions."
+          okText="Delete"
+          okType="danger"
+          cancelText="Cancel"
+          onConfirm={(e) => { stop(e); onDelete(); }}
+          onCancel={stop}
+        >
+          <Button
+            type="text"
+            size="small"
+            icon={<DeleteOutlined />}
+            onClick={stop}
+            data-testid={`project-delete-${project.id}`}
+            aria-label={`Delete project ${project.name || project.id}`}
+            style={{
+              color: tokens.labelTertiary,
+              opacity: hover || active ? 1 : 0,
+              transition: 'opacity 0.12s, color 0.12s',
+              padding: '0 4px', height: 22, minWidth: 22,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = tokens.danger; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = tokens.labelTertiary; }}
+          />
+        </Popconfirm>
       </div>
     </Tooltip>
   );

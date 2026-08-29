@@ -1,67 +1,83 @@
 /**
- * ChatComposer — sticky bottom-of-thread input box (R37 update).
+ * ChatComposer — sticky bottom-of-thread input box (R37 update, R38.6).
  *
  * R37 changes (from user feedback):
- *   1. **Run-as-task toggle** — the composer now has a small toggle
- *      next to the send button. OFF (default): the message is sent
- *      as a single-turn chat to the Coder (no loop kicked off). ON:
- *      the message kicks off the full Coder <-> Reviewer loop. This
- *      fixes the "every conversation becomes a task" issue —
- *      casual questions stay as chat; only the messages the user
- *      explicitly tags as tasks spawn a loop.
- *   2. **FolderPicker above the input** — the user wanted the
- *      project picker near the chat input instead of in the topbar.
- *      We render it as a small "switch project" pill above the
- *      input box (the topbar still has one too for quick access).
+ *   1. ~~Run-as-task toggle~~ — R38.6 removed the manual toggle.
+ *      The agent now auto-classifies the message as chat or task
+ *      via `utils/intent.ts` (keyword + question-pattern + code-block
+ *      heuristic). The user no longer has to choose. A live-preview
+ *      label ("Chat" / "Task") sits in the action row so the user
+ *      can see in advance which mode the next message will route to.
+ *   2. **FolderPicker above the input** — the project picker is a
+ *      small "switch project" pill above the input box.
+ *
+ * R38 additions:
+ *   3. **Model ID chip** on the rightmost of the action row — the
+ *      chip shows the active provider's model and clicks through to
+ *      Settings → LLM Models.
  *
  * Layout:
- *   ┌─────────────────────────────────────────────┐
- *   │  [▼ /path/to/project]   ← switch project   │  ← R37
- *   ├─────────────────────────────────────────────┤
- *   │  ┌────────────────────────────────────┐     │
- *   │  │ Describe a task — the Auto router…  │ ☐ │  ← R37: Run as task
- *   │  │                                    │   │
- *   │  └────────────────────────────────────┘ ↑  │
- *   │  Enter to send · Shift+Enter for newline  │
- *   └─────────────────────────────────────────────┘
+ *   ┌─────────────────────────────────────────────────────┐
+ *   │  [▼ /path/to/project]   ← switch project   (R37)   │
+ *   ├─────────────────────────────────────────────────────┤
+ *   │  ┌────────────────────────────────────┐             │
+ *   │  │ Type a message — the agent will    │ 📎 ↑  │ gpt-4o ⚙ │
+ *   │  │ route to chat or task ...         │ [Chat]  │             │
+ *   │  │                                    │             │
+ *   │  └────────────────────────────────────┘             │
+ *   │  Enter to send · Shift+Enter for newline            │
+ *   └─────────────────────────────────────────────────────┘
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { Button, Tooltip, App as AntdApp, Switch } from 'antd';
+import { Button, Tooltip, App as AntdApp } from 'antd';
 import {
   ArrowUpOutlined, PaperClipOutlined, ThunderboltOutlined,
-  MessageOutlined,
+  MessageOutlined, RobotOutlined, SettingOutlined,
 } from '@ant-design/icons';
 
 import { useThemeTokens } from '../hooks/useThemeTokens';
+import { useSettingsStore } from '../stores/settingsStore';
+import { classifyIntent } from '../utils/intent';
 import FolderPicker from './FolderPicker';
 
 interface Props {
   value?: string;
   onChange?: (v: string) => void;
   /**
-   * Called when the user submits. The boolean is the new
-   * ``runAsTask`` toggle state: ``true`` means the user wants
-   * the full loop, ``false`` means a single-turn chat.
+   * Called when the user submits. The intent is auto-classified
+   * by the composer (no manual Chat/Task toggle since R38.6).
    */
-  onSubmit: (text: string, runAsTask: boolean) => Promise<void> | void;
+  onSubmit: (text: string) => Promise<void> | void;
   placeholder?: string;
   busy?: boolean;
   disabled?: boolean;
   disabledHint?: string;
-  /** Initial value for the runAsTask toggle. */
-  defaultRunAsTask?: boolean;
 }
 
 const MAX_TEXTAREA_HEIGHT = 240;
 
 const ChatComposer: React.FC<Props> = ({
   value, onChange, onSubmit, placeholder, busy, disabled, disabledHint,
-  defaultRunAsTask = false,
 }) => {
   const tokens = useThemeTokens();
   const [text, setText] = useState(value || '');
-  const [runAsTask, setRunAsTask] = useState<boolean>(defaultRunAsTask);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+  // R38: read the active provider's model from the settings store so
+  // we can show it on the action row. The provider switches the
+  // model in real-time (the user can change it in Settings → LLM
+  // Models without reloading the composer).
+  const activeProvider = useSettingsStore((s) => s.provider.active);
+  const openaiModel = useSettingsStore((s) => s.provider.openai.model);
+  const anthropicModel = useSettingsStore((s) => s.provider.anthropic.model);
+  const openSettings = useSettingsStore((s) => s.openDrawer);
+  const currentModel = (activeProvider === 'openai' ? openaiModel : anthropicModel)
+    || (activeProvider === 'openai' ? 'gpt-4o' : 'claude-3-5-sonnet-latest');
+
+  // R38.6: live-preview the intent classification in the action row
+  // hint so the user can see (in advance) which mode their message
+  // will route to. Updates on every keystroke.
+  const intent = classifyIntent(text);
+  const isTask = intent === 'task';
 
   // Sync external value updates (e.g. parent resetting after submit).
   useEffect(() => {
@@ -81,7 +97,7 @@ const ChatComposer: React.FC<Props> = ({
     const trimmed = text.trim();
     if (!trimmed || disabled || busy) return;
     try {
-      await onSubmit(trimmed, runAsTask);
+      await onSubmit(trimmed);
       setText('');
     } catch {
       // Caller surfaces the error; keep the text so the user can retry.
@@ -95,14 +111,12 @@ const ChatComposer: React.FC<Props> = ({
     }
   };
 
-  // Compute the send-button color depending on mode:
-  //   - chat mode (toggle off) → brand color
-  //   - task mode (toggle on)  → a "thunder" color so the user can
-  //     see at a glance "this is going to spin up the loop"
-  const sendColor = runAsTask ? tokens.warning : tokens.labelPrimary;
-  const sendTitle = runAsTask
-    ? 'Send as task (start the Coder <-> Reviewer loop)'
-    : 'Send as chat (single-turn, no loop)';
+  // The send-button color hints at the auto-classified mode.
+  // Yellow = task (loop), brand color = chat (single-turn).
+  const sendColor = isTask ? tokens.warning : tokens.labelPrimary;
+  const sendTitle = isTask
+    ? 'Send as task (full Coder ↔ Reviewer loop)'
+    : 'Send as chat (single-turn reply)';
 
   return (
     <div style={{
@@ -121,9 +135,9 @@ const ChatComposer: React.FC<Props> = ({
       >
         <FolderPicker />
         <span style={{ opacity: 0.6 }}>
-          · {runAsTask
-            ? 'Tasks start the Coder ↔ Reviewer loop'
-            : 'Chat is single-turn (no loop)'}
+          · {isTask
+            ? 'This message will start the Coder ↔ Reviewer loop'
+            : 'This message is a single-turn reply'}
         </span>
       </div>
 
@@ -147,9 +161,8 @@ const ChatComposer: React.FC<Props> = ({
           disabled={disabled || busy}
           placeholder={disabled
             ? (disabledHint || 'Pick a project or folder to start chatting')
-            : (placeholder || (runAsTask
-                ? 'Describe a task — the loop will run until approved.'
-                : 'Ask anything — single chat reply, no loop.'))}
+            : (placeholder || 'Type a message — the agent will route to '
+               + 'chat (single reply) or task (full loop) automatically.')}
           style={{
             width: '100%', border: 'none', outline: 'none',
             background: 'transparent', color: tokens.labelPrimary,
@@ -163,38 +176,34 @@ const ChatComposer: React.FC<Props> = ({
           display: 'flex', alignItems: 'center', gap: 8,
           paddingTop: 4,
         }}>
-          {/* R37: Run-as-task toggle on the left of the action row */}
+          {/* R38.6: live-preview of the auto-classified intent. We
+              show a small label (with the matching icon) so the
+              user can see in advance which mode the next message
+              will route to. No toggle — the heuristic decides. */}
           <Tooltip
-            title={runAsTask
-              ? 'Currently: Task mode. Click to switch to Chat (no loop).'
-              : 'Currently: Chat mode. Click to switch to Task (run the loop).'}
+            title={isTask
+              ? 'Auto-classified as task — full Coder ↔ Reviewer loop'
+              : 'Auto-classified as chat — single-turn reply'}
             placement="top"
           >
-            <label
-              data-testid="run-as-task-toggle"
+            <span
+              data-testid="composer-intent-preview"
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 4,
                 padding: '2px 8px', borderRadius: 10,
-                background: runAsTask ? tokens.warning + '22' : 'transparent',
-                color: runAsTask ? tokens.warning : tokens.labelTertiary,
-                fontSize: 11, cursor: 'pointer', userSelect: 'none',
+                background: isTask
+                  ? tokens.warning + '22' : tokens.bgLay2,
+                color: isTask
+                  ? tokens.warning : tokens.labelTertiary,
+                fontSize: 11, userSelect: 'none',
                 transition: 'background 0.15s, color 0.15s',
               }}
-              onClick={() => setRunAsTask((v) => !v)}
-              role="button"
             >
-              {runAsTask
+              {isTask
                 ? <ThunderboltOutlined style={{ fontSize: 12 }} />
                 : <MessageOutlined style={{ fontSize: 12 }} />}
-              <span>{runAsTask ? 'Task' : 'Chat'}</span>
-              <Switch
-                size="small"
-                checked={runAsTask}
-                onChange={(checked) => setRunAsTask(checked)}
-                onClick={(_, e) => e.stopPropagation()}
-                style={{ marginLeft: 2 }}
-              />
-            </label>
+              <span>{isTask ? 'Task' : 'Chat'}</span>
+            </span>
           </Tooltip>
           <div style={{ flex: 1 }} />
           <Tooltip title="Attach file (coming soon)">
@@ -205,7 +214,7 @@ const ChatComposer: React.FC<Props> = ({
             <Button
               type="primary"
               shape="circle"
-              icon={runAsTask ? <ThunderboltOutlined /> : <ArrowUpOutlined />}
+              icon={isTask ? <ThunderboltOutlined /> : <ArrowUpOutlined />}
               onClick={submit}
               disabled={disabled || busy || !text.trim()}
               loading={busy}
@@ -216,6 +225,53 @@ const ChatComposer: React.FC<Props> = ({
               data-testid="composer-send"
               aria-label="Send"
             />
+          </Tooltip>
+          {/* R38: model ID chip on the rightmost of the action row.
+              Click to open Settings → LLM Models. The chip shows
+              which model the next message will use (the active
+              provider's model from settings). */}
+          <Tooltip
+            title={
+              <span>
+                Using <b>{activeProvider === 'openai' ? 'OpenAI' : 'Anthropic'}</b>{' '}
+                · <b>{currentModel}</b> — click to change in Settings.
+              </span>
+            }
+            placement="top"
+          >
+            <button
+              type="button"
+              data-testid="composer-model-chip"
+              onClick={openSettings}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '3px 8px', borderRadius: 10,
+                background: tokens.bgLay2, color: tokens.labelSecondary,
+                fontSize: 11, fontWeight: 500,
+                border: `1px solid ${tokens.border}`,
+                cursor: 'pointer', userSelect: 'none',
+                maxWidth: 200, overflow: 'hidden',
+                whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                transition: 'background 0.12s, color 0.12s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = tokens.bgLay1;
+                e.currentTarget.style.color = tokens.labelPrimary;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = tokens.bgLay2;
+                e.currentTarget.style.color = tokens.labelSecondary;
+              }}
+            >
+              <RobotOutlined style={{ fontSize: 11 }} />
+              <span style={{
+                overflow: 'hidden', textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap', minWidth: 0,
+              }}>
+                {currentModel}
+              </span>
+              <SettingOutlined style={{ fontSize: 10, opacity: 0.6 }} />
+            </button>
           </Tooltip>
         </div>
       </div>

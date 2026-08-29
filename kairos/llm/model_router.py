@@ -49,6 +49,15 @@ class ModelRouter:
         if config_path and config_path.exists():
             self._load_config(config_path)
 
+        # R37+: also load the per-provider openai / anthropic configs
+        # eagerly. Previously this was lazy (called on the first
+        # get_provider_for_role), which meant a freshly-constructed
+        # ModelRouter had no R37+ configs in ``_model_configs`` and
+        # tests / other callers couldn't introspect the user's LLM
+        # settings. Loading eagerly keeps ``_model_configs`` in sync
+        # with what's on disk.
+        self._load_custom_models()
+
         # Load persisted role mappings
         self._load_role_mappings()
 
@@ -60,11 +69,58 @@ class ModelRouter:
         self._role_mapping = config.get("role_model_mapping", {})
 
     def _load_custom_models(self):
-        """Load custom model configs from settings file."""
+        """Load custom model configs from settings file.
+
+        R37+: also load the per-provider openai / anthropic configs
+        (endpointUrl, baseUrl, apiKey, model) so the user's LLM
+        settings in the SettingsDrawer actually drive the Coder /
+        Reviewer LLM calls. Without this, the user-set baseUrl /
+        apiKey / model were stored in settings.json but never read
+        by the model router — the LLM call still used whatever was
+        in custom_models / api_keys (legacy fields).
+        """
         sf = settings_path()
         if sf.exists():
             try:
                 settings = json.loads(sf.read_text(encoding="utf-8"))
+                # R37+: openai / anthropic per-provider configs.
+                # Prefer the nested ``provider.openai`` shape, fall
+                # back to the top-level ``provider_openai``.
+                nested = settings.get("provider") or {}
+                openai_cfg = (
+                    nested.get("openai")
+                    if isinstance(nested.get("openai"), dict)
+                    else settings.get("provider_openai")
+                ) or {}
+                anthropic_cfg = (
+                    nested.get("anthropic")
+                    if isinstance(nested.get("anthropic"), dict)
+                    else settings.get("provider_anthropic")
+                ) or {}
+                active = (nested.get("active")
+                          or settings.get("active_provider") or "openai")
+                if openai_cfg and (openai_cfg.get("apiKey") or openai_cfg.get("model")):
+                    self._model_configs["__r37_openai__"] = LLMConfig(
+                        provider="openai",
+                        model=openai_cfg.get("model") or "gpt-4o",
+                        api_key=openai_cfg.get("apiKey") or "",
+                        base_url=openai_cfg.get("baseUrl") or "https://api.openai.com/v1",
+                    )
+                if anthropic_cfg and (anthropic_cfg.get("apiKey") or anthropic_cfg.get("model")):
+                    self._model_configs["__r37_anthropic__"] = LLMConfig(
+                        provider="anthropic",
+                        model=anthropic_cfg.get("model") or "claude-3-5-sonnet-latest",
+                        api_key=anthropic_cfg.get("apiKey") or "",
+                        base_url=anthropic_cfg.get("baseUrl") or "https://api.anthropic.com",
+                    )
+                # R37+: the active provider determines which LLMConfig
+                # the Coder / Reviewer actually use. We register both
+                # above and pick one based on ``active``.
+                if active == "openai" and "__r37_openai__" in self._model_configs:
+                    self._model_configs["__active__"] = self._model_configs["__r37_openai__"]
+                elif active == "anthropic" and "__r37_anthropic__" in self._model_configs:
+                    self._model_configs["__active__"] = self._model_configs["__r37_anthropic__"]
+                # Legacy: custom_models + api_keys (R8 shape) still work.
                 custom_models = settings.get("custom_models", [])
                 for m in custom_models:
                     key = f"custom:{m['name']}"

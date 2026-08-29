@@ -23,12 +23,36 @@
   },
   "ollama_base_url": "",
   "provider_env_map": {},
-  "active_provider": "ollama",
+  "active_provider": "openai",
   "provider": {
-    "active": "ollama",
-    "ollamaBaseUrl": "http://10.0.0.5:11434",
-    "ollamaModel": "qwen2.5-coder:14b",
-    "apiKeyEnv": "OPENAI_API_KEY"
+    "active": "openai",
+    "ollamaBaseUrl": "http://127.0.0.1:11434",
+    "ollamaModel": "qwen2.5-coder:7b",
+    "apiKeyEnv": "OPENAI_API_KEY",
+    "openai": {
+      "endpointUrl": "https://openrouter.ai/api/v1/chat/completions",
+      "baseUrl": "https://api.openai.com/v1",
+      "apiKey": "",
+      "model": "anthropic/claude-sonnet-4-20250514"
+    },
+    "anthropic": {
+      "endpointUrl": "https://api.anthropic.com/v1/messages",
+      "baseUrl": "https://api.anthropic.com",
+      "apiKey": "",
+      "model": "claude-3-5-sonnet-latest"
+    }
+  },
+  "provider_openai": {
+    "endpointUrl": "https://openrouter.ai/api/v1/chat/completions",
+    "baseUrl": "https://api.openai.com/v1",
+    "apiKey": "",
+    "model": "anthropic/claude-sonnet-4-20250514"
+  },
+  "provider_anthropic": {
+    "endpointUrl": "https://api.anthropic.com/v1/messages",
+    "baseUrl": "https://api.anthropic.com",
+    "apiKey": "",
+    "model": "claude-3-5-sonnet-latest"
   },
   "memory_user_path": "",
   "memory_project_path": ""

@@ -29,9 +29,26 @@ class FileEditTool(BaseTool):
     async def execute(self, path: str = "", content: str = "", **kwargs) -> ToolResult:
         try:
             file_path = self._resolve_safe(path)
+        except PermissionError as e:
+            return ToolResult(success=False, output="", error=str(e))
+        # R38.6 §30: auto-checkpoint BEFORE the write. A failed
+        # snapshot is logged but never blocks the write — we
+        # don't want a permission bug in the checkpointer to
+        # brick the agent.
+        snap_err: Optional[str] = None
+        if self._checkpointer is not None:
+            snap_err = self._checkpointer.before_write(path)
+        try:
             file_path.parent.mkdir(parents=True, exist_ok=True)
             file_path.write_text(content, encoding="utf-8")
-            return ToolResult(success=True, output=f"File written: {path} ({len(content)} bytes)")
+            meta = {"bytes_written": len(content)}
+            if snap_err:
+                meta["auto_checkpoint_error"] = snap_err
+            return ToolResult(
+                success=True,
+                output=f"File written: {path} ({len(content)} bytes)",
+                metadata=meta,
+            )
         except PermissionError as e:
             return ToolResult(success=False, output="", error=str(e))
         except Exception as e:
@@ -67,13 +84,22 @@ class FileEditReplaceTool(BaseTool):
         if not file_path.exists():
             return ToolResult(success=False, output="", error=f"File not found: {path}")
 
+        # R38.6 §30: auto-checkpoint BEFORE the read-modify-write
+        # cycle so a single restore can undo the whole edit.
+        snap_err: Optional[str] = None
+        if self._checkpointer is not None:
+            snap_err = self._checkpointer.before_write(path)
         try:
             content = file_path.read_text(encoding="utf-8")
             if old_text not in content:
                 return ToolResult(success=False, output="", error="old_text not found in file")
             new_content = content.replace(old_text, new_text, 1)
             file_path.write_text(new_content, encoding="utf-8")
-            return ToolResult(success=True, output=f"Replaced text in {path}")
+            meta = {"path": path}
+            if snap_err:
+                meta["auto_checkpoint_error"] = snap_err
+            return ToolResult(success=True, output=f"Replaced text in {path}",
+                               metadata=meta)
         except Exception as e:
             return ToolResult(success=False, output="", error=str(e))
 
@@ -122,6 +148,18 @@ class MultiEditTool(BaseTool):
     async def execute(self, edits: Optional[list] = None, **kwargs) -> ToolResult:
         if not edits:
             return ToolResult(success=False, output="", error="No edits provided")
+        # R38.6 §30: snapshot every path that's about to be
+        # modified, in one batch, BEFORE we touch anything. If
+        # any single snapshot fails, we continue — a failed
+        # checkpoint is logged but doesn't block the edit.
+        snap_errors: dict = {}
+        if self._checkpointer is not None and edits:
+            for e in edits:
+                p = e.get("path", "")
+                if p and p not in snap_errors:
+                    err = self._checkpointer.before_write(p)
+                    if err:
+                        snap_errors[p] = err
         applied = 0
         failed = []
         for i, e in enumerate(edits):
@@ -143,15 +181,21 @@ class MultiEditTool(BaseTool):
                 failed.append(f"#{i}: permission denied ({e})")
             except Exception as e:
                 failed.append(f"#{i}: {e}")
+        meta = {
+            "applied": applied,
+            "files": len({e.get('path', '') for e in edits}),
+        }
+        if snap_errors:
+            meta["auto_checkpoint_errors"] = snap_errors
         if failed:
             return ToolResult(
                 success=False,
                 output=f"Applied {applied}/{len(edits)} edits.",
                 error="; ".join(failed),
-                metadata={"applied": applied, "total": len(edits)},
+                metadata=meta,
             )
         return ToolResult(
             success=True,
-            output=f"Applied {applied} edits across {len({e.get('path', '') for e in edits})} file(s).",
-            metadata={"applied": applied, "files": len({e.get('path', '') for e in edits})},
+            output=f"Applied {applied} edits across {meta['files']} file(s).",
+            metadata=meta,
         )

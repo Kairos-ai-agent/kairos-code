@@ -338,6 +338,23 @@ class Orchestrator:
             WebFetchTool(),
             WebSearchTool(),
         ]
+
+        # R38.6 §30: auto-checkpoint the project's files before any
+        # write. The checkpointer is shared by the 3 file tools so
+        # the user can restore from the Workbench panel even if the
+        # agent's session crashed mid-loop. Best-effort: a failed
+        # snapshot is logged but never blocks the write.
+        try:
+            from kairos.auto_checkpoint import AutoCheckpointer
+            checkpointer = AutoCheckpointer(project_dir=project.work_dir
+                                            or project.workspace)
+            for tool in coder_tools:
+                if isinstance(tool, (FileEditTool, FileEditReplaceTool,
+                                       MultiEditTool)):
+                    tool._checkpointer = checkpointer
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("auto-checkpointer setup failed: %s", exc)
+
         subagent_tool = SubagentTool(allowed_root=coder_root)
         coder_tools.append(subagent_tool)
 
@@ -664,18 +681,41 @@ class Orchestrator:
         return list(self._projects.values())
 
     def delete_project(self, project_id: str):
+        """Soft-delete (R38.6): archive the project in the DB and
+        tear down its in-memory runtime.
+
+        The DB row, sessions, files, and notes are preserved
+        (``archived_at`` is set, no DELETE). The user can restore
+        via ``restore_project()``. The in-memory ``_projects`` map
+        is cleared so the UI no longer sees the project (until
+        Kairos restarts and re-loads from the DB — at which point
+        ``load_projects()`` filters out archived rows by default).
+
+        We do NOT call ``self._db.delete_project_memory()`` — that
+        would wipe the sessions/files we just preserved for restore.
+        """
         project = self._projects.pop(project_id, None)
         if not project:
             return
         if project.loop_task and not project.loop_task.done():
             project.loop_task.cancel()
-        self._db.delete_project_memory(project_id)
+        # Archive the row (sets archived_at). Records, sessions,
+        # files, and notes are preserved.
+        if hasattr(self._db, 'archive_project'):
+            self._db.archive_project(project_id)
         for agent_id in [project.coder.agent_id if project.coder else None,
                           project.reviewer.agent_id if project.reviewer else None]:
             if agent_id:
                 self._agents.pop(agent_id, None)
         # Tear down per-project runtime resources.
         self._close_project_runtime(project)
+
+    def restore_project(self, project_id: str) -> bool:
+        """Reverse an archive: clear ``archived_at`` so the project
+        shows up in ``load_projects()`` again. R38.6."""
+        if not hasattr(self._db, 'restore_project'):
+            return False
+        return self._db.restore_project(project_id)
 
     def _close_project_runtime(self, project: Project) -> None:
         """Stop the watchers, close MCP subprocesses, remove worktrees.

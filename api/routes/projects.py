@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from api import deps
 from kairos.loop.review_loop import _loop_health_score
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -120,36 +123,58 @@ async def chat(project_id: str, request: "ChatRequest"):
     from kairos.agents.base import AgentTask
     from kairos.core.message_bus import Message
 
-    project = _orch().get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404,
-                            detail=f"Project not found: {project_id}")
-    if not project.coder:
-        raise HTTPException(status_code=503,
-                            detail="No Coder agent wired for this project")
-
-    text = (request.message or "").strip()
-    if not text:
-        raise HTTPException(status_code=400, detail="message is required")
-
-    # Build a minimal task and call the Coder's run() directly.
-    # No plan tracking, no plan approval, no Reviewer — just one
-    # round of text. The Reply is returned synchronously over HTTP
-    # *and* published on the message bus for any open WS client.
-    bus = project.message_bus
-    import uuid as _uuid
-    task = AgentTask(
-        id=_uuid.uuid4().hex[:12],
-        title="Chat",
-        description=text,
-        instruction=text,
-        context={"mode": "chat", "single_turn": True},
-    )
     try:
-        reply = await project.coder.run(task)
+        project = _orch().get_project(project_id)
+        if not project:
+            raise HTTPException(status_code=404,
+                                detail=f"Project not found: {project_id}")
+        if not project.coder:
+            raise HTTPException(status_code=503,
+                                detail="No Coder agent wired for this project")
+
+        text = (request.message or "").strip()
+        if not text:
+            raise HTTPException(status_code=400, detail="message is required")
+
+        # Build a minimal task and call the Coder's run() directly.
+        # No plan tracking, no plan approval, no Reviewer — just one
+        # round of text. The Reply is returned synchronously over HTTP
+        # *and* published on the message bus for any open WS client.
+        # NOTE: the message bus lives on the *Orchestrator*, not on
+        # each Project. Project only carries per-project state
+        # (coder / reviewer / loop_task / loop_session / runtime).
+        # The R37 /chat route previously read ``project.message_bus``
+        # and crashed with AttributeError; the Orchestrator has the
+        # single shared bus every project publishes into.
+        bus = _orch().message_bus
+        import uuid as _uuid
+        task = AgentTask(
+            id=_uuid.uuid4().hex[:12],
+            title="Chat",
+            description=text,
+            instruction=text,
+            context={"mode": "chat", "single_turn": True},
+        )
+        try:
+            reply = await project.coder.run(task)
+        except Exception as exc:
+            raise HTTPException(status_code=500,
+                                detail=f"Coder chat failed: {exc}")
+    except HTTPException:
+        # Already a clean 4xx/5xx — let it through.
+        raise
     except Exception as exc:
+        # R38.6 §22: an unhandled exception in the pre-Coder logic
+        # (e.g. _orch().get_project raises, project.coder is None
+        # but accessed as attribute, message_bus is None, AgentTask
+        # constructor fails) used to return FastAPI's default
+        # plain-text "Internal Server Error" with NO detail. The
+        # frontend then showed the bare "[500] Request failed with
+        # status code 500" toast. Now we convert to a proper
+        # 500 with detail so the user sees the real cause.
+        logger.exception("chat pre-coder logic failed")
         raise HTTPException(status_code=500,
-                            detail=f"Coder chat failed: {exc}")
+                            detail=f"chat pre-coder: {type(exc).__name__}: {exc}")
     # Best-effort publish so the WS thread updates.
     try:
         await bus.publish(Message(
@@ -611,11 +636,43 @@ async def get_project_messages(project_id: str, limit: int = 50):
 
 @router.delete("/{project_id}")
 async def delete_project(project_id: str):
+    """Archive (soft-delete) a project.
+
+    R38.6: this no longer hard-deletes the row. We just set
+    ``archived_at`` so the row is hidden from ``load_projects()``.
+    The project record, sessions, files, and notes are preserved
+    so the user can restore via ``POST /api/projects/{id}/restore``.
+    The in-memory project + agents are torn down so the running
+    loop stops, but the data on disk stays intact.
+    """
     project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     _orch().delete_project(project_id)
-    return {"status": "ok", "message": f"Project {project_id} deleted"}
+    return {"status": "archived",
+            "message": f"Project {project_id} archived (data preserved)"}
+
+
+@router.post("/{project_id}/restore")
+async def restore_project(project_id: str):
+    """Restore an archived project.
+
+    R38.6: reverses a soft-delete. Clears ``archived_at`` so the
+    row shows up in ``load_projects()`` again. The project's
+    sessions, files, and notes were preserved on archive, so
+    nothing is lost — the project comes back fully intact.
+    """
+    if not _orch().get_project(project_id):
+        # The project might not be in memory (e.g. we just
+        # restarted). The DB-level restore still works.
+        pass
+    ok = _orch().restore_project(project_id)
+    if not ok:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Project not found (or not archived): {project_id}")
+    return {"status": "restored",
+            "message": f"Project {project_id} restored"}
 
 
 

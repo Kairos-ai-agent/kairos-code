@@ -1,0 +1,306 @@
+{
+  "version": 1,
+  "installed_at": "2026-08-29T05:58:21Z",
+  "skills": {
+    "total": 29,
+    "installed": 26,
+    "failed": 3,
+    "records": [
+      {
+        "name": "docx",
+        "category": "document",
+        "source": "anthropics/skills",
+        "url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/docx/SKILL.md",
+        "path": "kairos\\skills\\docx\\SKILL.md",
+        "description": "Create / edit / analyze Word documents with tracked changes, comments, formatting. Source-available, used in production by Claude.ai.",
+        "status": "already-installed",
+        "bytes": 7002
+      },
+      {
+        "name": "pdf",
+        "category": "document",
+        "source": "anthropics/skills",
+        "url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/pdf/SKILL.md",
+        "path": "kairos\\skills\\pdf\\SKILL.md",
+        "description": "PDF text / table / metadata extraction, merging, annotation.",
+        "status": "already-installed",
+        "bytes": 8386
+      },
+      {
+        "name": "pptx",
+        "category": "document",
+        "source": "anthropics/skills",
+        "url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/pptx/SKILL.md",
+        "path": "kairos\\skills\\pptx\\SKILL.md",
+        "description": "PowerPoint read / generate / layout / templates.",
+        "status": "already-installed",
+        "bytes": 21034
+      },
+      {
+        "name": "xlsx",
+        "category": "document",
+        "source": "anthropics/skills",
+        "url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/xlsx/SKILL.md",
+        "path": "kairos\\skills\\xlsx\\SKILL.md",
+        "description": "Excel manipulation: formulas, charts, transforms.",
+        "status": "already-installed",
+        "bytes": 8697
+      },
+      {
+        "name": "frontend-design",
+        "category": "design",
+        "source": "anthropics/skills",
+        "url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/frontend-design/SKILL.md",
+        "path": "kairos\\skills\\frontend-design\\SKILL.md",
+        "description": "Distinctive, production-grade UI. Avoids generic 'AI slop' aesthetics.",
+        "status": "already-installed",
+        "bytes": 8315
+      },
+      {
+        "name": "webapp-testing",
+        "category": "testing",
+        "source": "anthropics/skills",
+        "url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/webapp-testing/SKILL.md",
+        "path": "kairos\\skills\\webapp-testing\\SKILL.md",
+        "description": "Playwright-based local web app testing toolkit.",
+        "status": "already-installed",
+        "bytes": 4008
+      },
+      {
+        "name": "mcp-builder",
+        "category": "tools",
+        "source": "anthropics/skills",
+        "url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/mcp-builder/SKILL.md",
+        "path": "kairos\\skills\\mcp-builder\\SKILL.md",
+        "description": "Guide for creating high-quality MCP servers.",
+        "status": "already-installed",
+        "bytes": 9328
+      },
+      {
+        "name": "skill-creator",
+        "category": "tools",
+        "source": "anthropics/skills",
+        "url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/skill-creator/SKILL.md",
+        "path": "kairos\\skills\\skill-creator\\SKILL.md",
+        "description": "Meta-skill: scaffold a new Skill from a description.",
+        "status": "already-installed",
+        "bytes": 33653
+      },
+      {
+        "name": "theme-factory",
+        "category": "design",
+        "source": "anthropics/skills",
+        "url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/theme-factory/SKILL.md",
+        "path": "kairos\\skills\\theme-factory\\SKILL.md",
+        "description": "Style artifacts with professional themes or generate new ones. Pairs well with docx/pptx.",
+        "status": "already-installed",
+        "bytes": 3183
+      },
+      {
+        "name": "canvas-design",
+        "category": "design",
+        "source": "anthropics/skills",
+        "url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/canvas-design/SKILL.md",
+        "path": "kairos\\skills\\canvas-design\\SKILL.md",
+        "description": "Design visual art in PNG / PDF using p5.js.",
+        "status": "already-installed",
+        "bytes": 12068
+      },
+      {
+        "name": "algorithmic-art",
+        "category": "design",
+        "source": "anthropics/skills",
+        "url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/algorithmic-art/SKILL.md",
+        "path": "kairos\\skills\\algorithmic-art\\SKILL.md",
+        "description": "Generative art using p5.js with seeded randomness.",
+        "status": "already-installed",
+        "bytes": 20173
+      },
+      {
+        "name": "slack-gif-creator",
+        "category": "media",
+        "source": "anthropics/skills",
+        "url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/slack-gif-creator/SKILL.md",
+        "path": "kairos\\skills\\slack-gif-creator\\SKILL.md",
+        "description": "Animated GIFs optimized for Slack's size constraints.",
+        "status": "already-installed",
+        "bytes": 8095
+      },
+      {
+        "name": "brand-guidelines",
+        "category": "design",
+        "source": "anthropics/skills",
+        "url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/brand-guidelines/SKILL.md",
+        "path": "kairos\\skills\\brand-guidelines\\SKILL.md",
+        "description": "Apply Anthropic's brand colors and typography.",
+        "status": "already-installed",
+        "bytes": 2308
+      },
+      {
+        "name": "systematic-debugging",
+        "category": "workflow",
+        "source": "obra/superpowers-skills",
+        "url": "https://raw.githubusercontent.com/obra/superpowers-skills/main/skills/debugging/systematic-debugging/SKILL.md",
+        "path": "kairos\\skills\\systematic-debugging\\SKILL.md",
+        "description": "Use when encountering any bug, test failure, or unexpected behavior. Before proposing a fix.",
+        "status": "already-installed",
+        "bytes": 10067
+      },
+      {
+        "name": "test-driven-development",
+        "category": "workflow",
+        "source": "obra/superpowers-skills",
+        "url": "https://raw.githubusercontent.com/obra/superpowers-skills/main/skills/testing/test-driven-development/SKILL.md",
+        "path": "kairos\\skills\\test-driven-development\\SKILL.md",
+        "description": "TDD: write the test first, then the implementation.",
+        "status": "already-installed",
+        "bytes": 10079
+      },
+      {
+        "name": "using-git-worktrees",
+        "category": "workflow",
+        "source": "obra/superpowers-skills",
+        "url": "https://raw.githubusercontent.com/obra/superpowers-skills/main/skills/collaboration/using-git-worktrees/SKILL.md",
+        "path": "kairos\\skills\\using-git-worktrees\\SKILL.md",
+        "description": "Create isolated git worktrees for parallel work.",
+        "status": "already-installed",
+        "bytes": 5652
+      },
+      {
+        "name": "verification-before-completion",
+        "category": "workflow",
+        "source": "obra/superpowers-skills",
+        "url": "https://raw.githubusercontent.com/obra/superpowers-skills/main/skills/debugging/verification-before-completion/SKILL.md",
+        "path": "kairos\\skills\\verification-before-completion\\SKILL.md",
+        "description": "Verify your work before declaring done. Catches the 'looks-right-but-actually-broken' syndrome.",
+        "status": "installed",
+        "bytes": 4126
+      },
+      {
+        "name": "writing-plans",
+        "category": "workflow",
+        "source": "obra/superpowers-skills",
+        "url": "https://raw.githubusercontent.com/obra/superpowers-skills/main/skills/collaboration/writing-plans/SKILL.md",
+        "path": "kairos\\skills\\writing-plans\\SKILL.md",
+        "description": "Write a plan before coding. Planners fail open, not closed.",
+        "status": "already-installed",
+        "bytes": 3530
+      },
+      {
+        "name": "brainstorming",
+        "category": "workflow",
+        "source": "obra/superpowers-skills",
+        "url": "https://raw.githubusercontent.com/obra/superpowers-skills/main/skills/collaboration/brainstorming/SKILL.md",
+        "path": "kairos\\skills\\brainstorming\\SKILL.md",
+        "description": "Transform rough ideas into fully-formed designs through structured questioning.",
+        "status": "already-installed",
+        "bytes": 2980
+      },
+      {
+        "name": "root-cause-tracing",
+        "category": "workflow",
+        "source": "obra/superpowers-skills",
+        "url": "https://raw.githubusercontent.com/obra/superpowers-skills/main/skills/debugging/root-cause-tracing/SKILL.md",
+        "path": "kairos\\skills\\root-cause-tracing\\SKILL.md",
+        "description": "When errors occur deep in execution, trace back to the original trigger.",
+        "status": "already-installed",
+        "bytes": 5746
+      },
+      {
+        "name": "defense-in-depth",
+        "category": "workflow",
+        "source": "obra/superpowers-skills",
+        "url": "https://raw.githubusercontent.com/obra/superpowers-skills/main/skills/debugging/defense-in-depth/SKILL.md",
+        "path": "kairos\\skills\\defense-in-depth\\SKILL.md",
+        "description": "Multi-layered testing / security best practices.",
+        "status": "installed",
+        "bytes": 3915
+      },
+      {
+        "name": "writing-skills",
+        "category": "meta",
+        "source": "obra/superpowers-skills",
+        "url": "https://raw.githubusercontent.com/obra/superpowers-skills/main/skills/meta/writing-skills/SKILL.md",
+        "path": "kairos\\skills\\writing-skills\\SKILL.md",
+        "description": "How to author a new Skill that follows the spec.",
+        "status": "already-installed",
+        "bytes": 20713
+      },
+      {
+        "name": "subagent-driven-development",
+        "category": "workflow",
+        "source": "obra/superpowers-skills",
+        "url": "https://raw.githubusercontent.com/obra/superpowers-skills/main/skills/collaboration/subagent-driven-development/SKILL.md",
+        "path": "kairos\\skills\\subagent-driven-development\\SKILL.md",
+        "description": "Dispatch independent tasks to subagents with code-review checkpoints.",
+        "status": "already-installed",
+        "bytes": 5133
+      },
+      {
+        "name": "artifacts-builder",
+        "category": "tools",
+        "source": "ComposioHQ/awesome-claude-skills",
+        "url": "https://raw.githubusercontent.com/ComposioHQ/awesome-claude-skills/master/artifacts-builder/SKILL.md",
+        "path": "kairos\\skills\\artifacts-builder\\SKILL.md",
+        "description": "Suite for building complex claude.ai HTML artifacts (React + Tailwind + shadcn/ui).",
+        "status": "installed",
+        "bytes": 3065
+      },
+      {
+        "name": "csv-data-summarizer",
+        "category": "data",
+        "source": "ComposioHQ/awesome-claude-skills",
+        "url": "https://raw.githubusercontent.com/ComposioHQ/awesome-claude-skills/master/csv-data-summarizer-claude-skill/SKILL.md",
+        "path": "kairos\\skills\\csv-data-summarizer\\SKILL.md",
+        "description": "Auto-analyze CSVs: columns, distributions, missing data, correlations.",
+        "status": "download-failed"
+      },
+      {
+        "name": "deep-research",
+        "category": "research",
+        "source": "ComposioHQ/awesome-claude-skills",
+        "url": "https://raw.githubusercontent.com/ComposioHQ/awesome-claude-skills/master/deep-research/SKILL.md",
+        "path": "kairos\\skills\\deep-research\\SKILL.md",
+        "description": "Multi-step autonomous research using Gemini Deep Research.",
+        "status": "download-failed"
+      },
+      {
+        "name": "file-organizer",
+        "category": "productivity",
+        "source": "ComposioHQ/awesome-claude-skills",
+        "url": "https://raw.githubusercontent.com/ComposioHQ/awesome-claude-skills/master/file-organizer/SKILL.md",
+        "path": "kairos\\skills\\file-organizer\\SKILL.md",
+        "description": "Intelligently organize files, find duplicates, optimize directory structure.",
+        "status": "installed",
+        "bytes": 11096
+      },
+      {
+        "name": "youtube-transcript",
+        "category": "media",
+        "source": "ComposioHQ/awesome-claude-skills",
+        "url": "https://raw.githubusercontent.com/ComposioHQ/awesome-claude-skills/master/youtube-transcript/SKILL.md",
+        "path": "kairos\\skills\\youtube-transcript\\SKILL.md",
+        "description": "Fetch YouTube transcripts and generate summaries.",
+        "status": "download-failed"
+      },
+      {
+        "name": "image-enhancer",
+        "category": "media",
+        "source": "ComposioHQ/awesome-claude-skills",
+        "url": "https://raw.githubusercontent.com/ComposioHQ/awesome-claude-skills/master/image-enhancer/SKILL.md",
+        "path": "kairos\\skills\\image-enhancer\\SKILL.md",
+        "description": "Improve image quality, especially screenshots.",
+        "status": "installed",
+        "bytes": 2530
+      }
+    ]
+  },
+  "mcps": {
+    "count": 0,
+    "path": ""
+  },
+  "plugins": {
+    "count": 0,
+    "path": ""
+  }
+}

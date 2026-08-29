@@ -60,6 +60,31 @@ class MetricsSettings:
 
 
 @dataclass
+class OpenAIProviderConfig:
+    """R37+: per-provider config (OpenAI-compatible).
+
+    Mirrors ``web/src/stores/settingsStore.ts:OpenAIConfig`` so the
+    frontend's POST /api/projects/settings is round-tripped to disk
+    without losing data. ``endpoint_url`` is the full URL the test
+    probe hits (R38.5 — the user owns the path); ``base_url`` is
+    used by the orchestrator's actual chat calls.
+    """
+    endpointUrl: str = "https://api.openai.com/v1/chat/completions"
+    baseUrl: str = "https://api.openai.com/v1"
+    apiKey: str = ""
+    model: str = "gpt-4o"
+
+
+@dataclass
+class AnthropicProviderConfig:
+    """R37+: per-provider config (Anthropic-compatible)."""
+    endpointUrl: str = "https://api.anthropic.com/v1/messages"
+    baseUrl: str = "https://api.anthropic.com"
+    apiKey: str = ""
+    model: str = "claude-3-5-sonnet-latest"
+
+
+@dataclass
 class Settings:
     """The full settings blob. Mirrors the frontend store."""
     voice: VoiceSettings = field(default_factory=VoiceSettings)
@@ -80,6 +105,14 @@ class Settings:
     provider_ollama_base_url: str = "http://127.0.0.1:11434"
     provider_ollama_model: str = "qwen2.5-coder:7b"
     provider_api_key_env: str = "OPENAI_API_KEY"
+    # R37+: per-provider (openai / anthropic) full configs. Stored
+    # nested in the wire ``provider`` object so the frontend can
+    # round-trip everything in one POST. Pre-existing flat fields
+    # above are kept for backwards-compat with older settings.json.
+    provider_openai: OpenAIProviderConfig = field(
+        default_factory=OpenAIProviderConfig)
+    provider_anthropic: AnthropicProviderConfig = field(
+        default_factory=AnthropicProviderConfig)
     # Round 8: per-tier memory scope. "user" memories follow
     # the user across projects; "project" stay with one project;
     # "session" are kept in-memory only for the current loop.
@@ -139,16 +172,18 @@ class SettingsStore:
         The patch can include any of the top-level sections
         (``voice``, ``mcp``, ``cloud``, ``metrics``,
         ``ollama_base_url``, ``provider_env_map``,
-        ``active_provider``, ``provider``). Sections not
-        in the patch are left untouched. Within a section, only
-        the keys present in the patch are updated.
+        ``active_provider``, ``provider``,
+        ``provider_openai``, ``provider_anthropic``).
+        Sections not in the patch are left untouched. Within a
+        section, only the keys present in the patch are updated.
 
         The ``provider`` section is accepted as a nested dict
         (matching the frontend ``ProviderSettings``) and split into
         the flat ``active_provider`` / ``provider_ollama_base_url``
         / ``provider_ollama_model`` / ``provider_api_key_env``
-        fields on disk. For backwards compatibility ``provider``
-        keys are also accepted in flat form.
+        fields on disk. R37+ also persists the per-provider openai /
+        anthropic configs (endpointUrl, baseUrl, apiKey, model) so
+        the user's LLM settings survive a backend restart.
         """
         with self._lock:
             current = _to_dict(self._settings)
@@ -193,8 +228,37 @@ class SettingsStore:
                         "ollamaModel": flat_model,
                         "apiKeyEnv": flat_key,
                     }
+                    # R37+: persist the per-provider openai / anthropic
+                    # configs (endpointUrl, baseUrl, apiKey, model).
+                    # Without this, the user's LLM settings were lost
+                    # on backend restart (the new keys were silently
+                    # dropped by the older update() code).
+                    if isinstance(sub.get("openai"), dict):
+                        current["provider_openai"] = dict(
+                            current.get("provider_openai") or {}, **sub["openai"])
+                        if isinstance(current.get("provider"), dict):
+                            current["provider"] = dict(
+                                current["provider"],
+                                openai=current["provider_openai"])
+                    if isinstance(sub.get("anthropic"), dict):
+                        current["provider_anthropic"] = dict(
+                            current.get("provider_anthropic") or {}, **sub["anthropic"])
+                        if isinstance(current.get("provider"), dict):
+                            current["provider"] = dict(
+                                current["provider"],
+                                anthropic=current["provider_anthropic"])
                     # Avoid a stale read from the prior nested block.
                     _ = nested_now
+                    continue
+                if section == "provider_openai" and isinstance(sub, dict):
+                    # Top-level provider_openai (alternative to nested).
+                    current["provider_openai"] = dict(
+                        current.get("provider_openai") or {}, **sub)
+                    continue
+                if section == "provider_anthropic" and isinstance(sub, dict):
+                    # Top-level provider_anthropic (alternative to nested).
+                    current["provider_anthropic"] = dict(
+                        current.get("provider_anthropic") or {}, **sub)
                     continue
                 if section not in current or not isinstance(sub, dict):
                     continue
@@ -231,13 +295,21 @@ def _to_dict(s: Settings) -> dict:
         "active_provider": s.active_provider,
         # Nested provider panel — mirrors web/src/stores/settingsStore.ts
         # ProviderSettings so the SettingsDrawer can read/write the
-        # whole object with one POST.
+        # whole object with one POST. R37+ includes the full openai /
+        # anthropic per-provider configs (endpointUrl, baseUrl, apiKey,
+        # model). The legacy ollama fields stay for backwards-compat.
         "provider": {
             "active": s.active_provider,
             "ollamaBaseUrl": s.provider_ollama_base_url,
             "ollamaModel": s.provider_ollama_model,
             "apiKeyEnv": s.provider_api_key_env,
+            "openai": asdict(s.provider_openai),
+            "anthropic": asdict(s.provider_anthropic),
         },
+        # R37+: also keep the per-provider configs at the top level so
+        # older readers (and the migration code) can find them.
+        "provider_openai": asdict(s.provider_openai),
+        "provider_anthropic": asdict(s.provider_anthropic),
         "memory_user_path": s.memory_user_path,
         "memory_project_path": s.memory_project_path,
     }
@@ -255,6 +327,20 @@ def _from_dict(d: dict) -> Settings:
     # Provider panel: prefer nested ``provider`` object; fall back to
     # the flat ``active_provider`` field (older settings.json files).
     nested_provider = d.get("provider") or {}
+    # R37+: openai / anthropic per-provider configs. Prefer the nested
+    # ``provider.openai`` object (the new wire format), fall back to
+    # the top-level ``provider_openai`` (some legacy code paths), and
+    # finally to defaults.
+    openai_raw = (
+        nested_provider.get("openai")
+        if isinstance(nested_provider.get("openai"), dict)
+        else (d.get("provider_openai") or {})
+    )
+    anthropic_raw = (
+        nested_provider.get("anthropic")
+        if isinstance(nested_provider.get("anthropic"), dict)
+        else (d.get("provider_anthropic") or {})
+    )
     return Settings(
         voice=voice, mcp=mcp, cloud=cloud, metrics=metrics,
         ollama_base_url=str(d.get("ollama_base_url", "")),
@@ -279,6 +365,8 @@ def _from_dict(d: dict) -> Settings:
             or d.get("provider_api_key_env")
             or "OPENAI_API_KEY"
         ),
+        provider_openai=OpenAIProviderConfig(**openai_raw),
+        provider_anthropic=AnthropicProviderConfig(**anthropic_raw),
         memory_user_path=str(d.get("memory_user_path") or ""),
         memory_project_path=str(d.get("memory_project_path") or ""),
     )

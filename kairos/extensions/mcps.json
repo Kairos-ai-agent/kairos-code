@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "comment": "R38.6 §27: curated MCP server registry. Curated from ~6000+ public MCPs (Anthropic official + top community picks). To run an MCP, the user needs the required env_keys set (e.g. GITHUB_PERSONAL_ACCESS_TOKEN, BRAVE_API_KEY).",
+  "servers": [
+    {
+      "name": "filesystem",
+      "category": "core",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "--root",
+        "."
+      ],
+      "description": "Read/write/list files under a configured root. The workhorse MCP for any coding agent.",
+      "source": "https://github.com/modelcontextprotocol/servers",
+      "stars": "8.5k",
+      "official": true
+    },
+    {
+      "name": "git",
+      "category": "core",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": [
+        "mcp-server-git",
+        "--repository",
+        "."
+      ],
+      "description": "git log, diff, show, status, branch, blame via MCP. Essential for any code-review workflow.",
+      "source": "https://github.com/modelcontextprotocol/servers",
+      "stars": "8.5k",
+      "official": true
+    },
+    {
+      "name": "github",
+      "category": "vcs",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "env_keys": [
+        "GITHUB_PERSONAL_ACCESS_TOKEN"
+      ],
+      "description": "Issues, PRs, repos, code search via the GitHub API. Required for any PR-review or repo-management flow.",
+      "source": "https://github.com/modelcontextprotocol/servers",
+      "stars": "15.2k",
+      "official": true
+    },
+    {
+      "name": "fetch",
+      "category": "web",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": [
+        "mcp-server-fetch"
+      ],
+      "description": "Fetch and convert web content to markdown. Replaces the old 'WebFetch' tool.",
+      "source": "https://github.com/modelcontextprotocol/servers",
+      "stars": "8.5k",
+      "official": true
+    },
+    {
+      "name": "time",
+      "category": "utilities",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": [
+        "mcp-server-time"
+      ],
+      "description": "Current time / timezone conversion. Tiny but useful for any time-sensitive task.",
+      "source": "https://github.com/modelcontextprotocol/servers",
+      "stars": "8.5k",
+      "official": true
+    },
+    {
+      "name": "brave-search",
+      "category": "web",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-brave-search"
+      ],
+      "env_keys": [
+        "BRAVE_API_KEY"
+      ],
+      "description": "Privacy-focused web search via the Brave API. Better than scraping for general queries.",
+      "source": "https://github.com/modelcontextprotocol/servers",
+      "stars": "8.5k",
+      "official": true
+    },
+    {
+      "name": "sequential-thinking",
+      "category": "utilities",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
+      "description": "Step-by-step reasoning MCP — useful for complex multi-step planning problems.",
+      "source": "https://github.com/modelcontextprotocol/servers",
+      "stars": "8.5k",
+      "official": true
+    },
+    {
+      "name": "playwright",
+      "category": "browser",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest"
+      ],
+      "description": "Browser automation: navigate, click, screenshot, fill forms. Top community pick (11.6k stars).",
+      "source": "https://github.com/microsoft/playwright-mcp",
+      "stars": "11.6k",
+      "official": false
+    },
+    {
+      "name": "context7",
+      "category": "docs",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ],
+      "description": "Fetches up-to-date library docs / code examples directly into context. Top-rated (61k stars).",
+      "source": "https://github.com/upstash/context7",
+      "stars": "61k",
+      "official": false
+    },
+    {
+      "name": "puppeteer",
+      "category": "browser",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-puppeteer"
+      ],
+      "description": "Alternative to Playwright. We pick Playwright as the primary browser MCP, so this is here as a fallback. Use it if Playwright fails to install.",
+      "source": "https://github.com/modelcontextprotocol/servers",
+      "stars": "8.5k",
+      "official": true
+    }
+  ]
+}

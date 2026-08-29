@@ -31,6 +31,7 @@ import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import ChatThread from '../components/ChatThread';
 import ChatComposer from '../components/ChatComposer';
+import { classifyIntent } from '../utils/intent';
 import api, { onWebSocketMessage, onWebSocketState } from '../api/client';
 import type { Message, LoopSession, SessionRound } from '../types';
 
@@ -53,6 +54,8 @@ const Chat: React.FC = () => {
   const currentMessages = useChatStore((s) => s.currentMessages);
   const setCurrentMessages = useChatStore((s) => s.setCurrentMessages);
   const appendMessage = useChatStore((s) => s.appendMessage);
+  const appendStreamChunk = useChatStore((s) => s.appendStreamChunk);
+  const finalizeStream = useChatStore((s) => s.finalizeStream);
   const setSessions = useChatStore((s) => s.setSessions);
 
   const [busy, setBusy] = useState(false);
@@ -171,21 +174,36 @@ const Chat: React.FC = () => {
       }
 
       if (topic === 'stream.chunk') {
-        // Streaming output — append a single bubble with the
-        // accumulated content. For simplicity we just push each
-        // chunk as its own message; the chat thread de-dupes by id.
-        appendMessage({
-          id: `stream-${msg.metadata?.request_id || msg.timestamp || Date.now()}`,
-          sender: msg.sender || 'agent',
-          receiver: msg.receiver || '',
-          topic,
-          content: typeof msg.content === 'string' ? msg.content
-                  : JSON.stringify(msg.content || ''),
-          msg_type: 'stream',
-          timestamp: msg.timestamp || Date.now() / 1000,
-          metadata: msg.metadata || {},
-        });
+        // R38.6: stream chunks collapse into a single bubble per
+        // sender. The Coder publishes one stream.chunk per token
+        // (each Chinese char / English word), so naively appending
+        // each chunk as its own message produces 8+ bubbles for a
+        // 5-word reply. We delegate to ``appendStreamChunk`` which
+        // finds the most recent stream bubble for this sender and
+        // appends; if none exists, it creates one.
+        const chunkContent = typeof msg.content === 'string'
+          ? msg.content
+          : JSON.stringify(msg.content || '');
+        appendStreamChunk(
+          msg.sender || 'agent',
+          chunkContent,
+          {
+            topic,
+            receiver: msg.receiver || '',
+            metadata: msg.metadata || {},
+            timestamp: msg.timestamp || Date.now() / 1000,
+          },
+        );
         return;
+      }
+
+      // Terminal events for the streaming bubble. We don't need to
+      // do anything visual (the stream bubble already has the full
+      // text), but we call finalizeStream so a new stream.chunk
+      // (next turn) starts a fresh bubble instead of appending to
+      // the now-finalized one.
+      if (topic === 'agent.response' || topic === 'task.result' || topic === 'task.error') {
+        finalizeStream(msg.sender || 'agent');
       }
 
       // Loop lifecycle.
@@ -281,14 +299,13 @@ const Chat: React.FC = () => {
 
   // ----- Actions -----
   //
-  // R37 split: chat vs task. The composer now passes a
-  // ``runAsTask`` boolean.
-  //   - runAsTask=false  → POST /chat (single-turn; no loop)
-  //   - runAsTask=true   → POST /start (kicks off the Coder
-  //                                <-> Reviewer loop)
-  //   - If a Reviewer ask is pending, the composer collapses the
-  //     toggle and just answers the question.
-  const handleSubmit = async (text: string, runAsTask: boolean) => {
+  // R38.6: the manual ``runAsTask`` toggle is gone. The composer
+  // (ChatComposer) auto-classifies intent via utils/intent.ts and
+  // we route accordingly:
+  //   - intent='task'  → POST /start (full Coder ↔ Reviewer loop)
+  //   - intent='chat'  → POST /chat  (single-turn reply)
+  //   - askState.pending always wins (answer the reviewer's question).
+  const handleSubmit = async (text: string) => {
     if (!currentProject) {
       msgApi.warning('Pick a project or folder first.');
       return;
@@ -308,7 +325,7 @@ const Chat: React.FC = () => {
         await api.post(`/projects/${currentProject.id}/ask/answer`,
                        { answer: text });
         setAskState(null);
-      } else if (runAsTask) {
+      } else if (classifyIntent(text) === 'task') {
         await api.post(`/projects/${currentProject.id}/start`,
                        { requirement: text });
       } else {
@@ -332,7 +349,41 @@ const Chat: React.FC = () => {
         }
       }
     } catch (e: any) {
-      msgApi.error(e?.response?.data?.detail || 'Failed to submit');
+      // Show the REAL error from the server, not a generic
+      // "Failed to submit" — the previous fallback hid useful
+      // diagnostics (e.g. "Invalid API key" → user thought the
+      // UI was broken, when it was actually a settings issue).
+      console.error('[ChatComposer] submit failed:', e);
+      const status = e?.response?.status;
+      const detail = e?.response?.data?.detail;
+      let msg: string;
+      if (typeof detail === 'string' && detail.trim()) {
+        msg = detail;
+      } else if (Array.isArray(detail) && detail.length) {
+        // FastAPI 422 validation errors come back as a list of
+        // {loc, msg, type} objects. Pick the first msg.
+        const first = detail[0];
+        msg = (first?.msg && typeof first.msg === 'string')
+              ? first.msg
+              : JSON.stringify(detail);
+      } else if (typeof detail === 'object' && detail !== null) {
+        msg = JSON.stringify(detail);
+      } else if (typeof e?.message === 'string' && e.message) {
+        msg = e.message;
+      } else {
+        msg = 'Failed to submit';
+      }
+      if (status) {
+        msg = `[${status}] ${msg}`;
+      }
+      // R38.6: actionable hint when the error looks like a
+      // settings / Coder-not-ready issue. The user is more likely
+      // to fix it when we point them at the next step.
+      if (status === 503
+          || /no coder|api[_ ]?key|provider|model|not configured|unauthorized|401|404/i.test(msg)) {
+        msg += ' — open Settings → LLM Models and click Save.';
+      }
+      msgApi.error(msg);
     } finally {
       setBusy(false);
     }

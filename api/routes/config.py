@@ -306,6 +306,7 @@ async def save_loop_config(request: LoopConfigRequest):
 # ============================================================================
 
 import logging
+import re
 import urllib.error
 import urllib.request
 from pydantic import BaseModel
@@ -318,19 +319,132 @@ class TestConnectionRequest(BaseModel):
     """Payload for the test-connection endpoint.
 
     `provider` is one of: ``"openai"`` (any OpenAI-compatible server)
-    or ``"anthropic"``. The endpoint appends the right path
-    (``/v1/models`` or ``/v1/messages``) and sends a minimal probe.
+    or ``"anthropic"``.
+
+    R38.5: the user provides a **full** ``endpoint_url`` (including
+    the chat path), and the probe hits it as-is. No more path
+    guessing / /v1 stripping / auto-appending — the user owns the
+    URL. If ``endpoint_url`` is empty, the legacy ``base_url`` +
+    auto-append path is used as a fallback (so old clients still
+    work).
     """
     provider: str
-    base_url: str
-    api_key: str
-    model: str = ""  # optional, only used for anthropic (in the body)
+    base_url: str = ""          # legacy: base URL for auto-append path
+    api_key: str = ""
+    endpoint_url: str = ""     # R38.5: full URL the probe will hit
+    model: str = ""             # used as the `model` field in the probe body
 
 
-def _probe_get(base_url: str, api_key: str, timeout: float = 5.0):
-    """Issue a GET ``/v1/models`` against an OpenAI-compatible base."""
-    url = base_url.rstrip("/") + "/v1/models"
-    req = urllib.request.Request(url, method="GET")
+def _strip_v1(base_url: str) -> str:
+    """Strip a trailing ``/v1`` (or ``/V1``) from the base URL.
+
+    Both ``https://api.openai.com/v1`` and ``https://api.openai.com``
+    are common in the wild — and users reasonably paste the former
+    (the OpenAI docs show it). We normalize so the probe never ends
+    up at ``/v1/v1/models``.
+
+    R38.5: this is now only used as a fallback when the user does
+    not provide an explicit ``endpoint_url``.
+    """
+    return re.sub(r"/v1/?$", "", base_url.rstrip("/"), flags=re.IGNORECASE)
+
+
+def _extract_error_message(body: str) -> str:
+    """Pull a human-readable message out of a JSON error body.
+
+    LLM APIs and proxies use a few common error shapes:
+      - OpenAI / Anthropic / most proxies: ``{"error": {"message": "..."}}``
+      - Some proxies wrap differently: ``{"error": "string"}``
+      - Some proxies: ``{"message": "..."}`` at the top level
+      - Agnes AI apihub, others: ``{"error": {"message": "Invalid ..."}}``
+
+    We return the first string we find that looks like an error
+    message, so the user sees "HTTP 404: Invalid API key" instead
+    of the raw ``HTTP 404: {"error":{"message":"Invalid API key"}}``.
+
+    Returns ``""`` when the body isn't JSON-shaped (raw HTML error
+    pages, plain text, etc.) — in that case the caller falls back
+    to the raw body.
+    """
+    if not body:
+        return ""
+    body = body.strip()
+    if not body.startswith("{"):
+        return ""
+    try:
+        data = json.loads(body)
+    except (json.JSONDecodeError, ValueError):
+        return ""
+    # OpenAI / Anthropic shape: {"error": {"message": "..."}}
+    if isinstance(data.get("error"), dict):
+        msg = data["error"].get("message")
+        if isinstance(msg, str) and msg.strip():
+            return msg.strip()
+        # Some proxies nest the message under a different key.
+        for k in ("message", "detail", "error_description"):
+            v = data["error"].get(k)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+    # Some proxies: {"error": "string message"}
+    if isinstance(data.get("error"), str) and data["error"].strip():
+        return data["error"].strip()
+    # Some proxies: top-level {"message": "..."}
+    msg = data.get("message")
+    if isinstance(msg, str) and msg.strip():
+        return msg.strip()
+    return ""
+
+
+def _format_probe_error(status_code: int, body: str, fallback: str) -> str:
+    """Build the user-facing ``detail`` string for a probe error.
+
+    Prefer a parsed error message from the JSON body over the raw
+    body, so the user sees "HTTP 404: Invalid API key" instead of
+    ``HTTP 404: {"error":{"message":"Invalid API key"}}``.
+
+    Truncates long raw bodies at 500 chars (was 200) so the user
+    can see the full error message even when it's verbose.
+    """
+    parsed = _extract_error_message(body)
+    if parsed:
+        return f"HTTP {status_code}: {parsed}"
+    if body:
+        body = body.strip()
+        if len(body) > 500:
+            body = body[:500] + "…"
+        return f"HTTP {status_code}: {body}"
+    return f"HTTP {status_code}: {fallback}"
+
+
+def _probe_post_openai_chat(
+    endpoint_url: str,
+    api_key: str,
+    model: str,
+    base_url: str = "",
+    timeout: float = 10.0,
+):
+    """Issue a minimal ``POST`` against an OpenAI-compatible endpoint.
+
+    R38.5: prefer the user-supplied ``endpoint_url`` (full URL,
+    including the chat path). The probe hits it as-is — no path
+    guessing, no /v1 stripping, no /v1/chat/completions appending.
+    Falls back to the legacy auto-construct (``base_url`` +
+    ``/v1/chat/completions``) only when ``endpoint_url`` is empty.
+
+    The body is the smallest one most servers accept: one user
+    message, ``max_tokens=1``. This costs the user ~1 token of
+    real usage on paid APIs, but it's the price of a real probe.
+    """
+    if endpoint_url.strip():
+        url = endpoint_url.strip()
+    else:
+        url = _strip_v1(base_url) + "/v1/chat/completions"
+    body = json.dumps({
+        "model": model or "gpt-4o-mini",
+        "max_tokens": 1,
+        "messages": [{"role": "user", "content": "ping"}],
+    }).encode("utf-8")
+    req = urllib.request.Request(url, data=body, method="POST")
     req.add_header("Authorization", f"Bearer {api_key}")
     req.add_header("Content-Type", "application/json")
     try:
@@ -338,30 +452,49 @@ def _probe_get(base_url: str, api_key: str, timeout: float = 5.0):
             return {
                 "ok": 200 <= resp.status < 400,
                 "status": resp.status,
-                "detail": f"GET {url} -> {resp.status}",
+                "detail": f"POST {url} -> {resp.status}",
             }
     except urllib.error.HTTPError as exc:
         body = ""
         try:
-            body = exc.read().decode("utf-8", errors="replace")[:200]
+            body = exc.read().decode("utf-8", errors="replace")
         except Exception:
             pass
+        # R38.6.2: include the URL we attempted in the error
+        # detail so the user can see exactly which address the
+        # probe tried (e.g. when a proxy rewrites / doubles the
+        # path, the user needs to see what we sent to figure out
+        # what to fix).
         return {
             "ok": False,
             "status": exc.code,
-            "detail": f"HTTP {exc.code}: {body or exc.reason}",
+            "detail": _format_probe_error(exc.code, body, str(exc.reason))
+                     + f" (url: {url})",
         }
     except (urllib.error.URLError, OSError) as exc:
         return {
             "ok": False,
             "status": 0,
-            "detail": f"connection failed: {exc}",
+            "detail": f"connection failed: {exc} (url: {url})",
         }
 
 
-def _probe_post_anthropic(base_url, api_key, model, timeout: float = 10.0):
-    """Issue a minimal POST ``/v1/messages`` for Anthropic-compatible base."""
-    url = base_url.rstrip("/") + "/v1/messages"
+def _probe_post_anthropic(
+    endpoint_url: str,
+    api_key: str,
+    model: str,
+    base_url: str = "",
+    timeout: float = 10.0,
+):
+    """Issue a minimal POST against an Anthropic-compatible endpoint.
+
+    R38.5: prefer the user-supplied ``endpoint_url`` (full URL);
+    fall back to ``base_url + /v1/messages`` if not provided.
+    """
+    if endpoint_url.strip():
+        url = endpoint_url.strip()
+    else:
+        url = _strip_v1(base_url) + "/v1/messages"
     body = json.dumps({
         "model": model or "claude-3-5-sonnet-latest",
         "max_tokens": 1,
@@ -381,33 +514,44 @@ def _probe_post_anthropic(base_url, api_key, model, timeout: float = 10.0):
     except urllib.error.HTTPError as exc:
         body = ""
         try:
-            body = exc.read().decode("utf-8", errors="replace")[:200]
+            body = exc.read().decode("utf-8", errors="replace")
         except Exception:
             pass
         return {
             "ok": False,
             "status": exc.code,
-            "detail": f"HTTP {exc.code}: {body or exc.reason}",
+            "detail": _format_probe_error(exc.code, body, str(exc.reason))
+                     + f" (url: {url})",
         }
     except (urllib.error.URLError, OSError) as exc:
         return {
             "ok": False,
             "status": 0,
-            "detail": f"connection failed: {exc}",
+            "detail": f"connection failed: {exc} (url: {url})",
         }
 
 
 @router.post("/test_connection")
 async def test_connection(req: TestConnectionRequest = Body(...)):
-    """Verify that the user-supplied base URL + API key actually work.
+    """Verify that the user-supplied endpoint URL + API key actually work.
+
+    R38.5: the user provides a full ``endpoint_url`` (including the
+    chat path). The probe hits it as-is. We still accept ``base_url``
+    as a legacy fallback — when ``endpoint_url`` is empty, we auto-
+    construct (baseUrl + ``/v1/chat/completions`` or
+    ``/v1/messages``).
 
     Returns ``{ok, status, detail}``:
-      - ``{ok: true,  status: 200, detail: "GET ... -> 200"}`` on success
+      - ``{ok: true,  status: 200, detail: "POST ... -> 200"}`` on success
       - ``{ok: false, status: 401, detail: "HTTP 401: ..."}`` on auth failure
       - ``{ok: false, status: 0,   detail: "connection failed: ..."}`` on network error
     """
-    if not req.base_url.strip():
-        raise HTTPException(status_code=400, detail="base_url is required")
+    # R38.5: require EITHER endpoint_url OR base_url. The frontend
+    # always sends endpoint_url now; base_url is the legacy fallback.
+    if not req.endpoint_url.strip() and not req.base_url.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="endpoint_url (or legacy base_url) is required")
     if not req.api_key.strip():
         raise HTTPException(status_code=400, detail="api_key is required")
     provider = req.provider.strip().lower()
@@ -416,10 +560,19 @@ async def test_connection(req: TestConnectionRequest = Body(...)):
             status_code=400,
             detail="provider must be 'openai' or 'anthropic'")
     if provider == "openai":
-        result = _probe_get(req.base_url.strip(), req.api_key.strip())
+        result = _probe_post_openai_chat(
+            req.endpoint_url.strip(),
+            req.api_key.strip(),
+            req.model.strip(),
+            base_url=req.base_url.strip(),
+        )
     else:
         result = _probe_post_anthropic(
-            req.base_url.strip(), req.api_key.strip(), req.model.strip())
+            req.endpoint_url.strip(),
+            req.api_key.strip(),
+            req.model.strip(),
+            base_url=req.base_url.strip(),
+        )
     # Log the result for ops visibility (without the key).
     masked = req.api_key.strip()[:4] + "..." + req.api_key.strip()[-2:]
     logger.info("test_connection provider=%s ok=%s status=%s key=%s",

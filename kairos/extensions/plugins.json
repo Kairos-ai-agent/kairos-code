@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "comment": "R38.6 §27: curated Claude Code plugin registry. Plugins are installed via `npx claude-plugins install`.",
+  "plugins": [
+    {
+      "name": "frontend-design",
+      "marketplace": "anthropics/claude-code",
+      "install": "npx claude-plugins install @anthropics/claude-code/frontend-design",
+      "description": "Anthropic's official frontend-design plugin (10k+ downloads). Uses the official Skill from anthropics/skills."
+    },
+    {
+      "name": "document-skills",
+      "marketplace": "anthropics/anthropic-agent-skills",
+      "install": "npx claude-plugins install @anthropics/anthropic-agent-skills/document-skills",
+      "description": "Excel / Word / PowerPoint / PDF skills in one plugin. 148k downloads."
+    },
+    {
+      "name": "code-review",
+      "marketplace": "anthropics/claude-code",
+      "install": "npx claude-plugins install @anthropics/claude-code/code-review",
+      "description": "Automated PR review with confidence scoring. 4k downloads."
+    },
+    {
+      "name": "feature-dev",
+      "marketplace": "anthropics/claude-code",
+      "install": "npx claude-plugins install @anthropics/claude-code/feature-dev",
+      "description": "Specialized agents for exploration, architecture, quality review. 3.8k downloads."
+    },
+    {
+      "name": "pr-review-toolkit",
+      "marketplace": "anthropics/claude-code",
+      "install": "npx claude-plugins install @anthropics/claude-code/pr-review-toolkit",
+      "description": "Specialized PR review agents for tests, error handling, type design, simplification."
+    },
+    {
+      "name": "security-guidance",
+      "marketplace": "anthropics/claude-code",
+      "install": "npx claude-plugins install @anthropics/claude-code/security-guidance",
+      "description": "Security reminder hook for command injection, XSS, unsafe code patterns."
+    },
+    {
+      "name": "compound-engineering",
+      "marketplace": "EveryInc/every-marketplace",
+      "install": "npx claude-plugins install @EveryInc/every-marketplace/compound-engineering",
+      "description": "29 agents + 22 commands + 19 skills. The most comprehensive 'smart-team' plugin."
+    },
+    {
+      "name": "python-development",
+      "marketplace": "wshobson/claude-code-workflows",
+      "install": "npx claude-plugins install @wshobson/claude-code-workflows/python-development",
+      "description": "Modern Python: 3.12+, Django, FastAPI, async."
+    },
+    {
+      "name": "javascript-typescript",
+      "marketplace": "wshobson/claude-code-workflows",
+      "install": "npx claude-plugins install @wshobson/claude-code-workflows/javascript-typescript",
+      "description": "JS / TS development with ES6+, Node."
+    },
+    {
+      "name": "backend-development",
+      "marketplace": "wshobson/claude-code-workflows",
+      "install": "npx claude-plugins install @wshobson/claude-code-workflows/backend-development",
+      "description": "Backend API design, GraphQL, Temporal orchestration."
+    }
+  ]
+}

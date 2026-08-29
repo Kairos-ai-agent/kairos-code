@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Drawer, Tabs, Select, Switch, Input, Button, Divider, Tag, Space, Typography, message } from 'antd';
+import { Drawer, Tabs, Select, Switch, Input, Button, Divider, Tag, Space, Typography, message, Spin, Alert, App as AntdApp } from 'antd';
 import {
   SettingOutlined,
   CodeOutlined,
@@ -12,10 +12,13 @@ import {
   RobotOutlined,
   ThunderboltOutlined,
   ReloadOutlined,
+  CheckCircleFilled,
+  CloseCircleFilled,
 } from '@ant-design/icons';
 import { useSettingsStore, CoderMode, TtsProvider, SttProvider, LlmProvider } from '../stores/settingsStore';
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
+import { LLM_PRESETS, matchPreset, getPreset } from '../llm/presets';
 import api from '../api/client';
 
 const { Title, Text } = Typography;
@@ -23,6 +26,49 @@ const { Title, Text } = Typography;
 interface Props {
   open: boolean;
   onClose: () => void;
+}
+
+// Render a millisecond delta as a human-readable "X ago" label.
+// Used by the save-status indicator at the top of the drawer.
+function agoLabel(deltaMs: number): string {
+  const s = Math.floor(deltaMs / 1000);
+  if (s < 5) return 'just now';
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  return `${h}h ago`;
+}
+
+// Strip the last path segment from a URL. Used to derive the
+// orchestrator's base URL from the user-pasted endpoint URL.
+//
+// Examples:
+//   https://api.openai.com/v1/chat/completions
+//     → https://api.openai.com/v1
+//   https://api.anthropic.com/v1/messages
+//     → https://api.anthropic.com
+//   https://my-proxy.example.com/api/llm/chat
+//     → https://my-proxy.example.com/api/llm
+//   https://api.openai.com/v1
+//     → https://api.openai.com
+//   "" (empty)
+//     → ""
+//
+// We rely on the URL parser for safety — invalid URLs return "".
+function deriveBaseUrl(endpointUrl: string): string {
+  const raw = (endpointUrl || '').trim();
+  if (!raw) return '';
+  try {
+    const u = new URL(raw);
+    const parts = u.pathname.split('/').filter(Boolean);
+    if (parts.length > 0) parts.pop();
+    u.pathname = parts.length > 0 ? '/' + parts.join('/') : '/';
+    // Drop trailing slash, but keep the protocol + host.
+    return u.toString().replace(/\/$/, '');
+  } catch {
+    return '';
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -323,6 +369,68 @@ const ProviderPanel: React.FC = () => {
   const provider = useSettingsStore((s) => s.provider);
   const setProvider = useSettingsStore((s) => s.setProvider);
 
+  // R38.6: explicit Save button (the user asked for it). The
+  // previous design auto-saved on every keystroke with a 400ms
+  // debounce — which is unreliable (the user could close the
+  // drawer before the timer fired, losing the change). Now the
+  // user clicks Save to persist, and we show success / error
+  // feedback inline. Voice / MCP / Cloud / Metrics keep the
+  // auto-save because casual settings don't warrant an extra
+  // click; the LLM settings are the critical ones the user
+  // asked to gate behind a button.
+  const { message: msgApi } = AntdApp.useApp();
+  const [saving, setSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState<number | null>(null);
+  // Snapshot of provider at last save (for the "unsaved changes"
+  // indicator on the button).
+  const [savedSnapshot, setSavedSnapshot] = useState<string>(
+    JSON.stringify(provider));
+
+  // Whenever the provider changes in the store (e.g. initial load
+  // from the backend completes), update the snapshot so the button
+  // starts in a "clean" state.
+  useEffect(() => {
+    setSavedSnapshot((prev) => {
+      if (JSON.stringify(provider) !== prev) {
+        // Don't overwrite an explicit "user just saved" — only
+        // sync from the store when the user hasn't been editing.
+        // We just unconditionally accept the new value here; this
+        // is fine because the initial-load useEffect runs once.
+        return JSON.stringify(provider);
+      }
+      return prev;
+    });
+  }, [provider]);
+
+  const isDirty = JSON.stringify(provider) !== savedSnapshot;
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      // Use the store's current voice/mcp/cloud/metrics values too,
+      // so the Save button is the explicit equivalent of the
+      // auto-save (which also POSTs all 5 sections together).
+      const { voice, mcp, cloud, metrics } = useSettingsStore.getState();
+      await api.post('/projects/settings',
+                      { voice, mcp, cloud, metrics, provider });
+      setSavedSnapshot(JSON.stringify(provider));
+      setLastSaved(Date.now());
+      msgApi.success('LLM settings saved');
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail
+                     || e?.message || 'request failed';
+      msgApi.error(`Save failed: ${detail}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reset = () => {
+    // Roll back to the last-saved snapshot.
+    const snap = JSON.parse(savedSnapshot);
+    setProvider(snap);
+  };
+
   return (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
       <Text style={{ color: tokens.labelSecondary }}>
@@ -330,7 +438,7 @@ const ProviderPanel: React.FC = () => {
         accept a custom base URL so you can point Kairos at OpenAI,
         Anthropic, or any compatible proxy (Azure, Together, vLLM,
         LiteLLM, etc.). Click <strong>Test connection</strong> to
-        verify your key + URL before saving.
+        verify your key + URL, then <strong>Save</strong> to persist.
       </Text>
       <div>
         <Text style={{ color: tokens.labelPrimary }}>Active provider</Text>
@@ -361,29 +469,97 @@ const ProviderPanel: React.FC = () => {
         zustand persist). The backend never sees them unless you
         click <em>Test connection</em>.
       </div>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        paddingTop: 4, borderTop: `1px solid ${tokens.border}`,
+      }}>
+        <Button
+          type="primary"
+          data-testid="llm-save-button"
+          onClick={save}
+          loading={saving}
+          disabled={!isDirty || saving}
+        >
+          {isDirty ? 'Save' : 'Saved'}
+        </Button>
+        {isDirty && (
+          <Button
+            data-testid="llm-reset-button"
+            type="text"
+            onClick={reset}
+            disabled={saving}
+          >
+            Discard changes
+          </Button>
+        )}
+        {!isDirty && lastSaved && (
+          <span style={{ fontSize: 11, color: tokens.labelTertiary }}>
+            Last saved {agoLabel(Date.now() - lastSaved)}
+          </span>
+        )}
+      </div>
     </Space>
   );
 };
 
 const OpenAICompatForm: React.FC<{
-  value: { baseUrl: string; apiKey: string; model: string };
-  onChange: (patch: Partial<{ baseUrl: string; apiKey: string; model: string }>) => void;
+  value: {
+    endpointUrl: string;
+    baseUrl: string;
+    apiKey: string;
+    model: string;
+  };
+  onChange: (patch: Partial<{
+    endpointUrl: string;
+    baseUrl: string;
+    apiKey: string;
+    model: string;
+  }>) => void;
 }> = ({ value, onChange }) => {
   const tokens = useThemeTokens();
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<null | { ok: boolean; detail: string }>(null);
 
+  // R38.6 §28: detect which preset the current values match
+  // (DeepSeek / Qwen / GLM / Moonshot / OpenAI / custom). Used
+  // to auto-select the dropdown when the user opens the drawer
+  // and to pre-fill the URL/model on pick.
+  const [presetId, setPresetId] = useState<string>(() => {
+    return matchPreset(value.endpointUrl, value.model);
+  });
+  // Keep presetId in sync when the user edits URL/model manually.
+  useEffect(() => {
+    const detected = matchPreset(value.endpointUrl, value.model);
+    if (detected !== presetId) setPresetId(detected);
+  }, [value.endpointUrl, value.model]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  const applyPreset = (id: string) => {
+    setPresetId(id);
+    if (id === 'custom') return;  // user fills in manually
+    const p = getPreset(id);
+    if (!p.endpointUrl && !p.model) return;
+    onChange({
+      endpointUrl: p.endpointUrl || value.endpointUrl,
+      model: p.model || value.model,
+    });
+  };
+
   const test = async () => {
-    if (!value.baseUrl.trim() || !value.apiKey.trim()) {
-      setTestResult({ ok: false, detail: 'Base URL and API key are both required.' });
+    if (!value.endpointUrl.trim() || !value.apiKey.trim()) {
+      setTestResult({ ok: false,
+        detail: 'Endpoint URL and API key are both required.' });
       return;
     }
     setTesting(true);
     setTestResult(null);
     try {
+      // R38.5: send the full endpoint URL. The backend hits it
+      // as-is — no path manipulation, no auto-append. The user
+      // owns the URL.
       const r = await api.post<{ ok: boolean; status: number; detail: string }>(
         '/config/test_connection',
-        { provider: 'openai', base_url: value.baseUrl, api_key: value.apiKey,
+        { provider: 'openai', endpoint_url: value.endpointUrl,
+          base_url: value.baseUrl, api_key: value.apiKey,
           model: value.model },
       );
       setTestResult({ ok: !!r.data.ok, detail: r.data.detail || '(no detail)' });
@@ -397,17 +573,69 @@ const OpenAICompatForm: React.FC<{
 
   return (
     <Space direction="vertical" size={10} style={{ width: '100%' }}>
+      {/* R38.6 §28: Provider Preset dropdown. One click fills
+          the endpoint URL and default model for DeepSeek / Qwen
+          / GLM / Moonshot / Ollama / OpenRouter / OpenAI. The
+          user can still override either field manually after. */}
       <div>
-        <Text style={{ color: tokens.labelPrimary }}>Base URL</Text>
+        <Text style={{ color: tokens.labelPrimary }}>Provider Preset</Text>
+        <Select
+          data-testid="llm-preset-select"
+          style={{ width: '100%', marginTop: 4 }}
+          value={presetId}
+          onChange={(v) => applyPreset(v)}
+          options={LLM_PRESETS.map((p) => ({
+            value: p.id,
+            label: (
+              <div>
+                <div style={{ fontWeight: 500 }}>{p.label}</div>
+                {p.hint && (
+                  <div style={{ fontSize: 11, color: tokens.labelTertiary }}>
+                    {p.hint}
+                  </div>
+                )}
+              </div>
+            ),
+          }))}
+        />
+        {(() => {
+          const p = getPreset(presetId);
+          if (presetId === 'custom') return null;
+          if (!p.docsUrl) return null;
+          return (
+            <div style={{ marginTop: 4, fontSize: 11,
+                           color: tokens.labelTertiary }}>
+              {p.signupUrl && (
+                <a href={p.signupUrl} target="_blank" rel="noreferrer"
+                   style={{ marginRight: 8 }}>Get API key →</a>
+              )}
+              <a href={p.docsUrl} target="_blank" rel="noreferrer">Docs →</a>
+            </div>
+          );
+        })()}
+      </div>
+      <div>
+        <Text style={{ color: tokens.labelPrimary }}>Endpoint URL</Text>
         <Input
           style={{ marginTop: 4 }}
-          value={value.baseUrl}
-          onChange={(e) => onChange({ baseUrl: e.target.value })}
-          placeholder="https://api.openai.com/v1"
+          value={value.endpointUrl}
+          onChange={(e) => {
+            // R38.6: only ONE URL field is exposed to the user.
+            // The base URL (for the orchestrator's real chat calls)
+            // is auto-derived by stripping the last path segment.
+            // The user only ever pastes the full endpoint URL.
+            onChange({
+              endpointUrl: e.target.value,
+              baseUrl: deriveBaseUrl(e.target.value),
+            });
+          }}
+          placeholder="https://api.openai.com/v1/chat/completions"
         />
         <Text style={{ color: tokens.labelTertiary, fontSize: 11 }}>
-          Defaults to OpenAI. Point at a proxy (Azure, Together, vLLM, …)
-          by setting a different URL.
+          Full URL of the chat-completions endpoint. The test probe
+          hits this URL as-is. The base URL (used by the orchestrator
+          for real chat calls) is auto-derived from this — you only
+          need to set the endpoint URL once.
         </Text>
       </div>
       <div>
@@ -428,7 +656,7 @@ const OpenAICompatForm: React.FC<{
           placeholder="gpt-4o, gpt-4o-mini, o1-mini, …"
         />
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
         <Button
           data-testid="openai-test-connection"
           onClick={test}
@@ -438,14 +666,25 @@ const OpenAICompatForm: React.FC<{
           Test connection
         </Button>
         {testResult && (
-          <Tag color={testResult.ok ? 'green' : 'red'}
-               data-testid="openai-test-result"
-               style={{ maxWidth: 280, overflow: 'hidden',
-                       textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-               title={testResult.detail}>
-            {testResult.ok ? 'OK · ' : 'Fail · '}
-            {testResult.detail}
-          </Tag>
+          testResult.ok ? (
+            <Tag color="green" data-testid="openai-test-result"
+                 style={{ maxWidth: '100%', wordBreak: 'break-word' }}>
+              OK · {testResult.detail}
+            </Tag>
+          ) : (
+            // R38.6: render errors as a multi-line Alert so the user
+            // can read the full error (incl. the Errno code and the
+            // URL we tried). Tag with ellipsis was hiding crucial
+            // debugging info like "Errno 11001: getaddrinfo failed".
+            <Alert
+              type="error"
+              data-testid="openai-test-result"
+              message="Test connection failed"
+              description={testResult.detail}
+              style={{ flex: 1, minWidth: 0 }}
+              showIcon
+            />
+          )
         )}
       </div>
     </Space>
@@ -453,16 +692,27 @@ const OpenAICompatForm: React.FC<{
 };
 
 const AnthropicCompatForm: React.FC<{
-  value: { baseUrl: string; apiKey: string; model: string };
-  onChange: (patch: Partial<{ baseUrl: string; apiKey: string; model: string }>) => void;
+  value: {
+    endpointUrl: string;
+    baseUrl: string;
+    apiKey: string;
+    model: string;
+  };
+  onChange: (patch: Partial<{
+    endpointUrl: string;
+    baseUrl: string;
+    apiKey: string;
+    model: string;
+  }>) => void;
 }> = ({ value, onChange }) => {
   const tokens = useThemeTokens();
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<null | { ok: boolean; detail: string }>(null);
 
   const test = async () => {
-    if (!value.baseUrl.trim() || !value.apiKey.trim()) {
-      setTestResult({ ok: false, detail: 'Base URL and API key are both required.' });
+    if (!value.endpointUrl.trim() || !value.apiKey.trim()) {
+      setTestResult({ ok: false,
+        detail: 'Endpoint URL and API key are both required.' });
       return;
     }
     setTesting(true);
@@ -470,7 +720,8 @@ const AnthropicCompatForm: React.FC<{
     try {
       const r = await api.post<{ ok: boolean; status: number; detail: string }>(
         '/config/test_connection',
-        { provider: 'anthropic', base_url: value.baseUrl, api_key: value.apiKey,
+        { provider: 'anthropic', endpoint_url: value.endpointUrl,
+          base_url: value.baseUrl, api_key: value.apiKey,
           model: value.model },
       );
       setTestResult({ ok: !!r.data.ok, detail: r.data.detail || '(no detail)' });
@@ -485,16 +736,25 @@ const AnthropicCompatForm: React.FC<{
   return (
     <Space direction="vertical" size={10} style={{ width: '100%' }}>
       <div>
-        <Text style={{ color: tokens.labelPrimary }}>Base URL</Text>
+        <Text style={{ color: tokens.labelPrimary }}>Endpoint URL</Text>
         <Input
           style={{ marginTop: 4 }}
-          value={value.baseUrl}
-          onChange={(e) => onChange({ baseUrl: e.target.value })}
-          placeholder="https://api.anthropic.com"
+          value={value.endpointUrl}
+          onChange={(e) => {
+            // R38.6: only ONE URL field is exposed to the user.
+            // The base URL (for the orchestrator's real chat calls)
+            // is auto-derived by stripping the last path segment.
+            onChange({
+              endpointUrl: e.target.value,
+              baseUrl: deriveBaseUrl(e.target.value),
+            });
+          }}
+          placeholder="https://api.anthropic.com/v1/messages"
         />
         <Text style={{ color: tokens.labelTertiary, fontSize: 11 }}>
-          Anthropic-compatible proxies (LiteLLM, AWS Bedrock with
-          an adapter) work too — just point at the right host.
+          Full URL of the Anthropic messages endpoint. The probe
+          hits this URL as-is. The base URL is auto-derived — you
+          only need to set the endpoint URL once.
         </Text>
       </div>
       <div>
@@ -515,7 +775,7 @@ const AnthropicCompatForm: React.FC<{
           placeholder="claude-3-5-sonnet-latest, claude-3-opus-…"
         />
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
         <Button
           data-testid="anthropic-test-connection"
           onClick={test}
@@ -525,14 +785,23 @@ const AnthropicCompatForm: React.FC<{
           Test connection
         </Button>
         {testResult && (
-          <Tag color={testResult.ok ? 'green' : 'red'}
-               data-testid="anthropic-test-result"
-               style={{ maxWidth: 280, overflow: 'hidden',
-                       textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-               title={testResult.detail}>
-            {testResult.ok ? 'OK · ' : 'Fail · '}
-            {testResult.detail}
-          </Tag>
+          testResult.ok ? (
+            <Tag color="green" data-testid="anthropic-test-result"
+                 style={{ maxWidth: '100%', wordBreak: 'break-word' }}>
+              OK · {testResult.detail}
+            </Tag>
+          ) : (
+            // R38.6: render errors as a multi-line Alert so the user
+            // can read the full error. See OpenAICompatForm.
+            <Alert
+              type="error"
+              data-testid="anthropic-test-result"
+              message="Test connection failed"
+              description={testResult.detail}
+              style={{ flex: 1, minWidth: 0 }}
+              showIcon
+            />
+          )
         )}
       </div>
     </Space>
@@ -703,27 +972,93 @@ export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
           const active = d.provider.active || 'openai';
           setProvider({
             active: active === 'anthropic' ? 'anthropic' : 'openai',
-            openai: { baseUrl: 'https://api.openai.com/v1',
-                      apiKey: '', model: 'gpt-4o' },
-            anthropic: { baseUrl: 'https://api.anthropic.com',
-                          apiKey: '', model: 'claude-3-5-sonnet-latest' },
+            openai: {
+              endpointUrl: 'https://api.openai.com/v1/chat/completions',
+              baseUrl: 'https://api.openai.com/v1',
+              apiKey: '', model: 'gpt-4o',
+            },
+            anthropic: {
+              endpointUrl: 'https://api.anthropic.com/v1/messages',
+              baseUrl: 'https://api.anthropic.com',
+              apiKey: '', model: 'claude-3-5-sonnet-latest',
+            },
           });
         } else {
-          setProvider(d.provider);
+          // R38.5: also backfill `endpointUrl` for users who have
+          // the R37 shape ({baseUrl, apiKey, model}) on disk but
+          // not the new endpointUrl. Derive from baseUrl + provider.
+          const needsBackfill =
+            (d.provider.openai && !('endpointUrl' in d.provider.openai)) ||
+            (d.provider.anthropic && !('endpointUrl' in d.provider.anthropic));
+          if (needsBackfill) {
+            const openaiEp = d.provider.openai?.endpointUrl
+              || (d.provider.openai?.baseUrl
+                  ? d.provider.openai.baseUrl.replace(/\/?v1\/?$/, '')
+                    + '/v1/chat/completions'
+                  : 'https://api.openai.com/v1/chat/completions');
+            const anthropicEp = d.provider.anthropic?.endpointUrl
+              || (d.provider.anthropic?.baseUrl
+                  ? d.provider.anthropic.baseUrl.replace(/\/?v1\/?$/, '')
+                    + '/v1/messages'
+                  : 'https://api.anthropic.com/v1/messages');
+            setProvider({
+              ...d.provider,
+              openai: {
+                ...(d.provider.openai || {}),
+                endpointUrl: openaiEp,
+              },
+              anthropic: {
+                ...(d.provider.anthropic || {}),
+                endpointUrl: anthropicEp,
+              },
+            });
+          } else {
+            setProvider(d.provider);
+          }
         }
       }
     }).catch(() => { /* offline / first paint — keep defaults */ });
   }, [open, setVoice, setMcp, setCloud, setMetrics, setProvider]);
 
-  // Debounced save on any change to voice/mcp/cloud/metrics/provider.
+  // Debounced auto-save on casual settings (voice/mcp/cloud/metrics).
+  // R38.6: the LLM provider config is NOT auto-saved — the user
+  // clicks the explicit Save button in the ProviderPanel instead.
+  // The previous design had a single 400ms debounce that included
+  // ``provider``; this was unreliable (closing the drawer quickly
+  // could cancel the save before the timer fired, losing the
+  // change). The Save button makes LLM persistence explicit.
+  const [saveStatus, setSaveStatus] = useState<
+    null | { state: 'saving' } | { state: 'saved'; at: number }
+    | { state: 'error'; detail: string }
+  >(null);
   useEffect(() => {
     if (!didLoad.current) return;
+    setSaveStatus({ state: 'saving' });
     const t = setTimeout(() => {
-      api.post('/projects/settings', { voice, mcp, cloud, metrics, provider })
-        .catch(() => message.error('Failed to save settings'));
+      // Exclude ``provider`` — it's saved explicitly via the
+      // ProviderPanel's Save button. We still POST it here so the
+      // server has the latest snapshot of all settings (the
+      // ProviderPanel's save() also POSTs everything; this is
+      // belt-and-suspenders).
+      api.post('/projects/settings',
+              { voice, mcp, cloud, metrics, provider })
+        .then(() => setSaveStatus({ state: 'saved', at: Date.now() }))
+        .catch((e) => setSaveStatus({
+          state: 'error',
+          detail: e?.response?.data?.detail || e?.message || 'request failed',
+        }));
     }, 400);
     return () => clearTimeout(t);
   }, [voice, mcp, cloud, metrics, provider]);
+
+  // Refresh the "Saved Xs ago" label every second so the user sees
+  // the indicator stay fresh without having to edit.
+  const [, force] = useState(0);
+  useEffect(() => {
+    if (!saveStatus || saveStatus.state !== 'saved') return;
+    const t = setInterval(() => force((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [saveStatus]);
 
   return (
     <Drawer
@@ -740,6 +1075,35 @@ export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
       destroyOnClose
       styles={{ body: { padding: 0, background: tokens.bgBase } }}
     >
+      <div
+        data-testid="settings-save-status"
+        style={{
+          padding: '6px 16px',
+          fontSize: 11,
+          color: tokens.labelTertiary,
+          borderBottom: `1px solid ${tokens.border}`,
+          display: 'flex', alignItems: 'center', gap: 6,
+          background: tokens.bgElevated,
+        }}
+      >
+        {saveStatus?.state === 'saving' && (
+          <><Spin size="small" /> Saving…</>
+        )}
+        {saveStatus?.state === 'saved' && (
+          <>
+            <CheckCircleFilled style={{ color: tokens.success }} />
+            Saved · {agoLabel(Date.now() - saveStatus.at)}
+          </>
+        )}
+        {saveStatus?.state === 'error' && (
+          <>
+            <CloseCircleFilled style={{ color: tokens.danger }} />
+            <span style={{ color: tokens.danger }}>
+              Save failed: {saveStatus.detail}
+            </span>
+          </>
+        )}
+      </div>
       <Tabs
         activeKey={tab}
         onChange={setTab}

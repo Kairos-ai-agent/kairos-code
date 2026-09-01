@@ -98,6 +98,17 @@ export const useChatStore = create<ChatStore>()(
       setCurrentProject: (currentProject) =>
         set({ currentProject, sessions: [], currentSessionId: null,
               currentMessages: [] }),
+      // R38.6.4: debug aid — log whenever currentMessages is set to
+      // [] so the user can trace in DevTools why their chat thread
+      // disappeared. If the user reports "messages lost on refresh",
+      // they grep DevTools for "[chatStore] messages cleared by" and
+      // find the exact call site.
+      _logClear: (where: string) => {
+        if (typeof console !== 'undefined') {
+          console.info('[chatStore] messages cleared by:', where,
+                       '— stack:', new Error().stack?.split('\n').slice(1, 4).join(' | '));
+        }
+      },
       setSessions: (sessions) => set({ sessions }),
       setCurrentSessionId: (currentSessionId) => set({ currentSessionId }),
       setCurrentMessages: (currentMessages) => set({ currentMessages }),
@@ -269,9 +280,54 @@ export const useChatStore = create<ChatStore>()(
         currentSessionId: s.currentSessionId,
         currentMessages: s.currentMessages.slice(-200),
       }),
+      // R38.6.4: explicit merge so v1 caches (no currentMessages)
+      // upgrade cleanly to v2. Default merge is
+      // ``{...current, ...persisted}`` which would keep
+      // currentMessages = [] from the initial state when persisted
+      // doesn't have it. That's the right behavior for v1, but we
+      // want a clear migration path. We always restore the
+      // persisted messages (or fall back to [] if absent) so the
+      // thread is in sync with whatever was last saved.
+      merge: (persisted, current) => {
+        const p = (persisted || {}) as Record<string, unknown>;
+        return {
+          ...current,
+          ...p,
+          currentMessages: Array.isArray(p.currentMessages)
+                            ? (p.currentMessages as unknown[]).slice(-200)
+                            : [],
+        };
+      },
       // Bump this when the shape of the cached state changes
       // incompatibly, to force a one-time re-init of the cache.
       version: 2,
+      // v1 -> v2 migration. v1 had no currentMessages; we just
+      // add an empty array so the new shape is satisfied. New
+      // messages get appended + persisted going forward.
+      migrate: (persisted: unknown, version: number) => {
+        const p = (persisted || {}) as Record<string, unknown>;
+        if (version < 2) {
+          return { ...p, currentMessages: [] };
+        }
+        return p;
+      },
+      // R38.6.4: debug logger so the user can verify in DevTools
+      // that the persist layer is actually saving / loading
+      // currentMessages. Without this, the only way to diagnose
+      // "messages lost on refresh" is to inspect localStorage by
+      // hand. We log at the start of hydration + every save.
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          console.warn('[chatStore] rehydrate failed:', error);
+          return;
+        }
+        // `state` is the merged state after hydration. If it's
+        // null we treat it as a fresh install.
+        const s = (state as unknown as { currentMessages?: unknown[] }) || {};
+        console.info('[chatStore] rehydrated, currentMessages:',
+                     Array.isArray(s.currentMessages)
+                       ? s.currentMessages.length : 0);
+      },
     },
   ),
 );

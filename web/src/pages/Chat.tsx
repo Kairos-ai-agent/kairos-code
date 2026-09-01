@@ -123,8 +123,13 @@ const Chat: React.FC = () => {
       }
       setCurrentMessages(msgs);
     } catch (e) {
-      // 404 = no rounds yet, that's fine.
-      setCurrentMessages([]);
+      // 404 / network error = no rounds yet. R38.6.4: don't
+      // wipe currentMessages — the local store already has the
+      // user's chat bubbles (and possibly the agent's streamed
+      // reply), which is what they want to see. The backend
+      // session-rounds API only knows about loop rounds, not
+      // plain chat messages. Replacing the store with [] here
+      // was the root cause of "刷新后聊天记录还是没有了".
     }
   }, [setCurrentMessages]);
 
@@ -278,8 +283,26 @@ const Chat: React.FC = () => {
       // text), but we call finalizeStream so a new stream.chunk
       // (next turn) starts a fresh bubble instead of appending to
       // the now-finalized one.
+      //
+      // R38.6.4: also surface a task-completion toast. Previously
+      // the user only saw the result by scrolling the chat; if
+      // they had switched tabs or were in another part of the app
+      // the agent's finish was silent. Now: task.result → "Done"
+      // success toast, task.error → "Failed" error toast. The
+      // toast text is short so it doesn't drown out the chat
+      // content (the bubble carries the actual output).
       if (topic === 'agent.response' || topic === 'task.result' || topic === 'task.error') {
         finalizeStream(msg.sender || 'agent');
+        if (topic === 'task.result') {
+          const isErr = /error|fail|exception|traceback/i.test(content);
+          if (isErr) {
+            msgApi.error('Task failed — see the chat for details');
+          } else {
+            msgApi.success('Task done');
+          }
+        } else if (topic === 'task.error') {
+          msgApi.error(`Task error: ${content.slice(0, 120)}`);
+        }
       }
 
       // Loop lifecycle.
@@ -372,8 +395,14 @@ const Chat: React.FC = () => {
         loadSessionHistory(currentProject.id, sessionId);
       }
     } else {
+      // R38.6.4: don't wipe currentMessages here. The user
+      // could be on /chat (no sessionId) with chat-only bubbles
+      // already in the store. Wiping them on mount was the root
+      // cause of "刷新后聊天记录还是没有了". loadSessionHistory
+      // also no longer clears the store on 404 (see its catch
+      // block above), so the local chat thread survives across
+      // refresh + project re-mount.
       lastLoadedRef.current = '';
-      setCurrentMessages([]);
     }
   }, [currentProject, sessionId, loadSessionHistory, setCurrentMessages]);
 

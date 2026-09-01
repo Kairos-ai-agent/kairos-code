@@ -50,6 +50,7 @@ import type { Project } from '../types';
 import ChatSidebar from './ChatSidebar';
 import { SettingsDrawer } from './SettingsDrawer';
 import WorkbenchPanel from './WorkbenchPanel';
+import TaskTracker from './TaskTracker';
 
 const { Header, Sider, Content } = Layout;
 
@@ -319,7 +320,22 @@ const AppLayout: React.FC = () => {
           }}
           data-testid="workbench-sider"
         >
-          {workbenchOpen && <WorkbenchPanel />}
+          {workbenchOpen && (
+            <div style={{
+              height: '100%', display: 'flex',
+              flexDirection: 'column', minHeight: 0,
+            }}>
+              {/* Workbench takes a natural slice; the TaskTracker
+                  below it absorbs the rest. Both scroll independently
+                  so file tree + task list stay visible at the same
+                  time (R38.6.4: user request). */}
+              <div style={{ flex: '0 0 auto', minHeight: 0,
+                          display: 'flex', flexDirection: 'column' }}>
+                <WorkbenchPanel />
+              </div>
+              <TaskTracker />
+            </div>
+          )}
         </Sider>
       </Layout>
 

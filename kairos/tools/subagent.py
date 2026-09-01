@@ -1,6 +1,6 @@
 """SubagentTool — let the Coder spawn a child agent for a sub-task.
 
-This is the foundation of Claude Code's "subagent fork" capability.
+This is the foundation of the agentic CLI's "subagent fork" capability.
 We don't have a separate Subagent class — a child Coder is just another
 KairosAgent instance pointed at the same project. The tool returns the
 child's final text, which the parent Coder sees as a tool result and
@@ -55,13 +55,18 @@ class SubagentTool(BaseTool):
                              "description": "Clear, focused description of what the subagent should do"},
                     "max_turns": {"type": "integer", "default": 8,
                                    "description": "Cap the subagent's tool turns. Default 8."},
+                    "background": {"type": "boolean", "default": False,
+                                    "description": "R38.6.4 (long-running-harness-inspired): if true, return a handle "
+                                                    "immediately and run the child in background. Use "
+                                                    "subagent_status(handle) / subagent_result(handle) "
+                                                    "to poll the result. The parent Coder keeps going."},
                 },
                 "required": ["task"],
             },
         }
 
     async def execute(self, task: str = "", max_turns: int = 8,
-                      **kwargs) -> ToolResult:
+                      background: bool = False, **kwargs) -> ToolResult:
         if not task:
             return ToolResult(success=False, output="", error="task is required")
         if self.parent_agent is None:
@@ -101,6 +106,32 @@ class SubagentTool(BaseTool):
             description=task,
             context={"project_id": self.project_id},
         )
+
+        # R38.6.4 (long-running-harness-inspired): background mode returns
+        # immediately with a handle, so the parent Coder can keep
+        # making progress. The child runs as an asyncio.Task in
+        # the background; status / result are pollable via
+        # LongRunningRegistry.
+        if background:
+            from kairos.long_running import get_registry
+            def _child_coro():
+                return child.run(child_task)
+            handle = get_registry().spawn(
+                parent_id=self.parent_agent.agent_id,
+                project_id=self.project_id,
+                task_text=task[:200],
+                coro_factory=_child_coro,
+            )
+            return ToolResult(
+                success=True,
+                output=(f"Sub-agent spawned in background. "
+                        f"handle={handle} child={child_id}. "
+                        f"Use subagent_status({handle}) to poll "
+                        f"the result."),
+                metadata={"child_agent_id": child_id,
+                          "handle": handle, "background": True},
+            )
+
         try:
             result = await child.run(child_task)
         except Exception as e:

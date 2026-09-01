@@ -12,7 +12,7 @@ plan rides along into the next round's system prompt and into
 the WebSocket events so the UI can render a live checklist.
 
 This is the simplest possible TodoWrite surface — taken from
-``langchain-ai/deepagents`` and Claude Code's TodoWrite. We
+``langchain-ai/deepagents`` and the agentic CLI's TodoWrite. We
 deliberately don't try to be the planning tool that decides what
 to do; the LLM does that. We're just the durable storage + render
 layer.

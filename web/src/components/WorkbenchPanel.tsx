@@ -37,11 +37,14 @@ import {
 } from '@ant-design/icons';
 
 import api from '../api/client';
+import { formatError } from '../utils/formatError';
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import { onWebSocketMessage } from '../api/client';
 import AgentsMdEditor from './AgentsMdEditor';
 import BrowserPanel from './BrowserPanel';
+import ToolsPanel from './ToolsPanel';
+import { ToolOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
 
@@ -123,6 +126,7 @@ const WorkbenchPanel: React.FC<WorkbenchPanelProps> = ({
   const currentProject = useChatStore((s) => s.currentProject);
   const [activeTab, setActiveTab] = useState('files');
   const [open, setOpen] = useState(initiallyOpen);
+  const [toolsOpen, setToolsOpen] = useState(false);
 
   // Close the panel automatically when the project changes (so
   // the user doesn't see stale data from a different project).
@@ -155,6 +159,11 @@ const WorkbenchPanel: React.FC<WorkbenchPanelProps> = ({
       }}>
         <span style={{ fontWeight: 600 }}>Workbench</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {/* R38.6.3: Tools button removed. The advanced
+              features (Plan / Skills / Hooks / Memory / IM / Verify)
+              are still available via /api/borrowed/* endpoints.
+              For daily chat the inline plan/approve/memory in
+              the chat thread is enough. */}
           <AgentsMdEditor />
           <Button
             size="small" type="text"
@@ -174,39 +183,24 @@ const WorkbenchPanel: React.FC<WorkbenchPanelProps> = ({
             style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
             tabBarStyle={{ marginBottom: 0, paddingLeft: 8 }}
             items={[
+              // R38.6.3: collapsed 5 tabs → 1. Changes / Tasks /
+              // Deliverables / Browser are power-user details
+              // that crowd the Workbench. They remain available
+              // via /api/workbench/* endpoints and via inline
+              // chat metadata, just not as visible tabs.
               {
                 key: 'files',
                 label: <span><FolderOutlined /> Files</span>,
                 children: <FilesTab projectId={currentProject.id} />,
-              },
-              {
-                key: 'changes',
-                label: <span><DiffOutlined /> Changes</span>,
-                children: <ChangesTab projectId={currentProject.id} />,
-              },
-              {
-                key: 'tasks',
-                label: <span><CheckCircleOutlined /> Tasks</span>,
-                children: <TasksTab projectId={currentProject.id} />,
-              },
-              {
-                key: 'deliverables',
-                label: <span><CameraOutlined /> Deliverables</span>,
-                children: <DeliverablesTab projectId={currentProject.id} />,
-              },
-              {
-                // R38.6 §32: Playwright-backed browser. The
-                // 5th tab gives the user a live headless
-                // Chromium session scoped to this project.
-                key: 'browser',
-                label: <span><GlobalOutlined /> Browser</span>,
-                children: <BrowserPanel projectId={currentProject.id} />,
               },
             ]}
           />
           <CheckpointBar projectId={currentProject.id} />
         </>
       )}
+      <ToolsPanel open={toolsOpen}
+        onClose={() => setToolsOpen(false)}
+        projectId={currentProject.id} />
     </div>
   );
 };
@@ -308,7 +302,7 @@ const FilesTab: React.FC<{ projectId: string }> = ({ projectId }) => {
       });
       setTree(r.data);
     } catch (e: any) {
-      setError(e?.response?.data?.detail || e?.message || 'failed to load tree');
+      setError(formatError(e, 'failed to load tree'));
     } finally {
       setLoading(false);
     }
@@ -842,3 +836,4 @@ const DeliverablesTab: React.FC<{ projectId: string }> = ({ projectId }) => {
     </div>
   );
 };
+

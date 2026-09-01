@@ -1,18 +1,13 @@
 /**
  * App — top-level router.
  *
- * Layout:
- *   /             → Chat (default landing; sidebar with project picker)
- *   /chat         → Chat (new conversation)
- *   /chat/:sid    → Chat (specific session)
- *   /today        → Today (stats + recent activity)
- *   /projects     → Projects (legacy page, kept for project CRUD)
- *   /loop         → Loop (legacy page, kept for advanced diagnostics)
- *
- * Settings now lives in a right-side Drawer (see
- * `components/SettingsDrawer.tsx`), opened from the avatar
- * dropdown. The `/settings` route is kept as a fallback redirect
- * to /chat for users who bookmarked the old URL.
+ * R38.6.3: simplified routing. The 4 obsolete pages
+ * (Today / Tools / Loop / Trace / Project) all redirect to
+ * /chat. Their page components are still in the codebase
+ * (referenced from the redirect handlers) but the imports
+ * are gone so they don't bloat the bundle. Settings is now
+ * an avatar-dropdown drawer; the legacy /settings URL just
+ * redirects to /chat as well.
  */
 import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';

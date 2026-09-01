@@ -28,6 +28,7 @@ import {
 } from '@ant-design/icons';
 
 import api from '../api/client';
+import { formatError } from '../utils/formatError';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 
 interface FiredAlert {
@@ -99,7 +100,7 @@ const AlertPanel: React.FC = () => {
       setMutes(m.data.mutes || {});
       setLastRefresh(Date.now());
     } catch (e: any) {
-      setErr(e?.response?.data?.detail || e?.message || 'Failed to load alerts');
+      setErr(formatError(e, 'Failed to load alerts'));
     } finally {
       setLoading(false);
     }
@@ -277,3 +278,4 @@ const AlertPanel: React.FC = () => {
 };
 
 export default AlertPanel;
+

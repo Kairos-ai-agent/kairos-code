@@ -18,6 +18,7 @@ import {
 } from '@ant-design/icons';
 
 import api from '../api/client';
+import { formatError } from '../utils/formatError';
 
 interface CostSummary {
   calls: number;
@@ -63,7 +64,7 @@ const CostDashboard: React.FC = () => {
       setRecent(r.data || []);
       setLastRefresh(Date.now());
     } catch (e: any) {
-      setErr(e?.response?.data?.detail || e?.message || 'Failed to load cost data');
+      setErr(formatError(e, 'Failed to load cost data'));
     } finally {
       setLoading(false);
     }
@@ -213,3 +214,4 @@ const CostDashboard: React.FC = () => {
 };
 
 export default CostDashboard;
+

@@ -766,6 +766,31 @@ async def run_loop(session, requirement, *, unbounded: bool = False):
         while not session.user_stopped and cap_check():
             session.round += 1
             round_no = session.round
+            # R38.6 §34: Claude-style three-layer context
+            # compression. When the agent's context grows past
+            # DEFAULT_THRESHOLD_ROUNDS (50), collapse the
+            # earlier turns into a digest so the LLM gets a
+            # compact summary instead of a 100k-token wall.
+            try:
+                if (session.coder and
+                        round_no % 10 == 0 and
+                        hasattr(session.coder, "_memory") and
+                        session.coder._memory and
+                        len(session.coder._memory) > 30):
+                    from kairos.compaction import (
+                        maybe_compact, compaction_stats,
+                    )
+                    msgs = [{"role": m.role, "content": m.content}
+                            for m in session.coder._memory
+                            if hasattr(m, "role")]
+                    compacted, digest = maybe_compact(
+                        msgs, rounds=round_no)
+                    logger.info(
+                        "compaction: %d → %d msgs (digest %d chars)",
+                        len(msgs), len(compacted),
+                        len(digest) if digest else 0)
+            except Exception as exc:
+                logger.debug("compaction skipped: %s", exc)
             try:
                 from kairos.tools.cache import clear_round
                 clear_round()

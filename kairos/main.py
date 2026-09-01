@@ -9,19 +9,25 @@ import uvicorn
 
 from kairos import __version__
 from kairos.config.settings import settings
-from kairos.perf import recommended_workers
 
 logger = logging.getLogger(__name__)
 
 
 def _resolve_workers() -> int:
-    """Pick the worker count from settings, falling back to a
-    sensible default based on CPU count.
+    """Pick the worker count from settings.
 
-    - ``workers=0`` (default) → ``min(8, 2 * cpu + 1)``
-    - ``workers>=1``            → that exact value
-    - ``debug=True``            → forced to 1 (uvicorn's
+    - ``workers=0`` (default) → **1** (single process)
+    - ``workers>=1``          → that exact value
+    - ``debug=True``          → forced to 1 (uvicorn's
       ``--reload`` requires a single process)
+
+    NOTE: this app MUST run single-process. The orchestrator, agents,
+    message bus, and per-project in-memory state live in the uvicorn
+    worker process; with multiple workers each worker has its own
+    copy, so a project created via worker A is "Project not found"
+    on worker B (requests round-robin across workers). SQLite under
+    ``data/`` is likewise single-writer. ``recommended_workers()``
+    (up to 8) was the default and caused exactly that 404.
 
     Looks up the settings at call time (not at import time) so
     tests can monkeypatch ``kairos.config.settings.settings``.
@@ -31,7 +37,7 @@ def _resolve_workers() -> int:
         return 1
     if _settings.workers and _settings.workers > 0:
         return _settings.workers
-    return recommended_workers()
+    return 1
 
 
 def _resolve_loop() -> str:

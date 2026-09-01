@@ -10,7 +10,7 @@ one or more of:
   - ``mcp.yaml``    — MCP server config (merged with the user's)
   - ``commands/``   — slash commands the CLI exposes
 
-Mirrors Claude Code's plugin model (and Codex's plugins/ subdir).
+Mirrors the agentic CLI's plugin model (and the cloud task's plugins/ subdir).
 The intent: a team can package "everything we need to use Kairos on
 our monorepo" as a single directory that they check into git, and
 each developer just runs ``kairos plugin install <path>``.

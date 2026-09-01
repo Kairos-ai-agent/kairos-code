@@ -87,6 +87,10 @@ class MessageBus:
         for tok in stale:
             self._listeners.pop(tok, None)
 
+    async def recent(self, limit: int = 50) -> list:
+        """Snapshot the most recent N messages (oldest -> newest)."""
+        return list(self._history)[-limit:]
+
     async def publish(self, message: Message):
         """Publish a message to the bus."""
         # Store in history (deque enforces maxlen, no manual slicing)

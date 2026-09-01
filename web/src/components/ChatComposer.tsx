@@ -123,24 +123,6 @@ const ChatComposer: React.FC<Props> = ({
       padding: '8px 16px 20px',
       background: 'linear-gradient(to top, ' + tokens.bgBase + ' 60%, transparent 100%)',
     }}>
-      {/* R37: project picker above the input so the user can switch
-          projects without scrolling back to the top. */}
-      <div
-        data-testid="composer-folder"
-        style={{
-          maxWidth: 768, margin: '0 auto 6px',
-          display: 'flex', alignItems: 'center', gap: 8,
-          fontSize: 12, color: tokens.labelTertiary,
-        }}
-      >
-        <FolderPicker />
-        <span style={{ opacity: 0.6 }}>
-          · {isTask
-            ? 'This message will start the Coder ↔ Reviewer loop'
-            : 'This message is a single-turn reply'}
-        </span>
-      </div>
-
       <div style={{
         maxWidth: 768, margin: '0 auto',
         background: tokens.bgLay1,
@@ -176,6 +158,15 @@ const ChatComposer: React.FC<Props> = ({
           display: 'flex', alignItems: 'center', gap: 8,
           paddingTop: 4,
         }}>
+          {/* R38.6.4: project picker moved from above the input
+              (where it crowded the action row and pushed the
+              intent hint into a separate line) to the bottom-left
+              of the chat box. The intent preview sits right next
+              to it; attach / send / model-chip keep the right
+              side. */}
+          <div data-testid="composer-folder">
+            <FolderPicker />
+          </div>
           {/* R38.6: live-preview of the auto-classified intent. We
               show a small label (with the matching icon) so the
               user can see in advance which mode the next message

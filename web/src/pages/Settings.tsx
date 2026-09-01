@@ -275,7 +275,7 @@ const SettingsPage: React.FC = () => {
       children: (
         <Card>
           <Paragraph type="secondary">
-            添加 OpenAI 或 Anthropic 兼容的 LLM 服务。
+            添加 OpenAI 或 Anthropic-compatible的 LLM 服务。
           </Paragraph>
           <Divider />
           <Button type="primary" icon={<PlusOutlined />}
@@ -316,8 +316,8 @@ const SettingsPage: React.FC = () => {
               <Form.Item label="协议" required>
                 <Radio.Group value={newModel.protocol}
                   onChange={(e) => setNewModel((p) => ({ ...p, protocol: e.target.value }))}>
-                  <Radio.Button value="openai">OpenAI 兼容</Radio.Button>
-                  <Radio.Button value="anthropic">Anthropic 兼容</Radio.Button>
+                  <Radio.Button value="openai">OpenAI-compatible</Radio.Button>
+                  <Radio.Button value="anthropic">Anthropic-compatible</Radio.Button>
                 </Radio.Group>
               </Form.Item>
               <Form.Item label="API Base URL" required>

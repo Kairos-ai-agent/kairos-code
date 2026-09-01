@@ -1,7 +1,7 @@
-"""Coder — the universal Claude Code-style agent.
+"""Coder — the universal the agentic CLI-style agent.
 
-Goals vs. Claude Code:
-- All of Claude Code's tools (grep, find, git, multi-edit, webfetch, ...)
+Goals vs. the agentic CLI:
+- All of the agentic CLI's tools (grep, find, git, multi-edit, webfetch, ...)
 - Streaming output by default
 - Persistent cross-session memory via project_id + DB
 - Hook system (later)
@@ -107,9 +107,15 @@ If you cannot emit the block, the orchestrator will treat you as 0.
 class Coder(KairosAgent):
     """Universal coding agent. Full tool access."""
 
-    # Higher turn budget than the old defaults — real coding tasks often
-    # need 15-25 rounds (read, plan, edit, test, fix).
-    MAX_TOOL_TURNS = 25
+    # R38.6.3: per the user's directive, no hard turn cap —
+    # the agent should be able to do as many tool rounds as a
+    # real task needs (read, plan, edit, test, fix, re-test,
+    # repeat). The 200 ceiling is just a safety belt to catch
+    # true infinite loops; in practice most tasks finish in
+    # 10-20 rounds. Progress is surfaced via the message bus
+    # (``agent.thinking`` events) for the Workbench progress
+    # display — not as a hard "Turn X/200" cap in the chat UI.
+    MAX_TOOL_TURNS = 200
     MAX_CHAT_TURNS = 10
 
     def __init__(self, agent_id: str, llm_config: LLMConfig, message_bus: MessageBus,

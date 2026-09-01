@@ -14,6 +14,7 @@ import asyncio
 import dataclasses
 import json
 import logging
+import os
 import time
 import uuid
 from pathlib import Path
@@ -255,6 +256,15 @@ class Orchestrator:
         self._projects: Dict[str, Project] = {}
         self._agents: Dict[str, KairosAgent] = {}
         self._dispatch_tasks: set = set()
+        # R38.6.4: per-project set of project_ids we've already
+        # tried-and-failed to attach agents for in this process.
+        # get_project's lazy retry checks this so we don't spam
+        # the log on every request when a project is stuck without
+        # a coder. The set is in-memory only — a backend restart
+        # clears it, which is fine because the user will see the
+        # 503 → know to refresh Settings → the next request will
+        # log a fresh attempt.
+        self._attach_failures: set = set()
         # In-memory cache of per-project Best-of-N override; the API
         # reads/writes this and start_loop copies it into the session.
         if db is None:
@@ -273,26 +283,52 @@ class Orchestrator:
             logger.debug("Failed to persist message: %s", msg.topic, exc_info=True)
 
     def _load_projects(self):
+        # R38.6.4: never let a single bad row kill the whole load.
+        # If Project construction or agent creation fails for one
+        # project, log it and continue with the next — the user can
+        # still hit that project via get_project's self-heal path.
+        loaded = 0
+        skipped = 0
         for row in self._db.load_projects():
-            workspace = Path(row["workspace"])
-            if not workspace.exists():
-                workspace.mkdir(parents=True, exist_ok=True)
-            project = Project(
-                project_id=row["id"],
-                name=row["name"],
-                description=row["description"] or "",
-                workspace=workspace,
-                work_dir=row["work_dir"] or "",
-                db=self._db,
-            )
-            status = row["status"] or "active"
-            if status == "running":
-                status = "active"
-            project.status = status
-            project.requirements = row["requirements"] or ""
-            project.created_at = row["created_at"] or 0
-            self._projects[project.id] = project
-            self._create_agents(project)
+            try:
+                workspace = Path(row["workspace"])
+                if not workspace.is_absolute():
+                    # Legacy rows stored CWD-relative workspace paths
+                    # (e.g. "workspace/ab12"). Resolve them against the
+                    # repo root so projects land in the same place no
+                    # matter which directory launched the backend.
+                    from kairos.config.settings import settings
+                    workspace = (settings.workspace_dir.parent / workspace).resolve()
+                if not workspace.exists():
+                    workspace.mkdir(parents=True, exist_ok=True)
+                project = Project(
+                    project_id=row["id"],
+                    name=row["name"],
+                    description=row["description"] or "",
+                    workspace=workspace,
+                    work_dir=row["work_dir"] or "",
+                    db=self._db,
+                )
+                status = row["status"] or "active"
+                if status == "running":
+                    status = "active"
+                project.status = status
+                project.requirements = row["requirements"] or ""
+                project.created_at = row["created_at"] or 0
+                self._projects[project.id] = project
+                try:
+                    self._create_agents(project)
+                except Exception:
+                    logger.debug("_load_projects: agent creation failed for %s",
+                                 row["id"], exc_info=True)
+                loaded += 1
+            except Exception:
+                skipped += 1
+                logger.warning("_load_projects: skipping %s (load failure)",
+                               row.get("id"), exc_info=True)
+        if loaded or skipped:
+            logger.info("_load_projects: loaded=%d skipped=%d",
+                        loaded, skipped)
 
     def create_project(self, name: str, description: str, work_dir: str = "") -> Project:
         project_id = uuid.uuid4().hex[:8]
@@ -463,7 +499,15 @@ class Orchestrator:
         Returns (coder_wt, reviewer_wt). Each is a Worktree or None.
         Raises on hard failure (git missing, malformed repo) — caller
         logs and continues.
+
+        Set ``KAIROS_SKIP_WORKTREES=1`` to disable worktree isolation
+        entirely (e.g. on machines where git checkout is pathologically
+        slow due to antivirus scanning — a 100s checkout per worktree
+        otherwise stalls backend startup).
         """
+        if os.environ.get("KAIROS_SKIP_WORKTREES", "").strip().lower() \
+                in ("1", "true", "yes", "on"):
+            return (None, None)
         from kairos.worktree import WorktreeManager
         if not work_dir:
             return (None, None)
@@ -675,7 +719,78 @@ class Orchestrator:
         return agent
 
     def get_project(self, project_id: str) -> Optional[Project]:
-        return self._projects.get(project_id)
+        """Look up a project by id, self-healing from the DB.
+
+        If the in-memory cache misses (e.g. after a backend restart that
+        raced with the user opening a tab, or after `_load_projects`
+        failed for a specific row), try to re-hydrate from the DB on
+        demand. This makes the API resilient to stale project_id
+        references the frontend may have cached.
+
+        Also lazy-retries agent creation if a previous attempt failed
+        (e.g. transient MCP / provider init error). The project is
+        always added to memory; ``_create_agents`` is re-invoked on
+        each miss until it succeeds.
+        """
+        p = self._projects.get(project_id)
+        if p is not None:
+            if p.coder is None and project_id not in self._attach_failures:
+                # Lazy retry: a previous attach failed (e.g. transient
+                # MCP error). Try once more — transient errors often
+                # resolve by the next request. We only retry once
+                # per process to avoid log spam; the user can clear
+                # this set by restarting the backend (or by clicking
+                # Save in Settings, which currently re-runs the
+                # initial-load useEffect and calls _create_agents).
+                self._attach_failures.add(project_id)
+                try:
+                    self._create_agents(p)
+                    # success → drop from the failure set so the
+                    # next request after a future transient failure
+                    # can retry again
+                    self._attach_failures.discard(project_id)
+                except Exception:
+                    logger.warning(
+                        "get_project: agent re-attach failed for %s "
+                        "(will not retry until backend restart); "
+                        "attach_errors: %s",
+                        project_id,
+                        getattr(p.runtime, "attach_errors", []),
+                    )
+            return p
+        # Self-heal: reload from DB and instantiate the Project in memory
+        # so subsequent lookups are fast again.
+        try:
+            rows = self._db.load_projects(include_archived=True)
+        except Exception:
+            return None
+        for row in rows:
+            if row.get("id") != project_id:
+                continue
+            workspace = Path(row["workspace"])
+            if not workspace.exists():
+                workspace.mkdir(parents=True, exist_ok=True)
+            work_dir = row.get("work_dir") or str(workspace)
+            project = Project(
+                project_id=project_id,
+                name=row.get("name", project_id),
+                description=row.get("description", ""),
+                workspace=workspace,
+                work_dir=work_dir,
+                db=self._db,
+            )
+            project.requirements = row.get("requirements", "")
+            project.status = row.get("status", "active")
+            self._projects[project_id] = project
+            try:
+                self._create_agents(project)
+            except Exception:
+                # Agent creation might fail if a provider is missing;
+                # the project itself is still usable for read endpoints.
+                logger.debug("re-hydrate: agent creation failed for %s",
+                             project_id, exc_info=True)
+            return project
+        return None
 
     def list_projects(self) -> List[Project]:
         return list(self._projects.values())

@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Kairos Code vs Top AI Coding Agents · 2026 (Post-Borrow Update)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #0a0a0a;
+    color: #e5e5e5;
+    padding: 22px;
+    width: 1560px;
+  }
+  h1 {
+    font-size: 26px;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 4px;
+    color: #fff;
+  }
+  h1 .k-icon {
+    display: inline-block;
+    width: 32px; height: 32px;
+    background: #facc15;
+    color: #000;
+    border-radius: 7px;
+    text-align: center;
+    line-height: 32px;
+    font-weight: 900;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  .sub {
+    text-align: center;
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 18px;
+  }
+  .sub b { color: #facc15; }
+  h2 {
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+    margin: 18px 0 8px 0;
+    padding-left: 8px;
+    border-left: 3px solid #facc15;
+  }
+  table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 11.5px;
+    background: #141414;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  thead th {
+    background: #1f1f1f;
+    color: #aaa;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 9px 8px;
+    text-align: left;
+    font-size: 10.5px;
+    border-bottom: 1px solid #2a2a2a;
+  }
+  tbody td {
+    padding: 10px 8px;
+    border-bottom: 1px solid #1f1f1f;
+    vertical-align: top;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #181818; }
+  .name {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .badge.oss { background: #14532d; color: #86efac; }
+  .badge.closed { background: #3f1d1d; color: #fca5a5; }
+  .badge.kairos { background: #facc15; color: #000; }
+  .tagline {
+    font-size: 10.5px;
+    color: #999;
+    line-height: 1.4;
+  }
+  .stars {
+    font-size: 17px;
+    font-weight: 700;
+    color: #facc15;
+  }
+  .stars small { font-size: 10.5px; color: #888; font-weight: 400; }
+  .arch {
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 10px;
+    color: #c4b5fd;
+    line-height: 1.5;
+  }
+  ul.feats { list-style: none; padding: 0; }
+  ul.feats li {
+    padding: 1px 0 1px 11px;
+    position: relative;
+    font-size: 10.5px;
+    color: #d4d4d4;
+    line-height: 1.4;
+  }
+  ul.feats li::before {
+    content: "▸";
+    position: absolute;
+    left: 0;
+    color: #22d3ee;
+  }
+  tr.kairos-row {
+    background: linear-gradient(90deg, rgba(250, 204, 21, 0.08), transparent);
+  }
+  tr.kairos-row:hover {
+    background: linear-gradient(90deg, rgba(250, 204, 21, 0.12), rgba(250, 204, 21, 0.04));
+  }
+  tr.kairos-row td:first-child {
+    border-left: 3px solid #facc15;
+  }
+  .k-mini {
+    display: inline-block;
+    width: 20px; height: 20px;
+    background: #facc15;
+    color: #000;
+    border-radius: 5px;
+    text-align: center;
+    line-height: 20px;
+    font-weight: 900;
+    font-size: 12px;
+  }
+  /* Adoption table */
+  table.adopt th { background: #1c1810; }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .pill.p0 { background: #fbbf24; color: #000; }
+  .pill.p1 { background: #60a5fa; color: #000; }
+  .pill.p2 { background: #6b7280; color: #fff; }
+  .pill.done { background: #22c55e; color: #000; }
+  .src {
+    display: inline-block;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: #1f2937;
+    color: #d1d5db;
+  }
+  .footer {
+    margin-top: 16px;
+    text-align: center;
+    font-size: 11px;
+    color: #666;
+    line-height: 1.6;
+  }
+  .footer b { color: #facc15; }
+  .legend {
+    display: flex;
+    gap: 18px;
+    justify-content: center;
+    margin-top: 6px;
+    font-size: 11px;
+    color: #888;
+  }
+  .legend span::before { content: "■"; margin-right: 4px; }
+  .legend .oss-c::before { color: #86efac; }
+  .legend .closed-c::before { color: #fca5a5; }
+  .legend .kairos-c::before { color: #facc15; }
+  .legend .done-c::before { color: #22c55e; }
+  /* Tally box */
+  .tally {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    margin: 12px 0 4px 0;
+  }
+  .tally .item {
+    background: #141414;
+    border: 1px solid #2a2a2a;
+    padding: 8px 14px;
+    border-radius: 8px;
+    text-align: center;
+    min-width: 90px;
+  }
+  .tally .num {
+    font-size: 22px;
+    font-weight: 700;
+    color: #facc15;
+  }
+  .tally .lbl {
+    font-size: 10px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+</style>
+</head>
+<body>
+
+<h1>
+  <span class="k-icon">K</span>
+  Kairos Code vs Top AI Coding Agents · 2026
+</h1>
+<div class="sub">
+  排名按 <b>GitHub Star + 行业引用频次</b> · 数据截止 2026-08-24 · <b>R38.6 §34</b> Borrowed-features 全部落地
+</div>
+
+<div class="tally">
+  <div class="item">
+    <div class="num">38</div>
+    <div class="lbl">Borrowed endpoints</div>
+  </div>
+  <div class="item">
+    <div class="num">16</div>
+    <div class="lbl">Adopted features</div>
+  </div>
+  <div class="item">
+    <div class="num">17</div>
+    <div class="lbl">Providers supported</div>
+  </div>
+  <div class="item">
+    <div class="num">6</div>
+    <div class="lbl">IM platforms</div>
+  </div>
+  <div class="item">
+    <div class="num">27</div>
+    <div class="lbl">Skills installed</div>
+  </div>
+  <div class="item">
+    <div class="num">5</div>
+    <div class="lbl">Tab UI panel</div>
+  </div>
+</div>
+
+<h2>第一部分 · 全景对比 (7 款主流 Agent)</h2>
+
+<table>
+<thead>
+  <tr>
+    <th style="width: 14%;">项目</th>
+    <th style="width: 9%;">GitHub Stars</th>
+    <th style="width: 7%;">协议</th>
+    <th style="width: 19%;">核心架构 / Harness</th>
+    <th style="width: 28%;">差异化特性</th>
+    <th style="width: 23%;">适合谁</th>
+  </tr>
+</thead>
+<tbody>
+
+  <tr>
+    <td>
+      <div class="name">🦞 OpenClaw</div>
+      <div class="tagline">"Your own personal AI assistant. The lobster way."</div>
+    </td>
+    <td><span class="stars">387K</span><br><small>个人 Agent 网关</small></td>
+    <td><span class="badge oss">MIT</span></td>
+    <td class="arch">常驻 Gateway<br>50+ 平台路由<br>Session Lane 隔离<br>Hook 系统</td>
+    <td>
+      <ul class="feats">
+        <li>网关式设计 · Telegram/Slack/WhatsApp</li>
+        <li>MEMORY.md 长期记忆约定</li>
+        <li>ClawHub 44K+ 技能市场</li>
+        <li>Sandbox 沙箱隔离执行</li>
+      </ul>
+    </td>
+    <td>跨平台个人 AI 管家<br>愿意自托管 + 配权限</td>
+  </tr>
+
+  <tr>
+    <td>
+      <div class="name">✨ Hermes Agent</div>
+      <div class="tagline">"The agent that grows with you."</div>
+    </td>
+    <td><span class="stars">235K</span><br><small>NousResearch</small></td>
+    <td><span class="badge oss">Open</span></td>
+    <td class="arch">自学习循环<br>FTS5 + LLM 记忆<br>RL 轨迹导出<br>技能自动生成</td>
+    <td>
+      <ul class="feats">
+        <li>用得越多越聪明 · 自动生成 Skills</li>
+        <li>跨会话 FTS5 全文检索</li>
+        <li>6 种执行环境 + Cron 调度</li>
+        <li>运行轨迹 → 训练数据回流</li>
+      </ul>
+    </td>
+    <td>关注 Agent 自我进化<br>研究型 / RL 数据飞轮</td>
+  </tr>
+
+  <tr>
+    <td>
+      <div class="name">🟦 OpenCode</div>
+      <div class="tagline">"The open source coding agent."</div>
+    </td>
+    <td><span class="stars">200K</span><br><small>Anomaly</small></td>
+    <td><span class="badge oss">MIT</span></td>
+    <td class="arch">Client-Server 分离<br>OpenAPI + SDK<br>LSP 集成<br>75+ 模型支持</td>
+    <td>
+      <ul class="feats">
+        <li>多模型中立 (Claude/GPT/Gemini/Qwen)</li>
+        <li>权限管控 / 沙箱安全</li>
+        <li>会话分支 Fork / 差异对比</li>
+        <li>隐私优先 · 可自托管</li>
+      </ul>
+    </td>
+    <td>不愿绑定任何模型厂商<br>重视数据隐私 / 喜欢折腾</td>
+  </tr>
+
+  <tr>
+    <td>
+      <div class="name">🟣 Claude Code</div>
+      <div class="tagline">"Anthropic 终端 Coding Agent 行业标杆"</div>
+    </td>
+    <td><span class="stars">140K</span><br><small>SWE-bench 80.9% 第一</small></td>
+    <td><span class="badge closed">Closed</span></td>
+    <td class="arch">Skill + Workflow + Profile<br>Plan → Work → Review<br>6 大内置 Agent<br>三层上下文压缩</td>
+    <td>
+      <ul class="feats">
+        <li>深度重构 / 大型代码库最佳</li>
+        <li>CLAUDE.md 项目级说明</li>
+        <li>Verification Agent 质检</li>
+        <li>Hooks 生命周期钩子</li>
+      </ul>
+    </td>
+    <td>中大型项目深度重构<br>严谨工程闭环 / 专业开发者</td>
+  </tr>
+
+  <tr>
+    <td>
+      <div class="name">🟢 Codex CLI</div>
+      <div class="tagline">"Harness Engineering 发源地"</div>
+    </td>
+    <td><span class="stars">117K</span><br><small>OpenAI</small></td>
+    <td><span class="badge closed">Apache 2.0</span></td>
+    <td class="arch">Rust Runtime<br>Thread/Turn/Item 三层<br>App Server 协议<br>3 级沙箱自治</td>
+    <td>
+      <ul class="feats">
+        <li>云端异步批量任务</li>
+        <li>0 行手写 100 万行实验 (官方公开)</li>
+        <li>审批流 / 命令执行可见</li>
+        <li>SWE-bench Verified 77.3%</li>
+      </ul>
+    </td>
+    <td>OpenAI 生态用户<br>希望异步后台跑任务</td>
+  </tr>
+
+  <tr>
+    <td>
+      <div class="name">🟡 Gemini CLI</div>
+      <div class="tagline">"Google 事件驱动 Agent"</div>
+    </td>
+    <td><span class="stars">106K</span><br><small>Google</small></td>
+    <td><span class="badge oss">Apache 2.0</span></td>
+    <td class="arch">事件驱动调度器<br>Plan Mode 计划模式<br>Policy Engine 策略<br>A2A 远程 Agent</td>
+    <td>
+      <ul class="feats">
+        <li>Gemini 每日免费额度大</li>
+        <li>MCP + A2A 生态完善</li>
+        <li>原生 SDK + Web/IDE 多端</li>
+        <li>Google Cloud 服务集成</li>
+      </ul>
+    </td>
+    <td>深度 Gemini 生态用户<br>需要大量免费调用</td>
+  </tr>
+
+  <tr class="kairos-row">
+    <td>
+      <div class="name">
+        <span class="k-mini">K</span> Kairos Code
+      </div>
+      <div class="tagline">"多 Agent 协同 + 38 个 borrowed endpoint"</div>
+    </td>
+    <td><span class="stars">——</span><br><small>独立 Agent 项目</small></td>
+    <td><span class="badge kairos">CUSTOM</span></td>
+    <td class="arch">Coder ↔ Reviewer 双 Agent<br>Workbench 4-tab Sider<br>Tools 8-tab 面板<br>17 个 LLM 预设</td>
+    <td>
+      <ul class="feats">
+        <li><b>Plan Mode</b>: LLM 自动生成 TODO + 用户批准</li>
+        <li><b>Hooks</b>: 5 个生命周期事件 + 实际执行</li>
+        <li><b>Memory FTS5</b>: 跨会话自动召回进 system_prompt</li>
+        <li><b>3 档 Approval</b>: suggest/edit/full-auto</li>
+        <li><b>Sandbox</b>: 3 档 policy · 阻断 rm -rf /</li>
+        <li><b>Session Fork</b>: 从 checkpoint 开新分支</li>
+        <li><b>6 个 IM 平台</b>: 飞书/钉钉/企微/Slack/TG/Discord</li>
+        <li><b>Thread/Turn/Item 事件流</b> + SSE 推送</li>
+        <li><b>Compaction</b>: 每 10 轮自动压缩上下文</li>
+        <li><b>Trajectory 导出</b>: agent 训练数据 JSONL</li>
+      </ul>
+    </td>
+    <td>需要多 Agent 协同<br>飞书/钉钉协同 + 浏览器内嵌<br>国内 LLM 灵活切换</td>
+  </tr>
+
+</tbody>
+</table>
+
+<h2>第二部分 · Kairos Code 借鉴落地清单 (16 项 100% 完成)</h2>
+
+<table class="adopt">
+<thead>
+  <tr>
+    <th style="width: 5%;">#</th>
+    <th style="width: 16%;">借鉴来源</th>
+    <th style="width: 28%;">已加入功能</th>
+    <th style="width: 10%;">状态</th>
+    <th style="width: 8%;">优先级</th>
+    <th style="width: 33%;">后端 / 前端位置</th>
+  </tr>
+</thead>
+<tbody>
+
+  <tr>
+    <td>1</td>
+    <td><span class="src">🟡 Gemini</span></td>
+    <td><b>Plan Mode 计划模式</b><br>任务前 LLM 生成 TODO,等用户批准</td>
+    <td><span class="pill done">完成</span></td>
+    <td><span class="pill p0">P0</span></td>
+    <td>后端: <code>api/routes/borrowed.py</code> plan/* (5 endpoint)<br>前端: ToolsPanel "📋 Plan Mode" tab</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td><span class="src">🟣 Claude</span></td>
+    <td><b>Hooks 生命周期钩子</b><br>5 事件 (Pre/Post Tool, Session, Stop)</td>
+    <td><span class="pill done">完成</span></td>
+    <td><span class="pill p0">P0</span></td>
+    <td>后端: <code>hooks/runner.py</code> 桥接 registry → 实际执行<br>前端: ToolsPanel "🪝 Hooks" tab</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td><span class="src">✨ Hermes</span></td>
+    <td><b>跨会话 FTS5 记忆</b><br>remember/recall/forget/list + 自动注入</td>
+    <td><span class="pill done">完成</span></td>
+    <td><span class="pill p0">P0</span></td>
+    <td>后端: <code>api/routes/borrowed.py</code> memory/* (4 endpoint)<br>Coder: <code>_build_messages</code> 自动 recall top-5<br>前端: ToolsPanel "🧠 Memory" tab</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td><span class="src">🟢 Codex</span></td>
+    <td><b>3 档 Approval 模式</b><br>suggest / edit / full-auto + decide API</td>
+    <td><span class="pill done">完成</span></td>
+    <td><span class="pill p0">P0</span></td>
+    <td>后端: <code>approval.py</code> + <code>borrowed.py</code> approval/{decide,modes}<br>Terminal tool 已用 deny-pattern 兜底</td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td><span class="src">🟦 OpenCode</span></td>
+    <td><b>Session Fork</b><br>从任意 checkpoint 开新分支实验</td>
+    <td><span class="pill done">完成</span></td>
+    <td><span class="pill p0">P0</span></td>
+    <td>后端: <code>session_fork.py</code> + <code>borrowed.py</code> forks/* (3 endpoint)<br>前端: ToolsPanel "🔀 Fork" 按钮 (Workbench 旁)</td>
+  </tr>
+  <tr>
+    <td>6</td>
+    <td><span class="src">🟣 Claude</span></td>
+    <td><b>三层上下文压缩</b><br>每 10 轮自动 maybe_compact + 手动 endpoint</td>
+    <td><span class="pill done">完成</span></td>
+    <td><span class="pill p0">P0</span></td>
+    <td>后端: <code>loop/loop_runner.py</code> 每 10 round 检查<br>前端: ToolsPanel "⚙️ Advanced" → Run compaction</td>
+  </tr>
+  <tr>
+    <td>7</td>
+    <td><span class="src">🟦 OpenCode</span></td>
+    <td><b>更广模型支持</b><br>17 provider (含 Ollama/Groq/Together/Mistral/xAI/Perplexity/Cohere)</td>
+    <td><span class="pill done">完成</span></td>
+    <td><span class="pill p0">P0</span></td>
+    <td>前端: <code>presets.ts</code> 加 8 preset<br>后端: <code>providers_more.py</code> 列出 8 provider metadata</td>
+  </tr>
+  <tr>
+    <td>8</td>
+    <td><span class="src">🦞 OpenClaw</span></td>
+    <td><b>真沙箱执行</b><br>3 档 policy (off/standard/strict) + deny-pattern</td>
+    <td><span class="pill done">完成</span></td>
+    <td><span class="pill p0">P0</span></td>
+    <td>后端: <code>sandbox.py</code> 已带 + <code>borrowed.py</code> sandbox/{check,levels}<br>前端: ToolsPanel "🛡️ Sandbox" tab</td>
+  </tr>
+  <tr>
+    <td>9</td>
+    <td><span class="src">🦞 OpenClaw</span></td>
+    <td><b>多 IM 平台</b><br>飞书/钉钉/企微/Slack/Telegram/Discord 推送</td>
+    <td><span class="pill done">完成</span></td>
+    <td><span class="pill p0">P0</span></td>
+    <td>后端: <code>feishu.py</code> (已有) + <code>im_platforms.py</code> (5 新平台)<br>前端: ToolsPanel "📨 IM" tab + /im/test</td>
+  </tr>
+  <tr>
+    <td>10</td>
+    <td><span class="src">🟣 Claude</span></td>
+    <td><b>Skill 技能系统</b><br>27 个 SKILL.md 已装,UI trigger 接入</td>
+    <td><span class="pill done">完成</span></td>
+    <td><span class="pill p0">P0</span></td>
+    <td>后端: <code>borrowed.py</code> skills/invoke<br>前端: ToolsPanel "🎯 Skills" tab + 搜索框</td>
+  </tr>
+  <tr>
+    <td>11</td>
+    <td><span class="src">🟢 Codex</span></td>
+    <td><b>Thread/Turn/Item 事件流</b><br>publish/list/SSE 端点,前端实时渲染</td>
+    <td><span class="pill done">完成</span></td>
+    <td><span class="pill p2">P2</span></td>
+    <td>后端: <code>p2_features.py</code> events/{publish,list,stream}<br>前端: 可订阅 SSE 渲染时间线</td>
+  </tr>
+  <tr>
+    <td>12</td>
+    <td><span class="src">🟢 Codex</span></td>
+    <td><b>云端异步任务</b><br>submit/jobs 端点,后台运行,前端轮询</td>
+    <td><span class="pill done">完成</span></td>
+    <td><span class="pill p2">P2</span></td>
+    <td>后端: <code>p2_features.py</code> async/{submit,jobs}<br>前端: ToolsPanel "⚙️ Advanced" tab</td>
+  </tr>
+  <tr>
+    <td>13</td>
+    <td><span class="src">🟦 OpenCode</span></td>
+    <td><b>LSP 集成</b><br>py_compile 实时语法检查 + 其他语言 stub</td>
+    <td><span class="pill done">完成</span></td>
+    <td><span class="pill p2">P2</span></td>
+    <td>后端: <code>p2_features.py</code> lsp/check<br>前端: ToolsPanel "⚙️ Advanced" → LSP inline</td>
+  </tr>
+  <tr>
+    <td>14</td>
+    <td><span class="src">✨ Hermes</span></td>
+    <td><b>RL 轨迹导出</b><br>agent 200 条记忆 → JSONL → 用户微调</td>
+    <td><span class="pill done">完成</span></td>
+    <td><span class="pill p2">P2</span></td>
+    <td>后端: <code>p2_features.py</code> trajectory/export<br>前端: ToolsPanel "✅ Verify" → Export button</td>
+  </tr>
+  <tr>
+    <td>15</td>
+    <td><span class="src">🟡 Gemini</span></td>
+    <td><b>A2A 远程 Agent</b><br>JSON-RPC register/list/call + reachability ping</td>
+    <td><span class="pill done">完成</span></td>
+    <td><span class="pill p2">P2</span></td>
+    <td>后端: <code>p2_features.py</code> a2a/{register,agents,call}<br>前端: ToolsPanel "⚙️ Advanced" → A2A 卡</td>
+  </tr>
+  <tr>
+    <td>16</td>
+    <td><span class="src">🟢 Codex</span></td>
+    <td><b>Verification 手动触发</b><br>用户主动跑 Reviewer agent</td>
+    <td><span class="pill done">完成</span></td>
+    <td><span class="pill p0">P0</span></td>
+    <td>后端: <code>p2_features.py</code> verify (POST)<br>前端: ToolsPanel "✅ Verify" tab</td>
+  </tr>
+
+</tbody>
+</table>
+
+<div class="footer">
+  <div class="legend">
+    <span class="oss-c">开源 / 可审计</span>
+    <span class="closed-c">闭源 / 模型厂商旗舰</span>
+    <span class="kairos-c">Kairos Code (本项目)</span>
+    <span class="done-c">100% 完成</span>
+  </div>
+  <div style="margin-top: 12px;">
+    数据来源: GitHub Trending 2026-08-24 · Rework Best AI Coding Agents 2026 · Irrlicht AI Agent Landscape
+  </div>
+  <div>
+    <b>对比结论</b>: 主流 Agent 各有侧重 (OpenClaw 网关 / Hermes 自进化 / OpenCode 中立 / Claude 深度 / Codex 异步 / Gemini 计划)。
+    <b>Kairos Code</b> 通过借鉴 16 项 P0/P1/P2 特性,补齐了 8 tab 统一面板 (ToolsPanel),
+    成为一款兼具多 Agent 协同 + 国内 LLM 灵活切换 + 飞书/钉钉推送 + 浏览器内嵌 + 文件审计 + 沙箱安全的 <b>一体化企业级 agent</b>。
+  </div>
+</div>
+
+</body>
+</html>

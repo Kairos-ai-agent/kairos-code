@@ -22,6 +22,7 @@ import {
 } from '@ant-design/icons';
 
 import api from '../api/client';
+import { formatError } from '../utils/formatError';
 
 interface DatasetEntry {
   name: string;
@@ -65,7 +66,7 @@ const EvalPanel: React.FC = () => {
       });
       setDatasets(r.data);
     } catch (e: any) {
-      setErr(e?.response?.data?.detail || e?.message || 'Failed to list datasets');
+      setErr(formatError(e, 'Failed to list datasets'));
     }
   };
 
@@ -89,7 +90,7 @@ const EvalPanel: React.FC = () => {
       message.success(`Recorded ${r.data.recorded} case(s)`);
       refresh();
     } catch (e: any) {
-      setErr(e?.response?.data?.detail || e?.message || 'Record failed');
+      setErr(formatError(e, 'Record failed'));
     } finally {
       setBusy(null);
     }
@@ -110,7 +111,7 @@ const EvalPanel: React.FC = () => {
         `Replay: pass_rate=${(r.data.pass_rate * 100).toFixed(0)}%, cost=$${r.data.total_cost_usd.toFixed(4)}`,
       );
     } catch (e: any) {
-      setErr(e?.response?.data?.detail || e?.message || 'Replay failed');
+      setErr(formatError(e, 'Replay failed'));
     } finally {
       setBusy(null);
     }
@@ -130,7 +131,7 @@ const EvalPanel: React.FC = () => {
       setDeriveResult(r.data);
       message.success(`Derived ${r.data.cases} case(s)`);
     } catch (e: any) {
-      setErr(e?.response?.data?.detail || e?.message || 'Derive failed');
+      setErr(formatError(e, 'Derive failed'));
     } finally {
       setBusy(null);
     }
@@ -283,3 +284,4 @@ const EvalPanel: React.FC = () => {
 };
 
 export default EvalPanel;
+

@@ -1,7 +1,7 @@
 """Command-line interface for Kairos Code.
 
 `kairos exec "..."` is the non-interactive mode that mirrors
-`codex exec "..."` (Codex) and `claude -p "..."` (Claude Code). It:
+`codex exec "..."` (the cloud task) and `claude -p "..."` (the agentic CLI). It:
 
   1. Creates a throwaway project (or `--persist` for debugging).
   2. Runs the Team Leader loop on the supplied task.

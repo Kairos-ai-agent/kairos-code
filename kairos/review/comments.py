@@ -2,7 +2,7 @@
 
 Converts Reviewer verdicts into `::code-comment` directives that editor
 plugins (VS Code, Cursor) can render as red/yellow/green squiggles with
-hover-text. Format mirrors Codex desktop's inline comment system:
+hover-text. Format mirrors the cloud task desktop's inline comment system:
 
     ::code-comment{title="..." body="..." file="..." start=N end=N priority=0..3}
 
@@ -17,7 +17,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# Severity -> Codex priority mapping (0 = blocker, 3 = nit).
+# Severity -> the cloud task priority mapping (0 = blocker, 3 = nit).
 _SEVERITY_PRIORITY = {
     "CRITICAL": 0,
     "MAJOR": 1,
@@ -74,7 +74,7 @@ def comments_to_jsonl(comments: List[Dict[str, Any]]) -> str:
     return "\n".join(json.dumps(c, ensure_ascii=False) for c in comments)
 
 def comments_to_directive_lines(comments: List[Dict[str, Any]]) -> str:
-    """Render comments as Codex-style ::code-comment{...} directives.
+    """Render comments as the cloud task-style ::code-comment{...} directives.
 
     One per line. Useful for embedding directly in source files as
     inline review notes that downstream tools can grep for.

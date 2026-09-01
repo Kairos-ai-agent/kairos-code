@@ -1,4 +1,4 @@
-"""Output guardrails (Codex-Harness-style).
+"""Output guardrails (the cloud task-Harness-style).
 
 A guardrail is a hook that runs AFTER an agent finishes its main loop
 but BEFORE the result is published. It inspects the final assistant
@@ -15,7 +15,7 @@ KairosAgent), because the most useful kind — calling a real Reviewer
 agent to grade the output — costs an extra LLM round-trip per
 agent.run().
 
-This is the Codex-Harness-style "everything is a hook" pattern: the
+This is the the cloud task-Harness-style "everything is a hook" pattern: the
 loop body stays simple, side concerns (review, policy, telemetry)
 plug in as guardrail functions.
 """
@@ -76,7 +76,7 @@ class OutputGuardrail:
             invoke it once more for the final result.
         blocking: If True, ``check()`` raises GuardrailTripwire when
             CRITICAL is found. Defaults to False so the loop can keep
-            going and just publish a flagged message — Codex-style
+            going and just publish a flagged message — the cloud task-style
             "soft fail" so the user still sees the result.
         timeout_s: Hard cap on the reviewer round. 0 = no cap.
         message_bus: When provided, results are published on

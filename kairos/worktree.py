@@ -2,7 +2,7 @@
 
 When multiple sub-agents (Coder, Reviewer, Refactorer, …) work on
 the same project in parallel, they would normally stomp on each
-other's files. Codex handles this with `git worktree`: each
+other's files. the cloud task handles this with `git worktree`: each
 sub-agent gets an independent checkout of the same repo on its
 own branch, and the orchestrator merges the branch back when the
 sub-task completes successfully.
@@ -27,6 +27,7 @@ unique names (we expose `unique_branch_name(role)` to help).
 from __future__ import annotations
 
 import logging
+import os
 import re
 import subprocess
 import uuid
@@ -87,8 +88,17 @@ class WorktreeManager:
         """Run a git command in `repo_path` and return stdout.
 
         On non-zero exit, raise WorktreeError with stderr included.
+        Bounded by a timeout (``KAIROS_GIT_TIMEOUT`` seconds, default
+        15) so a slow / scanning-locked checkout raises WorktreeError
+        instead of hanging the caller forever — the orchestrator
+        treats worktree creation as best-effort and continues without
+        isolation when it fails.
         """
         cmd = ("git",) + args
+        try:
+            timeout_s = float(os.environ.get("KAIROS_GIT_TIMEOUT", "15"))
+        except ValueError:
+            timeout_s = 15.0
         try:
             result = subprocess.run(
                 cmd,
@@ -98,7 +108,14 @@ class WorktreeManager:
                 encoding="utf-8",
                 errors="replace",
                 check=False,
+                timeout=timeout_s,
             )
+        except subprocess.TimeoutExpired as exc:
+            raise WorktreeError(
+                f"git {' '.join(args)} timed out after {timeout_s}s "
+                "(slow checkout — set KAIROS_SKIP_WORKTREES=1 to "
+                "disable worktree isolation)"
+            ) from exc
         except FileNotFoundError as exc:
             raise WorktreeError(
                 "git executable not found on PATH; install git "

@@ -1,6 +1,6 @@
 """Project manifest loader.
 
-Mirrors Codex Harness's `Manifest` pattern: a per-project YAML file
+Mirrors the cloud task Harness's `Manifest` pattern: a per-project YAML file
 that declares workspace structure, trust boundaries, sandbox limits,
 and agent settings. Kairos looks for `<work_dir>/.kairos/manifest.yaml`
 at agent creation time and uses it to:
@@ -55,7 +55,7 @@ DEFAULTS: Dict[str, Any] = {
         "max_tool_turns": 15,
     },
     "reviewers": {
-        # Codex-style: "reviewer" is the main + specialists are extra.
+        # the cloud task-style: "reviewer" is the main + specialists are extra.
         "enabled": ["reviewer", "security_reviewer", "perf_reviewer"],
         "weights": {
             "reviewer": 0.5,

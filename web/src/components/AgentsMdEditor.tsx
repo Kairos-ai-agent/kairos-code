@@ -22,6 +22,7 @@ import {
 import { BookOutlined, SaveOutlined, ReloadOutlined } from '@ant-design/icons';
 
 import api from '../api/client';
+import { formatError } from '../utils/formatError';
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 
@@ -73,7 +74,7 @@ const AgentsMdEditor: React.FC<AgentsMdEditorProps> = ({
       setPath(r.data.path);
       setSource(r.data.source);
     } catch (e: any) {
-      setError(e?.response?.data?.detail || e?.message || 'load failed');
+      setError(formatError(e, 'load failed'));
     } finally {
       setLoading(false);
     }
@@ -103,7 +104,7 @@ const AgentsMdEditor: React.FC<AgentsMdEditorProps> = ({
       );
       onSaved?.(r.data.bytes);
     } catch (e: any) {
-      setError(e?.response?.data?.detail || e?.message || 'save failed');
+      setError(formatError(e, 'save failed'));
     } finally {
       setSaving(false);
     }
@@ -174,7 +175,7 @@ const AgentsMdEditor: React.FC<AgentsMdEditorProps> = ({
             )}
           </Space>
         }
-        destroyOnClose={false}
+        destroyOnHidden={false}
       >
         <Paragraph style={{ fontSize: 12, color: tokens.labelSecondary,
                             marginBottom: 12 }}>
@@ -243,3 +244,4 @@ const AgentsMdEditor: React.FC<AgentsMdEditorProps> = ({
 };
 
 export default AgentsMdEditor;
+

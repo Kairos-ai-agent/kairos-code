@@ -1,6 +1,6 @@
 """AGENTS.md loader.
 
-Mirrors Codex Harness's AGENTS.md pattern: structured Markdown files
+Mirrors the cloud task Harness's AGENTS.md pattern: structured Markdown files
 that augment (or override) the hard-coded system_prompt in each role.
 
 Two scopes, merged with project winning over global:

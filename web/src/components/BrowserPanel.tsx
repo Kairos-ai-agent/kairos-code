@@ -33,6 +33,7 @@ import {
 } from '@ant-design/icons';
 
 import api from '../api/client';
+import { formatError } from '../utils/formatError';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 
 const { Text } = Typography;
@@ -498,3 +499,4 @@ const BrowserPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
 };
 
 export default BrowserPanel;
+

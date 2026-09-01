@@ -1,6 +1,6 @@
 """Hooks system for Kairos.
 
-Mirrors Claude Code's lifecycle hook model. Three event types:
+Mirrors the agentic CLI's lifecycle hook model. Three event types:
 
   - ``PreToolUse``   — fires before a tool runs. The hook can
     ``allow``, ``deny``, or ``modify`` the call. Returning ``deny``

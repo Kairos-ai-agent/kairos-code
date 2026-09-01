@@ -31,6 +31,7 @@ import { Breadcrumb, Button, List, Spin, Alert, Empty } from 'antd';
 import { FolderOpenOutlined, RightOutlined, HomeOutlined } from '@ant-design/icons';
 
 import api from '../api/client';
+import { formatError } from '../utils/formatError';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 
 export interface FsEntry {
@@ -75,8 +76,7 @@ const BrowsePanel: React.FC<BrowsePanelProps> = ({ onSelect, disabled }) => {
       }
     }).catch((e: any) => {
       if (cancelled) return;
-      setError(e?.response?.data?.detail || e?.message
-               || 'Failed to load folder roots.');
+      setError(formatError(e, 'Failed to load folder roots.'));
     }).finally(() => {
       if (!cancelled) setLoadingRoots(false);
     });
@@ -96,8 +96,7 @@ const BrowsePanel: React.FC<BrowsePanelProps> = ({ onSelect, disabled }) => {
       })
       .catch((e: any) => {
         if (cancelled) return;
-        setError(e?.response?.data?.detail || e?.message
-                 || 'Failed to list directory.');
+        setError(formatError(e, 'Failed to list directory.'));
         setEntries([]);
       })
       .finally(() => {
@@ -262,7 +261,7 @@ const BrowsePanel: React.FC<BrowsePanelProps> = ({ onSelect, disabled }) => {
             ) : entries.length === 0 ? (
               <Empty
                 description="No subfolders"
-                imageStyle={{ height: 40 }}
+                styles={{ image: { height: 40 } }}
                 style={{ padding: '12px 0' }}
               />
             ) : (
@@ -337,3 +336,4 @@ const BrowsePanel: React.FC<BrowsePanelProps> = ({ onSelect, disabled }) => {
 };
 
 export default BrowsePanel;
+

@@ -1,6 +1,6 @@
 """Skills framework.
 
-Mirrors Codex Harness's Skills pattern: small, focused Markdown files
+Mirrors the cloud task Harness's Skills pattern: small, focused Markdown files
 with YAML frontmatter that get loaded into the system_prompt when the
 current task context matches.
 
@@ -26,7 +26,7 @@ Matching is a simple union of conditions. A skill matches when ANY
 of its `when` clauses (if any) is satisfied. Higher `priority` wins.
 At most `max_active` skills are injected into a single run.
 
-This is intentionally simpler than Codex's full Skills spec (no
+This is intentionally simpler than the cloud task's full Skills spec (no
 sub-agent discovery, no MCP-injected skills). We focus on the single
 job AGENTS.md+Skills are great at: putting project context in front
 of the model without re-asking the user.
@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_ACTIVE = 3
 DEFAULT_MAX_BODY_BYTES = 16384  # 16KB — long enough for battle-tested skills
-                                  # (e.g. obra/superpowers). Priority is still
+                                  # (e.g. the community skill library). Priority is still
                                   # the top-N gate so total injected bytes
                                   # stay bounded.
 
@@ -143,7 +143,7 @@ class SkillsLoader:
     Three scopes, in increasing priority order:
     - **bundled**: ``<package>/skills/*.md`` (ships with the Kairos
       install — battle-tested community skills like
-      obra/superpowers). Last to be overridden, but
+      the community skill library). Last to be overridden, but
       the loader picks them up first so the user sees them
       immediately even with an empty ``~/.kairos/skills``.
     - **global**:  ``~/.kairos/skills/*.md`` (user-global)

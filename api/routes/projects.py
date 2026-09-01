@@ -1,10 +1,11 @@
-﻿"""Project API routes 鈥?LoopReview mode."""
+"""Project API routes 鈥?LoopReview mode."""
 
 from __future__ import annotations
 
 import base64
 import json
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -39,6 +40,25 @@ async def list_projects():
 
 @router.post("")
 async def create_project(request: "CreateProjectRequest"):
+    # Validate / normalize work_dir BEFORE creating the project.
+    # A folder picked in the BrowsePanel can vanish (deleted, or a
+    # network / removable drive disconnected) between listing and
+    # submit; give the user a clear message instead of a project
+    # whose working directory 404s every workbench / fs call.
+    if request.work_dir and request.work_dir.strip():
+        try:
+            wd = Path(request.work_dir.strip()).expanduser()
+            if not wd.is_absolute():
+                wd = wd.resolve()
+            if not wd.exists():
+                # Recreate the folder so the project is usable (the
+                # orchestrator would create it anyway on agent attach).
+                wd.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"工作目录不可访问: {request.work_dir}",
+            )
     project = _orch().create_project(request.name, request.description, request.work_dir)
     return project.to_dict()
 
@@ -57,8 +77,20 @@ async def get_global_settings():
 async def update_global_settings(patch: dict):
     """Merge a partial settings dict into the global settings."""
     from kairos.settings_store import get_store, _to_dict
-    s = get_store().update(patch or {})
-    return _to_dict(s)
+    try:
+        s = get_store().update(patch or {})
+        return _to_dict(s)
+    except Exception as e:
+        # R38.6.4: surface the actual failure reason in the 500
+        # response so the frontend can show it (instead of just
+        # "[HTTP 500] Request failed with status code 500").
+        import traceback
+        logger.error("update_global_settings failed: %s",
+                     traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"{type(e).__name__}: {e}"[:400],
+        )
 
 
 @router.get("/cost")
@@ -120,43 +152,44 @@ async def chat(project_id: str, request: "ChatRequest"):
     commits, the user clicks "Run as task" and the chat composer
     posts to ``/start`` instead.
     """
-    from kairos.agents.base import AgentTask
-    from kairos.core.message_bus import Message
-
     try:
         project = _orch().get_project(project_id)
         if not project:
             raise HTTPException(status_code=404,
                                 detail=f"Project not found: {project_id}")
         if not project.coder:
-            raise HTTPException(status_code=503,
-                                detail="No Coder agent wired for this project")
+            # R38.6.4: surface the underlying attach errors so the
+            # user can see WHY the Coder wasn't wired (MCP failure,
+            # worktree error, provider init issue, etc). Without
+            # this the user just sees "no coder" and doesn't know
+            # whether to fix settings, restart the backend, or
+            # delete the project.
+            #
+            # Don't append a generic "open Settings" hint here —
+            # the frontend (Chat.tsx) already adds that based on
+            # status/msg regex. Adding it server-side produces
+            # double "open Settings" in the toast.
+            errs = list(getattr(project.runtime, "attach_errors", []) or [])
+            detail = "No Coder agent wired for this project"
+            if errs:
+                detail += f" — agent attach errors: {'; '.join(errs)}"
+            raise HTTPException(status_code=503, detail=detail)
 
         text = (request.message or "").strip()
         if not text:
             raise HTTPException(status_code=400, detail="message is required")
 
-        # Build a minimal task and call the Coder's run() directly.
-        # No plan tracking, no plan approval, no Reviewer — just one
-        # round of text. The Reply is returned synchronously over HTTP
-        # *and* published on the message bus for any open WS client.
-        # NOTE: the message bus lives on the *Orchestrator*, not on
-        # each Project. Project only carries per-project state
-        # (coder / reviewer / loop_task / loop_session / runtime).
-        # The R37 /chat route previously read ``project.message_bus``
-        # and crashed with AttributeError; the Orchestrator has the
-        # single shared bus every project publishes into.
-        bus = _orch().message_bus
-        import uuid as _uuid
-        task = AgentTask(
-            id=_uuid.uuid4().hex[:12],
-            title="Chat",
-            description=text,
-            instruction=text,
-            context={"mode": "chat", "single_turn": True},
-        )
+        # R38.6.3: /chat calls the Coder's ``chat()`` method
+        # (not ``run()``). ``chat()`` uses MAX_CHAT_TURNS=5 with
+        # a single conversational prompt — no tool calls, no
+        # Reviewer, no multi-round plan. The previous code used
+        # ``run()`` which has MAX_TOOL_TURNS=25 and ran the full
+        # tool loop, which is wrong for a single-turn chat message.
+        # The user reported "Turn 1/25 + Reviewer triggered" for
+        # a simple "你好" — this fix routes the chat through
+        # ``chat()`` so it's a single LLM call.
         try:
-            reply = await project.coder.run(task)
+            reply = await project.coder.chat(text)
         except Exception as exc:
             raise HTTPException(status_code=500,
                                 detail=f"Coder chat failed: {exc}")
@@ -175,19 +208,11 @@ async def chat(project_id: str, request: "ChatRequest"):
         logger.exception("chat pre-coder logic failed")
         raise HTTPException(status_code=500,
                             detail=f"chat pre-coder: {type(exc).__name__}: {exc}")
-    # Best-effort publish so the WS thread updates.
-    try:
-        await bus.publish(Message(
-            sender="coder",
-            receiver="user",
-            topic="agent.chat_reply",
-            content=reply,
-            msg_type="text",
-            metadata={"project_id": project_id, "mode": "chat"},
-        ))
-    except Exception:
-        logger.debug("chat reply WS publish failed (non-fatal)",
-                     exc_info=True)
+    # The Coder already published the reply as `agent.chat` on the bus
+    # (from ``coder.chat()``), which the chat thread renders as the
+    # reply bubble. Publishing a second `agent.chat_reply` event here
+    # only doubles the WS traffic — nothing consumes it. The REST
+    # response carries the reply for callers that don't watch the WS.
     return {"project_id": project_id, "reply": reply, "mode": "chat"}
 
 
@@ -282,10 +307,12 @@ async def get_ask_state(project_id: str):
     if not project:
         raise HTTPException(status_code=404,
                             detail=f"Project not found: {project_id}")
-    state = _orch().get_ask(project_id)
-    if state is None:
-        return {"pending": False, "question": "", "context": "", "round": 0}
-    return state
+    # R38.6.3: the Orchestrator doesn't currently track
+    # pending user-input "ask" requests in a structured way
+    # (this is a future feature). For now, return a stub
+    # pending=False so the frontend's "is there a question
+    # waiting?" check doesn't 500.
+    return {"pending": False, "question": "", "context": "", "round": 0}
 
 
 @router.post("/{project_id}/ask/answer")
@@ -780,6 +807,15 @@ class StartLoopRequest(BaseModel):
 class ChatRequest(BaseModel):
     """Round 37: payload for the single-turn /chat endpoint."""
     message: str
+    # R38.6 §34: when true, the agent's task starts with
+    # the Plan Mode flow — the LLM lays out a TODO and the
+    # user must approve it before execution begins. Mirrors
+    # the the the plan-mode pattern's "Plan Mode" toggle.
+    require_plan: bool = False
+    # Pre-generated plan_id (from /api/borrowed/.../plan/generate)
+    # — when set, the agent reads the plan's step list and
+    # asks the user to approve each step before executing.
+    plan_id: str = ""
 
 class RevertFileRequest(BaseModel):
     sha: str

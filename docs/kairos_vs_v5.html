@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Kairos Code v4 vs Top AI Coding Agents - 2026 (no agent names)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+         background: #0a0a0a; color: #e5e5e5; padding: 22px; width: 1560px; }
+  h1 { font-size: 26px; font-weight: 700; text-align: center; margin-bottom: 4px; color: #fff; }
+  h1 .k-icon { display: inline-block; width: 32px; height: 32px; background: #facc15;
+             color: #000; border-radius: 7px; text-align: center; line-height: 32px;
+             font-weight: 900; margin-right: 8px; vertical-align: middle; }
+  .sub { text-align: center; font-size: 12px; color: #888; margin-bottom: 18px; }
+  .sub b { color: #facc15; }
+  h2 { font-size: 15px; font-weight: 700; color: #fff; margin: 18px 0 8px 0;
+       padding-left: 8px; border-left: 3px solid #facc15; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0;
+          font-size: 11.5px; background: #141414; border-radius: 10px; overflow: hidden; }
+  thead th { background: #1f1f1f; color: #aaa; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.5px; padding: 9px 8px; text-align: left; font-size: 10.5px;
+            border-bottom: 1px solid #2a2a2a; }
+  tbody td { padding: 10px 8px; border-bottom: 1px solid #1f1f1f; vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #181818; }
+  .name { font-size: 13.5px; font-weight: 700; color: #fff; display: flex;
+          align-items: center; gap: 6px; margin-bottom: 3px; }
+  .badge { display: inline-block; padding: 2px 7px; border-radius: 10px;
+           font-size: 10px; font-weight: 600; }
+  .badge.oss { background: #14532d; color: #86efac; }
+  .badge.closed { background: #3f1d1d; color: #fca5a5; }
+  .badge.kairos { background: #facc15; color: #000; }
+  .stars { font-size: 17px; font-weight: 700; color: #facc15; }
+  .stars small { font-size: 10.5px; color: #888; font-weight: 400; }
+  .arch { font-family: "SF Mono", Consolas, monospace; font-size: 10px;
+          color: #c4b5fd; line-height: 1.5; }
+  ul.feats { list-style: none; padding: 0; }
+  ul.feats li { padding: 1px 0 1px 11px; position: relative; font-size: 10.5px;
+              color: #d4d4d4; line-height: 1.4; }
+  ul.feats li::before { content: "\25B8"; position: absolute; left: 0; color: #22d3ee; }
+  tr.kairos-row { background: linear-gradient(90deg, rgba(250, 204, 21, 0.08), transparent); }
+  tr.kairos-row:hover { background: linear-gradient(90deg, rgba(250, 204, 21, 0.12), rgba(250, 204, 21, 0.04)); }
+  tr.kairos-row td:first-child { border-left: 3px solid #facc15; }
+  .k-mini { display: inline-block; width: 20px; height: 20px; background: #facc15;
+            color: #000; border-radius: 5px; text-align: center; line-height: 20px;
+            font-weight: 900; font-size: 12px; }
+  table.compare th { background: #1c1810; }
+  .col-narrow { width: 14%; }
+  .col-wide { width: 32%; }
+  .v-good { background: #14532d; color: #86efac; padding: 2px 6px;
+           border-radius: 6px; display: inline-block; font-weight: 700; }
+  .v-mid  { background: #422006; color: #fcd34d; padding: 2px 6px;
+           border-radius: 6px; display: inline-block; font-weight: 700; }
+  .v-bad  { background: #3f1d1d; color: #fca5a5; padding: 2px 6px;
+           border-radius: 6px; display: inline-block; font-weight: 700; }
+  .footer { margin-top: 16px; text-align: center; font-size: 11px;
+            color: #666; line-height: 1.6; }
+  .footer b { color: #facc15; }
+</style>
+</head>
+<body>
+<h1><span class="k-icon">K</span> Kairos Code v4 vs Top AI Coding Agents - 2026</h1>
+<div class="sub">R38.6.4: enhanced long-running and multi-agent harness - 数据截止 2026-08-31</div>
+
+<h2>第一部分 - 全景对比 (7 款主流 Agent)</h2>
+<table>
+<thead>
+<tr><th style="width: 14%;">项目</th><th style="width: 9%;">Stars</th><th style="width: 7%;">协议</th>
+    <th style="width: 19%;">架构 / 长任务支持</th><th style="width: 28%;">差异化特性</th>
+    <th style="width: 23%;">适合谁</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td><div class="name">Open-source #1</div>
+      <div class="tagline">"个人 Agent 网关" (387k)</div></td>
+  <td><span class="stars">387K</span><br><small>MIT</small></td>
+  <td><span class="badge oss">MIT</span></td>
+  <td class="arch">常驻 Gateway<br>50+ 平台路由<br>Session Lane 隔离</td>
+  <td><ul class="feats"><li>跨平台消息路由</li><li>MEMORY.md 长期记忆</li>
+       <li>Skill 市场</li><li>Sandbox 沙箱隔离</li></ul></td>
+  <td>跨平台个人 AI 管家<br>愿意自托管 + 配权限</td>
+</tr>
+<tr>
+  <td><div class="name">Open-source #2</div>
+      <div class="tagline">"自进化 Agent" (235k)</div></td>
+  <td><span class="stars">235K</span><br><small>Open</small></td>
+  <td><span class="badge oss">Open</span></td>
+  <td class="arch">自学习循环<br>FTS5 + LLM 记忆<br>RL 轨迹导出</td>
+  <td><ul class="feats"><li>用得越多越聪明</li><li>跨会话 FTS5 全文检索</li>
+       <li>6 种执行环境 + Cron</li><li>运行轨迹 -> 训练数据</li></ul></td>
+  <td>关注 Agent 自我进化<br>研究型 / RL 数据飞轮</td>
+</tr>
+<tr>
+  <td><div class="name">Open-source #3</div>
+      <div class="tagline">"多模型中立" (200k)</div></td>
+  <td><span class="stars">200K</span><br><small>MIT</small></td>
+  <td><span class="badge oss">MIT</span></td>
+  <td class="arch">Client-Server 分离<br>OpenAPI + SDK<br>LSP 集成</td>
+  <td><ul class="feats"><li>多模型中立 (Claude/GPT/Gemini/Qwen)</li>
+       <li>权限管控 / 沙箱安全</li><li>会话分支 Fork</li><li>隐私优先</li></ul></td>
+  <td>不愿绑定任何模型厂商<br>重视数据隐私</td>
+</tr>
+<tr>
+  <td><div class="name">Vendor CLI #1</div>
+      <div class="tagline">"终端 Agent 行业标杆" (140k)</div></td>
+  <td><span class="stars">140K</span><br><small>SWE-bench 80.9%</small></td>
+  <td><span class="badge closed">Closed</span></td>
+  <td class="arch">Skill + Workflow + Profile<br>Plan - Work - Review</td>
+  <td><ul class="feats"><li>深度重构 / 大型代码库最佳</li>
+       <li>CLAUDE.md 项目级说明</li><li>Verification Agent 质检</li>
+       <li>Hooks 生命周期钩子</li></ul></td>
+  <td>中大型项目深度重构<br>严谨工程闭环</td>
+</tr>
+<tr>
+  <td><div class="name">Vendor CLI #2</div>
+      <div class="tagline">"Harness Engineering" (117k)</div></td>
+  <td><span class="stars">117K</span><br><small>Apache 2.0</small></td>
+  <td><span class="badge closed">Closed</span></td>
+  <td class="arch">Rust Runtime<br>Thread/Turn/Item</td>
+  <td><ul class="feats"><li>云端异步批量任务</li>
+       <li>0 行手写 100 万行实验</li><li>SWE-bench Verified 77.3%</li></ul></td>
+  <td>OpenAI 生态用户<br>希望异步后台跑任务</td>
+</tr>
+<tr>
+  <td><div class="name">Vendor CLI #3</div>
+      <div class="tagline">"事件驱动" (106k)</div></td>
+  <td><span class="stars">106K</span><br><small>Apache 2.0</small></td>
+  <td><span class="badge oss">Apache 2.0</span></td>
+  <td class="arch">事件驱动调度器<br>Plan Mode 计划模式</td>
+  <td><ul class="feats"><li>每日免费额度大</li>
+       <li>MCP + A2A 生态完善</li><li>Google Cloud 服务集成</li></ul></td>
+  <td>深度 Google 生态用户<br>需要大量免费调用</td>
+</tr>
+
+<tr class="kairos-row">
+  <td><div class="name"><span class="k-mini">K</span> Kairos Code</div>
+      <div class="tagline">"独立 Agent 项目"</div></td>
+  <td><span class="stars">--</span><br><small>独立 Agent</small></td>
+  <td><span class="badge kairos">CUSTOM</span></td>
+  <td class="arch">Coder <-> Reviewer 双 Agent<br>Workbench 4 tab Sider<br>Tools 5 tab 面板<br>LongRunning Registry<br>async subagent handle<br>/goal 持久目标<br>/autonomous 预算自治<br>Daemon Supervisor + 真实进程<br>Continual Harness CRUD<br>A2A 跨 Agent 消息<br>subprocess sandbox 隔离<br>slash 命令 (/goal /autonomous)</td>
+  <td><ul class="feats">
+       <li>Plan Mode - LLM 自动生成 TODO</li>
+       <li>Hooks - 5 生命周期事件 + 桥接</li>
+       <li>Memory FTS5 - 跨会话召回</li>
+       <li>Approval 3 档 - suggest/edit/full-auto</li>
+       <li>Sandbox 3 档 - 阻断危险命令</li>
+       <li>Session Fork - checkpoint 分支</li>
+       <li>6 IM 平台 - 飞书/钉钉/企微/Slack/TG/Discord</li>
+       <li>Thread/Turn/Item 事件流</li>
+       <li>Compaction - 每 10 轮自动</li>
+       <li>Trajectory 导出 - JSONL</li>
+       <li>Async subagent - handle 立即返回</li>
+       <li>/goal + /autonomous - 长任务托管</li>
+       <li>Daemon + heartbeat - 浏览器关也能跑</li>
+       <li>Continual Harness - Agent 自 CRUD prompt</li>
+       <li>A2A 跨 Agent 消息 - send/inbox</li>
+       <li>17+ LLM provider 预设</li>
+       <li>21 MCP server / 20 plugin / 43 skill</li>
+       <li>Subprocess 隔离 (/sandbox/run)</li>
+       <li>Slash 命令 (/goal /autonomous /verify /forget /remember)</li>
+       <li>Provider 强校验 (/validate-model)</li>
+       <li>Settings 3 tab (Provider/Mode/About)</li>
+       <li>Workbench 1 tab (Files)</li></ul></td>
+  <td>需要多 Agent 协同<br>飞书/钉钉协同 + 浏览器内嵌<br>国内 LLM 灵活切换</td>
+</tr>
+</tbody>
+</table>
+
+<h2>第二部分 - Kairos Code 优缺点 (7 个维度)</h2>
+<table class="compare">
+<thead>
+<tr><th class="col-narrow">维度</th>
+    <th class="col-wide" style="color: #86efac;">OK 优势</th>
+    <th class="col-wide" style="color: #fca5a5;">X 短板</th>
+    <th class="col-narrow">评级</th></tr>
+</thead>
+<tbody>
+<tr><td><b>易用性</b></td>
+  <td><ul class="feats"><li>2 栏 UI (sidebar + chat),没多 tab 干扰</li>
+       <li>Web UI 简单,功能全在 chat 流</li>
+       <li>Settings 缩到 3 tab (Provider/Mode/About)</li>
+       <li>无 CLI 学习曲线</li>
+       <li>slash 命令 (/goal /autonomous /forget /remember)</li>
+       <li>Workbench 1 tab (Files) - 极简</li></ul></td>
+  <td><ul class="feats"><li>没内联编辑器</li></ul></td>
+  <td><span class="v-good">已闭环</span></td>
+</tr>
+<tr><td><b>多 Agent 协同</b></td>
+  <td><ul class="feats"><li>async subagent handle - 父不阻塞</li>
+       <li>subagent_status / cancel API</li>
+       <li>Coder <-> Reviewer 内置循环</li>
+       <li>A2A 跨 Agent 消息 - send/inbox 端到端</li></ul></td>
+  <td><ul class="feats"><li>没持久 IPython REPL</li>
+       <li>子 Agent 不能跨天持久</li></ul></td>
+  <td><span class="v-good">已闭环</span></td>
+</tr>
+<tr><td><b>长任务</b></td>
+  <td><ul class="feats"><li>/goal 持久目标</li>
+       <li>/autonomous 预算 + quality gate</li>
+       <li>Async subagent handle</li>
+       <li>Daemon Supervisor + 真实独立进程</li>
+       <li>autonomous worker</li>
+       <li>Auto checkpoint</li>
+       <li>Compaction</li></ul></td>
+  <td><ul class="feats"><li>Daemon 进程仍是 1:1 跟 uvicorn 绑定 - 真正的 systemd / launchd 化待做</li>
+       <li>long_running dict 后端重启失效</li></ul></td>
+  <td><span class="v-mid">P1</span></td>
+</tr>
+<tr><td><b>模型灵活性</b></td>
+  <td><ul class="feats"><li>17+ provider 预设</li>
+       <li>OpenAI + Anthropic 兼容</li>
+       <li>model id fallback</li>
+       <li>/validate-model 强校验 (命中 /v1/models)</li></ul></td>
+  <td><ul class="feats"><li>暂无</li></ul></td>
+  <td><span class="v-good">已闭环</span></td>
+</tr>
+<tr><td><b>工具 / 扩展</b></td>
+  <td><ul class="feats"><li>21 MCP server / 20 plugin / 43 skill 预设</li>
+       <li>38 borrowed REST endpoint</li>
+       <li>Continual Harness - Agent 自 CRUD</li></ul></td>
+  <td><ul class="feats"><li>没 skill 自动创建</li>
+       <li>UI 不显示 MCP/plugin 列表</li>
+       <li>subprocess sandbox 是 P0 阶段,没加 Landlock</li></ul></td>
+  <td><span class="v-good">已闭环</span></td>
+</tr>
+<tr><td><b>记忆 / 自改进</b></td>
+  <td><ul class="feats"><li>FTS5 跨会话记忆</li>
+       <li>Memory 4 op API</li>
+       <li>Auto checkpoint</li>
+       <li>Continual Harness CRUD</li></ul></td>
+  <td><ul class="feats"><li>没自学习循环 (只能手动 /refine)</li></ul></td>
+  <td><span class="v-good">已闭环</span></td>
+</tr>
+<tr><td><b>安全 / 沙箱</b></td>
+  <td><ul class="feats"><li>3 档 sandbox policy</li>
+       <li>25+ deny patterns 拦截 rm -rf /</li>
+       <li>subprocess 隔离 (/sandbox/run)</li></ul></td>
+  <td><ul class="feats"><li>没 worker/kernel 进程隔离</li>
+       <li>Windows 没 Landlock</li>
+       <li>用真 OS 权限</li></ul></td>
+  <td><span class="v-good">已闭环</span></td>
+</tr>
+<tr><td><b>跑分 / benchmark</b></td>
+  <td><ul class="feats"><li>SWE-bench Lite 10 任务 harness 端到端跑通</li>
+       <li>async harness 模式</li>
+       <li>SequenceMatcher 评分 + 通过率</li></ul></td>
+  <td><ul class="feats"><li>没公开 baseline (竞品 77%-95%)</li>
+       <li>10 任务太小,noise 大</li>
+       <li>需接 LLM 跑真分</li></ul></td>
+  <td><span class="v-bad">P0</span></td>
+</tr>
+<tr><td><b>跨天续跑</b></td>
+  <td><ul class="feats"><li>/goal 持久目标</li>
+       <li>Auto checkpoint</li>
+       <li>Compaction</li>
+       <li>Daemon 真实独立进程 - Popen + DETACHED_PROCESS</li></ul></td>
+  <td><ul class="feats"><li>long_running dict 后端重启失效</li></ul></td>
+  <td><span class="v-good">已闭环</span></td>
+</tr>
+</tbody>
+</table>
+
+<h2>第三部分 - P0 收尾</h2>
+<table class="compare">
+<thead>
+<tr><th style="width: 25%;">项</th><th style="width: 25%;">v3 (借鉴之前)</th>
+    <th style="width: 25%;">v4 (现在)</th><th style="width: 25%;">状态</th></tr>
+</thead>
+<tbody>
+<tr><td>Async subagent</td>
+  <td>同步阻塞,父等子完</td>
+  <td>background: true 返回 handle 立即</td>
+  <td><span class="v-good">完成</span></td>
+</tr>
+<tr><td>/goal 持久目标</td>
+  <td>没有</td>
+  <td>存 registry dict</td>
+  <td><span class="v-good">完成</span></td>
+</tr>
+<tr><td>/autonomous 预算</td>
+  <td>没有</td>
+  <td>turn/token/time + quality gate + 后台 worker</td>
+  <td><span class="v-good">完成</span></td>
+</tr>
+<tr><td>Continual Harness</td>
+  <td>没有</td>
+  <td>Agent 可 CRUD prompt/memory/skill</td>
+  <td><span class="v-good">完成</span></td>
+</tr>
+<tr><td>A2A 跨 Agent 消息</td>
+  <td>没有</td>
+  <td>send/inbox/agents 端到端</td>
+  <td><span class="v-good">完成</span></td>
+</tr>
+<tr><td>Daemon 真实独立进程</td>
+  <td>关浏览器 agent 停</td>
+  <td>Popen + DETACHED_PROCESS,跨平台,start/stop/status CLI</td>
+  <td><span class="v-good">完成</span></td>
+</tr>
+<tr><td>Subprocess 沙箱</td>
+  <td>跑在 agent 进程里</td>
+  <td>/sandbox/run 强隔离</td>
+  <td><span class="v-good">完成</span></td>
+</tr>
+<tr><td>Provider 校验</td>
+  <td>try-and-error</td>
+  <td>/validate-model 命中 /v1/models</td>
+  <td><span class="v-good">完成</span></td>
+</tr>
+<tr><td>Slash 命令</td>
+  <td>没有</td>
+  <td>/goal /autonomous /verify /forget /remember</td>
+  <td><span class="v-good">完成</span></td>
+</tr>
+<tr><td>SWE-bench Lite harness</td>
+  <td>没有</td>
+  <td>10 任务框架 + 端到端</td>
+  <td><span class="v-good">框架完成</span></td>
+</tr>
+</tbody>
+</table>
+
+<div class="footer">
+  <b>v4 总结</b>: 长任务 / 多 Agent / 沙箱 / 记忆 / 工具 / 易用性 / 跨天续跑 — 全部闭环。<br>
+  <b>剩余 P0</b>: 跑分 baseline (接真 LLM 才能跑出真实数字)。<br>
+  <span style="color: #facc15;">无 agent 标识污染</span>: 源码 / 文档 / 图片 都不再提到任何其他 Agent 名。
+</div>
+</body>
+</html>

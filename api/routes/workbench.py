@@ -116,12 +116,22 @@ _MAX_FILE_BYTES = 1 * 1024 * 1024  # 1 MB
 
 
 def _resolve_project_root(project_id: str) -> Path:
-    """Return the project's effective root dir (work_dir or workspace)."""
+    """Return the project's effective root dir (work_dir or workspace).
+
+    Ensures the root exists (mkdir) so a freshly-created project whose
+    folder briefly can't be resolved never 404s the workbench tree —
+    the tree then simply shows the (possibly empty) root.
+    """
     project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"project not found: {project_id}")
     root = getattr(project, "work_dir", None) or str(project.workspace)
-    return Path(root).resolve()
+    p = Path(root).resolve()
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass  # read-only / locked — the tree endpoint reports it
+    return p
 
 
 def _safe_join(root: Path, rel: str) -> Path:

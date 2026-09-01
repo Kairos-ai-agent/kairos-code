@@ -1,8 +1,8 @@
 """Cloud delegation — run a coding task on a remote runner.
 
-Mirrors the Codex-Harness "cloud delegation" feature: instead of
+Mirrors the the cloud task-Harness "cloud delegation" feature: instead of
 running the Coder/Reviewer loop locally, hand a task off to a remote
-service (a Docker container, a cloud VM, or a Codex-style hosted
+service (a Docker container, a cloud VM, or a the cloud task-style hosted
 runner) and poll for results.
 
 Design:
@@ -12,7 +12,7 @@ Design:
   result". This means we can plug in:
   - A self-hosted `RemoteRunner` server (the user runs it on a VM)
   - A Docker container exposing the same HTTP API
-  - A future Codex cloud service
+  - A future the cloud task cloud service
 * `LocalDelegator` runs the task in-process. Useful for tests, and
   for "offline" mode where you want delegation semantics without
   actually leaving the box.

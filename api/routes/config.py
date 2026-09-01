@@ -29,14 +29,39 @@ def _load_settings() -> dict:
     return {}
 
 def _save_settings(data: dict):
+    # Merge, don't replace: data/settings.json also carries sections
+    # owned by other subsystems (provider / provider_openai /
+    # provider_anthropic from the SettingsDrawer, role_mappings from
+    # the model router, loop_config). A plain replace would silently
+    # wipe the user's LLM provider config and role assignments.
+    existing = _load_settings()
+    existing.update(data)
     SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SETTINGS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    SETTINGS_FILE.write_text(
+        json.dumps(existing, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
 @router.get("/models")
 async def list_models():
     return {
         "models": model_router.list_models(),
         "role_mappings": model_router.list_role_mappings(),
+        "tier_mappings": model_router.list_tier_mappings(),
+    }
+
+
+@router.get("/models/tiers")
+async def list_tier_routing():
+    """R38.6.4: per-task complexity tier routing.
+
+    Returns the current fast / default / strong → model name
+    mappings. The SettingsDrawer uses this to display and edit
+    the tier assignments.
+    """
+    return {
+        "tiers": model_router.list_tier_mappings(),
+        "models": model_router.list_models(),
     }
 
 @router.post("/models/assign")
@@ -104,7 +129,7 @@ async def fetch_deepseek_models():
             {"id": "deepseek-reasoner", "name": "DeepSeek Reasoner (R1)"},
         ]}
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=10, trust_env=False) as client:
             resp = await client.get(
                 "https://api.deepseek.com/models",
                 headers={"Authorization": f"Bearer {api_key}"},
@@ -145,7 +170,8 @@ async def fetch_custom_models(request: FetchModelsRequest):
             if request.api_key:
                 headers["x-api-key"] = request.api_key
                 headers["anthropic-version"] = "2023-06-01"
-            async with httpx.AsyncClient(timeout=5, follow_redirects=True) as client:
+            async with httpx.AsyncClient(timeout=5, follow_redirects=True,
+                                         trust_env=False) as client:
                 resp = await client.get(f"{base}/models", headers=headers)
                 if resp.status_code == 200:
                     data = resp.json()
@@ -174,7 +200,8 @@ async def fetch_custom_models(request: FetchModelsRequest):
         url = f"{base}/models"
         if request.api_key:
             headers["Authorization"] = f"Bearer {request.api_key}"
-        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True,
+                                     trust_env=False) as client:
             resp = await client.get(url, headers=headers)
             if resp.status_code == 200:
                 data = resp.json()
@@ -183,10 +210,20 @@ async def fetch_custom_models(request: FetchModelsRequest):
                     for m in data.get("data", [])
                 ]
                 models.sort(key=lambda x: x["id"])
-                return {"models": models, "count": len(models)}
-    except Exception:
+                return {"models": models, "count": len(models),
+                        "note": f"fetched {len(models)} models from {base}"}
+            # The provider exists but doesn't expose /v1/models
+            # (common for proxies / aggregators). Return a friendly
+            # error so the UI doesn't show a 500.
+            return {"models": [], "count": 0,
+                    "error": f"GET {url} returned {resp.status_code}",
+                    "note": "provider has no /v1/models — pick a model manually"}
+    except Exception as exc:
         import logging
-        logging.getLogger(__name__).debug("Failed to fetch custom models", exc_info=True)
+        logging.getLogger(__name__).debug(
+            "Failed to fetch custom models", exc_info=True)
+        return {"models": [], "count": 0,
+                "error": f"{type(exc).__name__} fetching {url}: {exc}"}
 
     return {"models": [], "error": "Failed to fetch models"}
 
@@ -302,7 +339,7 @@ async def save_loop_config(request: LoopConfigRequest):
 
 
 # ============================================================================
-# Round 37: LLM test-connection (OpenAI / Anthropic compatible)
+# Round 37: LLM test-connection (OpenAI and Anthropic compatible)
 # ============================================================================
 
 import logging
@@ -353,7 +390,7 @@ def _extract_error_message(body: str) -> str:
     """Pull a human-readable message out of a JSON error body.
 
     LLM APIs and proxies use a few common error shapes:
-      - OpenAI / Anthropic / most proxies: ``{"error": {"message": "..."}}``
+      - OpenAI and Anthropic / most proxies: ``{"error": {"message": "..."}}``
       - Some proxies wrap differently: ``{"error": "string"}``
       - Some proxies: ``{"message": "..."}`` at the top level
       - Agnes AI apihub, others: ``{"error": {"message": "Invalid ..."}}``
@@ -375,7 +412,7 @@ def _extract_error_message(body: str) -> str:
         data = json.loads(body)
     except (json.JSONDecodeError, ValueError):
         return ""
-    # OpenAI / Anthropic shape: {"error": {"message": "..."}}
+    # OpenAI and Anthropic shape: {"error": {"message": "..."}}
     if isinstance(data.get("error"), dict):
         msg = data["error"].get("message")
         if isinstance(msg, str) and msg.strip():
@@ -444,34 +481,38 @@ def _probe_post_openai_chat(
         "max_tokens": 1,
         "messages": [{"role": "user", "content": "ping"}],
     }).encode("utf-8")
-    req = urllib.request.Request(url, data=body, method="POST")
-    req.add_header("Authorization", f"Bearer {api_key}")
-    req.add_header("Content-Type", "application/json")
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return {
-                "ok": 200 <= resp.status < 400,
-                "status": resp.status,
-                "detail": f"POST {url} -> {resp.status}",
-            }
-    except urllib.error.HTTPError as exc:
-        body = ""
+        async def _do_probe():
+            async with httpx.AsyncClient(timeout=timeout, trust_env=False) as c:
+                return await c.post(url, content=body, headers=headers)
+        # We can't await here (this function is sync, called from async
+        # via run_in_executor-or-async wrapper). Re-implement as sync
+        # via httpx.Client for simplicity.
+        with httpx.Client(timeout=timeout, trust_env=False) as c:
+            resp = c.post(url, content=body, headers=headers)
+        return {
+            "ok": 200 <= resp.status_code < 400,
+            "status": resp.status_code,
+            "detail": f"POST {url} -> {resp.status_code}",
+        }
+    except httpx.HTTPStatusError as exc:
+        body_text = ""
         try:
-            body = exc.read().decode("utf-8", errors="replace")
+            body_text = exc.response.text
         except Exception:
             pass
-        # R38.6.2: include the URL we attempted in the error
-        # detail so the user can see exactly which address the
-        # probe tried (e.g. when a proxy rewrites / doubles the
-        # path, the user needs to see what we sent to figure out
-        # what to fix).
         return {
             "ok": False,
-            "status": exc.code,
-            "detail": _format_probe_error(exc.code, body, str(exc.reason))
+            "status": exc.response.status_code,
+            "detail": _format_probe_error(
+                exc.response.status_code, body_text, str(exc))
                      + f" (url: {url})",
         }
-    except (urllib.error.URLError, OSError) as exc:
+    except (httpx.RequestError, OSError) as exc:
         return {
             "ok": False,
             "status": 0,
@@ -500,30 +541,43 @@ def _probe_post_anthropic(
         "max_tokens": 1,
         "messages": [{"role": "user", "content": "ping"}],
     }).encode("utf-8")
-    req = urllib.request.Request(url, data=body, method="POST")
-    req.add_header("x-api-key", api_key)
-    req.add_header("anthropic-version", "2023-06-01")
-    req.add_header("Content-Type", "application/json")
+    # R38.6.3: Anthropic uses ``x-api-key`` (lowercase) per their
+    # docs, but MiniMax's Anthropic-compatible proxy expects
+    # ``X-Api-Key`` (capital X) per their docs. Some proxies
+    # are case-sensitive on header lookups even though HTTP
+    # itself is case-insensitive. Send BOTH to cover both
+    # real Anthropic and the MiniMax-style proxy.
+    headers = {
+        "x-api-key": api_key,
+        "X-Api-Key": api_key,
+        "Authorization": f"Bearer {api_key},  # also covers "
+                                  "Anthropic-compat proxies that "
+                                  "only check Bearer",
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+    }
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return {
-                "ok": 200 <= resp.status < 400,
-                "status": resp.status,
-                "detail": f"POST {url} -> {resp.status}",
-            }
-    except urllib.error.HTTPError as exc:
-        body = ""
+        with httpx.Client(timeout=timeout, trust_env=False) as c:
+            resp = c.post(url, content=body, headers=headers)
+        return {
+            "ok": 200 <= resp.status_code < 400,
+            "status": resp.status_code,
+            "detail": f"POST {url} -> {resp.status_code}",
+        }
+    except httpx.HTTPStatusError as exc:
+        body_text = ""
         try:
-            body = exc.read().decode("utf-8", errors="replace")
+            body_text = exc.response.text
         except Exception:
             pass
         return {
             "ok": False,
-            "status": exc.code,
-            "detail": _format_probe_error(exc.code, body, str(exc.reason))
+            "status": exc.response.status_code,
+            "detail": _format_probe_error(
+                exc.response.status_code, body_text, str(exc))
                      + f" (url: {url})",
         }
-    except (urllib.error.URLError, OSError) as exc:
+    except (httpx.RequestError, OSError) as exc:
         return {
             "ok": False,
             "status": 0,

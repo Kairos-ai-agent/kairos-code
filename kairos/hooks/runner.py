@@ -70,6 +70,29 @@ class HookRunner:
                 continue
             if replaced is not None and isinstance(replaced, dict):
                 arguments = replaced
+        # R38.6 §34: bridge to the registry-based hooks
+        # (registered via /api/borrowed/{pid}/hooks). The
+        # registry's post-tool event with command field is
+        # executed as a shell command.
+        try:
+            from kairos.hooks import get_default_registry, HookEvent
+            registry = get_default_registry()
+            for spec in registry.hooks_for(HookEvent.PreToolUse):
+                if spec.matcher and not spec.matcher in (tool_name,):
+                    continue
+                if spec.command:
+                    import subprocess
+                    try:
+                        subprocess.run(spec.command, shell=True,
+                                       timeout=spec.timeout_s,
+                                       cwd=None,
+                                       capture_output=True)
+                    except Exception:
+                        logger.debug("pre_tool hook cmd failed",
+                                     exc_info=True)
+        except Exception:
+            logger.debug("registry pre_tool hook bridge failed",
+                         exc_info=True)
         return arguments
 
     def post_tool_use(self, tool_name: str, arguments: dict, result,
@@ -80,6 +103,27 @@ class HookRunner:
                 hook(tool_name, arguments, result, agent_id, project_id)
             except Exception:
                 logger.warning("post_tool_use hook raised", exc_info=True)
+        # R38.6 §34: registry-based hooks (PostToolUse event)
+        try:
+            from kairos.hooks import get_default_registry, HookEvent
+            registry = get_default_registry()
+            for spec in registry.hooks_for(HookEvent.PostToolUse):
+                if spec.matcher and not (spec.matcher in (tool_name, "*")
+                                          or tool_name.endswith(spec.matcher.lstrip("*"))):
+                    continue
+                if spec.command:
+                    import subprocess
+                    try:
+                        subprocess.run(spec.command, shell=True,
+                                       timeout=spec.timeout_s,
+                                       cwd=None,
+                                       capture_output=True)
+                    except Exception:
+                        logger.debug("post_tool hook cmd failed",
+                                     exc_info=True)
+        except Exception:
+            logger.debug("registry post_tool hook bridge failed",
+                         exc_info=True)
 
     def loop_round(self, round_no: int, coder_summary: str,
                    review: dict, project_id: str) -> None:

@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Kairos Code v3 — R38.6.4 vs Top AI Coding Agents (长任务借鉴后)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #0a0a0a;
+    color: #e5e5e5;
+    padding: 22px;
+    width: 1560px;
+  }
+  h1 {
+    font-size: 26px;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 4px;
+    color: #fff;
+  }
+  h1 .k-icon {
+    display: inline-block;
+    width: 32px; height: 32px;
+    background: #facc15;
+    color: #000;
+    border-radius: 7px;
+    text-align: center;
+    line-height: 32px;
+    font-weight: 900;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  .sub {
+    text-align: center;
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 18px;
+  }
+  .sub b { color: #facc15; }
+  h2 {
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+    margin: 18px 0 8px 0;
+    padding-left: 8px;
+    border-left: 3px solid #facc15;
+  }
+  table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 11.5px;
+    background: #141414;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  thead th {
+    background: #1f1f1f;
+    color: #aaa;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 9px 8px;
+    text-align: left;
+    font-size: 10.5px;
+    border-bottom: 1px solid #2a2a2a;
+  }
+  tbody td {
+    padding: 10px 8px;
+    border-bottom: 1px solid #1f1f1f;
+    vertical-align: top;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #181818; }
+  .name {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .badge.oss { background: #14532d; color: #86efac; }
+  .badge.closed { background: #3f1d1d; color: #fca5a5; }
+  .badge.kairos { background: #facc15; color: #000; }
+  .tagline {
+    font-size: 10.5px;
+    color: #999;
+    line-height: 1.4;
+  }
+  .stars {
+    font-size: 17px;
+    font-weight: 700;
+    color: #facc15;
+  }
+  .stars small { font-size: 10.5px; color: #888; font-weight: 400; }
+  .arch {
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 10px;
+    color: #c4b5fd;
+    line-height: 1.5;
+  }
+  ul.feats { list-style: none; padding: 0; }
+  ul.feats li {
+    padding: 1px 0 1px 11px;
+    position: relative;
+    font-size: 10.5px;
+    color: #d4d4d4;
+    line-height: 1.4;
+  }
+  ul.feats li::before {
+    content: "▸";
+    position: absolute;
+    left: 0;
+    color: #22d3ee;
+  }
+  tr.kairos-row {
+    background: linear-gradient(90deg, rgba(250, 204, 21, 0.08), transparent);
+  }
+  tr.kairos-row:hover {
+    background: linear-gradient(90deg, rgba(250, 204, 21, 0.12), rgba(250, 204, 21, 0.04));
+  }
+  tr.kairos-row td:first-child {
+    border-left: 3px solid #facc15;
+  }
+  .k-mini {
+    display: inline-block;
+    width: 20px; height: 20px;
+    background: #facc15;
+    color: #000;
+    border-radius: 5px;
+    text-align: center;
+    line-height: 20px;
+    font-weight: 900;
+    font-size: 12px;
+  }
+  .verdict {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    display: inline-block;
+    font-weight: 700;
+  }
+  .v-good { background: #14532d; color: #86efac; }
+  .v-mid { background: #422006; color: #fcd34d; }
+  .v-bad { background: #3f1d1d; color: #fca5a5; }
+  table.compare th { background: #1c1810; }
+  .col-narrow { width: 14%; }
+  .col-wide { width: 32%; }
+  .footer {
+    margin-top: 16px;
+    text-align: center;
+    font-size: 11px;
+    color: #666;
+    line-height: 1.6;
+  }
+  .footer b { color: #facc15; }
+  .legend {
+    display: flex;
+    gap: 18px;
+    justify-content: center;
+    margin-top: 6px;
+    font-size: 11px;
+    color: #888;
+  }
+  .legend span::before { content: "■"; margin-right: 4px; }
+  .legend .oss-c::before { color: #86efac; }
+  .legend .closed-c::before { color: #fca5a5; }
+  .legend .kairos-c::before { color: #facc15; }
+</style>
+</head>
+<body>
+
+<h1>
+  <span class="k-icon">K</span>
+  Kairos Code v3 vs Top AI Coding Agents · 2026
+</h1>
+<div class="sub">
+  R38.6.4: 借鉴 Prime Agent 后的优缺点对比 · 数据截止 2026-08-30
+</div>
+
+<h2>第一部分 · 全景对比 (7 款主流 Agent)</h2>
+
+<table>
+<thead>
+  <tr>
+    <th style="width: 14%;">项目</th>
+    <th style="width: 9%;">Stars</th>
+    <th style="width: 7%;">协议</th>
+    <th style="width: 19%;">架构 / 长任务支持</th>
+    <th style="width: 28%;">差异化特性</th>
+    <th style="width: 23%;">适合谁</th>
+  </tr>
+</thead>
+<tbody>
+
+  <tr>
+    <td>
+      <div class="name">🦞 OpenClaw</div>
+      <div class="tagline">"Your own personal AI assistant."</div>
+    </td>
+    <td><span class="stars">387K</span><br><small>个人 Agent 网关</small></td>
+    <td><span class="badge oss">MIT</span></td>
+    <td class="arch">常驻 Gateway<br>50+ 平台路由<br>Session Lane 隔离<br>Hook 系统</td>
+    <td>
+      <ul class="feats">
+        <li>跨平台消息路由</li>
+        <li>MEMORY.md 长期记忆</li>
+        <li>ClawHub 44K+ 技能市场</li>
+        <li>Sandbox 沙箱隔离</li>
+      </ul>
+    </td>
+    <td>跨平台个人 AI 管家<br>愿意自托管 + 配权限</td>
+  </tr>
+
+  <tr>
+    <td>
+      <div class="name">✨ Hermes Agent</div>
+      <div class="tagline">"The agent that grows with you."</div>
+    </td>
+    <td><span class="stars">235K</span><br><small>NousResearch</small></td>
+    <td><span class="badge oss">Open</span></td>
+    <td class="arch">自学习循环<br>FTS5 + LLM 记忆<br>RL 轨迹导出<br>技能自动生成</td>
+    <td>
+      <ul class="feats">
+        <li>用得越多越聪明</li>
+        <li>跨会话 FTS5 全文检索</li>
+        <li>6 种执行环境 + Cron</li>
+        <li>运行轨迹 → 训练数据</li>
+      </ul>
+    </td>
+    <td>关注 Agent 自我进化<br>研究型 / RL 数据飞轮</td>
+  </tr>
+
+  <tr>
+    <td>
+      <div class="name">🟦 OpenCode</div>
+      <div class="tagline">"The open source coding agent."</div>
+    </td>
+    <td><span class="stars">200K</span><br><small>Anomaly</small></td>
+    <td><span class="badge oss">MIT</span></td>
+    <td class="arch">Client-Server 分离<br>OpenAPI + SDK<br>LSP 集成<br>75+ 模型支持</td>
+    <td>
+      <ul class="feats">
+        <li>多模型中立 (Claude/GPT/Gemini/Qwen)</li>
+        <li>权限管控 / 沙箱安全</li>
+        <li>会话分支 Fork / 差异对比</li>
+        <li>隐私优先 · 可自托管</li>
+      </ul>
+    </td>
+    <td>不愿绑定任何模型厂商<br>重视数据隐私 / 喜欢折腾</td>
+  </tr>
+
+  <tr>
+    <td>
+      <div class="name">🟣 Claude Code</div>
+      <div class="tagline">"Anthropic 终端 Coding Agent 行业标杆"</div>
+    </td>
+    <td><span class="stars">140K</span><br><small>SWE-bench 80.9% 第一</small></td>
+    <td><span class="badge closed">Closed</span></td>
+    <td class="arch">Skill + Workflow + Profile<br>Plan → Work → Review<br>6 大内置 Agent<br>三层上下文压缩</td>
+    <td>
+      <ul class="feats">
+        <li>深度重构 / 大型代码库最佳</li>
+        <li>CLAUDE.md 项目级说明</li>
+        <li>Verification Agent 质检</li>
+        <li>Hooks 生命周期钩子</li>
+      </ul>
+    </td>
+    <td>中大型项目深度重构<br>严谨工程闭环 / 专业开发者</td>
+  </tr>
+
+  <tr>
+    <td>
+      <div class="name">🟢 Codex CLI</div>
+      <div class="tagline">"Harness Engineering 发源地"</div>
+    </td>
+    <td><span class="stars">117K</span><br><small>OpenAI</small></td>
+    <td><span class="badge closed">Apache 2.0</span></td>
+    <td class="arch">Rust Runtime<br>Thread/Turn/Item 三层<br>App Server 协议<br><b>R38.6.4: 3 级沙箱自治</b></td>
+    <td>
+      <ul class="feats">
+        <li>云端异步批量任务 ✓ (借鉴自 Prime)</li>
+        <li>0 行手写 100 万行实验</li>
+        <li>审批流 / 命令执行可见</li>
+        <li>SWE-bench Verified 77.3%</li>
+      </ul>
+    </td>
+    <td>OpenAI 生态用户<br>希望异步后台跑任务</td>
+  </tr>
+
+  <tr>
+    <td>
+      <div class="name">🟡 Gemini CLI</div>
+      <div class="tagline">"Google 事件驱动 Agent"</div>
+    </td>
+    <td><span class="stars">106K</span><br><small>Google</small></td>
+    <td><span class="badge oss">Apache 2.0</span></td>
+    <td class="arch">事件驱动调度器<br>Plan Mode 计划模式<br>Policy Engine 策略<br>A2A 远程 Agent</td>
+    <td>
+      <ul class="feats">
+        <li>Gemini 每日免费额度大</li>
+        <li>MCP + A2A 生态完善</li>
+        <li>原生 SDK + Web/IDE 多端</li>
+        <li>Google Cloud 服务集成</li>
+      </ul>
+    </td>
+    <td>深度 Gemini 生态用户<br>需要大量免费调用</td>
+  </tr>
+
+  <tr class="kairos-row">
+    <td>
+      <div class="name">
+        <span class="k-mini">K</span> Kairos Code
+      </div>
+      <div class="tagline">"R38.6.4: 借鉴 Prime + Codex + OpenCode"</div>
+    </td>
+    <td><span class="stars">——</span><br><small>独立 Agent 项目</small></td>
+    <td><span class="badge kairos">CUSTOM</span></td>
+    <td class="arch">Coder ↔ Reviewer 双 Agent<br>Workbench 4 tab Sider<br>Tools 8 tab 面板<br><b>R38.6.4: LongRunning Registry</b><br><b>async subagent handle</b><br><b>/goal 持久目标</b><br><b>/autonomous 预算自治</b></td>
+    <td>
+      <ul class="feats">
+        <li><b>Plan Mode</b> (借鉴 Gemini) — LLM 自动生成 TODO</li>
+        <li><b>Hooks</b> (借鉴 Claude) — 5 生命周期事件 + 桥接</li>
+        <li><b>Memory FTS5</b> (借鉴 Hermes) — 跨会话召回</li>
+        <li><b>Approval 3 档</b> (借鉴 Codex) — suggest/edit/full-auto</li>
+        <li><b>Sandbox 3 档</b> (借鉴 OpenClaw) — 阻断危险命令</li>
+        <li><b>Session Fork</b> (借鉴 OpenCode) — checkpoint 分支</li>
+        <li><b>6 IM 平台</b> (借鉴 OpenClaw) — 飞书/钉钉/企微</li>
+        <li><b>Thread/Turn/Item 事件流</b> (借鉴 Codex)</li>
+        <li><b>Compaction</b> (借鉴 Claude) — 每 10 轮自动</li>
+        <li><b>Trajectory 导出</b> (借鉴 Hermes) — JSONL</li>
+        <li><b>Async subagent</b> (借鉴 Prime) — handle 立即返回</li>
+        <li><b>/goal + /autonomous</b> (借鉴 Prime) — 长任务托管</li>
+      </ul>
+    </td>
+    <td>需要多 Agent 协同<br>飞书/钉钉协同 + 浏览器内嵌<br>国内 LLM 灵活切换</td>
+  </tr>
+
+</tbody>
+</table>
+
+<h2>第二部分 · Kairos Code 优缺点 (R38.6.4 后)</h2>
+
+<table class="compare">
+<thead>
+  <tr>
+    <th class="col-narrow">维度</th>
+    <th class="col-wide" style="color: #86efac;">✅ 优势 (vs 其他 6 款)</th>
+    <th class="col-wide" style="color: #fca5a5;">❌ 短板 (vs 其他 6 款)</th>
+    <th class="col-narrow">改进优先级</th>
+  </tr>
+</thead>
+<tbody>
+
+  <tr>
+    <td><b>易用性</b></td>
+    <td>
+      <ul class="feats">
+        <li>2 栏 UI (sidebar + chat),<b>没有 Workbench 多 tab 干扰</b></li>
+        <li>Web UI 简单,功能全在 chat 消息流里</li>
+        <li>Settings 缩到 3 tab (Provider/Mode/About)</li>
+        <li>无 CLI 学习曲线,直接点</li>
+      </ul>
+    </td>
+    <td>
+      <ul class="feats">
+        <li>没有 OpenCode 那样的 inline 编辑器</li>
+        <li>没 Prime Agent 的 /goal /autonomous <b>CLI 命令</b>(只有 API)</li>
+      </ul>
+    </td>
+    <td><span class="verdict v-mid">P1</span></td>
+  </tr>
+
+  <tr>
+    <td><b>多 Agent 协同</b></td>
+    <td>
+      <ul class="feats">
+        <li><b>async subagent handle</b> (借鉴 Prime) — 父 Agent 不阻塞</li>
+        <li>subagent_status / subagent_cancel API 可轮询</li>
+        <li>Coder ↔ Reviewer 内置双 Agent 循环</li>
+      </ul>
+    </td>
+    <td>
+      <ul class="feats">
+        <li><b>没 Hermes/OpenClaw 那样的子 Agent 跨会话消息</b></li>
+        <li>子 Agent 不能持久化跨天会话</li>
+        <li>没 Prime Agent 的 IPython REPL,工具调用是一次性 JSON</li>
+      </ul>
+    </td>
+    <td><span class="verdict v-mid">P1</span></td>
+  </tr>
+
+  <tr>
+    <td><b>长任务</b></td>
+    <td>
+      <ul class="feats">
+        <li><b>/goal 持久目标</b> (借鉴 Prime) — 跨回合不丢</li>
+        <li><b>/autonomous 预算模式</b> (借鉴 Prime) — turn/token/time + quality gate</li>
+        <li>Auto checkpoint 每文件编辑前</li>
+        <li>Compaction 每 10 轮自动</li>
+      </ul>
+    </td>
+    <td>
+      <ul class="feats">
+        <li><b>没 Prime Agent 的 Daemon 模式</b> — 浏览器关就停</li>
+        <li>LongRunningRegistry 进程内 dict,<b>重启后 handle 失效</b></li>
+        <li>autonomous 提交后无 background worker 自动消费</li>
+      </ul>
+    </td>
+    <td><span class="verdict v-bad">P0</span></td>
+  </tr>
+
+  <tr>
+    <td><b>模型灵活性</b></td>
+    <td>
+      <ul class="feats">
+        <li>17 个 LLM provider 预设 (含 MiniMax、Qwen、GLM、Mistral、xAI 等)</li>
+        <li>完整 OpenAI 兼容协议 + Anthropic 兼容协议</li>
+        <li><b>模型字段填错也能跑</b> (fallback to default),不锁用户</li>
+      </ul>
+    </td>
+    <td>
+      <ul class="feats">
+        <li>没 Codex 那种 provider 强校验</li>
+        <li>需要用户自己懂 model id 命名</li>
+      </ul>
+    </td>
+    <td><span class="verdict v-good">P2</span></td>
+  </tr>
+
+  <tr>
+    <td><b>工具 / 扩展</b></td>
+    <td>
+      <ul class="feats">
+        <li><b>21 个 MCP server 预设</b> (含 context7、playwright、postgres、redis)</li>
+        <li><b>20 个 plugin 预设</b> (Anthropic + EveryInc + wshobson)</li>
+        <li><b>43 个 skill 预设</b> (Anthropic + obra + community)</li>
+        <li>38 个 borrowed REST endpoint</li>
+      </ul>
+    </td>
+    <td>
+      <ul class="feats">
+        <li>没 OpenClaw / Hermes 的 skill 自动创建</li>
+        <li>需要用户手动跑 install script</li>
+        <li>UI 不显示 MCP/plugin 列表 (高级功能靠 API)</li>
+      </ul>
+    </td>
+    <td><span class="verdict v-good">P2</span></td>
+  </tr>
+
+  <tr>
+    <td><b>记忆 / 自改进</b></td>
+    <td>
+      <ul class="feats">
+        <li>FTS5 跨会话记忆,自动注入 Coder system_prompt</li>
+        <li>Memory 4 op API (remember/recall/forget/list)</li>
+        <li>Auto checkpoint 写文件前快照</li>
+      </ul>
+    </td>
+    <td>
+      <ul class="feats">
+        <li><b>没 Prime Agent 的 Continual Harness</b> — Agent 不能 CRUD 自己的 prompt/skill</li>
+        <li>没 Hermes 那样的自学习循环 (Agent 不会自动改进自己)</li>
+        <li>Memory 不会被 LLM 主动管理 (只通过 API)</li>
+      </ul>
+    </td>
+    <td><span class="verdict v-mid">P1</span></td>
+  </tr>
+
+  <tr>
+    <td><b>安全 / 沙箱</b></td>
+    <td>
+      <ul class="feats">
+        <li>3 档 sandbox policy (off/standard/strict)</li>
+        <li>real-time deny-pattern 拦截 rm -rf /</li>
+        <li>Backend terminal tool 自带 25+ deny patterns</li>
+      </ul>
+    </td>
+    <td>
+      <ul class="feats">
+        <li><b>没 Prime Agent 那样的 worker / kernel 进程隔离</b></li>
+        <li>在 Windows / 非 Linux 跑没 Landlock 之类 OS 级沙箱</li>
+        <li>用真 OS 权限跑 LLM 生成的代码,风险大</li>
+      </ul>
+    </td>
+    <td><span class="verdict v-mid">P1</span></td>
+  </tr>
+
+  <tr>
+    <td><b>性能 / 跑分</b></td>
+    <td>
+      <ul class="feats">
+        <li>对话 / 简单任务非常快 (intelligent intent classification)</li>
+        <li>MAX_TOOL_TURNS=200 (Prime Agent 25 限制早已移除)</li>
+      </ul>
+    </td>
+    <td>
+      <ul class="feats">
+        <li><b>ARC-AGI-3 95.5% (Prime Agent) 远超我们</b> (我们没公开 benchmark)</li>
+        <li>Prime Agent 的 95.5% 来自 harness 工程优化,模型能 clone 这套</li>
+        <li>DeepSeek Harness 这类竞品在 ARC-AGI-3 上 >90%</li>
+      </ul>
+    </td>
+    <td><span class="verdict v-bad">P0</span></td>
+  </tr>
+
+  <tr>
+    <td><b>跨天续跑</b></td>
+    <td>
+      <ul class="feats">
+        <li>/goal 让目标跨回合持久</li>
+        <li>Auto checkpoint 让文件改动可回滚</li>
+        <li>Compaction 让上下文跨长任务不爆</li>
+      </ul>
+    </td>
+    <td>
+      <ul class="feats">
+        <li><b>没 Prime Agent 的 Daemon 后台 worker</b></li>
+        <li>浏览器关 = agent 停 (关键短板)</li>
+        <li>long_running 是进程内 dict,重启失效</li>
+      </ul>
+    </td>
+    <td><span class="verdict v-bad">P0</span></td>
+  </tr>
+
+</tbody>
+</table>
+
+<div class="footer">
+  <div class="legend">
+    <span class="oss-c">开源 / 可审计</span>
+    <span class="closed-c">闭源 / 模型厂商旗舰</span>
+    <span class="kairos-c">Kairos Code (本项目)</span>
+  </div>
+  <div style="margin-top: 12px;">
+    评级: <span class="verdict v-good">P2 优势</span> 可长期保持 ·
+    <span class="verdict v-mid">P1 短板</span> 应在下个 sprint 修 ·
+    <span class="verdict v-bad">P0 关键</span> 必须尽快修
+  </div>
+  <div style="margin-top: 8px;">
+    <b>关键 P0 结论</b>:
+    ① <b>Daemon 后台</b> (学 Prime Agent)— 浏览器关也能继续跑
+    ② <b>Arc-AGI 跑分 baseline</b> (学 DeepSeek/Prime)— 公开 harness 优化
+    ③ <b>autonomous worker</b> — 后台消费 job queue
+  </div>
+  <div style="margin-top: 6px;">
+    数据来源: GitHub Trending 2026-08-24 · PrimeIntellect-ai/prime-agent README
+  </div>
+</div>
+
+</body>
+</html>

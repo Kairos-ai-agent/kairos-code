@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "comment": "R38.6 §27: curated MCP server registry. Curated from ~6000+ public MCPs (Anthropic official + top community picks). To run an MCP, the user needs the required env_keys set (e.g. GITHUB_PERSONAL_ACCESS_TOKEN, BRAVE_API_KEY).",
+  "version": 2,
+  "comment": "R38.6.3: comprehensive MCP registry. 20 servers covering core dev, VCS, web, browser, DB, observability, AI, productivity.",
   "servers": [
     {
       "name": "filesystem",
@@ -28,7 +28,7 @@
         "--repository",
         "."
       ],
-      "description": "git log, diff, show, status, branch, blame via MCP. Essential for any code-review workflow.",
+      "description": "git log/diff/show/status/branch/blame via MCP.",
       "source": "https://github.com/modelcontextprotocol/servers",
       "stars": "8.5k",
       "official": true
@@ -45,9 +45,25 @@
       "env_keys": [
         "GITHUB_PERSONAL_ACCESS_TOKEN"
       ],
-      "description": "Issues, PRs, repos, code search via the GitHub API. Required for any PR-review or repo-management flow.",
+      "description": "Issues, PRs, repos, code search via the GitHub API.",
       "source": "https://github.com/modelcontextprotocol/servers",
       "stars": "15.2k",
+      "official": true
+    },
+    {
+      "name": "gitlab",
+      "category": "vcs",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": [
+        "mcp-server-gitlab"
+      ],
+      "env_keys": [
+        "GITLAB_PERSONAL_ACCESS_TOKEN"
+      ],
+      "description": "GitLab mirror of the GitHub MCP.",
+      "source": "https://github.com/modelcontextprotocol/servers",
+      "stars": "8.5k",
       "official": true
     },
     {
@@ -58,20 +74,7 @@
       "args": [
         "mcp-server-fetch"
       ],
-      "description": "Fetch and convert web content to markdown. Replaces the old 'WebFetch' tool.",
-      "source": "https://github.com/modelcontextprotocol/servers",
-      "stars": "8.5k",
-      "official": true
-    },
-    {
-      "name": "time",
-      "category": "utilities",
-      "transport": "stdio",
-      "command": "uvx",
-      "args": [
-        "mcp-server-time"
-      ],
-      "description": "Current time / timezone conversion. Tiny but useful for any time-sensitive task.",
+      "description": "Fetch and convert web content to markdown.",
       "source": "https://github.com/modelcontextprotocol/servers",
       "stars": "8.5k",
       "official": true
@@ -88,21 +91,21 @@
       "env_keys": [
         "BRAVE_API_KEY"
       ],
-      "description": "Privacy-focused web search via the Brave API. Better than scraping for general queries.",
+      "description": "Privacy-focused web search via the Brave API.",
       "source": "https://github.com/modelcontextprotocol/servers",
       "stars": "8.5k",
       "official": true
     },
     {
-      "name": "sequential-thinking",
-      "category": "utilities",
+      "name": "puppeteer",
+      "category": "browser",
       "transport": "stdio",
       "command": "npx",
       "args": [
         "-y",
-        "@modelcontextprotocol/server-sequential-thinking"
+        "@modelcontextprotocol/server-puppeteer"
       ],
-      "description": "Step-by-step reasoning MCP — useful for complex multi-step planning problems.",
+      "description": "Browser automation via Puppeteer: navigate, click, screenshot.",
       "source": "https://github.com/modelcontextprotocol/servers",
       "stars": "8.5k",
       "official": true
@@ -116,7 +119,7 @@
         "-y",
         "@playwright/mcp@latest"
       ],
-      "description": "Browser automation: navigate, click, screenshot, fill forms. Top community pick (11.6k stars).",
+      "description": "Browser automation: navigate, click, screenshot, fill forms. Top community pick.",
       "source": "https://github.com/microsoft/playwright-mcp",
       "stars": "11.6k",
       "official": false
@@ -130,21 +133,198 @@
         "-y",
         "@upstash/context7-mcp"
       ],
-      "description": "Fetches up-to-date library docs / code examples directly into context. Top-rated (61k stars).",
+      "description": "Fetches up-to-date library docs / code examples directly into context. Top-rated community pick.",
       "source": "https://github.com/upstash/context7",
       "stars": "61k",
       "official": false
     },
     {
-      "name": "puppeteer",
-      "category": "browser",
+      "name": "sequential-thinking",
+      "category": "utilities",
       "transport": "stdio",
       "command": "npx",
       "args": [
         "-y",
-        "@modelcontextprotocol/server-puppeteer"
+        "@modelcontextprotocol/server-sequential-thinking"
       ],
-      "description": "Alternative to Playwright. We pick Playwright as the primary browser MCP, so this is here as a fallback. Use it if Playwright fails to install.",
+      "description": "Step-by-step reasoning MCP.",
+      "source": "https://github.com/modelcontextprotocol/servers",
+      "stars": "8.5k",
+      "official": true
+    },
+    {
+      "name": "time",
+      "category": "utilities",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": [
+        "mcp-server-time"
+      ],
+      "description": "Current time / timezone conversion.",
+      "source": "https://github.com/modelcontextprotocol/servers",
+      "stars": "8.5k",
+      "official": true
+    },
+    {
+      "name": "memory",
+      "category": "utilities",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ],
+      "description": "Knowledge graph memory MCP. Persistent entity-relation store.",
+      "source": "https://github.com/modelcontextprotocol/servers",
+      "stars": "8.5k",
+      "official": true
+    },
+    {
+      "name": "postgres",
+      "category": "database",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres"
+      ],
+      "env_keys": [
+        "POSTGRES_CONNECTION_STRING"
+      ],
+      "description": "Read-only Postgres query MCP.",
+      "source": "https://github.com/modelcontextprotocol/servers",
+      "stars": "8.5k",
+      "official": true
+    },
+    {
+      "name": "sqlite",
+      "category": "database",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sqlite"
+      ],
+      "description": "Local SQLite query MCP.",
+      "source": "https://github.com/modelcontextprotocol/servers",
+      "stars": "8.5k",
+      "official": true
+    },
+    {
+      "name": "redis",
+      "category": "database",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": [
+        "mcp-server-redis"
+      ],
+      "env_keys": [
+        "REDIS_URL"
+      ],
+      "description": "Redis read/write MCP.",
+      "source": "https://github.com/modelcontextprotocol/servers",
+      "stars": "8.5k",
+      "official": true
+    },
+    {
+      "name": "sentry",
+      "category": "observability",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@sentry/mcp-server"
+      ],
+      "env_keys": [
+        "SENTRY_AUTH_TOKEN"
+      ],
+      "description": "Sentry error tracking MCP. Pull production errors / stack traces into context.",
+      "source": "https://github.com/getsentry/sentry-mcp",
+      "stars": "1.2k",
+      "official": false
+    },
+    {
+      "name": "cloudflare",
+      "category": "cloud",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@cloudflare/mcp-server-cloudflare"
+      ],
+      "env_keys": [
+        "CLOUDFLARE_API_TOKEN"
+      ],
+      "description": "Manage Cloudflare Workers / Pages / KV / R2 from the agent.",
+      "source": "https://github.com/cloudflare/mcp-server-cloudflare",
+      "stars": "2.1k",
+      "official": false
+    },
+    {
+      "name": "aws-kb",
+      "category": "cloud",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": [
+        "mcp-server-aws-kb"
+      ],
+      "env_keys": [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY"
+      ],
+      "description": "Query AWS Bedrock Knowledge Bases.",
+      "source": "https://github.com/modelcontextprotocol/servers",
+      "stars": "8.5k",
+      "official": true
+    },
+    {
+      "name": "notion",
+      "category": "productivity",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@notionhq/notion-mcp-server"
+      ],
+      "env_keys": [
+        "NOTION_TOKEN"
+      ],
+      "description": "Read/write Notion pages, databases, blocks.",
+      "source": "https://github.com/makenotion/notion-mcp",
+      "stars": "1.5k",
+      "official": false
+    },
+    {
+      "name": "linear",
+      "category": "productivity",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@linearapp/linear-mcp-server"
+      ],
+      "env_keys": [
+        "LINEAR_API_KEY"
+      ],
+      "description": "Manage Linear issues, projects, cycles.",
+      "source": "https://github.com/linear/linear-mcp",
+      "stars": "0.6k",
+      "official": false
+    },
+    {
+      "name": "slack",
+      "category": "productivity",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-slack"
+      ],
+      "env_keys": [
+        "SLACK_BOT_TOKEN",
+        "SLACK_TEAM_ID"
+      ],
+      "description": "Read/send Slack messages, search channels.",
       "source": "https://github.com/modelcontextprotocol/servers",
       "stars": "8.5k",
       "official": true

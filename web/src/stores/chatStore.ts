@@ -107,6 +107,54 @@ export const useChatStore = create<ChatStore>()(
           if (state.currentMessages.some((x) => x.id === m.id)) {
             return state;
           }
+          // R38.6.4: second-layer dedupe by content + sender within
+          // a 5-minute window. The component layer (Chat.tsx) checks
+          // the same thing, but the check there reads
+          // ``useChatStore.getState()`` — if the handler is invoked
+          // twice for the same event (React StrictMode dev
+          // double-invoke, two WS connections, or a single
+          // invocation that races with a re-render), both calls may
+          // run before the store has been updated, and both would
+          // append. The store's set callback is atomic, so we re-check
+          // here.
+          //
+          // The 5-minute window is wide enough to catch any racing
+          // append (the LLM round-trip is seconds, not minutes) but
+          // narrow enough that a new message with the same content
+          // (e.g. the user asking "OK" twice) still gets a new bubble.
+          const mContent = typeof m.content === 'string'
+                             ? m.content.trim() : '';
+          const mSender = (m.sender || '').toLowerCase();
+          // Accept short form ('coder') and full agent_id
+          // ('63bebf36.coder') — message bus uses full, REST uses short.
+          const isAgentBubble = mSender === 'agent' || mSender === 'coder'
+                                || mSender === 'assistant'
+                                || mSender.endsWith('.coder')
+                                || mSender.endsWith('.reviewer')
+                                || mSender.includes('coder')
+                                || mSender.includes('reviewer');
+          if (mContent && isAgentBubble) {
+            const now = Date.now() / 1000;
+            const dup = state.currentMessages.some((x) => {
+              const xContent = typeof x.content === 'string'
+                                 ? x.content.trim() : '';
+              if (xContent !== mContent) return false;
+              // Accept short form ('coder') and full agent_id
+              // ('63bebf36.coder') — the message bus uses full
+              // agent_id, REST path uses short. Both refer to the
+              // same agent.
+              const xs = (x.sender || '').toLowerCase();
+              const xIsAgent = xs === 'agent' || xs === 'coder'
+                                || xs === 'assistant'
+                                || xs.endsWith('.coder')
+                                || xs.endsWith('.reviewer')
+                                || xs.includes('coder')
+                                || xs.includes('reviewer');
+              if (!xIsAgent) return false;
+              return Math.abs((x.timestamp || 0) - now) < 300;  // 5 min
+            });
+            if (dup) return state;
+          }
           // Cap to 500 messages to keep the DOM small.
           const next = [...state.currentMessages, m];
           return { currentMessages: next.length > 500
@@ -202,16 +250,28 @@ export const useChatStore = create<ChatStore>()(
     {
       name: 'kairos-chat',
       storage: createJSONStorage(() => localStorage),
-      // Only persist the project-level state. Live state (sessions,
-      // messages, sidebar collapsed) is per-session / per-render and
-      // would cause weird leakage if cached.
+      // R38.6.4: persist the current chat thread + session id so
+      // the user's conversation survives a browser refresh. The
+      // user reported "刷新会丢失 chat 记录" — the previous
+      // partialize only kept projects / currentProject, so a
+      // Ctrl+R wiped the in-memory messages.
+      //
+      // We cap the persisted thread to the last 200 messages per
+      // session so a long conversation doesn't blow past the
+      // 5 MB localStorage budget (each message is ~200-500 bytes
+      // JSON, 200 × 500 = ~100 KB, well under the limit). Older
+      // messages are still in the backend's messages table; if the
+      // user scrolls back the chat should fetch from there, not
+      // from localStorage.
       partialize: (s) => ({
         projects: s.projects,
         currentProject: s.currentProject,
+        currentSessionId: s.currentSessionId,
+        currentMessages: s.currentMessages.slice(-200),
       }),
       // Bump this when the shape of the cached state changes
       // incompatibly, to force a one-time re-init of the cache.
-      version: 1,
+      version: 2,
     },
   ),
 );

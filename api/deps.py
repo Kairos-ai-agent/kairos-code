@@ -19,7 +19,12 @@ from kairos.llm.base import LLMConfig
 # Initialize core components (singleton pattern)
 config_path = Path(__file__).parent.parent / "kairos" / "config" / "models_config.yaml"
 model_router = ModelRouter(config_path=config_path)
-orchestrator = Orchestrator(model_router=model_router)
+# workspace_base is anchored to the repo (settings.workspace_dir), not
+# CWD-relative — the backend may be launched from any directory.
+orchestrator = Orchestrator(
+    model_router=model_router,
+    workspace_base=settings.workspace_dir,
+)
 
 
 def get_orchestrator() -> Orchestrator:
@@ -40,7 +45,7 @@ def get_review_engine() -> ReviewEngine:
     Tries custom models from data/settings.json first (user's actual config),
     then falls back to env-based default provider.
     """
-    settings_file = Path("./data/settings.json")
+    settings_file = settings.data_dir / "settings.json"
     if settings_file.exists():
         try:
             s = json.loads(settings_file.read_text(encoding="utf-8"))

@@ -5,7 +5,7 @@ Reference: https://modelcontextprotocol.io — 2025-11-25 spec
 
 MCP is the de-facto standard for connecting AI agents to external
 data sources (databases, GitHub, Linear, Figma, custom tools). Both
-Codex and Claude Code ship first-class MCP clients; without MCP,
+the cloud task and the agentic CLI ship first-class MCP clients; without MCP,
 Kairos is locked out of the entire ecosystem.
 
 This module implements the **client** side only. A server is a

@@ -1,6 +1,6 @@
 """Three-tier memory hierarchy.
 
-Following Claude Code's model: memories are scoped to a
+Following the agentic CLI's model: memories are scoped to a
 *lifetime*, and each tier is queried / persisted differently:
 
   - **user** — follows the user across *all* projects. Persisted

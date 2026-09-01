@@ -20,7 +20,7 @@ We deliberately keep extraction simple: pattern matching on
 user phrases. Calling an LLM to do this is overkill for the
 MVP and would itself be a non-deterministic subsystem.
 
-Mirrors Claude Code's "AutoMemory" feature described in their
+Mirrors the agentic CLI's "AutoMemory" feature described in their
 2026 release notes.
 """
 from __future__ import annotations

@@ -1,7 +1,7 @@
 """Approval modes: how much autonomy the agent has.
 
-Mirrors Codex's three-mode ladder (Suggest / Edit / Full-Auto)
-and Claude Code's `permissionMode` field. The mode is a single
+Mirrors the cloud task's three-mode ladder (Suggest / Edit / Full-Auto)
+and the agentic CLI's `permissionMode` field. The mode is a single
 value attached to the agent (or to a single `kairos exec` run);
 it determines what happens when the permission policy says
 "ask" (or the default).

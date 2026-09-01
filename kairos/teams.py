@@ -1,6 +1,6 @@
 """Agent Teams — coordinated multi-agent execution with a shared task board.
 
-Mirrors the Codex-Harness / Claude Code "Agent Teams" feature: a single
+Mirrors the the cloud task-Harness / the agentic CLI "Agent Teams" feature: a single
 TeamLead agent decomposes a high-level goal into independent sub-tasks,
 then dispatches them to N Worker agents that run in parallel, each in
 its own git worktree for filesystem isolation. Workers report progress

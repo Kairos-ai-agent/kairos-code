@@ -2,7 +2,7 @@
 
 The existing :mod:`kairos.skills` loader matches skills by
 keyword heuristics — fast but limited. As the skill library
-grows (R9 shipped 14 superpowers skills and the team is
+grows (R9 shipped 14 the skill library skills and the team is
 encouraged to write more), a real full-text index becomes
 useful: "find me the skill that mentions pytest fixtures"
 should rank the relevant skills above the irrelevant ones.

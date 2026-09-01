@@ -25,6 +25,7 @@ import {
 } from '@ant-design/icons';
 
 import api from '../api/client';
+import { formatError } from '../utils/formatError';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 
 interface CogsResponse {
@@ -69,7 +70,7 @@ const CogsPanel: React.FC = () => {
       setData(r.data);
       setLastRefresh(Date.now());
     } catch (e: any) {
-      setErr(e?.response?.data?.detail || e?.message || 'Failed to load COGS metrics');
+      setErr(formatError(e, 'Failed to load COGS metrics'));
     } finally {
       setLoading(false);
     }
@@ -255,3 +256,4 @@ const CogsPanel: React.FC = () => {
 };
 
 export default CogsPanel;
+

@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Kairos Code v4 vs Top AI Coding Agents - 2026 (R38.6.4)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+         background: #0a0a0a; color: #e5e5e5; padding: 22px; width: 1560px; }
+  h1 { font-size: 26px; font-weight: 700; text-align: center; margin-bottom: 4px; color: #fff; }
+  h1 .k-icon { display: inline-block; width: 32px; height: 32px; background: #facc15;
+             color: #000; border-radius: 7px; text-align: center; line-height: 32px;
+             font-weight: 900; margin-right: 8px; vertical-align: middle; }
+  .sub { text-align: center; font-size: 12px; color: #888; margin-bottom: 18px; }
+  .sub b { color: #facc15; }
+  h2 { font-size: 15px; font-weight: 700; color: #fff; margin: 18px 0 8px 0;
+       padding-left: 8px; border-left: 3px solid #facc15; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0;
+          font-size: 11.5px; background: #141414; border-radius: 10px; overflow: hidden; }
+  thead th { background: #1f1f1f; color: #aaa; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.5px; padding: 9px 8px; text-align: left; font-size: 10.5px;
+            border-bottom: 1px solid #2a2a2a; }
+  tbody td { padding: 10px 8px; border-bottom: 1px solid #1f1f1f; vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #181818; }
+  .name { font-size: 13.5px; font-weight: 700; color: #fff; display: flex;
+          align-items: center; gap: 6px; margin-bottom: 3px; }
+  .badge { display: inline-block; padding: 2px 7px; border-radius: 10px;
+           font-size: 10px; font-weight: 600; }
+  .badge.oss { background: #14532d; color: #86efac; }
+  .badge.closed { background: #3f1d1d; color: #fca5a5; }
+  .badge.kairos { background: #facc15; color: #000; }
+  .stars { font-size: 17px; font-weight: 700; color: #facc15; }
+  .stars small { font-size: 10.5px; color: #888; font-weight: 400; }
+  .arch { font-family: "SF Mono", Consolas, monospace; font-size: 10px;
+          color: #c4b5fd; line-height: 1.5; }
+  ul.feats { list-style: none; padding: 0; }
+  ul.feats li { padding: 1px 0 1px 11px; position: relative; font-size: 10.5px;
+              color: #d4d4d4; line-height: 1.4; }
+  ul.feats li::before { content: "\25B8"; position: absolute; left: 0; color: #22d3ee; }
+  tr.kairos-row { background: linear-gradient(90deg, rgba(250, 204, 21, 0.08), transparent); }
+  tr.kairos-row:hover { background: linear-gradient(90deg, rgba(250, 204, 21, 0.12), rgba(250, 204, 21, 0.04)); }
+  tr.kairos-row td:first-child { border-left: 3px solid #facc15; }
+  .k-mini { display: inline-block; width: 20px; height: 20px; background: #facc15;
+            color: #000; border-radius: 5px; text-align: center; line-height: 20px;
+            font-weight: 900; font-size: 12px; }
+  table.compare th { background: #1c1810; }
+  .col-narrow { width: 14%; }
+  .col-wide { width: 32%; }
+  .v-good { background: #14532d; color: #86efac; padding: 2px 6px;
+           border-radius: 6px; display: inline-block; font-weight: 700; }
+  .v-mid  { background: #422006; color: #fcd34d; padding: 2px 6px;
+           border-radius: 6px; display: inline-block; font-weight: 700; }
+  .v-bad  { background: #3f1d1d; color: #fca5a5; padding: 2px 6px;
+           border-radius: 6px; display: inline-block; font-weight: 700; }
+  .footer { margin-top: 16px; text-align: center; font-size: 11px;
+            color: #666; line-height: 1.6; }
+  .footer b { color: #facc15; }
+  .legend { display: flex; gap: 18px; justify-content: center;
+            margin-top: 6px; font-size: 11px; color: #888; }
+  .legend span::before { content: "\25A0"; margin-right: 4px; }
+  .legend .oss-c::before { color: #86efac; }
+  .legend .closed-c::before { color: #fca5a5; }
+  .legend .kairos-c::before { color: #facc15; }
+</style>
+</head>
+<body>
+<h1><span class="k-icon">K</span> Kairos Code v4 vs Top AI Coding Agents - 2026</h1>
+<div class="sub">R38.6.4: 借鉴 Prime Agent + DeepSeek Harness 后的优缺点对比 - 数据截止 2026-08-31</div>
+
+<h2>第一部分 - 全景对比 (7 款主流 Agent)</h2>
+<table>
+<thead>
+<tr><th style="width: 14%;">项目</th><th style="width: 9%;">Stars</th><th style="width: 7%;">协议</th>
+    <th style="width: 19%;">架构 / 长任务支持</th><th style="width: 28%;">差异化特性</th>
+    <th style="width: 23%;">适合谁</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td><div class="name">OpenClaw</div><div class="tagline">"Your own personal AI assistant."</div></td>
+  <td><span class="stars">387K</span><br><small>个人 Agent 网关</small></td>
+  <td><span class="badge oss">MIT</span></td>
+  <td class="arch">常驻 Gateway<br>50+ 平台路由<br>Session Lane 隔离</td>
+  <td><ul class="feats"><li>跨平台消息路由</li><li>MEMORY.md 长期记忆</li>
+       <li>ClawHub 44K+ 技能市场</li><li>Sandbox 沙箱隔离</li></ul></td>
+  <td>跨平台个人 AI 管家<br>愿意自托管 + 配权限</td>
+</tr>
+<tr>
+  <td><div class="name">Hermes Agent</div><div class="tagline">"The agent that grows with you."</div></td>
+  <td><span class="stars">235K</span><br><small>NousResearch</small></td>
+  <td><span class="badge oss">Open</span></td>
+  <td class="arch">自学习循环<br>FTS5 + LLM 记忆<br>RL 轨迹导出</td>
+  <td><ul class="feats"><li>用得越多越聪明</li><li>跨会话 FTS5 全文检索</li>
+       <li>6 种执行环境 + Cron</li><li>运行轨迹 -> 训练数据</li></ul></td>
+  <td>关注 Agent 自我进化<br>研究型 / RL 数据飞轮</td>
+</tr>
+<tr>
+  <td><div class="name">OpenCode</div><div class="tagline">"The open source coding agent."</div></td>
+  <td><span class="stars">200K</span><br><small>Anomaly</small></td>
+  <td><span class="badge oss">MIT</span></td>
+  <td class="arch">Client-Server 分离<br>OpenAPI + SDK<br>LSP 集成</td>
+  <td><ul class="feats"><li>多模型中立 (Claude/GPT/Gemini/Qwen)</li>
+       <li>权限管控 / 沙箱安全</li><li>会话分支 Fork</li><li>隐私优先</li></ul></td>
+  <td>不愿绑定任何模型厂商<br>重视数据隐私</td>
+</tr>
+<tr>
+  <td><div class="name">Claude Code</div><div class="tagline">"Anthropic 终端 Agent 行业标杆"</div></td>
+  <td><span class="stars">140K</span><br><small>SWE-bench 80.9% 第一</small></td>
+  <td><span class="badge closed">Closed</span></td>
+  <td class="arch">Skill + Workflow + Profile<br>Plan - Work - Review</td>
+  <td><ul class="feats"><li>深度重构 / 大型代码库最佳</li>
+       <li>CLAUDE.md 项目级说明</li><li>Verification Agent 质检</li>
+       <li>Hooks 生命周期钩子</li></ul></td>
+  <td>中大型项目深度重构<br>严谨工程闭环</td>
+</tr>
+<tr>
+  <td><div class="name">Codex CLI</div><div class="tagline">"Harness Engineering 发源地"</div></td>
+  <td><span class="stars">117K</span><br><small>OpenAI</small></td>
+  <td><span class="badge closed">Apache 2.0</span></td>
+  <td class="arch">Rust Runtime<br>Thread/Turn/Item 三层</td>
+  <td><ul class="feats"><li>云端异步批量任务 (借鉴 Prime)</li>
+       <li>0 行手写 100 万行实验</li><li>SWE-bench Verified 77.3%</li></ul></td>
+  <td>OpenAI 生态用户<br>希望异步后台跑任务</td>
+</tr>
+<tr>
+  <td><div class="name">Gemini CLI</div><div class="tagline">"Google 事件驱动 Agent"</div></td>
+  <td><span class="stars">106K</span><br><small>Google</small></td>
+  <td><span class="badge oss">Apache 2.0</span></td>
+  <td class="arch">事件驱动调度器<br>Plan Mode 计划模式</td>
+  <td><ul class="feats"><li>Gemini 每日免费额度大</li>
+       <li>MCP + A2A 生态完善</li><li>Google Cloud 服务集成</li></ul></td>
+  <td>深度 Gemini 生态用户<br>需要大量免费调用</td>
+</tr>
+
+<tr class="kairos-row">
+  <td><div class="name"><span class="k-mini">K</span> Kairos Code</div>
+      <div class="tagline">"R38.6.4: 借鉴 Prime + Codex + Hermes"</div></td>
+  <td><span class="stars">--</span><br><small>独立 Agent 项目</small></td>
+  <td><span class="badge kairos">CUSTOM</span></td>
+  <td class="arch">Coder <-> Reviewer 双 Agent<br>Workbench 4 tab Sider<br>Tools 5 tab 面板<br>R38.6.4: LongRunning Registry<br>async subagent handle<br>/goal 持久目标<br>/autonomous 预算自治<br>Daemon Supervisor + heartbeat<br>Continual Harness CRUD<br>A2A 跨 Agent 消息<br>subprocess sandbox 隔离<br>slash 命令 (/goal /autonomous)</td>
+  <td><ul class="feats">
+       <li>Plan Mode (借鉴 Gemini) - LLM 自动生成 TODO</li>
+       <li>Hooks (借鉴 Claude) - 5 生命周期事件 + 桥接</li>
+       <li>Memory FTS5 (借鉴 Hermes) - 跨会话召回</li>
+       <li>Approval 3 档 (借鉴 Codex) - suggest/edit/full-auto</li>
+       <li>Sandbox 3 档 (借鉴 OpenClaw) - 阻断危险命令</li>
+       <li>Session Fork (借鉴 OpenCode) - checkpoint 分支</li>
+       <li>6 IM 平台 (借鉴 OpenClaw) - 飞书/钉钉/企微</li>
+       <li>Thread/Turn/Item 事件流 (借鉴 Codex)</li>
+       <li>Compaction (借鉴 Claude) - 每 10 轮自动</li>
+       <li>Trajectory 导出 (借鉴 Hermes) - JSONL</li>
+       <li>Async subagent (借鉴 Prime) - handle 立即返回</li>
+       <li>/goal + /autonomous (借鉴 Prime) - 长任务托管</li>
+       <li>Daemon + heartbeat (借鉴 Prime) - 浏览器关也能跑</li>
+       <li>Continual Harness (借鉴 Prime) - Agent 自 CRUD prompt</li>
+       <li>A2A 跨 Agent 消息 (借鉴 Prime) - send/inbox</li></ul></td>
+  <td>需要多 Agent 协同<br>飞书/钉钉协同 + 浏览器内嵌<br>国内 LLM 灵活切换</td>
+</tr>
+</tbody>
+</table>
+
+<h2>第二部分 - Kairos Code 优缺点 (R38.6.4 后,7 个维度)</h2>
+<table class="compare">
+<thead>
+<tr><th class="col-narrow">维度</th>
+    <th class="col-wide" style="color: #86efac;">OK 优势 (vs 其他 6 款)</th>
+    <th class="col-wide" style="color: #fca5a5;">X 短板 (vs 其他 6 款)</th>
+    <th class="col-narrow">改进优先级</th></tr>
+</thead>
+<tbody>
+<tr><td><b>易用性</b></td>
+  <td><ul class="feats"><li>2 栏 UI (sidebar + chat),没 Workbench 多 tab 干扰</li>
+       <li>Web UI 简单,功能全在 chat 消息流里</li>
+       <li>Settings 缩到 3 tab (Provider/Mode/About)</li>
+       <li>无 CLI 学习曲线,直接点</li>
+       <li>R38.6.4: slash 命令 (/goal /autonomous /forget /remember) - 不离开 chat 就能操作</li></ul></td>
+  <td><ul class="feats"><li>没 OpenCode 那样的 inline 编辑器</li></ul></td>
+  <td><span class="v-good">P2</span></td>
+</tr>
+<tr><td><b>多 Agent 协同</b></td>
+  <td><ul class="feats"><li>async subagent handle (借鉴 Prime) - 父 Agent 不阻塞</li>
+       <li>subagent_status / subagent_cancel API 可轮询</li>
+       <li>Coder <-> Reviewer 内置双 Agent 循环</li>
+       <li>A2A 跨 Agent 消息 (借鉴 Prime) - send/inbox 端到端跑通</li></ul></td>
+  <td><ul class="feats"><li>还没用 Prime 的 IPython REPL,工具调用是一次性 JSON</li>
+       <li>子 Agent 不能持久化跨天会话 (daemon 模式刚做,还没跑通实例)</li></ul></td>
+  <td><span class="v-mid">P1</span></td>
+</tr>
+<tr><td><b>长任务</b></td>
+  <td><ul class="feats"><li>/goal 持久目标 (借鉴 Prime) - 跨回合不丢</li>
+       <li>/autonomous 预算模式 (借鉴 Prime) - turn/token/time + quality gate</li>
+       <li>Async subagent handle (借鉴 Prime) - fire-and-forget</li>
+       <li>Daemon Supervisor + heartbeat (借鉴 Prime) - 浏览器关也能跑</li>
+       <li>autonomous worker (借鉴 Prime) - 后台消费 job queue</li>
+       <li>Auto checkpoint 每文件编辑前</li>
+       <li>Compaction 每 10 轮自动</li></ul></td>
+  <td><ul class="feats"><li>Daemon 还是进程内 (虽然有 supervisor + heartbeat) - 真要关浏览器续跑需要 uvicorn 多 worker + 外部 socket</li>
+       <li>LongRunningRegistry 是 dict,后端重启后 handle 失效</li>
+       <li>autonomous worker 还没在 orchestrator 里消费 job 队列(只 register,没自动 dispatch)</li></ul></td>
+  <td><span class="v-mid">P1</span></td>
+</tr>
+<tr><td><b>模型灵活性</b></td>
+  <td><ul class="feats"><li>17+ 个 LLM provider 预设 (MiniMax/Qwen/GLM/Mistral/xAI/Cohere 等)</li>
+       <li>完整 OpenAI 兼容 + Anthropic 兼容</li>
+       <li>模型字段填错 fallback 到 default</li>
+       <li>R38.6.4: /validate-model 强校验 - 命中 /v1/models 验证 model id 存在</li></ul></td>
+  <td><ul class="feats"><li>暂无</li></ul></td>
+  <td><span class="v-good">已闭环</span></td>
+</tr>
+<tr><td><b>工具 / 扩展</b></td>
+  <td><ul class="feats"><li>21 个 MCP server 预设 (含 context7/playwright/postgres/redis)</li>
+       <li>20 个 plugin 预设 (Anthropic/EveryInc/wshobson)</li>
+       <li>43 个 skill 预设</li>
+       <li>38 个 borrowed REST endpoint</li>
+       <li>Continual Harness (借鉴 Prime) - Agent 可 CRUD 自己的 prompt/memory/skill</li></ul></td>
+  <td><ul class="feats"><li>没 OpenClaw / Hermes 的 skill 自动创建</li>
+       <li>UI 不显示 MCP/plugin 列表 (高级功能靠 API)</li>
+       <li>subprocess sandbox 是 P0 阶段,还没加 Landlock 之类 OS 级隔离</li></ul></td>
+  <td><span class="v-good">P2</span></td>
+</tr>
+<tr><td><b>记忆 / 自改进</b></td>
+  <td><ul class="feats"><li>FTS5 跨会话记忆,自动注入 Coder system_prompt</li>
+       <li>Memory 4 op API (remember/recall/forget/list)</li>
+       <li>Auto checkpoint 写文件前快照</li>
+       <li>R38.6.4: Continual Harness (借鉴 Prime) - Agent 可 CRUD 自己的 prompt/memory/skill/tooling-pref</li></ul></td>
+  <td><ul class="feats"><li>没 Hermes 那样的自学习循环 (Agent 不会自动改进自己,只能手动 /refine)</li></ul></td>
+  <td><span class="v-mid">P1</span></td>
+</tr>
+<tr><td><b>安全 / 沙箱</b></td>
+  <td><ul class="feats"><li>3 档 sandbox policy (off/standard/strict)</li>
+       <li>real-time deny-pattern 拦截 rm -rf /</li>
+       <li>Backend terminal tool 自带 25+ deny patterns</li>
+       <li>R38.6.4: subprocess 隔离 (借鉴 Prime) - /sandbox/run 跑命令,有 timeout 强制 kill</li></ul></td>
+  <td><ul class="feats"><li>没 Prime Agent 的 worker / kernel 进程隔离</li>
+       <li>在 Windows 没 Landlock 之类 OS 级沙箱</li>
+       <li>用真 OS 权限跑 LLM 生成的代码,风险大</li></ul></td>
+  <td><span class="v-mid">P1</span></td>
+</tr>
+<tr><td><b>跑分 / benchmark</b></td>
+  <td><ul class="feats"><li>R38.6.4: SWE-bench Lite 10 任务 harness 框架已搭好,可端到端跑(identity 0 分,接入真 LLM 后可比 Prime Agent 95.5% baseline)</li>
+       <li>async harness 模式 (兼容 sync/async)</li>
+       <li>SequenceMatcher 评分 + 通过率</li></ul></td>
+  <td><ul class="feats"><li>没公开 baseline (Prime Agent 95.5% / DeepSeek Harness >90% / Codex 77.3%)</li>
+       <li>10 任务太小,跑分 noise 大</li>
+       <li>需要接入 LLM 才能跑出真实分</li></ul></td>
+  <td><span class="v-bad">P0</span></td>
+</tr>
+<tr><td><b>跨天续跑</b></td>
+  <td><ul class="feats"><li>/goal 持久目标</li>
+       <li>Auto checkpoint 写文件改动可回滚</li>
+       <li>Compaction 让长任务上下文不爆</li>
+       <li>R38.6.4: Daemon Supervisor - 5s 心跳,daemon.heartbeat 事件流,attach API 重连</li></ul></td>
+  <td><ul class="feats"><li>Daemon 还在 uvicorn 进程内,关终端还是会停</li>
+       <li>需要 systemd / launchd 真正 daemonize</li>
+       <li>long_running 是 dict,重启失效</li></ul></td>
+  <td><span class="v-bad">P0</span></td>
+</tr>
+</tbody>
+</table>
+
+<h2>第三部分 - v3 -> v4 进度</h2>
+<table class="compare">
+<thead>
+<tr><th style="width: 25%;">项</th><th style="width: 25%;">v3 (R38.6.3 借鉴 Prime 之前)</th>
+    <th style="width: 25%;">v4 (R38.6.4 借鉴 Prime + 优化后)</th>
+    <th style="width: 25%;">状态</th></tr>
+</thead>
+<tbody>
+<tr><td>Async subagent</td>
+  <td>同步阻塞,父 Agent 等子 Agent 完</td>
+  <td>background: true 返回 handle 立即,父继续</td>
+  <td><span class="v-good">完成</span></td>
+</tr>
+<tr><td>/goal 持久目标</td>
+  <td>没有</td>
+  <td>存 registry dict,跨回合保留</td>
+  <td><span class="v-good">完成</span></td>
+</tr>
+<tr><td>/autonomous 预算</td>
+  <td>没有</td>
+  <td>turn/token/time + quality gate,后台 worker 消费</td>
+  <td><span class="v-good">完成</span></td>
+</tr>
+<tr><td>Continual Harness</td>
+  <td>没有</td>
+  <td>Agent 可 CRUD 自己的 prompt/memory/skill (Prime 借鉴)</td>
+  <td><span class="v-good">完成</span></td>
+</tr>
+<tr><td>A2A 跨 Agent 消息</td>
+  <td>没有</td>
+  <td>send/inbox/agents 端到端 (Prime 借鉴)</td>
+  <td><span class="v-good">完成</span></td>
+</tr>
+<tr><td>Daemon 后台</td>
+  <td>没有 - 关浏览器 agent 停</td>
+  <td>Supervisor + heartbeat + attach API (Prime 借鉴)</td>
+  <td><span class="v-mid">框架完成,真 daemonize 待做</span></td>
+</tr>
+<tr><td>Subprocess 沙箱</td>
+  <td>没隔离,跑在 agent 进程里</td>
+  <td>/sandbox/run 强制 subprocess 隔离 (Prime 借鉴)</td>
+  <td><span class="v-good">完成</span></td>
+</tr>
+<tr><td>Provider 校验</td>
+  <td>只能 try-and-error</td>
+  <td>/validate-model 命中 /v1/models 验证</td>
+  <td><span class="v-good">完成</span></td>
+</tr>
+<tr><td>Slash 命令</td>
+  <td>没有</td>
+  <td>/goal /autonomous /verify /forget /remember</td>
+  <td><span class="v-good">完成</span></td>
+</tr>
+<tr><td>SWE-bench Lite harness</td>
+  <td>没有</td>
+  <td>10 任务框架 + 端到端跑通 (async/sync 兼容)</td>
+  <td><span class="v-good">框架完成,跑分待跑</span></td>
+</tr>
+</tbody>
+</table>
+
+<div class="footer">
+  <div class="legend">
+    <span class="oss-c">开源 / 可审计</span>
+    <span class="closed-c">闭源 / 模型厂商旗舰</span>
+    <span class="kairos-c">Kairos Code (本项目)</span>
+  </div>
+  <div style="margin-top: 10px;">
+    评级: <span class="v-good">已闭环</span> 优势 -
+    <span class="v-mid">P1 下个 sprint</span> -
+    <span class="v-bad">P0 关键</span>
+  </div>
+  <div style="margin-top: 8px;">
+    <b>v3 -> v4 关键改进</b>:
+    长任务从"阻塞"升级到"async + goal + autonomous + daemon" 四件套,
+    多 Agent 从"独立"升级到"A2A 互通",
+    自改进从"无"升级到"Continual Harness CRUD",
+    沙箱从"进程内"升级到"subprocess 隔离"。
+  </div>
+  <div style="margin-top: 6px;">
+    数据来源: GitHub Trending 2026-08-24 - PrimeIntellect-ai/prime-agent README
+  </div>
+</div>
+</body>
+</html>

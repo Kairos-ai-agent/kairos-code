@@ -51,11 +51,28 @@ const ChatThread: React.FC<Props> = ({ messages, emptyHint, showRawToggle = fals
     return () => el.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Auto-scroll on new messages.
+  // Auto-scroll on new messages. R38.6.4: the previous logic
+  // set ``el.scrollTop = el.scrollHeight`` synchronously, but
+  // the DOM hadn't reflowed the new bubble yet, so the
+  // scrollHeight was the OLD value and the new bottom was
+  // either missed (tall messages cut off the top) or jumped
+  // somewhere wrong. Use ``requestAnimationFrame`` so the
+  // scroll happens after React has painted the new message,
+  // and fall back to ``scrollIntoView`` on the last child
+  // for the rare case where the container has a different
+  // scrollable parent (e.g. nested flex with overflow:hidden).
   useEffect(() => {
     const el = containerRef.current;
     if (!el || !stickToBottomRef.current) return;
-    el.scrollTop = el.scrollHeight;
+    const raf = requestAnimationFrame(() => {
+      const last = el.lastElementChild as HTMLElement | null;
+      if (last && typeof last.scrollIntoView === 'function') {
+        last.scrollIntoView({ block: 'end', inline: 'nearest' });
+      } else {
+        el.scrollTop = el.scrollHeight;
+      }
+    });
+    return () => cancelAnimationFrame(raf);
   }, [messages]);
 
   return (
@@ -174,15 +191,48 @@ const UserBubble: React.FC<{ message: Message }> = ({ message }) => {
 };
 
 const CoderBubble: React.FC<{ message: Message }> = ({ message }) => {
+  // R38.6.3: the user said the "Coder" role label is noisy
+  // in casual chat. Render the reply as a plain conversation
+  // bubble (small Kairos avatar + text) instead of a bordered
+  // role card. We keep the Reviewer card because its status
+  // (verdict, score) is useful info the user wants to see.
+  return <AssistantBubble message={message} />;
+};
+
+// R38.6.3: new "AssistantBubble" — a clean conversation-style
+// bubble used for plain chat replies. Small avatar (the Kairos
+// K), a thin label ("Kairos"), and the text. No bordered card
+// or topic meta line — chat should feel like chat.
+const AssistantBubble: React.FC<{ message: Message }> = ({ message }) => {
   const tokens = useThemeTokens();
+  const text = stringifyContent(message.content);
   return (
-    <RoleBubble
-      icon={<CodeOutlined />}
-      roleLabel="Coder"
-      accent={tokens.coderAccent}
-      content={stringifyContent(message.content)}
-      meta={message.topic}
-    />
+    <div style={{
+      display: 'flex', alignItems: 'flex-start', gap: 8,
+      marginTop: 4, marginBottom: 4,
+    }}>
+      <div style={{
+        width: 26, height: 26, borderRadius: 6,
+        background: '#facc15', color: '#000',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontWeight: 900, fontSize: 14, flexShrink: 0, marginTop: 2,
+      }}>K</div>
+      <div style={{
+        flex: 1, minWidth: 0,
+        background: tokens.bgElevated, borderRadius: 8,
+        padding: '8px 12px',
+      }}>
+        <span style={{
+          fontSize: 11, color: tokens.labelTertiary,
+          display: 'block', marginBottom: 2,
+        }}>Kairos</span>
+        <span style={{
+          fontSize: 13, color: tokens.labelPrimary,
+          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          lineHeight: 1.6,
+        }}>{text}</span>
+      </div>
+    </div>
   );
 };
 
@@ -299,7 +349,15 @@ const RoleBubble: React.FC<{
 };
 
 function stringifyContent(c: Message['content']): string {
-  if (typeof c === 'string') return c;
+  if (typeof c === 'string') {
+    // R38.6.4: the LLM reply sometimes starts with "\n" or " "
+    // (a stray newline from a markdown code block, or the API
+    // returning a leading blank line). With whiteSpace: pre-wrap
+    // in the bubble that renders as a visible empty first line.
+    // Strip leading whitespace so the bubble starts tight.
+    return c.replace(/^\s+/, '');
+  }
   if (c == null) return '';
   try { return JSON.stringify(c, null, 2); } catch { return String(c); }
 }
+

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Drawer, Tabs, Select, Switch, Input, Button, Divider, Tag, Space, Typography, message, Spin, Alert, App as AntdApp } from 'antd';
 import {
   SettingOutlined,
@@ -18,8 +18,9 @@ import {
 import { useSettingsStore, CoderMode, TtsProvider, SttProvider, LlmProvider } from '../stores/settingsStore';
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
-import { LLM_PRESETS, matchPreset, getPreset } from '../llm/presets';
+import { LLM_PRESETS, matchPreset, getPreset, CUSTOM_MODEL } from '../llm/presets';
 import api from '../api/client';
+import { formatError } from '../utils/formatError';
 
 const { Title, Text } = Typography;
 
@@ -361,7 +362,7 @@ const MetricsPanel: React.FC = () => {
 
 
 // ---------------------------------------------------------------------------
-// Provider panel (Round 37 — focused on OpenAI / Anthropic custom URLs)
+// Provider panel (Round 37 — focused on OpenAI and Anthropic custom URLs)
 // ---------------------------------------------------------------------------
 
 const ProviderPanel: React.FC = () => {
@@ -417,8 +418,7 @@ const ProviderPanel: React.FC = () => {
       setLastSaved(Date.now());
       msgApi.success('LLM settings saved');
     } catch (e: any) {
-      const detail = e?.response?.data?.detail
-                     || e?.message || 'request failed';
+      const detail = formatError(e, 'request failed');
       msgApi.error(`Save failed: ${detail}`);
     } finally {
       setSaving(false);
@@ -447,8 +447,8 @@ const ProviderPanel: React.FC = () => {
           value={provider.active}
           onChange={(v: LlmProvider) => setProvider({ active: v })}
           options={[
-            { value: 'openai', label: 'OpenAI (or any OpenAI-compatible API)' },
-            { value: 'anthropic', label: 'Anthropic (or any Anthropic-compatible API)' },
+            { value: 'openai', label: 'OpenAI' },
+            { value: 'anthropic', label: 'Anthropic' },
           ]}
         />
       </div>
@@ -533,17 +533,6 @@ const OpenAICompatForm: React.FC<{
     if (detected !== presetId) setPresetId(detected);
   }, [value.endpointUrl, value.model]);  // eslint-disable-line react-hooks/exhaustive-deps
 
-  const applyPreset = (id: string) => {
-    setPresetId(id);
-    if (id === 'custom') return;  // user fills in manually
-    const p = getPreset(id);
-    if (!p.endpointUrl && !p.model) return;
-    onChange({
-      endpointUrl: p.endpointUrl || value.endpointUrl,
-      model: p.model || value.model,
-    });
-  };
-
   const test = async () => {
     if (!value.endpointUrl.trim() || !value.apiKey.trim()) {
       setTestResult({ ok: false,
@@ -564,42 +553,264 @@ const OpenAICompatForm: React.FC<{
       );
       setTestResult({ ok: !!r.data.ok, detail: r.data.detail || '(no detail)' });
     } catch (e: any) {
+      // R38.6.3: surface the real reason the test failed.
+      // 1. The backend's global 500 handler returns
+      //    {detail, error_id}; axios puts it on e.response.data.
+      // 2. The backend's own 4xx responses also use {detail}.
+      // 3. Network / CORS failures leave e.response undefined —
+      //    we fall back to e.message which is axios's default
+      //    "Request failed with status code N" or "Network Error".
+      // 4. Non-JSON 5xx (HTML body, empty body) — e.response.data
+      //    is empty string or a Document. Try to read it.
+      const status = e?.response?.status;
+      const resp = e?.response;
+      let detail = '';
+      // Pull any useful text from the response body
+      if (resp?.data) {
+        if (typeof resp.data === 'string') {
+          detail = resp.data.slice(0, 300);
+        } else if (typeof resp.data === 'object') {
+          detail = resp.data.detail || resp.data.error_id
+                   || resp.data.message || JSON.stringify(resp.data).slice(0, 200);
+        }
+      }
+      if (!detail) detail = e?.message || 'request failed';
+      // If upstream returned a non-JSON body, say so explicitly
+      // so the user knows it's an HTML/proxy error, not a logic bug
+      const ct = String(resp?.headers?.['content-type'] || '');
+      if (ct && !ct.includes('json') && detail.length > 0) {
+        detail = `[upstream returned ${ct.split(';')[0]}, not JSON] ${detail}`;
+      }
       setTestResult({ ok: false,
-        detail: e?.response?.data?.detail || e?.message || 'request failed' });
+        detail: status ? `[HTTP ${status}] ${detail}` : detail });
     } finally {
       setTesting(false);
     }
   };
 
+  // R38.6 §28.2: dynamic model list. The Model Select is
+  // populated from a live API call (`POST /api/config/models/
+  // custom/fetch`) — the user picks a preset (or types a
+  // custom URL), then clicks "拉取 model 列表" to get the
+  // current set of models the provider actually exposes.
+  //
+  // We do NOT hardcode the model list per preset — the user
+  // said it was "串门" (models from one provider bleeding into
+  // another's dropdown) and would also go stale the moment
+  // any provider adds a new model. Live fetch is the only
+  // source of truth.
+  const [fetchedModels, setFetchedModels] = useState<string[]>([]);
+  const [fetchingModels, setFetchingModels] = useState(false);
+  const [modelFetchError, setModelFetchError] = useState<string | null>(null);
+  const [lastFetchedKey, setLastFetchedKey] = useState<string>('');
+  // The model the user has saved may not be in the fetched
+  // list (e.g. fetch failed last time, or they typed a custom
+  // model). We remember it so the Select still has a valid
+  // value to display.
+  const [pinnedModel, setPinnedModel] = useState<string>(value.model);
+
+  // R38.6 §28.2: derive the base URL by stripping the
+  // "/chat/completions" suffix. The fetch endpoint expects
+  // just the base (it appends "/models" itself).
+  const fetchBaseUrl = useMemo(() => {
+    const u = (value.endpointUrl || '').trim();
+    if (!u) return '';
+    // Strip common suffixes so /models is appended to the root
+    return u
+      .replace(/\/chat\/completions\/?$/i, '')
+      .replace(/\/messages\/?$/i, '')
+      .replace(/\/$/, '');
+  }, [value.endpointUrl]);
+
+  const applyPreset = (id: string) => {
+    setPresetId(id);
+    setFetchedModels([]);  // clear — old list belonged to the
+                            // previous provider
+    setModelFetchError(null);
+    setLastFetchedKey('');
+    if (id === 'custom') return;  // user fills in manually
+    const p = getPreset(id);
+    onChange({
+      endpointUrl: p.endpointUrl || value.endpointUrl,
+      model: p.defaultModel || value.model,
+    });
+    if (p.defaultModel) setPinnedModel(p.defaultModel);
+  };
+
+  const applyModel = (m: string) => {
+    if (m === CUSTOM_MODEL) {
+      // Switch to free-text — keep current model so the user
+      // can edit it in place.
+      onChange({ model: pinnedModel || value.model });
+      return;
+    }
+    setPinnedModel(m);
+    onChange({ model: m });
+  };
+
+  const fetchModels = useCallback(async () => {
+    if (!fetchBaseUrl) {
+      setModelFetchError('请先填写 endpoint URL');
+      return;
+    }
+    if (!value.apiKey.trim()) {
+      setModelFetchError('请先填写 API key');
+      return;
+    }
+    setFetchingModels(true);
+    setModelFetchError(null);
+    try {
+      const r = await api.post<{
+        models: Array<{ id: string; name?: string }>;
+        count: number;
+        error?: string;
+        note?: string;
+      }>('/config/models/custom/fetch', {
+        base_url: fetchBaseUrl,
+        api_key: value.apiKey,
+        protocol: 'openai',
+      });
+      const list = (r.data.models || []).map((m) => m.id).filter(Boolean);
+      setFetchedModels(list);
+      setLastFetchedKey(`${fetchBaseUrl}#${list.length}`);
+      // Surface the backend's failure reason (e.g. "ConnectTimeout"
+      // when the endpoint is unreachable) so the click never
+      // silently does nothing. `error` is set by
+      // /api/config/models/custom/fetch when the provider call
+      // failed; `note` carries informational text on success paths.
+      if (r.data.error) setModelFetchError(r.data.error);
+      else if (r.data.note) setModelFetchError(r.data.note);
+      else setModelFetchError(null);
+      // If the current model is not in the fetched list and
+      // the Select is showing it, keep it (don't blow it
+      // away). The Select's options will list fetched + the
+      // current pinned value.
+    } catch (e: any) {
+      const msg = formatError(e, '拉取失败');
+      setModelFetchError(String(msg));
+    } finally {
+      setFetchingModels(false);
+    }
+  }, [fetchBaseUrl, value.apiKey]);
+
+  const preset = getPreset(presetId);
+  // Build the Select's options: fetched list (if any) + the
+  // currently-saved model (in case it's not in the list) +
+  // Custom. De-duplicate so the same model isn't listed twice.
+  const modelOptions: Array<{ value: string; label: string }> = [];
+  const seen = new Set<string>();
+  const addOption = (id: string, label?: string) => {
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    modelOptions.push({ value: id, label: label || id });
+  };
+  fetchedModels.forEach((m) => addOption(m));
+  // The "current" / pinned model — show it even if not in the
+  // fetched list (covers "fetch failed last time" and
+  // "user typed a custom model").
+  addOption(pinnedModel || value.model,
+            pinnedModel || value.model
+              ? `${pinnedModel || value.model} (当前)`
+              : '');
+  // The preset's default model — shown when fetch hasn't
+  // happened yet so the user at least sees what we'd default
+  // to.
+  addOption(preset.defaultModel,
+            preset.defaultModel
+              ? `${preset.defaultModel} (默认)`
+              : '');
+  // Always offer Custom as the escape hatch.
+  addOption(CUSTOM_MODEL, 'Custom (自填 model)');
+
+  // The Select's current value:
+  //   - If user picked Custom → CUSTOM_MODEL
+  //   - If the saved model is in the options → show it
+  //   - Otherwise → fall back to the first fetched model, or
+  //     the preset default, or the saved model pinned.
+  const modelSelectValue = (() => {
+    if (!value.model) return undefined;
+    if (seen.has(value.model)) return value.model;
+    return value.model;  // still render it even if not in
+                          // seen — AntD Select allows arbitrary
+                          // values to display, the user can
+                          // switch to one in the list
+  })();
+
   return (
-    <Space direction="vertical" size={10} style={{ width: '100%' }}>
+    <Space direction="vertical" size={12} style={{ width: '100%' }}>
       {/* R38.6 §28: Provider Preset dropdown. One click fills
           the endpoint URL and default model for DeepSeek / Qwen
           / GLM / Moonshot / Ollama / OpenRouter / OpenAI. The
-          user can still override either field manually after. */}
+          user can still override either field manually after.
+
+          R38.6 §28.1: we use `optionLabelProp="label"` so the
+          selected-value display is just the preset name (e.g.
+          "DeepSeek") — the hint lives in the option panel only
+          and in the "推荐模型" preview line below. This fixes
+          the "DeepSeek" / "deepseek-chat · 国内首选" overlap
+          reported by the user. */}
       <div>
-        <Text style={{ color: tokens.labelPrimary }}>Provider Preset</Text>
+        <Text style={{ color: tokens.labelPrimary,
+                        display: 'block', marginBottom: 6 }}>
+          Provider Preset
+        </Text>
         <Select
           data-testid="llm-preset-select"
-          style={{ width: '100%', marginTop: 4 }}
+          style={{ width: '100%' }}
           value={presetId}
-          onChange={(v) => applyPreset(v)}
+          onChange={applyPreset}
           options={LLM_PRESETS.map((p) => ({
             value: p.id,
-            label: (
-              <div>
+            // R38.6 §28.3: the option's `label` is a plain
+            // string ("DeepSeek"). The closed box displays
+            // this string only — no hint overlap. The hint
+            // shows in two other places: (1) as a caption
+            // directly below the closed box (so the user
+            // sees it without opening the dropdown), and
+            // (2) in the dropdown row (via optionRender).
+            label: p.label,
+          }))}
+          // R38.6 §28.3: explicit `labelRender` to GUARANTEE
+          // the closed box shows just the string. AntD 5.22
+          // would otherwise sometimes inherit the JSX from
+          // `optionRender` for the selected display. This
+          // belt-and-suspenders fix prevents the "DeepSeek /
+          // deepseek-chat · 国内首选" overlap the user
+          // reported.
+          labelRender={(props) => <span>{props.label}</span>}
+          // `optionRender` controls the dropdown ROW (when
+          // the panel is open). We render the full label +
+          // hint JSX here so the dropdown is informative.
+          optionRender={(option) => {
+            const p = LLM_PRESETS.find((x) => x.id === option.value);
+            if (!p) return option.label;
+            return (
+              <div style={{ padding: '2px 0' }}>
                 <div style={{ fontWeight: 500 }}>{p.label}</div>
                 {p.hint && (
-                  <div style={{ fontSize: 11, color: tokens.labelTertiary }}>
+                  <div style={{ fontSize: 11,
+                                 color: tokens.labelTertiary,
+                                 marginTop: 2 }}>
                     {p.hint}
                   </div>
                 )}
               </div>
-            ),
-          }))}
+            );
+          }}
         />
+        {/* R38.6 §28.3: hint shown as a small caption below
+            the closed box. Always visible (not gated on
+            dropdown open), so the user sees "国内首选" /
+            "极致性价比" without having to click. The signup
+            / docs links stay on a second line for spacing. */}
+        {preset.hint && presetId !== 'custom' && (
+          <div style={{ marginTop: 4, fontSize: 11,
+                         color: tokens.labelTertiary }}>
+            {preset.hint}
+          </div>
+        )}
         {(() => {
-          const p = getPreset(presetId);
+          const p = preset;
           if (presetId === 'custom') return null;
           if (!p.docsUrl) return null;
           return (
@@ -648,13 +859,78 @@ const OpenAICompatForm: React.FC<{
         />
       </div>
       <div>
-        <Text style={{ color: tokens.labelPrimary }}>Model</Text>
-        <Input
-          style={{ marginTop: 4 }}
-          value={value.model}
-          onChange={(e) => onChange({ model: e.target.value })}
-          placeholder="gpt-4o, gpt-4o-mini, o1-mini, …"
+        <div style={{ display: 'flex', alignItems: 'center',
+                      justifyContent: 'space-between', marginBottom: 6 }}>
+          <Text style={{ color: tokens.labelPrimary }}>Model</Text>
+          <Button
+            size="small"
+            type="link"
+            data-testid="llm-fetch-models"
+            icon={<ReloadOutlined />}
+            loading={fetchingModels}
+            disabled={!fetchBaseUrl || !value.apiKey}
+            onClick={fetchModels}
+            style={{ padding: 0 }}
+          >
+            {fetchedModels.length > 0
+              ? `重新拉取 (${fetchedModels.length})`
+              : '拉取 model 列表'}
+          </Button>
+        </div>
+        <Select
+          data-testid="llm-model-select"
+          style={{ width: '100%' }}
+          value={modelSelectValue}
+          onChange={applyModel}
+          showSearch
+          placeholder={
+            fetchedModels.length > 0
+              ? '从下拉选 model'
+              : (preset.defaultModel || '先点右上方「拉取 model 列表」')}
+          options={modelOptions}
+          filterOption={(input, option) =>
+            (option?.label as string ?? '')
+              .toLowerCase()
+              .includes(input.toLowerCase())
+          }
+          notFoundContent={
+            fetchedModels.length === 0
+              ? '点「拉取 model 列表」获取当前 provider 的 model'
+              : '无匹配'
+          }
         />
+        {modelSelectValue === CUSTOM_MODEL && (
+          <Input
+            data-testid="llm-model-custom"
+            style={{ marginTop: 6 }}
+            value={value.model}
+            onChange={(e) => onChange({ model: e.target.value })}
+            placeholder="type a model not in the list (e.g. my-fine-tune-7b)"
+          />
+        )}
+        {modelFetchError && (
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginTop: 6 }}
+            message="拉取 model 列表失败"
+            description={modelFetchError}
+          />
+        )}
+        {!modelFetchError && lastFetchedKey && (
+          <Text style={{ color: tokens.labelTertiary, fontSize: 11,
+                          display: 'block', marginTop: 4 }}>
+            已从 {fetchBaseUrl} 拉取 {fetchedModels.length} 个 model。
+            切换 provider 或修改 endpoint URL 后请重新拉取。
+          </Text>
+        )}
+        {!modelFetchError && !lastFetchedKey && (
+          <Text style={{ color: tokens.labelTertiary, fontSize: 11,
+                          display: 'block', marginTop: 4 }}>
+            填写 endpoint URL 和 API key 后，点上方「拉取 model 列表」
+            从 provider 实时获取 model。可选 "Custom" 输入未列出的 model。
+          </Text>
+        )}
       </div>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
         <Button
@@ -726,8 +1002,27 @@ const AnthropicCompatForm: React.FC<{
       );
       setTestResult({ ok: !!r.data.ok, detail: r.data.detail || '(no detail)' });
     } catch (e: any) {
+      // R38.6.3: same as the OpenAI form — surface status + detail
+      // so the user sees the real reason instead of "Request
+      // failed with status code 500".
+      const status = e?.response?.status;
+      const resp = e?.response;
+      let detail = '';
+      if (resp?.data) {
+        if (typeof resp.data === 'string') {
+          detail = resp.data.slice(0, 300);
+        } else if (typeof resp.data === 'object') {
+          detail = resp.data.detail || resp.data.error_id
+                   || resp.data.message || JSON.stringify(resp.data).slice(0, 200);
+        }
+      }
+      if (!detail) detail = e?.message || 'request failed';
+      const ct = String(resp?.headers?.['content-type'] || '');
+      if (ct && !ct.includes('json') && detail.length > 0) {
+        detail = `[upstream returned ${ct.split(';')[0]}, not JSON] ${detail}`;
+      }
       setTestResult({ ok: false,
-        detail: e?.response?.data?.detail || e?.message || 'request failed' });
+        detail: status ? `[HTTP ${status}] ${detail}` : detail });
     } finally {
       setTesting(false);
     }
@@ -840,7 +1135,7 @@ const SkillsPanel: React.FC<{ projectId: string | null }> = ({ projectId }) => {
       setCount(typeof data.count === 'number' ? data.count : 0);
       setSkills(Array.isArray(data.names) ? data.names : []);
     } catch (e: any) {
-      setErr(e?.response?.data?.detail || e?.message || 'Reload failed');
+      setErr(formatError(e, 'Reload failed'));
     } finally {
       setBusy(false);
     }
@@ -907,9 +1202,22 @@ const AboutPanel: React.FC = () => {
   const tokens = useThemeTokens();
   return (
     <Space direction="vertical" size={8} style={{ width: '100%' }}>
-      <Title level={4} style={{ color: tokens.labelPrimary, margin: 0 }}>
-        Kairos Code
-      </Title>
+      <Space size={12} align="center">
+        {/* R38.6 §34: brand K icon at 48px — bigger than
+            the topbar (24px) so the About panel feels
+            like a real "product card" with logo + name. */}
+        <img
+          src="/branding/kairos-icon-128.png"
+          alt="Kairos"
+          width={48}
+          height={48}
+          style={{ borderRadius: 10, display: 'block',
+                    objectFit: 'cover' }}
+        />
+        <Title level={4} style={{ color: tokens.labelPrimary, margin: 0 }}>
+          Kairos Code
+        </Title>
+      </Space>
       <Text style={{ color: tokens.labelSecondary }}>
         Multi-agent collaboration platform. Coder &lt;-&gt; Reviewer loop,
         MCP, agents.md / skills, manifest, sandbox, voice, cloud.
@@ -962,6 +1270,32 @@ export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
       if (d.cloud) setCloud(d.cloud);
       if (d.metrics) setMetrics(d.metrics);
       if (d.provider) {
+        // R38.6.4: do NOT unconditionally adopt the backend's
+        // provider. If the user already has a configured provider
+        // in localStorage (apiKey, custom endpoint, non-default
+        // model), trust that and skip the migration. The bug we
+        // were hitting: backend stored the legacy R8 shape
+        // ({apiKeyEnv, ollamaBaseUrl, ollamaModel}) — the migration
+        // path wiped apiKey/endpointUrl back to defaults every time
+        // the drawer was opened, making the user re-paste the key.
+        const local = useSettingsStore.getState().provider;
+        const localHasKey = !!(local.openai?.apiKey
+                                || local.anthropic?.apiKey);
+        const localHasCustomUrl = !!(
+          (local.openai?.endpointUrl
+            && local.openai.endpointUrl
+              !== 'https://api.openai.com/v1/chat/completions')
+          || (local.anthropic?.endpointUrl
+            && local.anthropic.endpointUrl
+              !== 'https://api.anthropic.com/v1/messages'));
+        if (localHasKey || localHasCustomUrl) {
+          // User has explicit config in localStorage. Keep it.
+          // We can still opportunistically refresh non-sensitive
+          // fields from the backend (e.g. if the user changed
+          // model but not key), but only if the backend's value
+          // differs and the local slot is still the default.
+          return;
+        }
         // Migrate legacy {apiKeyEnv, ollamaBaseUrl, ollamaModel} shape
         // if the user has it on disk.
         if ('apiKeyEnv' in d.provider || 'ollamaBaseUrl' in d.provider) {
@@ -1045,7 +1379,7 @@ export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
         .then(() => setSaveStatus({ state: 'saved', at: Date.now() }))
         .catch((e) => setSaveStatus({
           state: 'error',
-          detail: e?.response?.data?.detail || e?.message || 'request failed',
+          detail: formatError(e, 'request failed'),
         }));
     }, 400);
     return () => clearTimeout(t);
@@ -1072,7 +1406,7 @@ export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
       width={420}
       open={open}
       onClose={onClose}
-      destroyOnClose
+      destroyOnHidden
       styles={{ body: { padding: 0, background: tokens.bgBase } }}
     >
       <div
@@ -1110,40 +1444,21 @@ export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
         tabPosition="top"
         style={{ padding: '0 16px' }}
         items={[
-          {
-            key: 'coder',
-            label: <span><CodeOutlined /> Coder</span>,
-            children: <CoderModePanel />,
-          },
-          {
-            key: 'voice',
-            label: <span><AudioOutlined /> Voice</span>,
-            children: <VoicePanel />,
-          },
-          {
-            key: 'mcp',
-            label: <span><ToolOutlined /> MCP</span>,
-            children: <McpPanel />,
-          },
-          {
-            key: 'cloud',
-            label: <span><CloudOutlined /> Cloud</span>,
-            children: <CloudPanel />,
-          },
-          {
-            key: 'metrics',
-            label: <span><LineChartOutlined /> Metrics</span>,
-            children: <MetricsPanel />,
-          },
+          // R38.6.3: 8 tabs → 3. Voice / MCP / Cloud / Metrics /
+          // Skills / Coder advanced panels removed. Power users
+          // can call those APIs directly via /api/config/* and
+          // /api/borrowed/*. The 3 remaining tabs cover the
+          // 95% daily-use path: pick a model, pick a mode,
+          // and (rarely) reset / inspect.
           {
             key: 'provider',
-            label: <span><RobotOutlined /> LLM Models</span>,
+            label: <span><RobotOutlined /> Provider</span>,
             children: <ProviderPanel />,
           },
           {
-            key: 'skills',
-            label: <span><ThunderboltOutlined /> Skills</span>,
-            children: <SkillsPanel projectId={projectId} />,
+            key: 'mode',
+            label: <span><CodeOutlined /> Mode</span>,
+            children: <CoderModePanel />,
           },
           {
             key: 'about',

@@ -8,7 +8,9 @@
   },
   "mcp": {
     "enabledServers": [
-      "filesystem"
+      "filesystem",
+      "github",
+      "postgres"
     ],
     "permissionPrompt": true
   },
@@ -30,10 +32,10 @@
     "ollamaModel": "qwen2.5-coder:7b",
     "apiKeyEnv": "OPENAI_API_KEY",
     "openai": {
-      "endpointUrl": "https://openrouter.ai/api/v1/chat/completions",
-      "baseUrl": "https://api.openai.com/v1",
-      "apiKey": "",
-      "model": "anthropic/claude-sonnet-4-20250514"
+      "endpointUrl": "https://apihub.agnes-ai.com/v1/chat/completions",
+      "baseUrl": "https://apihub.agnes-ai.com/v1/chat",
+      "apiKey": "REDACTED",
+      "model": "agnes-2.5-flash"
     },
     "anthropic": {
       "endpointUrl": "https://api.anthropic.com/v1/messages",
@@ -43,10 +45,10 @@
     }
   },
   "provider_openai": {
-    "endpointUrl": "https://openrouter.ai/api/v1/chat/completions",
-    "baseUrl": "https://api.openai.com/v1",
-    "apiKey": "",
-    "model": "anthropic/claude-sonnet-4-20250514"
+    "endpointUrl": "https://apihub.agnes-ai.com/v1/chat/completions",
+    "baseUrl": "https://apihub.agnes-ai.com/v1/chat",
+    "apiKey": "REDACTED",
+    "model": "agnes-2.5-flash"
   },
   "provider_anthropic": {
     "endpointUrl": "https://api.anthropic.com/v1/messages",

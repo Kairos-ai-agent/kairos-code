@@ -13,6 +13,7 @@ import { Modal, Input, List, Tag, Empty, Spin, Tooltip } from 'antd';
 import { SearchOutlined, ThunderboltOutlined, CopyOutlined } from '@ant-design/icons';
 
 import api from '../api/client';
+import { formatError } from '../utils/formatError';
 
 interface SearchResult {
   name: string;
@@ -74,7 +75,7 @@ const SkillSearchPalette: React.FC = () => {
         }>('/skill_search/search', { params: { q: query, limit: 15 } });
         setResults(r.data.results || []);
       } catch (e: any) {
-        setErr(e?.response?.data?.detail || e?.message || 'Search failed');
+        setErr(formatError(e, 'Search failed'));
         setResults([]);
       } finally {
         setLoading(false);
@@ -101,7 +102,7 @@ const SkillSearchPalette: React.FC = () => {
           </span>
         </span>
       }
-      destroyOnClose
+      destroyOnHidden
     >
       <Input
         size="large"
@@ -180,3 +181,4 @@ const SkillSearchPalette: React.FC = () => {
 };
 
 export default SkillSearchPalette;
+

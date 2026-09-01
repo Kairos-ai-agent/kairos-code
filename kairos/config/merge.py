@@ -8,7 +8,7 @@ from most-specific to least-specific:
   3. User                             ~/.kairos/<file>.yaml
   4. Built-in defaults (lowest)
 
-Mirrors Claude Code's "precedence: enterprise > user > project > plugin"
+Mirrors the agentic CLI's "precedence: enterprise > user > project > plugin"
 (inverted here because plugin code is usually the *latest* to add
 behavior and should win over a stale user config).
 

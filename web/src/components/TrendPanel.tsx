@@ -12,6 +12,7 @@ import { Card, Tabs, Table, Empty, Tag, Spin, Statistic, Row, Col, Alert } from 
 import { LineChartOutlined, FireOutlined } from '@ant-design/icons';
 
 import api from '../api/client';
+import { formatError } from '../utils/formatError';
 
 interface RunPoint {
   timestamp: string;
@@ -66,7 +67,7 @@ const TrendPanel: React.FC = () => {
       setTrend(t.data);
       setPerCase(p.data.cases || []);
     } catch (e: any) {
-      setErr(e?.response?.data?.detail || e?.message || 'Failed to load trend');
+      setErr(formatError(e, 'Failed to load trend'));
     } finally {
       setLoading(false);
     }
@@ -238,3 +239,4 @@ const PerCaseTab: React.FC<{ cases: CaseTrendPoint[] | null }> = ({ cases }) => 
 };
 
 export default TrendPanel;
+

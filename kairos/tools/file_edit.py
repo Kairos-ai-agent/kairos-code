@@ -112,7 +112,7 @@ class MultiEditTool(BaseTool):
     that would require tracking original contents and writing them back,
     which is expensive and the Coder can retry).
 
-    Designed to mirror Claude Code's MultiEdit: one round-trip, atomic-ish,
+    Designed to mirror the agentic CLI's MultiEdit: one round-trip, atomic-ish,
     and the Reviewer can see all changes in one tool invocation.
     """
 

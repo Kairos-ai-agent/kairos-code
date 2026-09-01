@@ -44,6 +44,7 @@ import { FolderOpenOutlined, PlusOutlined, HistoryOutlined, EditOutlined } from 
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import api from '../api/client';
+import { formatError } from '../utils/formatError';
 import type { Project } from '../types';
 import BrowsePanel from './BrowsePanel';
 
@@ -172,7 +173,7 @@ const FolderPicker: React.FC<FolderPickerProps> = ({
         open={manualOpen}
         onCancel={closeModal}
         footer={null}
-        destroyOnClose
+        destroyOnHidden
         width={560}
       >
         {/* R38.6 §25: browse-first. The user clicks a folder to
@@ -345,7 +346,7 @@ const FolderPicker: React.FC<FolderPickerProps> = ({
         open={manualOpen}
         onCancel={closeModal}
         footer={null}
-        destroyOnClose
+        destroyOnHidden
         width={560}
       >
         {/* R38.6 §25: browse-first UX. The BrowsePanel lets the
@@ -417,3 +418,4 @@ const FolderPicker: React.FC<FolderPickerProps> = ({
 };
 
 export default FolderPicker;
+

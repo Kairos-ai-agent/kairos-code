@@ -30,6 +30,7 @@ import {
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import api from '../api/client';
+import { formatError } from '../utils/formatError';
 
 type Tool = 'teams' | 'cloud' | 'voice' | 'computer';
 
@@ -41,7 +42,7 @@ const TOOLS: { key: Tool; title: string; icon: React.ReactNode;
     route: 'teams', status: 'per-project' },
   { key: 'cloud', title: 'Cloud Delegation',
     icon: <CloudOutlined style={{ fontSize: 28 }} />,
-    description: 'Hand off tasks to a remote runner (Codex CLI, VM, container).',
+    description: 'Hand off tasks to a remote runner (the cloud-task CLI, VM, container).',
     route: 'cloud', status: 'optional' },
   { key: 'voice', title: 'Voice Mode',
     icon: <AudioOutlined style={{ fontSize: 28 }} />,
@@ -342,3 +343,4 @@ const ComputerPanel: React.FC<{ notify: any }> = ({ notify }) => {
 };
 
 export default Tools;
+

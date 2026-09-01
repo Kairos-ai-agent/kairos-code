@@ -73,7 +73,7 @@ def main(argv: List[str] | None = None) -> int:
         agent = MockCoder(behavior="wrong")
     else:
         # Real model usage: the user wires their own provider
-        # (OpenAI / Anthropic / Ollama) via kairos.providers.
+        # (OpenAI and Anthropic / Ollama) via kairos.providers.
         print(
             "ERROR: no model provider is wired up yet. "
             "Use --mock to test the pipeline, or pass your own agent "

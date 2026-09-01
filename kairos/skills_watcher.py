@@ -1,7 +1,7 @@
 """Skill hot-reload.
 
 Watches the skills directories and re-reads files when they
-change on disk. Mirrors Claude Code 2.1's hot-reload behavior.
+change on disk. Mirrors the agentic CLI 2.1's hot-reload behavior.
 
 The implementation is intentionally simple: we poll the mtimes
 of all known ``*.md`` skill files on a fixed interval. We don't

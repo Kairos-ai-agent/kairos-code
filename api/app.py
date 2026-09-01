@@ -42,6 +42,10 @@ from kairos.browser import BrowserManager
 from api.routes import feishu as feishu_routes
 from kairos.feishu import (FeishuBindingStore, FeishuBot,
                              FeishuEventForwarder)
+# R38.6 §34: Borrowed features from top AI agents (Plan Mode,
+# Approval, Hooks, Skills invoke, Sandbox, Session Fork, IM
+# platforms, FTS5 memory, more LLM providers).
+from api.routes import borrowed as borrowed_routes
 
 log = logging.getLogger(__name__)
 
@@ -73,6 +77,46 @@ async def lifespan(app: FastAPI):
         await _browser_manager.start()
         browser_routes.set_manager(_browser_manager)
         log.info("Browser manager started (R38.6 §32)")
+        # R38.6.4: prime the long-running registry with the
+        # message bus so async subagents / goals / autonomous
+        # runs can publish subagent.completed events.
+        try:
+            from kairos.long_running import LongRunningRegistry, set_registry
+            reg = LongRunningRegistry(
+                message_bus=_orch().message_bus,
+                persist_dir=kairos_settings.data_dir / ".kairos",
+            )
+            set_registry(reg)
+            log.info("Long-running registry primed (R38.6 §34)")
+            # R38.6.4: also start the autonomous worker that
+            # consumes /autonomous job_ids off the same registry.
+            try:
+                from kairos.autonomous_worker import (
+                    AutonomousWorker, set_worker,
+                )
+                w = AutonomousWorker(orchestrator=_orch(), long_running_registry=reg)
+                w.attach(_orch(), reg)
+                await w.start()
+                set_worker(w)
+                log.info("Autonomous worker running (R38.6 §34)")
+            except Exception as exc:  # noqa: BLE001
+                log.debug("autonomous worker start failed: %s", exc)
+        except Exception as exc:  # noqa: BLE001
+            log.debug("long-running registry init failed: %s", exc)
+        # R38.6.4: Daemon supervisor. Emits a daemon.heartbeat
+        # event every 5s. Even though the current uvicorn process
+        # is single-process, this gives the UI a "daemon alive"
+        # signal and provides the ``/api/daemon/attach`` endpoint
+        # the user-facing run command can call.
+        try:
+            from kairos.daemon import DaemonSupervisor, set_supervisor
+            s = DaemonSupervisor(message_bus=_orch().message_bus)
+            s.attach(reg, _orch().message_bus)
+            await s.start()
+            set_supervisor(s)
+            log.info("Daemon supervisor started id=%s", s.daemon_id)
+        except Exception as exc:  # noqa: BLE001
+            log.debug("daemon supervisor start failed: %s", exc)
     except Exception as exc:  # noqa: BLE001
         log.warning("Browser manager failed to start: %s", exc)
         _browser_manager = None
@@ -214,6 +258,13 @@ app.include_router(alerts_router, prefix="/api/alerts", tags=["alerts"])
 app.include_router(browser_routes.router, tags=["browser"])
 # R38.6 §33: Feishu (Lark) bot — push notifications + remote commands
 app.include_router(feishu_routes.router, tags=["feishu"])
+# R38.6 §34: Borrowed features — Plan / Approval / Hooks / Skills /
+# Sandbox / Fork / IM / Memory / Providers
+app.include_router(borrowed_routes.router, tags=["borrowed"])
+# R38.6 §34: P2 features — Verification / Approval mode / Events /
+# Async / LSP / Trajectory / A2A
+from api.routes import p2_features as p2_features_routes
+app.include_router(p2_features_routes.router, tags=["borrowed-p2"])
 
 # Global message stream — mounted at /api/messages (not under /projects
 # because FastAPI's path-param matching can shadow literal /messages

@@ -129,9 +129,22 @@ class SettingsStore:
     """Thread-safe settings with disk persistence."""
 
     def __init__(self, path: Optional[Path] = None) -> None:
-        # Default location: <data_dir>/settings.json (or CWD fallback)
+        # Default location: <repo>/data/settings.json — the SAME file
+        # the model router reads (kairos/llm/model_router.py
+        # settings_path()). Previously this defaulted to CWD-relative
+        # "./settings.json", so the SettingsDrawer's saved provider
+        # config landed in a different file depending on how the
+        # backend was launched — after a restart (different CWD) the
+        # saved LLM settings were silently gone. Anchoring to the
+        # repo-absolute data dir makes persistence survive ANY launch
+        # method, and puts the drawer's provider config in the file
+        # the model router actually reads. KAIROS_DATA_DIR still
+        # overrides it.
         if path is None:
-            data_dir = Path(os.environ.get("KAIROS_DATA_DIR", "."))
+            data_dir = Path(os.environ.get(
+                "KAIROS_DATA_DIR",
+                Path(__file__).resolve().parent.parent / "data",
+            ))
             path = data_dir / "settings.json"
         self.path = path
         self._lock = threading.Lock()
@@ -153,8 +166,20 @@ class SettingsStore:
     def _save(self) -> None:
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
+            # Merge, don't replace: data/settings.json also holds
+            # legacy keys owned by other subsystems (api_keys,
+            # custom_models, role_mappings, loop_config). A plain
+            # replace would silently wipe the user's custom models /
+            # role assignments on every SettingsDrawer save.
+            existing: Dict[str, Any] = {}
+            if self.path.is_file():
+                try:
+                    existing = json.loads(self.path.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError):
+                    existing = {}
+            merged = {**existing, **_to_dict(self._settings)}
             self.path.write_text(
-                json.dumps(_to_dict(self._settings), indent=2, ensure_ascii=False),
+                json.dumps(merged, indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
         except OSError as exc:

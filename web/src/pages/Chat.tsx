@@ -1,3 +1,4 @@
+import { formatError } from '../utils/formatError';
 /**
  * Chat — the default landing page (replaces the old "Loop" tab).
  *
@@ -35,12 +36,11 @@ import { classifyIntent } from '../utils/intent';
 import api, { onWebSocketMessage, onWebSocketState } from '../api/client';
 import type { Message, LoopSession, SessionRound } from '../types';
 
-const STARTER_SUGGESTIONS = [
-  { title: '重构', text: '重构 src/api/server.py 的错误处理中间件，添加重试 + 限流' },
-  { title: '测试', text: '为 kairos/teams.py 写单元测试，覆盖 timeout / exception / 合并三种路径' },
-  { title: '文档', text: '给 kairos/agents_md.py 的 SkillsLoader 加中文 docstring' },
-  { title: 'Bug', text: '检查 api/routes/projects.py 的 sessions 端点，确认 live session 排在最前' },
-];
+// R38.6.3: removed STARTER_SUGGESTIONS — 4 hardcoded Chinese
+// starter chips (重构 / 测试 / 文档 / Bug) referenced files
+// (server.py, teams.py) that have nothing to do with the
+// user's actual project. Cluttering the empty chat without
+// adding value. The composer placeholder is enough.
 
 const Chat: React.FC = () => {
   const tokens = useThemeTokens();
@@ -71,11 +71,21 @@ const Chat: React.FC = () => {
     pending: boolean; question: string; context: string; round: number;
   } | null>(null);
   const [wsState, setWsState] = useState<'connecting' | 'open' | 'closed'>('closed');
+  // component state is captured at render time and goes stale by the
+  // time a chat reply returns, which used to render the single-turn
+  // reply twice (once from the WS `agent.chat` event, once from the
+  // REST response append below).
+  // Last (project, session) whose history we hydrated. The loop
+  // lifecycle handler loads history directly and then navigates,
+  // which re-triggers the effect below — without this guard the
+  // same session's rounds are fetched twice in a row.
+  const lastLoadedRef = useRef('');
 
   // ----- Helpers -----
   // Load one session's full history from the backend and rehydrate
   // the chat thread with Message-like bubbles.
   const loadSessionHistory = useCallback(async (pid: string, sid: string) => {
+    lastLoadedRef.current = `${pid}:${sid}`;
     try {
       const r = await api.get<{ rounds: SessionRound[] }>(
         `/projects/${pid}/sessions/${sid}/rounds`);
@@ -146,20 +156,86 @@ const Chat: React.FC = () => {
       const msg = data.message;
       const topic = (msg.topic || '').toString();
 
+      // R38.6.3: filter out the per-turn "Turn X/Y: reasoning..."
+      // chatter. It's a status message for the Coder's tool loop,
+      // not a chat bubble — surfacing it in the chat thread
+      // clutters the conversation with progress noise. The Workbench
+      // progress display subscribes to ``agent.progress`` for the
+      // same data. Here we just don't add it to the chat.
+      if (topic === 'agent.progress') return;
+      const content = (msg.content ?? '').toString();
+      const isTurnProgress = /^Turn \d+\/\d+:\s*reasoning/i.test(content);
+
+      // R38.6.3: skip ``agent.response`` and ``task.result`` here.
+      // Both events carry the same final text that the
+      // ``stream.chunk`` events already streamed into a single
+      // bubble. Without this filter the user sees the same
+      // response 3 times (stream.chunk bubble + agent.response
+      // bubble + task.result bubble). Terminal events for these
+      // topics are handled below (line ~217) — ``finalizeStream``
+      // closes the stream bubble. We don't append them.
+      if (topic === 'agent.response' || topic === 'task.result') {
+        // fall through to the lifecycle handlers below
+      } else if (topic === 'agent.thinking' && !isTurnProgress) {
+        // (handled below)
+      } else if (topic === 'agent.chat' || topic === 'tool.call'
+          || topic === 'tool.result' || topic === 'task.error') {
+        // (handled below)
+      } else {
+        return;  // unknown topic — don't render a bubble
+      }
+
       // User-visible chat bubbles: any agent activity that's worth
       // showing in the thread. Topics we surface:
       //   agent.thinking  — Coder started a new turn
-      //   agent.response   — Coder produced a final response
       //   agent.chat       — generic agent chat (e.g. reviewer ask)
       //   tool.call        — tool invocation
       //   tool.result      — tool returned
       //   task.error       — agent hit an error
-      //   task.result      — task finished
       //   stream.chunk     — streaming text delta (collapse into one bubble)
-      if (topic === 'agent.thinking' || topic === 'agent.response'
+      //   agent.response / task.result are SKIPPED here — they're
+      //   just terminal markers for the same content already shown
+      //   via stream.chunk. They get their ``finalizeStream`` call
+      //   below.
+      if ((topic === 'agent.thinking' && !isTurnProgress)
           || topic === 'agent.chat' || topic === 'tool.call'
-          || topic === 'tool.result' || topic === 'task.error'
-          || topic === 'task.result') {
+          || topic === 'tool.result' || topic === 'task.error') {
+        // Dedupe: for single-turn chat the REST response is appended
+        // by handleSubmit as well (topic agent.chat_reply). If that
+        // bubble already landed with the same content, don't append
+        // the WS copy — show the reply exactly once.
+        //
+        // R38.6.4: the previous window (15s) was too tight. The Coder
+        // sometimes publishes the WS event before the REST response
+        // comes back, and vice versa, with enough delay that the
+        // timestamp comparison could miss. We now dedupe on content
+        // match alone (no timestamp) — the content is unique enough
+        // (a multi-sentence LLM reply) that a same-content match
+        // within a 60s window is almost certainly the same reply
+        // arriving via two paths.
+        if (topic === 'agent.chat' || topic === 'agent.chat_reply') {
+          const wsContent = typeof msg.content === 'string'
+                              ? msg.content.trim() : '';
+          if (wsContent) {
+            const dup = useChatStore.getState().currentMessages.some(
+              (m) => {
+                const mContent = typeof m.content === 'string'
+                                   ? m.content.trim() : '';
+                if (mContent !== wsContent) return false;
+                // Sender may be a full agent_id like "63bebf36.coder"
+                // (from the message bus) or the short form "coder"
+                // (from REST). Accept any of:
+                //   "agent" | "coder" | "assistant" |
+                //   endsWith(".coder") | endsWith(".reviewer") |
+                //   includes("coder") | includes("reviewer")
+                const s = (m.sender || '').toLowerCase();
+                return s === 'agent' || s === 'coder' || s === 'assistant'
+                  || s.endsWith('.coder') || s.endsWith('.reviewer')
+                  || s.includes('coder') || s.includes('reviewer');
+              });
+            if (dup) return;
+          }
+        }
         appendMessage({
           id: msg.id || `ws-${Date.now()}-${Math.random().toString(16).slice(2)}`,
           sender: msg.sender || 'agent',
@@ -291,8 +367,12 @@ const Chat: React.FC = () => {
 
   useEffect(() => {
     if (currentProject && sessionId) {
-      loadSessionHistory(currentProject.id, sessionId);
+      const key = `${currentProject.id}:${sessionId}`;
+      if (lastLoadedRef.current !== key) {
+        loadSessionHistory(currentProject.id, sessionId);
+      }
     } else {
+      lastLoadedRef.current = '';
       setCurrentMessages([]);
     }
   }, [currentProject, sessionId, loadSessionHistory, setCurrentMessages]);
@@ -335,17 +415,45 @@ const Chat: React.FC = () => {
         const r = await api.post<{ reply: string; mode: string }>(
           `/projects/${currentProject.id}/chat`, { message: text });
         const reply = (r.data?.reply || '').trim();
-        if (reply) {
-          appendMessage({
-            id: `chat-reply-${Date.now()}`,
-            sender: 'coder',
-            receiver: 'user',
-            topic: 'agent.chat_reply',
-            content: reply,
-            msg_type: 'text',
-            timestamp: Date.now() / 1000,
-            metadata: { mode: 'chat' },
-          });
+               if (reply) {
+          // The Coder also publishes the reply over the WebSocket
+          // (topic `agent.chat`), which the WS handler renders as a
+          // bubble. To avoid showing the reply twice we only append
+          // here when the WS bubble hasn't already landed (content
+          // match) — the REST reply stays the reliable fallback, so
+          // the answer always appears even if the WS event is lost
+          // or the socket is down.
+          //
+          // R38.6.4: dedupe by content alone (no timestamp window).
+          // The previous 15s window was too tight — the Coder can
+          // publish the WS event seconds before the REST response
+          // returns, or vice versa, and the two paths would each
+          // append a bubble.
+          const replyTrim = reply.trim();
+          const alreadyShown = useChatStore.getState().currentMessages.some(
+            (m) => {
+              const mContent = typeof m.content === 'string'
+                                 ? m.content.trim() : '';
+              if (mContent !== replyTrim) return false;
+              // Accept short form ('coder') and full agent_id
+              // ('63bebf36.coder') — both are the same agent.
+              const s = (m.sender || '').toLowerCase();
+              return s === 'agent' || s === 'coder' || s === 'assistant'
+                || s.endsWith('.coder') || s.endsWith('.reviewer')
+                || s.includes('coder') || s.includes('reviewer');
+            });
+          if (!alreadyShown) {
+            appendMessage({
+              id: `chat-reply-${Date.now()}`,
+              sender: 'coder',
+              receiver: 'user',
+              topic: 'agent.chat_reply',
+              content: reply,
+              msg_type: 'text',
+              timestamp: Date.now() / 1000,
+              metadata: { mode: 'chat' },
+            });
+          }
         }
       }
     } catch (e: any) {
@@ -376,11 +484,33 @@ const Chat: React.FC = () => {
       if (status) {
         msg = `[${status}] ${msg}`;
       }
-      // R38.6: actionable hint when the error looks like a
+      // R38.6.4: actionable hint when the error looks like a
       // settings / Coder-not-ready issue. The user is more likely
       // to fix it when we point them at the next step.
-      if (status === 503
-          || /no coder|api[_ ]?key|provider|model|not configured|unauthorized|401|404/i.test(msg)) {
+      //
+      // 404 needs a different hint — "Project not found" means the
+      // tab's project_id is stale (e.g. backend was restarted and
+      // the orchestrator's in-memory map hasn't caught up). Tell
+      // the user to pick a project from the sidebar instead of
+      // steering them at Settings (which wouldn't help).
+      const isProjectMissing = /project not found/i.test(msg);
+      const isNoCoder = /no coder/i.test(msg);
+      if (isProjectMissing) {
+        msg += ' — pick a different project from the sidebar.';
+      } else if (isNoCoder) {
+        // Don't blanket-suggest Settings — the backend's 503
+        // detail now includes the real attach_errors (mcp/worktree/
+        // provider init). The user needs to see those to fix it.
+        // Only fall back to "open Settings" if no specific error
+        // came through.
+        if (!/attach errors?[: ]/i.test(msg)
+            && !/mcp[: ]/i.test(msg)
+            && !/worktree[: ]/i.test(msg)
+            && !/provider[: ]/i.test(msg)) {
+          msg += ' — open Settings → LLM Models and click Save.';
+        }
+      } else if (status === 503
+          || /api[_ ]?key|provider|model|not configured|unauthorized|401/i.test(msg)) {
         msg += ' — open Settings → LLM Models and click Save.';
       }
       msgApi.error(msg);
@@ -515,37 +645,6 @@ const Chat: React.FC = () => {
         disabled={!showComposer}
         disabledHint="Select a project or folder to start."
       />
-
-      {/* Starter suggestions (only when truly empty + no session) */}
-      {!hasSession && currentMessages.length === 0 && currentProject && (
-        <div style={{
-          maxWidth: 768, margin: '0 auto 12px',
-          display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)',
-          gap: 8, padding: '0 16px',
-        }}>
-          {STARTER_SUGGESTIONS.map((s) => (
-            <Button
-              key={s.title}
-              onClick={() => {
-                // Just populate the composer — user still needs to
-                // press Enter to send. This is more transparent than
-                // auto-sending.
-                const ev = new CustomEvent('kairos:composer:set', { detail: s.text });
-                window.dispatchEvent(ev);
-              }}
-              style={{
-                textAlign: 'left', height: 'auto', padding: '10px 12px',
-                background: tokens.bgLay1, border: `1px solid ${tokens.border}`,
-                color: tokens.labelPrimary, whiteSpace: 'normal',
-              }}
-            >
-              <div style={{ fontWeight: 600, fontSize: 13 }}>{s.title}</div>
-              <div style={{ fontSize: 12, color: tokens.labelTertiary,
-                            marginTop: 2 }}>{s.text}</div>
-            </Button>
-          ))}
-        </div>
-      )}
     </div>
   );
 };
@@ -685,3 +784,4 @@ const AskBanner: React.FC<{
     </div>
   );
 };
+

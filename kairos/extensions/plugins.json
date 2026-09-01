@@ -1,12 +1,12 @@
 {
-  "version": 1,
-  "comment": "R38.6 §27: curated Claude Code plugin registry. Plugins are installed via `npx claude-plugins install`.",
+  "version": 2,
+  "comment": "R38.6.3: comprehensive plugin registry. 20 plugins across Anthropic official, EveryInc (compound-engineering), wshobson workflows.",
   "plugins": [
     {
       "name": "frontend-design",
       "marketplace": "anthropics/claude-code",
       "install": "npx claude-plugins install @anthropics/claude-code/frontend-design",
-      "description": "Anthropic's official frontend-design plugin (10k+ downloads). Uses the official Skill from anthropics/skills."
+      "description": "Anthropic's official frontend-design plugin (10k+ downloads)."
     },
     {
       "name": "document-skills",
@@ -61,6 +61,66 @@
       "marketplace": "wshobson/claude-code-workflows",
       "install": "npx claude-plugins install @wshobson/claude-code-workflows/backend-development",
       "description": "Backend API design, GraphQL, Temporal orchestration."
+    },
+    {
+      "name": "kubernetes-devops",
+      "marketplace": "wshobson/claude-code-workflows",
+      "install": "npx claude-plugins install @wshobson/claude-code-workflows/kubernetes-devops",
+      "description": "K8s manifests, Helm charts, ArgoCD, observability."
+    },
+    {
+      "name": "aws-serverless",
+      "marketplace": "wshobson/claude-code-workflows",
+      "install": "npx claude-plugins install @wshobson/claude-code-workflows/aws-serverless",
+      "description": "Lambda, API Gateway, DynamoDB, SAM/CDK."
+    },
+    {
+      "name": "terraform-infrastructure",
+      "marketplace": "wshobson/claude-code-workflows",
+      "install": "npx claude-plugins install @wshobson/claude-code-workflows/terraform-infrastructure",
+      "description": "Terraform modules, state management, plan/apply."
+    },
+    {
+      "name": "testing-qa",
+      "marketplace": "wshobson/claude-code-workflows",
+      "install": "npx claude-plugins install @wshobson/claude-code-workflows/testing-qa",
+      "description": "Unit / integration / e2e test patterns."
+    },
+    {
+      "name": "security-pro",
+      "marketplace": "wshobson/claude-code-workflows",
+      "install": "npx claude-plugins install @wshobson/claude-code-workflows/security-pro",
+      "description": "OWASP, SAST, DAST, secrets scanning."
+    },
+    {
+      "name": "code-architecture",
+      "marketplace": "wshobson/claude-code-workflows",
+      "install": "npx claude-plugins install @wshobson/claude-code-workflows/code-architecture",
+      "description": "Clean architecture, DDD, hexagonal patterns."
+    },
+    {
+      "name": "data-engineering",
+      "marketplace": "wshobson/claude-code-workflows",
+      "install": "npx claude-plugins install @wshobson/claude-code-workflows/data-engineering",
+      "description": "ETL pipelines, dbt, Spark, warehouse modeling."
+    },
+    {
+      "name": "ml-ops",
+      "marketplace": "wshobson/claude-code-workflows",
+      "install": "npx claude-plugins install @wshobson/claude-code-workflows/ml-ops",
+      "description": "Model training, evaluation, deployment, monitoring."
+    },
+    {
+      "name": "documentation-generator",
+      "marketplace": "EveryInc/every-marketplace",
+      "install": "npx claude-plugins install @EveryInc/every-marketplace/documentation-generator",
+      "description": "Auto-generate READMEs, API docs, ADRs from code."
+    },
+    {
+      "name": "linear-workflows",
+      "marketplace": "EveryInc/every-marketplace",
+      "install": "npx claude-plugins install @EveryInc/every-marketplace/linear-workflows",
+      "description": "Linear issue triage, sprint planning, dependency mapping."
     }
   ]
 }

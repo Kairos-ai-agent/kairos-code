@@ -24,9 +24,11 @@
  *      same column as the chat history — minimax-code style).
  *   2. The avatar / settings dropdown is GONE from the topbar.
  *   3. The FolderPicker is GONE from the topbar. The project picker
- *      now lives above the chat input (see `ChatComposer.tsx`).
- *      This was a dedup pass: rendering the picker in two places
- *      was confusing, so the composer is the canonical location.
+ *      now lives in the bottom-left of the chat composer (see
+ *      `ChatComposer.tsx`) — in the action row, next to the
+ *      intent-preview chip. This was a dedup pass: rendering the
+ *      picker in two places was confusing, so the composer is the
+ *      canonical location.
  *
  * The footer is implemented in ChatSidebar (it has the full
  * sidebar context including flex / theming).
@@ -247,15 +249,22 @@ const AppLayout: React.FC = () => {
             color: tokens.labelPrimary,
           }}
         >
-          <span
-            aria-hidden
+          {/* R38.6 §34: brand K icon. The topbar logo is
+              24×24 to fit comfortably next to the 16px
+              "Kairos" text. The img element lets the browser
+              cache it; we set width/height explicitly so the
+              layout doesn't reflow when the image loads. */}
+          <img
+            src="/branding/kairos-icon-64.png"
+            alt="Kairos"
+            width={24}
+            height={24}
             style={{
-              width: 24, height: 24, borderRadius: 6,
-              background: tokens.labelPrimary, color: tokens.bgBase,
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 13, fontWeight: 700,
+              borderRadius: 6,
+              display: 'block',
+              objectFit: 'cover',
             }}
-          >K</span>
+          />
           Kairos
         </div>
         <div style={{ flex: 1 }} />

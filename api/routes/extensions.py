@@ -28,7 +28,7 @@ GET /api/extensions/mcps
     they need to set.
 
 GET /api/extensions/plugins
-    List curated plugins (Claude Code marketplaces). Each entry
+    List curated plugins (the agentic CLI marketplaces). Each entry
     has the install command (e.g. ``npx claude-plugins install ...``).
 
 GET /api/extensions/summary

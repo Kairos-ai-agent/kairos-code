@@ -34,7 +34,7 @@ class AgentTask(BaseModel):
     context: Dict[str, Any] = {}
     status: str = "pending"
     result: Optional[str] = None
-    # Codex-Harness-style output guardrail verdict. Populated by the
+    # the cloud task-Harness-style output guardrail verdict. Populated by the
     # agent's run() when an output_guardrail is attached. Optional
     # so existing call sites that build AgentTask without it keep
     # working unchanged.
@@ -243,7 +243,7 @@ class KairosAgent:
         self._max_tokens = 80000  # Token budget
         self._keep_recent = 4     # Always keep last N messages
 
-        # Codex-Harness-style retained reasoning: a running summary of
+        # the cloud task-Harness-style retained reasoning: a running summary of
         # older conversation turns is kept alongside the raw recent
         # messages. The summary is regenerated every SUMMARIZE_EVERY_N
         # turns (or when memory would otherwise overflow). It is
@@ -258,7 +258,7 @@ class KairosAgent:
         self.message_bus.subscribe(agent_id, f"agent.{agent_id}")
         self.message_bus.subscribe(agent_id, "broadcast")
 
-        # Codex-Harness-style project context: AGENTS.md augments the
+        # the cloud task-Harness-style project context: AGENTS.md augments the
         # hard-coded system_prompt at construction time. Skills are
         # loaded per task at _build_messages() because matching depends
         # on the current task context (keyword / tools / filename).
@@ -294,7 +294,26 @@ class KairosAgent:
             self._agents_md_loader = None
             self._skills_loader = None
 
-        # Optional output guardrail (Codex-Harness-style hook). When
+        # R38.6 §34: self-improving style FTS5 memory — pull top-5
+        # project-scoped memories into the system prompt so
+        # the agent remembers past sessions without
+        # re-asking the user. Lazy-loaded on first use.
+        self._memory_kb = None
+        if self._project_dir:
+            try:
+                from kairos.memory_kb import MemoryKB
+                mem_path = self._project_dir / ".kairos" / "memory_kb.json"
+                if mem_path.parent.exists():
+                    kb = MemoryKB(storage_path=mem_path)
+                    # Only do a quick recall at construction; full
+                    # recall runs on each task. Avoid hitting the
+                    # network on every agent spawn.
+                    self._memory_kb = kb
+            except Exception as exc:
+                logger.debug("memory_kb init failed: %s", exc)
+                self._memory_kb = None
+
+        # Optional output guardrail (the cloud task-Harness-style hook). When
         # present, ``run()`` invokes it on the final result before
         # returning so a Reviewer agent (or a fast local check) can
         # flag the output. Stays None by default — enabling it costs
@@ -473,7 +492,26 @@ class KairosAgent:
         """Build messages for LLM including system prompt and memory."""
         self._truncate_memory()
         system = self.system_prompt
-        # Inject Codex-style skills based on current task + tool context.
+        # R38.6 §34: self-improving style FTS5 memory — pull top-5
+        # project-scoped memories relevant to the current task
+        # and append them to the system prompt. This is the
+        # canonical "agent that grows with you" feature.
+        if self._memory_kb is not None and self.current_task is not None:
+            try:
+                task_text = (self.current_task.title or "") + " " + \
+                            (self.current_task.description or "")
+                hits = self._memory_kb.recall(task_text.strip(),
+                                                scope="project", limit=5)
+                if hits:
+                    lines = ["", "## Memory (from past sessions)"]
+                    for h in hits:
+                        if h.value:
+                            lines.append(f"- {h.key}: {h.value[:200]}")
+                    if len(lines) > 1:
+                        system = system + "\n" + "\n".join(lines)
+            except Exception as exc:
+                logger.debug("memory recall in _build_messages: %s", exc)
+        # Inject the cloud task-style skills based on current task + tool context.
         # We do this every turn because the active tool list changes
         # after each tool call, which can promote/demote skills.
         if self._skills_loader is not None and self.current_task is not None:
@@ -515,7 +553,7 @@ class KairosAgent:
             except Exception as exc:
                 logger.debug("plan injection failed: %s", exc)
 
-        # Inject retained-reasoning summary (Codex-Harness-style) as a
+        # Inject retained-reasoning summary (the cloud task-Harness-style) as a
         # second system message, immediately after the role + skills
         # system prompt. This is the agent's "earlier context" memory
         # for the long-running session.
@@ -673,12 +711,15 @@ class KairosAgent:
                 self.status = AgentStatus.THINKING
                 self.current_turn = turn + 1
                 self.current_tool = None
-                # Announce this turn on the bus so the UI can show progress
-                # even for agents without tools (e.g. Team Leader), whose
-                # activity was previously invisible until the final result.
+                # Announce this turn on the bus. R38.6.3: send to
+                # the dedicated ``agent.progress`` topic so the chat
+                # thread can filter it out and the Workbench can
+                # subscribe separately. The chat view should
+                # only show the agent's actual responses, not
+                # per-turn reasoning chatter.
                 await self.message_bus.publish(Message(
                     sender=self.agent_id,
-                    topic="agent.thinking",
+                    topic="agent.progress",
                     content=f"Turn {turn + 1}/{self.MAX_TOOL_TURNS}: reasoning...",
                     msg_type="text",
                     metadata={"task_id": task.id, "turn": turn + 1,
@@ -826,7 +867,7 @@ class KairosAgent:
                     ))
 
                 # End-of-turn: condense older turns into a running
-                # summary (Codex-Harness-style retained reasoning).
+                # summary (the cloud task-Harness-style retained reasoning).
                 # Runs only every _summarize_every_n turns or when
                 # memory approaches the token budget, so per-turn cost
                 # is usually zero. Indented 16 spaces so it lives
@@ -854,7 +895,7 @@ class KairosAgent:
             task.status = "completed" if not timed_out else "failed"
             task.result = result
 
-            # Codex-Harness-style output guardrail hook. If a reviewer
+            # the cloud task-Harness-style output guardrail hook. If a reviewer
             # guardrail is attached, let it grade the final result.
             # The guardrail publishes its own verdict to the bus; we
             # also stamp the task with a "guardrail" flag so the

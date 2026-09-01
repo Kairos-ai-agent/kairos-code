@@ -215,7 +215,7 @@ def check_skills_loadable() -> CheckResult:
                      group="skills")
     if n == 0:
         return _fail(name, "no skills discovered",
-                     hint="Re-run scripts/adapt_superpowers_skills.py and "
+                     hint="Re-run scripts/adapt_the skill library_skills.py and "
                           "scripts/adapt_anthropic_skills.py.",
                      group="skills")
     return _ok(name, f"{n} skills discovered", group="skills")

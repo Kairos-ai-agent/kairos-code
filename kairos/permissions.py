@@ -1,6 +1,6 @@
 """Permission rules: allow / ask / deny for tool invocations.
 
-Mirrors Claude Code's permission system. The user (or a project's
+Mirrors the agentic CLI's permission system. The user (or a project's
 ``permissions`` block) declares rules like::
 
     permissions:
@@ -195,7 +195,7 @@ def load_policy(
 
     Resolution order: user → project. Within each file, the order
     of rules is preserved (the first matching rule wins, per
-    Claude Code semantics).
+    the agentic CLI semantics).
     """
     user_dir = Path(user_dir) if user_dir else Path.home() / ".kairos"
     user_cfg = _load_yaml(user_dir / "permissions.yaml")

@@ -7,6 +7,7 @@ import {
   FileTextOutlined, PaperClipOutlined, InboxOutlined,
 } from '@ant-design/icons';
 import api from '../api/client';
+import { formatError } from '../utils/formatError';
 import { useAgentStore } from '../stores/agentStore';
 import type { Project, ProjectFile } from '../types';
 
@@ -73,7 +74,7 @@ const ProjectPage: React.FC = () => {
       startForm.resetFields();
       setCurrentProject(selectedProject);
     } catch (e: any) {
-      const detail = e?.response?.data?.detail || e?.message || 'Unknown error';
+      const detail = formatError(e, 'Unknown error');
       message.error(`Failed to start project: ${detail}`);
     }
   };
@@ -414,3 +415,4 @@ const ProjectPage: React.FC = () => {
 };
 
 export default ProjectPage;
+

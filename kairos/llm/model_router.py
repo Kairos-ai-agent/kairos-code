@@ -189,18 +189,57 @@ class ModelRouter:
                 logging.getLogger(__name__).debug("Failed to load role mappings", exc_info=True)
 
     def get_provider_for_role(self, role: str) -> BaseLLMProvider:
-        """Get an LLM provider for a specific role, with caching."""
-        model_name = self._role_mapping.get(role, "default")
+        """Get an LLM provider for a specific role, with caching.
+
+        For role lookups, falls back to "default" if the role isn't
+        explicitly mapped. For per-task tier lookups (fast / default /
+        strong), use ``get_provider_for_task(tier)`` instead.
+        """
+        return self._build_provider(role, role_mapping_key=role,
+                                     default_model_key="default")
+
+    def get_provider_for_task(self, tier: str) -> BaseLLMProvider:
+        """Get a provider for a per-task complexity tier.
+
+        R38.6.4: three tiers — "fast" / "default" / "strong". The
+        mapping is read from data/settings.json under
+        ``role_mappings[task:fast]``, ``role_mappings[task:default]``,
+        ``role_mappings[task:strong]``. Falls back to the active
+        provider for "default" and to sensible cheap / strong
+        models for the extremes if no explicit mapping exists.
+
+        Why three tiers:
+        - fast: file reads, status checks, simple Q&A — saves cost
+        - default: normal code edits, plan/execute loops
+        - strong: complex refactors, hard bug hunts, planning
+        """
+        tier_key = f"task:{tier}"
+        return self._build_provider(tier_key, role_mapping_key=tier_key,
+                                     default_model_key=tier)
+
+    def list_role_mappings(self) -> Dict[str, str]:
+        return dict(self._role_mapping)
+
+    def list_tier_mappings(self) -> Dict[str, str]:
+        """Return only the task:<tier> → model mappings for the UI
+        (SettingsDrawer) to display and edit."""
+        return {k.removeprefix("task:"): v
+                for k, v in self._role_mapping.items()
+                if k.startswith("task:")}
+
+    def _build_provider(self, cache_key: str, role_mapping_key: str,
+                          default_model_key: str) -> BaseLLMProvider:
+        """Shared provider-build path. Cached by ``cache_key``."""
+        model_name = self._role_mapping.get(role_mapping_key, default_model_key)
 
         # Check cache
         now = time.time()
-        if role in self._provider_cache:
-            cached_time = self._cache_timestamps.get(role, 0)
+        if cache_key in self._provider_cache:
+            cached_time = self._cache_timestamps.get(cache_key, 0)
             if now - cached_time < self._cache_ttl:
-                return self._provider_cache[role]
+                return self._provider_cache[cache_key]
 
         # Load custom models with TTL (avoid disk I/O on every call)
-        now = time.time()
         if now - self._custom_models_loaded_at > self._custom_models_ttl:
             self._load_custom_models()
             self._custom_models_loaded_at = now
@@ -217,11 +256,8 @@ class ModelRouter:
         raw_provider = create_provider(config)
 
         # Wrap with retry + exponential backoff + provider failover.
-        # Failover: if a "failover" model is configured for this role
-        # in data/settings.json (role_mappings[role + ":failover"]),
-        # the resilient wrapper uses it after 3 consecutive failures.
         failover = None
-        failover_model = self._role_mapping.get(role + ":failover")
+        failover_model = self._role_mapping.get(role_mapping_key + ":failover")
         if failover_model:
             try:
                 fc = self._model_configs.get(failover_model)
@@ -234,8 +270,8 @@ class ModelRouter:
         provider = wrap_with_resilience(raw_provider, failover=failover)
 
         # Cache it
-        self._provider_cache[role] = provider
-        self._cache_timestamps[role] = now
+        self._provider_cache[cache_key] = provider
+        self._cache_timestamps[cache_key] = now
 
         return provider
 
@@ -313,6 +349,3 @@ class ModelRouter:
                 "provider": cfg.provider,
             })
         return result
-
-    def list_role_mappings(self) -> Dict[str, str]:
-        return dict(self._role_mapping)

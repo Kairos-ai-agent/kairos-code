@@ -51,6 +51,7 @@ import { useThemeStore } from '../stores/themeStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import api from '../api/client';
+import { formatError } from '../utils/formatError';
 import NewChatButton from './NewChatButton';
 import type { LoopSession, Project } from '../types';
 
@@ -230,7 +231,7 @@ const ChatSidebar: React.FC = () => {
               <Empty
                 image={<MessageOutlined style={{ fontSize: 24,
                                                 color: tokens.labelTertiary }} />}
-                imageStyle={{ height: 32 }}
+                styles={{ image: { height: 32 } }}
                 description={
                   <span style={{ color: tokens.labelTertiary, fontSize: 12 }}>
                     No sessions yet — start a new loop below.
@@ -264,7 +265,7 @@ const ChatSidebar: React.FC = () => {
           <Empty
             image={<ProjectOutlined style={{ fontSize: 28,
                                             color: tokens.labelTertiary }} />}
-            imageStyle={{ height: 40 }}
+            styles={{ image: { height: 40 } }}
             description={
               <span style={{ color: tokens.labelTertiary, fontSize: 12 }}>
                 Add a folder from the top bar to start your first project.
@@ -573,3 +574,4 @@ function groupByDate(sessions: LoopSession[]): Group[] {
 }
 
 export default ChatSidebar;
+

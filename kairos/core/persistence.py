@@ -236,11 +236,15 @@ class Persistence:
     def save_loop_round(self, project_id: str, session_id: str, round_no: int, coder_summary: str, review: dict) -> None:
         """Persist one round's structured digest. Idempotent on
         (project_id, session_id, round) — if you save twice, the row is
-        overwritten (the table's PRIMARY KEY makes INSERT OR REPLACE work)."""
+        overwritten (the table's PRIMARY KEY makes INSERT OR REPLACE work).
+
+        The full summaries are stored WITHOUT truncation so old rounds
+        remain fully readable when the user scrolls history (a hard
+        [:5000]/[:2000] slice silently cut long replies / code blocks)."""
         review_json = json.dumps(review, ensure_ascii=False)
         with sqlite3.connect(self.db_path) as conn:
             insert_order = self._next_loop_insert_order(conn)
-            conn.execute('INSERT OR REPLACE INTO loop_rounds (project_id, session_id, round, coder_summary, review_summary, review_json, score, approve, created_at, insert_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (project_id, session_id, round_no, coder_summary[:5000], (review.get('summary') or '')[:2000], review_json, int(review.get('score') or 0), 1 if review.get('approve') else 0, time.time(), insert_order))
+            conn.execute('INSERT OR REPLACE INTO loop_rounds (project_id, session_id, round, coder_summary, review_summary, review_json, score, approve, created_at, insert_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (project_id, session_id, round_no, coder_summary, (review.get('summary') or ''), review_json, int(review.get('score') or 0), 1 if review.get('approve') else 0, time.time(), insert_order))
 
     def _next_loop_insert_order(self, conn) -> int:
         """Return a monotonically-increasing integer used as the
@@ -253,6 +257,43 @@ class Persistence:
             return int(row[0] or 0) + 1
         except sqlite3.OperationalError:
             return int(time.time() * 1000)
+
+    def record_working_fix(self, project_id: str, issue: str, fix: str,
+                             severity: str = "MAJOR",
+                             source: str = "loop") -> int:
+        """R38.6.4 #6: write a known-issue row into working_fixes.
+
+        Called by the Coder run loop when:
+        - the Reviewer issues a CRITICAL verdict, or
+        - the loop terminates with outcome=failed (no_progress_count
+          exceeded, user_stopped with no approve, etc.)
+
+        Future rounds of the same project read these rows from
+        ``_build_chat_system_prompt`` (already injected as "Known
+        issues to avoid"), so the Coder doesn't re-step on the same
+        rake.
+        """
+        if not issue or not fix:
+            return 0
+        with sqlite3.connect(self.db_path) as conn:
+            cur = conn.execute(
+                "INSERT INTO working_fixes "
+                "(project_id, issue, fix, severity, source, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (project_id, issue[:200], fix[:500], severity,
+                 source, time.time()))
+            return cur.lastrowid or 0
+
+    def list_working_fixes(self, project_id: str, limit: int = 5) -> List[dict]:
+        """R38.6.4 #6: fetch the most recent N fixes for a project."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT issue, fix, severity, created_at "
+                "FROM working_fixes WHERE project_id = ? "
+                "ORDER BY created_at DESC LIMIT ?",
+                (project_id, limit)).fetchall()
+        return [dict(r) for r in rows]
 
     def load_loop_rounds(self, project_id: str, limit: int=20) -> List[dict]:
         """Load recent loop rounds for a project, oldest first.
@@ -507,13 +548,13 @@ class Persistence:
                 rows = conn.execute('SELECT round, coder_summary, review_summary FROM loop_rounds_fts WHERE project_id = ? ORDER BY round DESC LIMIT ?', (project_id, limit)).fetchall()
                 return [dict(r) for r in rows]
             try:
-                rows = conn.execute('SELECT lr.round, lr.coder_summary, lr.review_summary, fts.rank AS score FROM loop_rounds_fts fts JOIN loop_rounds lr ON     lr.project_id = fts.project_id     AND lr.session_id = fts.session_id     AND lr.round = fts.round WHERE fts.project_id = ? AND loop_rounds_fts MATCH ? ORDER BY fts.rank LIMIT ?', (project_id, query, limit)).fetchall()
+                rows = conn.execute('SELECT lr.round, lr.coder_summary, lr.review_summary, fts.issues_text, fts.rank AS score FROM loop_rounds_fts fts JOIN loop_rounds lr ON     lr.project_id = fts.project_id     AND lr.session_id = fts.session_id     AND lr.round = fts.round WHERE fts.project_id = ? AND loop_rounds_fts MATCH ? ORDER BY fts.rank LIMIT ?', (project_id, query, limit)).fetchall()
                 if rows:
                     return [dict(r) for r in rows]
                 # JOIN found nothing in loop_rounds (caller only indexed
                 # into FTS without saving the canonical round). Fall back
                 # to FTS-only so the search still returns useful hits.
-                rows = conn.execute('SELECT round, coder_summary, review_summary FROM loop_rounds_fts WHERE project_id = ? AND loop_rounds_fts MATCH ? ORDER BY rank LIMIT ?', (project_id, query, limit)).fetchall()
+                rows = conn.execute('SELECT round, coder_summary, review_summary, issues_text FROM loop_rounds_fts WHERE project_id = ? AND loop_rounds_fts MATCH ? ORDER BY rank LIMIT ?', (project_id, query, limit)).fetchall()
                 return [dict(r) for r in rows]
             except sqlite3.OperationalError:
                 logger.debug('FTS query failed for %r', query, exc_info=True)

@@ -15,7 +15,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-from kairos.agents.base import AgentTask
+# R38.6.4 packaging: was 'from kairos.agents.base import AgentTask' — replaced with __getattr__ lazy load
 from kairos.core.message_bus import Message
 from kairos.loop.cross_loop import (
     CODER_TEMPERATURE_START,
@@ -32,6 +32,7 @@ from kairos.loop.gates import (
     PER_ROUND_TIMEOUT_S,
     STAGNATION_TOLERANCE,
     STAGNATION_WINDOW,
+    dynamic_caps,
     issues_signature,
 )
 from kairos.loop.plan_mode import is_plan_dirty, sanitize_plan_text
@@ -60,6 +61,10 @@ def _plan_snapshot(session) -> Optional[dict]:
         return None
 
 async def _run_coder_round(session, requirement, round_no, plan_mode=False):
+    # R38.6.4 packaging: AgentTask is lazy-loaded at module level via
+    # __getattr__, which does NOT fire for this bare-name lookup inside
+    # the function body — import it locally so the name resolves.
+    from kairos.agents.base import AgentTask
     bus = session.message_bus
     coder = session.coder
     target_temp = CODER_TEMPERATURE_START if plan_mode else coder_temperature_for_round(round_no)
@@ -469,10 +474,15 @@ async def _check_gates(session, round_no, bus):
         ))
         record_loop_round("approved")
         return "approved"
-    if session.total_tokens_used >= COST_TOKEN_CAP:
+    # Adaptive caps: heavy tasks get doubled headroom (see gates.dynamic_caps).
+    # Falls back to the constants when no caps were stashed on the session.
+    caps = getattr(session, "caps", None) or {}
+    token_cap = int(caps.get("token_cap") or COST_TOKEN_CAP)
+    safety_cap = int(caps.get("safety_cap") or LOOP_SAFETY_CAP)
+    if session.total_tokens_used >= token_cap:
         await bus.publish(Message(
             sender="orchestrator", topic="loop.cost_cap",
-            content=f"Token budget exhausted ({session.total_tokens_used} >= {COST_TOKEN_CAP})",
+            content=f"Token budget exhausted ({session.total_tokens_used} >= {token_cap})",
             msg_type="warning",
             metadata={"project_id": session.project.id,
                       "session_id": session.session_id},
@@ -516,10 +526,10 @@ async def _check_gates(session, round_no, bus):
         ))
         record_loop_round("stagnation")
         return "stagnation"
-    if session.round >= LOOP_SAFETY_CAP and not getattr(session, "_unbounded", False):
+    if session.round >= safety_cap and not getattr(session, "_unbounded", False):
         await bus.publish(Message(
             sender="orchestrator", topic="loop.safety_cap",
-            content=f"Round {session.round} reached safety cap {LOOP_SAFETY_CAP}",
+            content=f"Round {session.round} reached safety cap {safety_cap}",
             msg_type="warning",
             metadata={"project_id": session.project.id,
                       "session_id": session.session_id},
@@ -532,16 +542,62 @@ async def _check_gates(session, round_no, bus):
 # Best-of-N + smart plan mode + round summary
 # ============================================================================
 
+_PASSED_RE = re.compile(r"(\d+)\s+passed", re.IGNORECASE)
+_FAILED_RE = re.compile(r"(\d+)\s+(?:failed|error(?:s)?\b)", re.IGNORECASE)
+_ALL_GREEN_RE = re.compile(
+    r"all\s+tests?\s+pass(?:ed)?|exit\s*code\s*:?\s*0\b|\bok\b\s*\(", re.IGNORECASE
+)
+
+
+def _objective_signal(coder_text: str) -> int:
+    """Extract an objective execution signal from a Coder round's output.
+
+    Self-reported CONFIDENCE is poorly calibrated, so best-of-N also
+    looks for real evidence: test-suite output ("12 passed", "3 failed"),
+    all-green phrases, or exit-code-0 mentions.
+
+    Semantics: any reported test failure is a strong negative signal —
+    a candidate that shows "2 failed, 10 passed" must not outrank a
+    clean one just because it also passed some tests. Returns a signed
+    int; 0 means no signal at all.
+    """
+    if not coder_text:
+        return 0
+    tail = coder_text[-4000:]
+    m = _FAILED_RE.search(tail)
+    if m:
+        try:
+            failed = min(int(m.group(1)), 50)
+        except (TypeError, ValueError):
+            failed = 1
+        # "0 failed" / "0 errors" (common in jest "10 passed, 0 failed")
+        # is NOT a failure — only penalise an actual non-zero count.
+        if failed > 0:
+            return -(failed * 5 + 25)
+    signal = 0
+    m = _PASSED_RE.search(tail)
+    if m:
+        try:
+            signal += min(int(m.group(1)), 50) * 2
+        except (TypeError, ValueError):
+            pass
+    if _ALL_GREEN_RE.search(tail):
+        signal += 15
+    return signal
+
+
 async def _best_of_n_attempts(session, requirement, round_no, n, bus):
-    """Run the Coder N times in parallel, score each by a quick self-grade
-    on the Coder tail, and return the winning (coder_result, score) pair.
+    """Run the Coder N times in parallel and pick the strongest attempt.
 
-    Cheap self-grade: we ask the Coder to emit a brief self-eval in its
-    tail ("CONFIDENCE: 0-100"). We parse that. No Reviewer calls — the
-    real Reviewer runs after best-of-N picks a winner.
+    Ranking signal (in order):
+      1. Objective execution evidence parsed from each attempt's output
+         (tests passed / failed, exit code 0) — real beats self-reported.
+      2. Self-reported ``CONFIDENCE: 0-100`` as a tie-breaker.
+      3. Attempt order (earlier wins ties) for determinism.
 
-    Falls back to single-attempt mode if n<=1 or the Coder tail is
-    unparseable (in which case we just use the first result).
+    No Reviewer calls — the real Reviewer runs after best-of-N picks a
+    winner. Falls back to single-attempt mode if n<=1 or everything
+    fails to spawn.
     """
     if n <= 1 or not hasattr(session, "coder"):
         coder_result = await _run_coder_round(session, requirement, round_no)
@@ -568,19 +624,26 @@ async def _best_of_n_attempts(session, requirement, round_no, n, bus):
         first = results[0] if results else ""
         text = first if isinstance(first, str) else str(first or "")
         return text, 0
-    candidates.sort(key=lambda item: (-item[0], item[1]))
+    candidates.sort(
+        key=lambda item: (-_objective_signal(item[2]), -item[0], item[1])
+    )
     best_score, _, best_text = candidates[0]
     try:
         await bus.publish(Message(
             sender="orchestrator", topic="loop.best_of_n_pick",
-            content=f"Picked attempt {candidates[0][1]+1}/{n} (self-confidence={best_score})",
+            content=(
+                f"Picked attempt {candidates[0][1]+1}/{n} "
+                f"(evidence={_objective_signal(best_text)}, self-confidence={best_score})"
+            ),
             msg_type="text",
             metadata={"project_id": session.project.id,
                       "session_id": session.session_id,
                       "round": round_no,
                       "best_of_n": n,
                       "candidates": [
-                          {"idx": idx, "self_score": s} for s, idx, _ in candidates
+                          {"idx": idx, "self_score": s,
+                           "evidence": _objective_signal(t)}
+                          for s, idx, t in candidates
                       ]},
         ))
     except Exception:
@@ -635,6 +698,106 @@ def _is_trivial_requirement(requirement: str) -> bool:
 def should_auto_approve_plan(requirement: str) -> bool:
     """Public predicate so the orchestrator can call this before launch."""
     return _is_trivial_requirement(requirement)
+
+
+# ============================================================================
+# Review calibration — bind correctness to real test evidence
+# ============================================================================
+
+
+def _calibrate_review(review: Any, require_evidence: bool) -> Any:
+    """Enforce "no test evidence, no approval" on a Reviewer verdict.
+
+    When ``require_evidence`` is on (loop_config.require_test_evidence)
+    and the Reviewer did not report running any test command
+    (``tests_evidence.ran`` falsy), the verdict is downgraded so it can
+    never approve: approve is forced False, the score is clamped to 84
+    (below the 85 approval bar), and a MAJOR issue with a concrete fix
+    instruction is injected. Self-reported scores without execution
+    evidence are exactly the failure mode this guards against.
+
+    Only mutates the review when calibration actually fires, so
+    existing verdict shapes and tests are untouched by default.
+    """
+    if not require_evidence or not isinstance(review, dict):
+        return review
+    # Parallel multi-reviewer merge has no single tests_evidence field
+    # (each sub-verdict lives in _per_reviewer). Multiple independent
+    # reviewers IS the stronger evidence, so skip calibration here
+    # rather than wrongly downgrading a merged vote.
+    if isinstance(review.get("_per_reviewer"), dict):
+        return review
+    evidence = review.get("tests_evidence")
+    ran = bool(evidence.get("ran")) if isinstance(evidence, dict) else False
+    if ran:
+        return review
+    score = review.get("score")
+    if isinstance(score, (int, float)):
+        review["score"] = min(int(score), 84)
+    if review.get("approve"):
+        review["approve"] = False
+    calib = review.get("_calibration")
+    if not isinstance(calib, dict):
+        calib = {}
+        review["_calibration"] = calib
+    calib["missing_test_evidence"] = True
+    issues = review.get("issues")
+    if not isinstance(issues, list):
+        issues = []
+        review["issues"] = issues
+    issues.append({
+        "category": "correctness",
+        "severity": "MAJOR",
+        "file": "",
+        "line": 0,
+        "_injected": True,
+        "description": (
+            "No test evidence: the Reviewer verdict does not report "
+            "running any test command this round."
+        ),
+        "fix_instruction": (
+            "Run the project's test suite (pytest / npm test / etc.) and "
+            "attach the real result before approval can be considered."
+        ),
+    })
+    return review
+
+
+def _record_plan_deviation(session) -> None:
+    """Persist plan-vs-actual deviation at loop end into MemoryKB.
+
+    Closes the planning feedback loop: when a future task plans
+    similarly, the deviation note ("these todos never finished") is
+    available to recall, so the agent calibrates how much it commits
+    to. Best-effort — never raises.
+    """
+    try:
+        plan = getattr(session, "plan_todos", None)
+        if plan is None or plan.is_empty:
+            return
+        from kairos.loop.plan import plan_deviation_report
+        rep = plan_deviation_report(plan)
+        if rep["completion"] >= 0.999 and not rep["pending"]:
+            return
+        from kairos.memory_kb import MemoryKB
+        kb = MemoryKB()
+        sid = str(getattr(session, "session_id", "") or "")
+        key = (
+            f"plan-deviation:{getattr(session.project, 'id', 'p')}"
+            f":{sid[:8]}"
+        )
+        kb.remember(
+            key,
+            {
+                "pending": rep["pending"],
+                "completion": rep["completion"],
+                "rounds": int(getattr(session, "round", 0) or 0),
+            },
+            scope="project",
+            tags=("plan-deviation", "auto"),
+        )
+    except Exception:
+        logger.debug("plan deviation write failed (non-fatal)", exc_info=True)
 
 def _build_round_summary(session, coder_result: str, review: dict, round_no: int) -> str:
     """One-paragraph round digest for the UI / loop_history table.
@@ -718,6 +881,13 @@ async def run_loop(session, requirement, *, unbounded: bool = False):
     # Round 37: stash the unbounded flag on the session so the
     # per-round safety check sees it.
     session._unbounded = bool(unbounded)
+    # Adaptive caps: size the loop's safety/token ceilings from the
+    # requirement itself so heavy tasks get headroom while trivial
+    # ones keep the conservative defaults.
+    try:
+        session.caps = dynamic_caps(requirement)
+    except Exception:
+        logger.debug("dynamic caps failed (non-fatal)", exc_info=True)
     # Round 11: attach a Plan tracker to the Coder so its
     # `write_todos` tool calls are intercepted and the structured
     # plan rides along into the next round's system prompt.
@@ -758,8 +928,12 @@ async def run_loop(session, requirement, *, unbounded: bool = False):
 
     try:
         # Round 37: the safety cap is skipped in unbounded mode.
+        # Adaptive: the cap itself comes from dynamic_caps (stashed
+        # on session.caps) instead of the raw constant.
+        loop_caps = getattr(session, "caps", None) or {}
+        effective_safety_cap = int(loop_caps.get("safety_cap") or LOOP_SAFETY_CAP)
         cap_check = (
-            lambda: session.round < LOOP_SAFETY_CAP
+            lambda: session.round < effective_safety_cap
             if not getattr(session, "_unbounded", False)
             else True
         )
@@ -850,6 +1024,9 @@ async def run_loop(session, requirement, *, unbounded: bool = False):
                 pass
             if session.user_stopped:
                 break
+            # Calibration: when test evidence is required, a verdict
+            # without real test runs can never approve.
+            _calibrate_review(review, bool(getattr(session, "require_test_evidence", False)))
             review["_precheck_hint"] = precheck_hint
             review["_precheck_fixable"] = precheck_fixable
             try:
@@ -949,6 +1126,9 @@ async def run_loop(session, requirement, *, unbounded: bool = False):
                 logger.debug("auto-checkpoint failed", exc_info=True)
             gate = await _check_gates(session, round_no, bus)
             if gate:
+                # Planning feedback loop: record what the plan
+                # promised vs what actually finished.
+                _record_plan_deviation(session)
                 # Best-effort Coder self-reflection. The loop is already
                 # over; failure here must not crash the orchestrator.
                 try:
@@ -963,6 +1143,7 @@ async def run_loop(session, requirement, *, unbounded: bool = False):
                 except Exception:
                     logger.debug("SessionEnd hooks failed (non-fatal)", exc_info=True)
                 return
+        _record_plan_deviation(session)
         await bus.publish(Message(
             sender="orchestrator", topic="loop.finished",
             content=f"Loop finished after {session.round} round(s)",
@@ -977,3 +1158,14 @@ async def run_loop(session, requirement, *, unbounded: bool = False):
             msg_type="error",
             metadata={"project_id": session.project.id, "session_id": session.session_id},
         ))
+
+
+# R38.6.4 packaging: lazy import so PyInstaller onefile
+# can resolve this module (eager top-level imports trip
+# the bootloader when --collect-submodules misses the
+# symbol).
+def __getattr__(name):
+    if name in ['AgentTask']:
+        import importlib as _il, kairos.agents.base as _m
+        return getattr(_m, name)
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

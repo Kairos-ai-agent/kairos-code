@@ -84,6 +84,22 @@ const Chat: React.FC = () => {
   // ----- Helpers -----
   // Load one session's full history from the backend and rehydrate
   // the chat thread with Message-like bubbles.
+  // R38.6.4 #3: convert a backend chat-message (from
+  // /api/projects/{id}/chat-messages) into the in-store Message shape.
+  // We preserve all the fields the chat thread needs (id, sender,
+  // topic, content, timestamp, metadata) so the bubble can be
+  // rendered identically to a live WS message.
+  const toMsgFromBackend = (m: any): Message => ({
+    id: m.id,
+    sender: m.sender,
+    receiver: m.receiver || '',
+    topic: m.topic || '',
+    content: m.content ?? '',
+    msg_type: m.msg_type || 'text',
+    timestamp: m.timestamp || 0,
+    metadata: m.metadata || {},
+  });
+
   const loadSessionHistory = useCallback(async (pid: string, sid: string) => {
     lastLoadedRef.current = `${pid}:${sid}`;
     try {
@@ -121,6 +137,31 @@ const Chat: React.FC = () => {
           });
         }
       }
+      // R38.6.4 #3: also load per-message chat history from the
+      // ``messages`` table. This is the full thread (not just
+      // round summaries), so a chat-only session (no loop rounds)
+      // still rehydrates with all user/agent bubbles. The merge
+      // is a simple union by message id; if both the loop-round
+      // summary AND a per-message row cover the same content,
+      // we keep the loop-round summary (more structured).
+      try {
+        const cm = await api.get<{ messages: any[] }>(
+          `/projects/${pid}/chat-messages`, { params: { limit: 200 } });
+        const existingIds = new Set(msgs.map((m) => m.id));
+        for (const m of (cm.data.messages || [])) {
+          // Skip loop-round summaries and tool events for clarity
+          if (m.topic && m.topic.startsWith('coder.summary')) continue;
+          if (m.topic && m.topic.startsWith('reviewer.summary')) continue;
+          if (existingIds.has(m.id)) continue;
+          msgs.push(toMsgFromBackend(m));
+        }
+      } catch {
+        /* offline / endpoint missing — fall through to rounds only */
+      }
+      // Sort by timestamp so the chat thread is always in order,
+      // regardless of which source (loop rounds or per-message
+      // rows) contributed each entry.
+      msgs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
       setCurrentMessages(msgs);
     } catch (e) {
       // 404 / network error = no rounds yet. R38.6.4: don't
@@ -294,7 +335,21 @@ const Chat: React.FC = () => {
       if (topic === 'agent.response' || topic === 'task.result' || topic === 'task.error') {
         finalizeStream(msg.sender || 'agent');
         if (topic === 'task.result') {
-          const isErr = /error|fail|exception|traceback/i.test(content);
+          // R38.6.4: stricter error detection. The earlier loose
+          // regex ``/error|fail|exception|traceback/i`` fired on
+          // benign LLM text like "I checked the error logs" or
+          // "no exceptions were raised". We now require an obvious
+          // error signal: a top-of-message Error / Exception
+          // prefix, or an explicit "failed" / "traceback" keyword
+          // (LLMs rarely write "failed" except in error context),
+          // or a stack-frame line.
+          const trimmed = content.trim();
+          const isErr = (
+            /^\s*(Error|Exception|Fatal|TypeError|ValueError|KeyError|AttributeError|ImportError|RuntimeError)\s*[:(]/i.test(trimmed)
+            || /\btraceback\b/i.test(trimmed)
+            || /\b(stack trace|stacktrace)\b/i.test(trimmed)
+            || /\b(failed|FAIL)\b(?!\s+to\b)/i.test(trimmed)
+          );
           if (isErr) {
             msgApi.error('Task failed — see the chat for details');
           } else {
@@ -405,6 +460,35 @@ const Chat: React.FC = () => {
       lastLoadedRef.current = '';
     }
   }, [currentProject, sessionId, loadSessionHistory, setCurrentMessages]);
+
+  // R38.6.4: when a project is selected but no session is chosen
+  // (e.g. right after switching projects in the sidebar, where the
+  // user lands on /chat with no sessionId in the URL), auto-open
+  // the most recent session so the previous conversation is
+  // restored instead of the thread looking empty / "history lost".
+  // If the project has no history yet the API returns [] and the
+  // effect no-ops — the user sees a fresh empty thread, which is
+  // correct for a brand-new project.
+  useEffect(() => {
+    if (!currentProject || sessionId) return;
+    const projectId = currentProject.id;
+    api.get<{ sessions: LoopSession[] }>(`/projects/${projectId}/sessions`)
+      .then((r) => {
+        const list = (r.data && r.data.sessions) || [];
+        setSessions(list);
+        // Backend returns sessions sorted newest first; open the
+        // most recent one. Skip if the user already picked a session
+        // between the get() and the then().
+        const latest = list[0];
+        if (latest?.session_id && !useChatStore.getState().currentSessionId) {
+          setCurrentSessionId(latest.session_id);
+          navigate(`/chat/${latest.session_id}`, { replace: true });
+          loadSessionHistory(projectId, latest.session_id);
+        }
+      })
+      .catch(() => { /* offline / first paint — sidebar will retry */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentProject?.id, sessionId]);
 
   // ----- Actions -----
   //

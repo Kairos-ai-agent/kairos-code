@@ -53,7 +53,13 @@ interface ChatStore {
   currentProject: Project | null;
   sessions: SessionMeta[];
   currentSessionId: string | null;
-  currentMessages: Message[];   // for the current session
+  // R38.6.4: per-project chat thread. ``messagesByProject`` is the
+  // durable map (keyed by project_id); ``currentMessages`` is the
+  // live view of the active project. Switching projects snapshots
+  // the current view back into the map and loads the next project's
+  // thread, so the user's history survives the switch.
+  messagesByProject: Record<string, Message[]>;
+  currentMessages: Message[];
   sidebarCollapsed: boolean;
   workbenchOpen: boolean;       // R38.6 §26: right-side Workbench panel
 
@@ -88,6 +94,14 @@ export const useChatStore = create<ChatStore>()(
       currentProject: null,
       sessions: [],
       currentSessionId: null,
+      // R38.6.4: chat thread is per-project. ``messagesByProject``
+      // is the durable backing store (keyed by project_id);
+      // ``currentMessages`` is the live view of whichever project
+      // the user is currently looking at. ``setCurrentProject``
+      // snapshots the old project to the map and loads the new
+      // project's messages back into ``currentMessages``, so
+      // switching projects no longer wipes the user's history.
+      messagesByProject: {} as Record<string, Message[]>,
       currentMessages: [],
       sidebarCollapsed: false,
       workbenchOpen: true,  // R38.6 §26: open by default — the right
@@ -95,9 +109,32 @@ export const useChatStore = create<ChatStore>()(
                             // what the agent is doing.
 
       setProjects: (projects) => set({ projects }),
+      // R38.6.4: per-project chat thread. When the user switches
+      // projects we:
+      //   1. snapshot the current thread to messagesByProject[oldId]
+      //   2. load the new project's thread (or [] for a fresh one)
+      //   3. reset sessions + currentSessionId (these are project-scoped
+      //      too, so they don't carry across)
+      // The chat history for each project is preserved across
+      // switches, which is the user-facing bug the previous flat
+      // ``currentMessages: []`` clear caused.
       setCurrentProject: (currentProject) =>
-        set({ currentProject, sessions: [], currentSessionId: null,
-              currentMessages: [] }),
+        set((state) => {
+          const oldId = state.currentProject?.id;
+          const newId = currentProject?.id;
+          const map = { ...(state.messagesByProject || {}) };
+          if (oldId) {
+            map[oldId] = state.currentMessages;
+          }
+          const nextMessages = (newId && map[newId]) || [];
+          return {
+            currentProject,
+            sessions: [],
+            currentSessionId: null,
+            messagesByProject: map,
+            currentMessages: nextMessages,
+          };
+        }),
       // R38.6.4: debug aid — log whenever currentMessages is set to
       // [] so the user can trace in DevTools why their chat thread
       // disappeared. If the user reports "messages lost on refresh",
@@ -166,10 +203,12 @@ export const useChatStore = create<ChatStore>()(
             });
             if (dup) return state;
           }
-          // Cap to 500 messages to keep the DOM small.
-          const next = [...state.currentMessages, m];
-          return { currentMessages: next.length > 500
-                  ? next.slice(next.length - 500) : next };
+          // Keep the FULL thread — no artificial message cap — so
+          // history stays scrollable as far back as it goes. If
+          // rendering ever lags on very long threads, add windowing
+          // (virtual list) in ChatThread instead of dropping old
+          // messages.
+          return { currentMessages: [...state.currentMessages, m] };
         }),
       updateMessage: (id, patch) =>
         set((state) => ({
@@ -255,7 +294,8 @@ export const useChatStore = create<ChatStore>()(
         set((state) => ({ workbenchOpen: !state.workbenchOpen })),
       reset: () => set({
         projects: [], currentProject: null, sessions: [],
-        currentSessionId: null, currentMessages: [], sidebarCollapsed: false,
+        currentSessionId: null, currentMessages: [], messagesByProject: {},
+        sidebarCollapsed: false,
       }),
     }),
     {
@@ -278,7 +318,21 @@ export const useChatStore = create<ChatStore>()(
         projects: s.projects,
         currentProject: s.currentProject,
         currentSessionId: s.currentSessionId,
-        currentMessages: s.currentMessages.slice(-200),
+        // R38.6.4: cap each project's thread to 200 messages so a
+        // long conversation across many projects doesn't blow past
+        // the 5 MB localStorage budget (10 projects × 500 × ~500 B
+        // = ~2.5 MB worst case). Older messages stay in the backend
+        // messages table for scrollback.
+        messagesByProject: Object.fromEntries(
+          Object.entries(s.messagesByProject || {}).map(
+            ([pid, msgs]) => [pid, (msgs as unknown[]).slice(-500)]
+          )
+        ),
+        // R38.6.4: we still persist currentMessages for the v1->v2
+        // upgrade path (older caches had it as a flat array). New
+        // writes go through messagesByProject; this is a best-effort
+        // mirror of whichever project is currently active.
+        currentMessages: s.currentMessages.slice(-500),
       }),
       // R38.6.4: explicit merge so v1 caches (no currentMessages)
       // upgrade cleanly to v2. Default merge is
@@ -294,20 +348,33 @@ export const useChatStore = create<ChatStore>()(
           ...current,
           ...p,
           currentMessages: Array.isArray(p.currentMessages)
-                            ? (p.currentMessages as unknown[]).slice(-200)
+                            ? (p.currentMessages as unknown[]).slice(-500)
                             : [],
         };
       },
       // Bump this when the shape of the cached state changes
       // incompatibly, to force a one-time re-init of the cache.
-      version: 2,
-      // v1 -> v2 migration. v1 had no currentMessages; we just
-      // add an empty array so the new shape is satisfied. New
-      // messages get appended + persisted going forward.
+      version: 3,
+      // v1 -> v2: add empty currentMessages.
+      // v2 -> v3: split currentMessages into messagesByProject map
+      // so each project keeps its own chat thread. We move whatever
+      // v2 had for currentMessages into messagesByProject[currentId],
+      // and start fresh for other projects.
       migrate: (persisted: unknown, version: number) => {
         const p = (persisted || {}) as Record<string, unknown>;
         if (version < 2) {
           return { ...p, currentMessages: [] };
+        }
+        if (version < 3) {
+          const currentId =
+            (p.currentProject as { id?: string } | null)?.id ?? null;
+          const oldMessages = Array.isArray(p.currentMessages)
+                                ? p.currentMessages : [];
+          const messagesByProject: Record<string, unknown[]> = {};
+          if (currentId && oldMessages.length) {
+            messagesByProject[currentId] = oldMessages;
+          }
+          return { ...p, messagesByProject };
         }
         return p;
       },
@@ -323,11 +390,18 @@ export const useChatStore = create<ChatStore>()(
         }
         // `state` is the merged state after hydration. If it's
         // null we treat it as a fresh install.
-        const s = (state as unknown as { currentMessages?: unknown[] }) || {};
-        console.info('[chatStore] rehydrated, currentMessages:',
-                     Array.isArray(s.currentMessages)
-                       ? s.currentMessages.length : 0);
+        const s = (state as unknown as { currentProject?: { id?: string };
+                                          currentMessages?: unknown[];
+                                          currentSessionId?: string | null }) || {};
+        console.info('[chatStore] rehydrated:',
+                     'currentProject=', s.currentProject?.id ?? null,
+                     'currentSessionId=', s.currentSessionId ?? null,
+                     'currentMessages=',
+                       Array.isArray(s.currentMessages)
+                         ? s.currentMessages.length : 0);
       },
     },
   ),
 );
+
+

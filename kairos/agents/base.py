@@ -78,6 +78,10 @@ class KairosAgent:
     # (Reviewer, specialists) leave it alone.
     temperature: Optional[float] = None
     MAX_CHAT_TURNS = 5
+    # R38.6.4 #1: project_id is set by the orchestrator so _chat_impl
+    # can pull project context (AGENTS.md, file tree, history) into
+    # the system prompt. Optional — chat() still works without it.
+    project_id: Optional[str] = None
 
     # Per-LLM-call timeout (seconds). Pulled from the provider's LLMConfig
     # and applied with asyncio.wait_for so a hung provider can't tie up an
@@ -505,8 +509,12 @@ class KairosAgent:
                 if hits:
                     lines = ["", "## Memory (from past sessions)"]
                     for h in hits:
-                        if h.value:
-                            lines.append(f"- {h.key}: {h.value[:200]}")
+                        val = h.value
+                        if not val:
+                            continue
+                        if not isinstance(val, str):
+                            val = str(val)
+                        lines.append(f"- {h.key}: {val[:200]}")
                     if len(lines) > 1:
                         system = system + "\n" + "\n".join(lines)
             except Exception as exc:
@@ -765,7 +773,7 @@ class KairosAgent:
                     await self.message_bus.publish(Message(
                         sender=self.agent_id,
                         topic="agent.response",
-                        content=interim[:500],
+                        content=interim[:2000],
                         msg_type="text",
                         metadata={"task_id": task.id, "turn": turn + 1},
                     ))
@@ -887,7 +895,7 @@ class KairosAgent:
             await self.message_bus.publish(Message(
                 sender=self.agent_id,
                 topic="task.result",
-                content=result[:500],
+                content=result[:2000],
                 msg_type="result",
                 metadata={"task_id": task.id},
             ))
@@ -951,6 +959,112 @@ class KairosAgent:
         async with self._lock:
             return await self._chat_impl(message)
 
+    def _build_chat_system_prompt(self) -> str:
+        """Build a project-aware system prompt for single-turn chat.
+
+        R38.6.4 #1+#2+#6: without this, ``chat()`` was a stateless
+        "You are a helpful assistant" call. With this, the Coder
+        knows which project it's in, the AGENTS.md rules, the
+        most recent loop conclusions, the project-level preferences
+        and known fixes — so a casual "what does this function
+        do?" or "fix this bug" gets a real, project-grounded answer.
+
+        Every field is best-effort: if the work_dir doesn't exist,
+        the orchestrator is gone, or persistence returns an empty
+        list, we degrade silently rather than raise. The chat call
+        must never break because context is missing.
+        """
+        if not self.project_id:
+            # No project context: fall back to the generic prompt.
+            return ("You are a helpful assistant. Respond "
+                    "conversationally to the user's message. Use "
+                    "tools when helpful.")
+        try:
+            orch = self._orchestrator  # injected by orchestrator
+        except AttributeError:
+            orch = None
+        project = None
+        if orch is not None:
+            try:
+                project = orch.get_project(self.project_id)
+            except Exception:
+                project = None
+        wd = ""
+        if project is not None:
+            wd = (getattr(project, "work_dir", None)
+                  or str(getattr(project, "workspace", "")))
+
+        blocks: list[str] = []
+
+        # 1) project identity
+        if project is not None:
+            name = getattr(project, "name", "") or project.id
+            desc = (getattr(project, "description", "") or "").strip()
+            head = f'You are the Coder for project {name}.'
+            if desc:
+                head += f"  {desc[:200]}"
+            blocks.append(head)
+
+        # 2) AGENTS.md content (cap 2k chars)
+        try:
+            from pathlib import Path as _P
+            agents_md = _P(wd) / "AGENTS.md"
+            if agents_md.is_file():
+                txt = agents_md.read_text(
+                    encoding="utf-8", errors="replace")
+                blocks.append("### AGENTS.md (excerpt)\n"
+                              + txt[:2000])
+        except Exception:
+            pass
+
+        # 3) Recent loop conclusions + known issues (auto-memory)
+        if orch is not None and hasattr(orch, "_db"):
+            db = orch._db
+            try:
+                rounds = db.load_loop_rounds(
+                    self.project_id, limit=3) or []
+            except Exception:
+                rounds = []
+            if rounds:
+                lines = ["### Recent loop conclusions"]
+                for r in rounds:
+                    cs = (r.get("coder_summary") or "").strip()
+                    if cs:
+                        lines.append(
+                            f"- R{r.get('round','?')}: {cs[:200]}")
+                if len(lines) > 1:
+                    blocks.append("\n".join(lines))
+            try:
+                fixes = db._get_log_path()  # type: ignore[attr-defined]
+            except Exception:
+                fixes = None
+            # working_fixes rows: pull via a small helper if present
+            try:
+                wf_rows = db.conn.execute(  # type: ignore[attr-defined]
+                    "SELECT issue, fix, severity, created_at "
+                    "FROM working_fixes WHERE project_id = ? "
+                    "ORDER BY created_at DESC LIMIT 5",
+                    (self.project_id,)).fetchall()
+            except Exception:
+                wf_rows = []
+            if wf_rows:
+                lines = ["### Known issues to avoid"]
+                for issue, fix, sev, _ts in wf_rows:
+                    lines.append(
+                        f"- [{sev}] {issue[:80]} — fix: {fix[:120]}")
+                blocks.append(" ".join(lines))
+
+        # 4) assemble
+        base = ("You are a helpful assistant. Respond "
+                "conversationally to the user's message. Use "
+                "tools when helpful.")
+        if blocks:
+            ctx = " ".join(blocks)
+            return (f"{base}\n\n"
+                    f"You have the following project context:\n"
+                    f"{ctx}")
+        return base
+
     async def _chat_impl(self, message: str) -> str:
         """Internal chat implementation (called with lock held)."""
         user_msg = LLMMessage(role="user", content=message)
@@ -959,7 +1073,7 @@ class KairosAgent:
         tool_schemas = self._get_tool_schemas()
 
         # Use conversational prompt for chat mode (not task-specific JSON prompt)
-        chat_system = "You are a helpful assistant. Respond conversationally to the user's message. Use tools when helpful."
+        chat_system = self._build_chat_system_prompt()
 
         self.current_turn = 0
         self.total_turns = self.MAX_CHAT_TURNS
@@ -1013,13 +1127,19 @@ class KairosAgent:
         if last_response is None:
             return ""
 
-        # Publish to message bus
-        await self.message_bus.publish(Message(
-            sender=self.agent_id,
-            topic="agent.chat",
-            content=last_response.content,
-            msg_type="text",
-        ))
+        # Publish to message bus — but only when there's actually
+        # something to say. An empty / whitespace-only reply (e.g. a
+        # provider that returned blank content on a transient error)
+        # used to publish an empty `agent.chat` event, which the chat
+        # thread rendered as an empty "Kairos" bubble.
+        reply_text = (last_response.content or "").strip()
+        if reply_text:
+            await self.message_bus.publish(Message(
+                sender=self.agent_id,
+                topic="agent.chat",
+                content=last_response.content,
+                msg_type="text",
+            ))
 
         return last_response.content
 

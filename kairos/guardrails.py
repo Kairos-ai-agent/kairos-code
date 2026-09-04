@@ -26,7 +26,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
-from kairos.agents.base import AgentTask
+# R38.6.4 packaging: was 'from kairos.agents.base import AgentTask' — replaced with __getattr__ lazy load
 from kairos.core.message_bus import Message, MessageBus
 from kairos.loop.reviewers import (
     parse_review_verdict,
@@ -108,6 +108,10 @@ class OutputGuardrail:
         (using the same hardened parser as the main loop) and decide
         whether to trip.
         """
+        # R38.6.4 packaging: AgentTask is lazy-loaded via module
+        # __getattr__, which does not fire for a bare-name lookup —
+        # import locally so the name resolves at runtime.
+        from kairos.agents.base import AgentTask
         if not output or not output.strip():
             return GuardrailResult(summary="empty output; guardrail skipped")
         # Build a minimal pseudo-session that run_reviewer_round_for
@@ -212,3 +216,15 @@ def make_deny_substrings_guardrail(
         )
 
     return _check
+
+
+
+# R38.6.4 packaging: lazy import so PyInstaller onefile
+# can resolve this module (eager top-level imports trip
+# the bootloader when --collect-submodules misses the
+# symbol).
+def __getattr__(name):
+    if name in ['AgentTask']:
+        import importlib as _il, kairos.agents.base as _m
+        return getattr(_m, name)
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

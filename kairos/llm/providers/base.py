@@ -8,14 +8,28 @@ from typing import List
 from kairos.llm.base import LLMMessage
 
 def format_messages_for_openai(messages: List[LLMMessage]) -> List[dict]:
-    """Convert LLMMessage list to OpenAI-compatible format with tool_calls support."""
+    """Convert LLMMessage list to OpenAI-compatible format with tool_calls support.
+
+    R38.6.4: every entry now ALWAYS has a ``content`` field (even if
+    empty / null). The previous ``if msg.content:`` skip dropped the
+    field entirely for tool role messages that had a tool_call_id
+    but no content, which the OpenAI API rejects with
+    ``missing field 'content'``. Tool role messages that carry only
+    a tool result ID are still valid — they just need the content
+    key present (OpenAI accepts ``""`` or ``None``).
+    """
     result = []
     for msg in messages:
-        entry = {"role": msg.role}
+        entry: dict = {"role": msg.role}
 
-        # Content
-        if msg.content:
+        # Content — always include the key. Empty string or None is
+        # accepted by the OpenAI API; missing key is not.
+        if msg.content is not None and msg.content != "":
             entry["content"] = msg.content
+        else:
+            # Use empty string for the no-content case. OpenAI
+            # rejects missing key but accepts empty string.
+            entry["content"] = ""
 
         # Name (for tool role identification)
         if msg.name:
@@ -43,7 +57,7 @@ def format_messages_for_openai(messages: List[LLMMessage]) -> List[dict]:
                 for tc in msg.tool_calls
             ]
             # OpenAI requires content when tool_calls present (can be empty string)
-            if "content" not in entry:
+            if "content" not in entry or not entry["content"]:
                 entry["content"] = ""
 
         result.append(entry)

@@ -199,13 +199,21 @@ const CoderBubble: React.FC<{ message: Message }> = ({ message }) => {
   return <AssistantBubble message={message} />;
 };
 
+function splitThinking(text: string): { thinking: string; body: string } {
+  if (!text) return { thinking: '', body: text };
+  const m = text.match(/<think>([\s\S]*?)<\/think>/i);
+  if (!m) return { thinking: '', body: text };
+  return { thinking: (m[1] || '').trim(),
+           body: text.replace(m[0], '').trim() };
+}
+
 // R38.6.3: new "AssistantBubble" — a clean conversation-style
 // bubble used for plain chat replies. Small avatar (the Kairos
 // K), a thin label ("Kairos"), and the text. No bordered card
 // or topic meta line — chat should feel like chat.
 const AssistantBubble: React.FC<{ message: Message }> = ({ message }) => {
   const tokens = useThemeTokens();
-  const text = stringifyContent(message.content);
+  const { thinking, body } = splitThinking(stringifyContent(message.content));
   return (
     <div style={{
       display: 'flex', alignItems: 'flex-start', gap: 8,
@@ -226,11 +234,37 @@ const AssistantBubble: React.FC<{ message: Message }> = ({ message }) => {
           fontSize: 11, color: tokens.labelTertiary,
           display: 'block', marginBottom: 2,
         }}>Kairos</span>
-        <span style={{
-          fontSize: 13, color: tokens.labelPrimary,
-          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-          lineHeight: 1.6,
-        }}>{text}</span>
+        {thinking && (
+          <details
+            data-testid="think-block"
+            style={{
+              marginBottom: 6, background: tokens.bgLay1,
+              border: `1px solid ${tokens.border}`,
+              borderRadius: 6, padding: '4px 8px',
+            }}
+          >
+            <summary style={{
+              cursor: 'pointer', fontSize: 11,
+              color: tokens.labelTertiary, userSelect: 'none',
+            }}>
+              💭 思考过程（点击展开）
+            </summary>
+            <div style={{
+              fontSize: 12, color: tokens.labelSecondary,
+              lineHeight: 1.6, marginTop: 4,
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            }}>
+              {thinking}
+            </div>
+          </details>
+        )}
+        {body && (
+          <span style={{
+            fontSize: 13, color: tokens.labelPrimary,
+            whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            lineHeight: 1.6,
+          }}>{body}</span>
+        )}
       </div>
     </div>
   );

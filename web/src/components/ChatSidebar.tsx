@@ -110,10 +110,16 @@ const ChatSidebar: React.FC = () => {
     navigate(`/chat/${sid}`);
   };
 
+  // Pick a project = switch to it and start on its most recent
+  // conversation. Soft navigation (no full page reload — the hard
+  // reload here used to flash the page and wipe the thread); the
+  // store's setCurrentProject clears the in-memory thread, and
+  // Chat.tsx auto-loads the project's most recent session, so
+  // history comes back instead of looking lost.
   const selectProject = (p: Project) => {
-    if (currentProject?.id === p.id) return;  // no-op
+    if (currentProject?.id === p.id) return;
     setCurrentProject(p);
-    navigate('/chat');
+    navigate('/chat', { replace: true });
   };
 
   // Delete a project. Backend removes it (plus its sessions and

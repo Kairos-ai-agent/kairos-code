@@ -25,3 +25,6 @@ data/
 .idea/
 *.swp
 *.swo
+
+# Secrets
+settings.json

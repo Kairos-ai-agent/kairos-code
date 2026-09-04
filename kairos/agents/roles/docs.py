@@ -6,7 +6,7 @@ Reviewer can pick them up.
 """
 from __future__ import annotations
 
-from kairos.agents.base import KairosAgent
+# (Direct import of Reviewer is correct — R38.6.4 KairosAgent shim does not apply here)
 from kairos.core.message_bus import MessageBus
 from kairos.llm.base import LLMConfig
 from kairos.agents.roles.reviewer import Reviewer
@@ -63,3 +63,4 @@ class DocsReviewer(Reviewer):
             message_bus=message_bus,
             **kwargs,
         )
+

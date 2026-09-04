@@ -13,7 +13,7 @@ from api.schemas.agent import (
     ChatResponse,
     TaskResponse,
 )
-from kairos.agents.base import AgentTask
+# R38.6.4 packaging: was 'from kairos.agents.base import AgentTask' — replaced with __getattr__ lazy load
 
 router = APIRouter()
 
@@ -77,3 +77,15 @@ async def refresh_agents():
     """Refresh all agents with current model settings."""
     orchestrator.refresh_all_agents()
     return {"status": "ok", "agents": orchestrator.get_all_agent_states()}
+
+
+
+# R38.6.4 packaging: lazy import so PyInstaller onefile
+# can resolve this module (eager top-level imports trip
+# the bootloader when --collect-submodules misses the
+# symbol).
+def __getattr__(name):
+    if name in ['AgentTask']:
+        import importlib as _il, kairos.agents.base as _m
+        return getattr(_m, name)
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

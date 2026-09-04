@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 class ToolCall(BaseModel):
     """A tool call from the LLM."""
@@ -33,6 +34,30 @@ class LLMConfig(BaseModel):
     max_tokens: int = 8192
     temperature: float = 0.7
     timeout: int = 120
+
+    @field_validator("base_url")
+    @classmethod
+    def _normalize_base_url(cls, v: Optional[str]) -> Optional[str]:
+        """Trim a base_url so the provider's own "/chat/completions"
+        (openai) or "/v1/messages" (anthropic) append never doubles the
+        path.
+
+        Example upstream bug: a frontend derived ".../v1/chat" from
+        ".../v1/chat/completions"; the OpenAI SDK then appended
+        "/chat/completions" → ".../v1/chat/chat/completions" (404). We
+        normalize to the API root here so every provider reads a clean
+        base_url regardless of caller.
+        """
+        if not v:
+            return v
+        base = v.rstrip("/")
+        base = re.sub(r"/v1/chat/completions$", "", base, flags=re.IGNORECASE)
+        base = re.sub(r"/chat/completions$", "", base, flags=re.IGNORECASE)
+        base = re.sub(r"/v1/chat$", "", base, flags=re.IGNORECASE)
+        base = re.sub(r"/chat$", "", base, flags=re.IGNORECASE)
+        base = re.sub(r"/v1/messages$", "", base, flags=re.IGNORECASE)
+        base = re.sub(r"/messages$", "", base, flags=re.IGNORECASE)
+        return base or v.rstrip("/")
 
 class LLMResponse(BaseModel):
     """Response from an LLM provider."""

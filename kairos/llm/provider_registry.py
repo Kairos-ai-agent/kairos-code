@@ -27,13 +27,24 @@ class ProviderRegistry:
         return list(cls._providers.keys())
 
 def create_provider(config: LLMConfig) -> BaseLLMProvider:
-    """Create an LLM provider instance from config."""
+    """Create an LLM provider instance from config.
+
+    Unknown provider names fall back to the OpenAI-compatible provider
+    (most "unknown" providers are really OpenAI-compatible anyway), so a
+    bad / foreign model config can never make agent wiring fail. Without
+    this, an unregistered provider name raised ValueError inside
+    ``get_provider_for_role``, which left ``project.coder`` as None and
+    broke every chat call with "No Coder agent wired" (503). Now the
+    agent still gets wired and the error surfaces at call time instead.
+    """
     provider_class = ProviderRegistry.get(config.provider)
     if provider_class is None:
-        raise ValueError(
-            f"Unknown LLM provider: {config.provider}. "
-            f"Available: {ProviderRegistry.list_providers()}"
-        )
+        provider_class = ProviderRegistry.get("openai")
+        if provider_class is None:
+            raise ValueError(
+                f"No LLM provider registered; {config.provider} is "
+                f"unknown and the openai fallback is missing."
+            )
     return provider_class(config)
 
 # Auto-import providers to register them

@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from kairos.agents.base import AgentTask, KairosAgent
+# R38.6.4 packaging: was 'from kairos.agents.base import AgentTask, KairosAgent' — replaced with __getattr__ lazy load
 from kairos.core.message_bus import Message, MessageBus
 
 from kairos.loop.gates import (
@@ -164,3 +164,14 @@ _update_progress = _update_progress
 _wait_for_plan_decision = _wait_for_plan_decision
 should_auto_approve_plan = should_auto_approve_plan
 run_loop = run_loop
+
+
+# R38.6.4 packaging: lazy import so PyInstaller onefile
+# can resolve this module (eager top-level imports trip
+# the bootloader when --collect-submodules misses the
+# symbol).
+def __getattr__(name):
+    if name in ['AgentTask', 'KairosAgent']:
+        import importlib as _il, kairos.agents.base as _m
+        return getattr(_m, name)
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

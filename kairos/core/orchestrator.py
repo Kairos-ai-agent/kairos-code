@@ -22,9 +22,35 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-from kairos.agents.base import AgentTask, KairosAgent
-from kairos.agents.roles import Coder, Reviewer
+# R38.6.4 packaging: lazy-import kairos.agents.* so PyInstaller
+# can find the submodules (it misses top-level imports on packages
+# whose __init__.py already pulls them in). The orchestrator is the
+# first place that needs them after api.app; deferring the load to
+# first-use means PyInstaller's --collect-submodules and the
+# loader agree on the symbol resolution.
+import importlib as _il
+
+
+def _agent(name: str):
+    return _il.import_module(name)
+
+
+# R38.6.4 packaging: keep names available at module level for
+# existing ``from kairos.core.orchestrator import Coder`` style
+# imports — but resolve them lazily, on first attribute access.
+# This is the same pattern as ``from kairos import kairos`` but
+# using module __getattr__.
 from kairos.core.message_bus import Message, MessageBus
+
+
+def __getattr__(name):
+    if name in {"AgentTask", "KairosAgent"}:
+        mod = _il.import_module("kairos.agents.base")
+        return getattr(mod, name)
+    if name in {"Coder", "Reviewer"}:
+        mod = _il.import_module("kairos.agents.roles")
+        return getattr(mod, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 from kairos.core.persistence import Persistence
 from kairos.llm.base import LLMConfig
 from kairos.llm.model_router import ModelRouter
@@ -134,7 +160,13 @@ def _load_loop_config() -> dict:
     drops unknown specialist names so a typo in settings.json doesn't
     crash the loop.
     """
-    defaults = {"specialists": [], "best_of_n": 1, "review_focus": []}
+    defaults = {
+        "specialists": [],
+        "best_of_n": 1,
+        "review_focus": [],
+        "require_test_evidence": False,
+        "difficulty_routing": False,
+    }
     try:
         from kairos.config.settings import settings
         path = settings.data_dir / "settings.json"
@@ -164,8 +196,13 @@ def _load_loop_config() -> dict:
         if not review_focus:
             review_focus = [REVIEW_FOCUS_MAP[s] for s in specialists if s in REVIEW_FOCUS_MAP]
 
-        return {"specialists": specialists, "best_of_n": best_of_n,
-                "review_focus": review_focus}
+        return {
+            "specialists": specialists,
+            "best_of_n": best_of_n,
+            "review_focus": review_focus,
+            "require_test_evidence": bool(loop_cfg.get("require_test_evidence", False)),
+            "difficulty_routing": bool(loop_cfg.get("difficulty_routing", False)),
+        }
     except json.JSONDecodeError as e:
         logger.warning("data/settings.json is not valid JSON: %s; using defaults", e)
         return defaults
@@ -341,6 +378,14 @@ class Orchestrator:
         return project
 
     def _create_agents(self, project: Project):
+        # R38.6.4 packaging: Coder/Reviewer are lazy-loaded at module
+        # level via __getattr__, but that mechanism only fires on
+        # attribute access (module.Coder) — NOT on the bare-name lookup
+        # inside this method body, which raises NameError. Import them
+        # locally here (same pattern as _instantiate_specialists) so the
+        # role classes resolve regardless of the module-level loading
+        # strategy.
+        from kairos.agents.roles import Coder, Reviewer
         effective_root = project.work_dir or str(project.workspace)
         Path(effective_root).mkdir(parents=True, exist_ok=True)
 
@@ -435,17 +480,39 @@ class Orchestrator:
 
         yaml_prompts = self._load_yaml_prompts()
 
+        # Wire the Coder / Reviewer. NEVER leave project.coder / .reviewer
+        # None: a transient or unknown-model provider error must not cripple
+        # the project with "No Coder agent wired" (503). `create_provider`
+        # already falls back to an OpenAI-compatible provider for unknown
+        # names; here we also catch any residual construction error, log it,
+        # and retry once with the router's default provider so the project
+        # always ends up with a working agent.
+        def _wire(role: str, role_cls, tools, preferred):
+            try:
+                return self._make_agent(
+                    project.id, role, role_cls, preferred, tools,
+                    self.message_bus, yaml_prompts,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("agent wiring failed for %s.%s: %s — "
+                               "retrying with default provider",
+                               project.id, role, exc)
+                project.runtime.attach_errors.append(f"{role}: {exc}")
+                try:
+                    default_provider = self.model_router.get_provider_for_role("default")
+                except Exception as exc2:  # noqa: BLE001
+                    logger.warning("default provider fallback failed: %s", exc2)
+                    raise
+                return self._make_agent(
+                    project.id, role, role_cls, default_provider, tools,
+                    self.message_bus, yaml_prompts,
+                )
+
         coder_provider = self.model_router.get_provider_for_role("coder")
         reviewer_provider = self.model_router.get_provider_for_role("reviewer")
 
-        project.coder = self._make_agent(
-            project.id, "coder", Coder, coder_provider, coder_tools,
-            self.message_bus, yaml_prompts,
-        )
-        project.reviewer = self._make_agent(
-            project.id, "reviewer", Reviewer, reviewer_provider, reviewer_tools,
-            self.message_bus, yaml_prompts,
-        )
+        project.coder = _wire("coder", Coder, coder_tools, coder_provider)
+        project.reviewer = _wire("reviewer", Reviewer, reviewer_tools, reviewer_provider)
 
         # Output guardrail on the Coder: the project Reviewer double-
         # checks the Coder's final text and records a GuardrailResult
@@ -1123,6 +1190,32 @@ class Orchestrator:
             review_focus=review_focus,
             specialist_reviewers=specialist_reviewers,
         )
+        # Review calibration: when enabled, a Reviewer verdict without
+        # real test evidence can never approve the round (the loop
+        # runner clamps it). Opt-in via loop_config.require_test_evidence.
+        session.require_test_evidence = bool(
+            loop_cfg.get("require_test_evidence", False)
+        )
+        # Difficulty-aware routing: when enabled, trivial requirements
+        # run the Coder on the cheap "fast" tier for this loop, while
+        # normal/complex work keeps the role's configured model. Best
+        # effort — a routing failure must never block the loop.
+        if loop_cfg.get("difficulty_routing", False):
+            try:
+                from kairos.llm.model_router import resolve_task_tier
+                tier = resolve_task_tier(requirement)
+                if tier == "fast" and getattr(session, "coder", None) is not None:
+                    fast_provider = self.model_router.get_provider_for_task_strict("fast")
+                    if fast_provider is not None:
+                        session.coder._llm = fast_provider
+                        await self.message_bus.publish(Message(
+                            sender="orchestrator", topic="loop.difficulty_routed",
+                            content="Trivial requirement detected: Coder routed to fast tier.",
+                            msg_type="text",
+                            metadata={"project_id": project_id, "tier": tier},
+                        ))
+            except Exception:
+                logger.debug("difficulty routing failed (non-fatal)", exc_info=True)
         project.loop_session = session
         project.loop_task = asyncio.create_task(
             run_loop(session, requirement, unbounded=unbounded),

@@ -3,11 +3,34 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 from typing import AsyncIterator, List, Optional
 
 from kairos.llm.base import BaseLLMProvider, LLMConfig, LLMMessage, LLMResponse, ToolCall
 from kairos.llm.provider_registry import ProviderRegistry
 from kairos.llm.providers.base import format_messages_for_openai
+
+
+def _normalize_openai_base_url(url: str) -> str:
+    """Trim a base_url so the OpenAI SDK's own "/chat/completions" append
+    never doubles the path.
+
+    The SDK builds ``<base_url>/chat/completions``. If a base_url already
+    ends with a chat path (e.g. ``.../v1/chat`` from a frontend that
+    stripped only the last segment of ``.../v1/chat/completions``), the
+    request becomes ``.../v1/chat/chat/completions`` (404). Normalize the
+    likely variants down to the API root.
+    """
+    if not url:
+        return url
+    base = url.rstrip("/")
+    base = re.sub(r"/v1/chat/completions$", "", base, flags=re.IGNORECASE)
+    base = re.sub(r"/chat/completions$", "", base, flags=re.IGNORECASE)
+    base = re.sub(r"/v1/chat$", "", base, flags=re.IGNORECASE)
+    base = re.sub(r"/chat$", "", base, flags=re.IGNORECASE)
+    return base or url.rstrip("/")
+
 
 class OpenAIProvider(BaseLLMProvider):
     """OpenAI-compatible provider using the openai Python SDK."""
@@ -18,7 +41,14 @@ class OpenAIProvider(BaseLLMProvider):
 
         kwargs = {"api_key": config.api_key or "sk-placeholder", "max_retries": 2}
         if config.base_url:
-            kwargs["base_url"] = config.base_url
+            kwargs["base_url"] = _normalize_openai_base_url(config.base_url)
+        # Some OpenAI-compatible proxies (e.g. Cloudflare-fronted ones)
+        # reject the SDK's default "OpenAI/Python" user-agent. Allow an
+        # override via KAIROS_OPENAI_USER_AGENT so the user can present a
+        # different client identity without a rebuild.
+        ua = os.environ.get("KAIROS_OPENAI_USER_AGENT", "").strip()
+        if ua:
+            kwargs["default_headers"] = {"User-Agent": ua}
         self._client = AsyncOpenAI(**kwargs)
 
     async def complete(

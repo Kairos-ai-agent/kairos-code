@@ -15,6 +15,49 @@ INFRA_FAILURE_LIMIT = 5
 STAGNATION_WINDOW = 3
 STAGNATION_TOLERANCE = 2
 
+# --- adaptive caps ---------------------------------------------------------
+
+# A requirement counts as "heavy" (gets doubled caps) when it is longer
+# than this, carries architecture-scale keywords, or the plan has at
+# least this many todos.
+HEAVY_REQUIREMENT_CHARS = 2000
+HEAVY_PLAN_ITEMS = 8
+
+_HEAVY_KEYWORDS = (
+    "architecture", "refactor", "migrate", "rewrite",
+    "redesign", "multi-file",
+    "架构", "重构", "迁移", "重写", "多文件",
+)
+
+# Never let adaptive caps grow unbounded.
+MAX_SAFETY_CAP = 200
+MAX_TOKEN_CAP = 2_000_000
+
+
+def dynamic_caps(requirement: str = "", plan_items: int = 0) -> Dict[str, int]:
+    """Compute per-task loop caps instead of using the constants raw.
+
+    Small/trivial tasks keep the conservative defaults; heavy tasks
+    (long requirements, architecture-scale keywords, or big plans)
+    get 2x headroom so a legitimately large job isn't killed by the
+    same ceiling that guards a one-liner. Results are clamped so a
+    pathological requirement can never produce an unbounded loop.
+    """
+    text = (requirement or "")
+    lowered = text.lower()
+    heavy = (
+        len(text) > HEAVY_REQUIREMENT_CHARS
+        or plan_items >= HEAVY_PLAN_ITEMS
+        or any(k in lowered for k in _HEAVY_KEYWORDS)
+    )
+    mult = 2 if heavy else 1
+    return {
+        "safety_cap": min(LOOP_SAFETY_CAP * mult, MAX_SAFETY_CAP),
+        "token_cap": min(COST_TOKEN_CAP * mult, MAX_TOKEN_CAP),
+        "time_cap_s": min(int(COST_TIME_CAP_S * mult), 2 * 24 * 3600),
+    }
+
+
 def loop_health_score(session: Any) -> int:
     """Return a 0-100 health score for an in-progress loop."""
     score = 100

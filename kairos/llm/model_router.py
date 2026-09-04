@@ -23,6 +23,42 @@ SETTINGS_FILE = (
 )
 
 
+# --- difficulty-aware routing ----------------------------------------------
+
+_HEAVY_TASK_KEYWORDS = (
+    "architecture", "refactor", "migrate", "rewrite",
+    "redesign", "multi-file", "scalability", "performance",
+    "架构", "重构", "迁移", "重写", "性能", "扩展性",
+)
+
+
+def resolve_task_tier(requirement: str) -> str:
+    """Classify a requirement into a task tier: fast / default / strong.
+
+    Pure heuristic (no LLM call) so routing itself stays free:
+    - "fast"    : short, single-topic asks (quick fixes, Q&A, tweaks)
+    - "strong"  : architecture-scale work or long multi-part briefs
+    - "default" : everything in between
+
+    Used with ``get_provider_for_task(tier)`` so simple work runs on
+    the cheap model and hard work lands on the strong one.
+    """
+    text = (requirement or "").strip()
+    if not text:
+        return "fast"
+    lowered = text.lower()
+    heavy = (
+        len(text) > 2000
+        or any(k in lowered for k in _HEAVY_TASK_KEYWORDS)
+        or sum(1 for line in text.splitlines() if "`" in line and "." in line) >= 3
+    )
+    if heavy:
+        return "strong"
+    if len(text) <= 200 and "\n\n" not in text:
+        return "fast"
+    return "default"
+
+
 def settings_path() -> Path:
     """Resolve the live settings.json path on every call (not at import
     time). This matters for tests that monkeypatch ``KAIROS_DATA_DIR``
@@ -212,10 +248,29 @@ class ModelRouter:
         - fast: file reads, status checks, simple Q&A — saves cost
         - default: normal code edits, plan/execute loops
         - strong: complex refactors, hard bug hunts, planning
+
+        NOTE: when an active provider is configured in Settings it
+        overrides ALL tiers (see ``_build_provider``). Use
+        ``get_provider_for_task_strict`` when the tier must actually
+        take effect regardless of the active override.
         """
         tier_key = f"task:{tier}"
         return self._build_provider(tier_key, role_mapping_key=tier_key,
                                      default_model_key=tier)
+
+    def get_provider_for_task_strict(self, tier: str) -> BaseLLMProvider:
+        """Like ``get_provider_for_task`` but bypasses the ``__active__``
+        override so the tier mapping actually decides the model.
+
+        Used by difficulty-aware routing: when the user asked for
+        difficulty routing, the "fast" tier must genuinely switch to
+        the cheap model even though an active provider is set.
+        """
+        tier_key = f"task:{tier}"
+        return self._build_provider(
+            f"strict-{tier_key}", role_mapping_key=tier_key,
+            default_model_key=tier, bypass_active=True,
+        )
 
     def list_role_mappings(self) -> Dict[str, str]:
         return dict(self._role_mapping)
@@ -228,9 +283,27 @@ class ModelRouter:
                 if k.startswith("task:")}
 
     def _build_provider(self, cache_key: str, role_mapping_key: str,
-                          default_model_key: str) -> BaseLLMProvider:
-        """Shared provider-build path. Cached by ``cache_key``."""
-        model_name = self._role_mapping.get(role_mapping_key, default_model_key)
+                          default_model_key: str,
+                          bypass_active: bool = False) -> BaseLLMProvider:
+        """Shared provider-build path. Cached by ``cache_key``.
+
+        R38.6.4 #4: the SettingsDrawer's active provider is now the
+        single source of truth. We prefer ``__active__`` (the LLMConfig
+        the user picked in Settings) over ``role_mappings[role]``
+        (a legacy mapping that was often stale). Only fall back to
+        the role mapping when the active is unset.
+
+        ``bypass_active=True`` skips the ``__active__`` override so a
+        caller (difficulty routing) can force a specific tier mapping.
+        """
+        if bypass_active:
+            model_name = self._role_mapping.get(role_mapping_key, default_model_key)
+        else:
+            active = self._model_configs.get("__active__")
+            if active is not None:
+                model_name = "__active__"
+            else:
+                model_name = self._role_mapping.get(role_mapping_key, default_model_key)
 
         # Check cache
         now = time.time()

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from kairos.core.message_bus import MessageBus
 from kairos.llm.base import LLMConfig
-from kairos.agents.roles.reviewer import Reviewer
+from kairos.agents.roles.reviewer import Reviewer  # restored direct import (R38.6.4 __getattr__ shim removed — class base expression needs name in globals)
 
 SYSTEM_PROMPT = """You are Kairos Test Reviewer — focused on test coverage
 and test quality. You grade one round of the Coder's work on tests
@@ -50,3 +50,4 @@ class TestReviewer(Reviewer):
             message_bus=message_bus,
             **kwargs,
         )
+

@@ -15,6 +15,11 @@ If the same issue appears in 3 consecutive rounds, the loop terminates as
 
 from __future__ import annotations
 
+# R38.6.4 packaging: KairosAgent was moved to lazy __getattr__; with the
+# syntax fixes in kairos/agents/base.py the direct import is safe again,
+# and the direct import is required because class Reviewer(KairosAgent)
+# below is evaluated at module load time (module-level __getattr__ cannot
+# help a class-statement base expression).
 from kairos.agents.base import KairosAgent
 from kairos.core.message_bus import MessageBus
 from kairos.llm.base import LLMConfig
@@ -42,6 +47,12 @@ object — nothing else. No markdown fences, no commentary, no leading prose:
 {
   "approve": false,
   "score": 72,
+  "tests_evidence": {
+    "ran": true,
+    "command": "pytest -x -q",
+    "passed": true,
+    "note": "41 passed, 0 failed in 3.2s"
+  },
   "issues": [
     {
       "category": "correctness",
@@ -54,6 +65,21 @@ object — nothing else. No markdown fences, no commentary, no leading prose:
   ],
   "summary": "Two issues found: missing error handling in users endpoint and an N+1 query in list_users. Both MAJOR."
 }
+
+## Test evidence (required)
+The `tests_evidence` field is NOT optional. Before you emit your final
+verdict you MUST have actually executed the project's test suite (pytest,
+npm test, go test, etc.) via your tools this round, then report:
+- `ran`: true only if you really ran tests via a tool this round
+- `command`: the exact command you ran
+- `passed`: whether the suite passed
+- `note`: one-line result summary (counts, timing)
+
+Correctness (40% of the score) must be grounded in this real output —
+never in your assumptions about the code. If the project has no test
+suite at all, set `ran: false` and explain in `note`; do not invent
+results. A verdict without real test evidence is treated as
+uncalibrated and cannot approve the round.
 
 ## Asking the user (opt-in)
 If you genuinely cannot grade a round because the requirement is
@@ -150,3 +176,8 @@ class Reviewer(KairosAgent):
             message_bus=message_bus,
             **kwargs,
         )
+
+
+# R38.6.4 packaging fallback removed: with the direct import above
+# (kairos.agents.base.KairosAgent), this module no longer needs the
+# lazy __getattr__ shim.

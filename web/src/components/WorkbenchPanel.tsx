@@ -34,6 +34,7 @@ import {
   FileTextOutlined, CheckCircleOutlined, LoadingOutlined,
   RollbackOutlined, CameraOutlined, DiffOutlined,
   FolderAddOutlined, EditOutlined, GlobalOutlined,
+  AppstoreOutlined,
 } from '@ant-design/icons';
 
 import api from '../api/client';
@@ -119,18 +120,13 @@ interface WorkbenchPanelProps {
 // Component
 // ---------------------------------------------------------------------------
 
-const WorkbenchPanel: React.FC<WorkbenchPanelProps> = ({
-  initiallyOpen = true,
-}) => {
+const WorkbenchPanel: React.FC<WorkbenchPanelProps> = () => {
   const tokens = useThemeTokens();
   const currentProject = useChatStore((s) => s.currentProject);
+  const workbenchOpen = useChatStore((s) => s.workbenchOpen);
+  const toggleWorkbench = useChatStore((s) => s.toggleWorkbench);
   const [activeTab, setActiveTab] = useState('files');
-  const [open, setOpen] = useState(initiallyOpen);
   const [toolsOpen, setToolsOpen] = useState(false);
-
-  // Close the panel automatically when the project changes (so
-  // the user doesn't see stale data from a different project).
-  useEffect(() => { setOpen(initiallyOpen); }, [currentProject?.id]);
 
   if (!currentProject) {
     return (
@@ -153,29 +149,27 @@ const WorkbenchPanel: React.FC<WorkbenchPanelProps> = ({
       }}
     >
       <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        display: 'flex', alignItems: 'center', gap: 6,
         padding: '6px 12px', borderBottom: `1px solid ${tokens.border}`,
         fontSize: 12, color: tokens.labelSecondary,
       }}>
-        <span style={{ fontWeight: 600 }}>Workbench</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          {/* R38.6.3: Tools button removed. The advanced
-              features (Plan / Skills / Hooks / Memory / IM / Verify)
-              are still available via /api/borrowed/* endpoints.
-              For daily chat the inline plan/approve/memory in
-              the chat thread is enough. */}
-          <AgentsMdEditor />
+        {/* Toggle button goes to the LEFT of the "Workbench" title
+            (show/hide the whole right panel — the topbar button was
+            merged here). Hidden state = the 44px icon rail. */}
+        <Tooltip title={workbenchOpen ? 'Hide workbench' : 'Show workbench'}>
           <Button
-            size="small" type="text"
-            onClick={() => setOpen(!open)}
+            size="small" type={workbenchOpen ? 'primary' : 'text'}
+            icon={<AppstoreOutlined />}
+            onClick={toggleWorkbench}
             data-testid="workbench-toggle"
-          >
-            {open ? '›' : '‹'}
-          </Button>
-        </div>
+            aria-label="Toggle workbench"
+            style={{ color: tokens.labelSecondary }}
+          />
+        </Tooltip>
+        <span style={{ fontWeight: 600 }}>Workbench</span>
+        <div style={{ flex: 1 }} />
+        <AgentsMdEditor />
       </div>
-      {open && (
-        <>
           <Tabs
             activeKey={activeTab}
             onChange={setActiveTab}
@@ -190,14 +184,49 @@ const WorkbenchPanel: React.FC<WorkbenchPanelProps> = ({
               // chat metadata, just not as visible tabs.
               {
                 key: 'files',
-                label: <span><FolderOutlined /> Files</span>,
+                label: (
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center',
+                    gap: 4,
+                  }}>
+                    <FolderOutlined /> Files
+                    {/* R38.6.4: open-folder button next to the Files
+                        tab. Clicking calls the backend which spawns
+                        the OS file manager. The button sits inline
+                        with the tab label so it visually pairs with
+                        "Files" instead of floating at the far right
+                        of the tab bar. */}
+                    <Tooltip title="Open the project folder in your file manager">
+                      <Button
+                        size="small" type="text"
+                        icon={<FolderOpenOutlined />}
+                        data-testid="workbench-open-folder"
+                        onClick={(e) => {
+                          e.stopPropagation();  // don't switch tab
+                          api.post('/workbench/open-folder', null,
+                                    { params: { project_id: currentProject.id } })
+                            .catch((err) => {
+                              const detail = err?.response?.data?.detail
+                                             || err?.message
+                                             || 'failed to open folder';
+                              message.error(detail);
+                            });
+                        }}
+                        style={{
+                          marginLeft: 4, padding: '0 4px',
+                          color: tokens.labelSecondary,
+                        }}
+                      >
+                        Open folder
+                      </Button>
+                    </Tooltip>
+                  </span>
+                ),
                 children: <FilesTab projectId={currentProject.id} />,
               },
             ]}
           />
           <CheckpointBar projectId={currentProject.id} />
-        </>
-      )}
       <ToolsPanel open={toolsOpen}
         onClose={() => setToolsOpen(false)}
         projectId={currentProject.id} />

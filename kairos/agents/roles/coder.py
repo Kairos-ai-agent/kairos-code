@@ -14,6 +14,12 @@ execute. When a plan is risky or expensive, it should call out the risk.
 
 from __future__ import annotations
 
+# R38.6.4 packaging: KairosAgent was moved to lazy __getattr__ due to a
+# circular-import symptom seen during PyInstaller analysis; with the syntax
+# fixes in kairos/agents/base.py the direct import is safe again, and the
+# direct import is required because class Coder(KairosAgent) below is
+# evaluated at module load time (module-level __getattr__ cannot help a
+# class-statement base expression).
 from kairos.agents.base import KairosAgent
 from kairos.core.message_bus import MessageBus
 from kairos.llm.base import LLMConfig
@@ -129,3 +135,10 @@ class Coder(KairosAgent):
             message_bus=message_bus,
             **kwargs,
         )
+
+
+
+# R38.6.4 packaging fallback removed: with the direct import above
+# (kairos.agents.base.KairosAgent), this module no longer needs the
+# lazy __getattr__ shim — the class Coder(KairosAgent) statement now
+# resolves at module load.

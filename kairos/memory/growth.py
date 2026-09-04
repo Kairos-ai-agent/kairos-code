@@ -43,6 +43,8 @@ def auto_promote_failure_to_preference(
     """
     if not persistence or not issue or consecutive_count < threshold:
         return None
+    if issue.get("_injected"):
+        return None
     if confidence is not None and confidence < min_confidence:
         return None
     category = str(issue.get("category") or "general").strip().lower()
@@ -150,6 +152,8 @@ def record_global_insights_from_review(
     ids: List[int] = []
     try:
         for issue in review.get("issues") or []:
+            if issue.get("_injected"):
+                continue
             sev = str(issue.get("severity") or "").upper()
             if sev not in {"CRITICAL", "MAJOR"}:
                 continue

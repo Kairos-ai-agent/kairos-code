@@ -16,7 +16,7 @@ import http from 'http'
 // whichever port answers /api/health. An explicit KAIROS_PORT env var
 // always wins.
 // ---------------------------------------------------------------------------
-const CANDIDATE_PORTS = ['8900', '8964', '8966'];
+const CANDIDATE_PORTS = ['9527'];
 
 function isBackendAlive(port: string, timeoutMs = 800): Promise<boolean> {
   return new Promise((resolve) => {

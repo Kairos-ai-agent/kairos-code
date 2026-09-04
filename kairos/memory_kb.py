@@ -30,7 +30,6 @@ import logging
 import os
 import threading
 import time
-import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
@@ -162,26 +161,48 @@ class MemoryKB:
     def recall(
         self, query: str, scope: str = "project", limit: int = 10,
     ) -> List[MemoryEntry]:
-        """Substring / token-overlap recall within a scope.
+        """Token-overlap recall within a scope, with a semantic fallback.
 
-        Cheap heuristic: lowercase substring match on key + value
-        (stringified). A future round can swap in a vector backend
-        (cognee / graphiti) behind the same ``recall`` signature.
+        Phase 1 (exact): lowercase substring / token match on key +
+        stringified value — kept as-is for backward compatibility.
+        Phase 2 (semantic): when exact matches are thinner than
+        ``limit``, entries that missed phase 1 are re-ranked against
+        the query with a lightweight TF-IDF cosine (see
+        ``kairos.memory.semantic``) and appended by descending
+        similarity. This rescues "same meaning, different wording"
+        queries without any external dependency.
+
+        Ordering: exact hits first (newest first), then semantic
+        hits by similarity. Newest-first within the exact set
+        preserves the pre-semantic behavior for existing callers.
         """
         if scope not in VALID_SCOPES:
             raise ValueError(f"invalid scope {scope!r}")
         q = query.lower().strip()
         tokens = [t for t in q.split() if t]
-        out: List[MemoryEntry] = []
+        exact: List[MemoryEntry] = []
+        missed: List[MemoryEntry] = []
         with self._lock:
             for entry in self._store[scope].values():
                 haystack = (entry.key + " " + _stringify(entry.value)).lower()
-                if q and q in haystack:
-                    out.append(entry)
-                elif tokens and any(t in haystack for t in tokens):
-                    out.append(entry)
-        # Newest first; tie-break by key
-        out.sort(key=lambda e: (e.updated_at, e.key), reverse=True)
+                if (q and q in haystack) or (tokens and any(t in haystack for t in tokens)):
+                    exact.append(entry)
+                else:
+                    missed.append(entry)
+        exact.sort(key=lambda e: (e.updated_at, e.key), reverse=True)
+        out = exact[:max(0, limit)]
+        # Semantic phase: only when exact recall left headroom.
+        if q and len(out) < limit and missed:
+            try:
+                from kairos.memory.semantic import rank_by_similarity
+                docs = [e.key + " " + _stringify(e.value) for e in missed]
+                ranked = rank_by_similarity(query, docs)
+                for idx, _score in ranked:
+                    out.append(missed[idx])
+                    if len(out) >= limit:
+                        break
+            except Exception:
+                logger.debug("memory_kb: semantic recall failed", exc_info=True)
         return out[:max(0, limit)]
 
     def forget(self, key: str, scope: str = "project") -> bool:

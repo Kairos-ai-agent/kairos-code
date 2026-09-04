@@ -7,7 +7,7 @@ import json
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from api import deps
@@ -394,6 +394,49 @@ async def list_loop_sessions(project_id: str):
                     p["running"] = bool(project.loop_task
                                          and not project.loop_task.done())
     return {"project_id": project_id, "sessions": persisted}
+
+
+@router.get("/{project_id}/chat-messages")
+async def list_chat_messages(
+    project_id: str,
+    limit: int = Query(200, ge=1, le=2000),
+    since: float = Query(0.0, description="Unix timestamp; only return newer than this"),
+) -> dict:
+    """R38.6.4 #3: return chat-thread messages for a project.
+
+    The ``messages`` table accumulates every user/agent message routed
+    through the bus. The chat page previously only knew about
+    ``loop_rounds`` (summaries) — single-turn chat history looked
+    "lost" on refresh. This route returns the full per-message
+    stream so the chat page can re-hydrate the thread from DB.
+    """
+    from api.deps import orchestrator as _orch
+    if _orch() is None or _orch().get_project(project_id) is None:
+        raise HTTPException(
+            status_code=404, detail=f"project not found: {project_id}")
+    rows = _orch()._db.load_messages(limit=limit, project_id=project_id)
+    if since:
+        rows = [r for r in rows if r.get("timestamp", 0) > since]
+    out = []
+    for r in rows:
+        meta = r.get("metadata")
+        if isinstance(meta, str):
+            import json as _json
+            try:
+                meta = _json.loads(meta) if meta else {}
+            except Exception:
+                meta = {}
+        out.append({
+            "id": r.get("id"),
+            "sender": r.get("sender"),
+            "receiver": r.get("receiver", ""),
+            "topic": r.get("topic", ""),
+            "content": r.get("content", ""),
+            "msg_type": r.get("msg_type", "text"),
+            "timestamp": r.get("timestamp", 0.0),
+            "metadata": meta or {},
+        })
+    return {"messages": out, "count": len(out)}
 
 
 @router.get("/{project_id}/sessions/{session_id}/rounds")
@@ -820,4 +863,5 @@ class ChatRequest(BaseModel):
 class RevertFileRequest(BaseModel):
     sha: str
     path: str
+
 

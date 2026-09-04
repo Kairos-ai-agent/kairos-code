@@ -35,9 +35,8 @@ Usage:
 """
 from __future__ import annotations
 
-import json
 import logging
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -314,3 +313,27 @@ def plan_history_from_session_history(
         })
         prev_plan = plan
     return timeline
+
+
+# ---------------------------------------------------------------------------
+# Plan vs actual deviation (feedback loop for planning quality)
+# ---------------------------------------------------------------------------
+
+
+def plan_deviation_report(plan: Plan) -> Dict[str, Any]:
+    """Summarize plan-vs-actual at loop end.
+
+    Returns a compact record of what was planned and what actually
+    got done, so the deviation can be persisted to memory and recalled
+    when a future, similar task is planned:
+        {"total": int, "completed": [content...],
+         "pending": [content...], "completion": 0.0-1.0}
+    """
+    completed = [t.content for t in plan.todos if t.status == "completed"]
+    pending = [t.content for t in plan.todos if t.status != "completed"]
+    return {
+        "total": len(plan.todos),
+        "completed": completed,
+        "pending": pending,
+        "completion": plan.completion,
+    }

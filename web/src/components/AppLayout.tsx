@@ -219,7 +219,11 @@ const AppLayout: React.FC = () => {
   // R38.6 §26: right-side Workbench panel width. The Content area
   // shrinks to accommodate it; we don't overlay (which would hide
   // the chat) — minimax-code's right panel pushes the main area.
-  const workbenchWidth = workbenchOpen ? 360 : 0;
+  // The right rail never collapses to 0: when the Workbench is
+  // hidden we keep a slim 44px rail with a reopen button (the old
+  // topbar toggle is gone — show/hide now lives in the Workbench
+  // header itself).
+  const workbenchWidth = workbenchOpen ? 360 : 44;
 
   return (
     <Layout style={{ minHeight: '100vh', background: tokens.bgBase }}>
@@ -269,20 +273,6 @@ const AppLayout: React.FC = () => {
           Kairos
         </div>
         <div style={{ flex: 1 }} />
-        {/* R38.6 §26: topbar button to toggle the right-side
-            Workbench panel. Sits at the right edge of the header
-            so it doesn't compete with the logo for attention. */}
-        <Tooltip title={workbenchOpen ? 'Hide workbench' : 'Show workbench'}>
-          <Button
-            data-testid="workbench-toggle-topbar"
-            type={workbenchOpen ? 'primary' : 'text'}
-            icon={<AppstoreOutlined />}
-            size="small"
-            onClick={toggleWorkbench}
-          >
-            {workbenchOpen ? 'Workbench' : ''}
-          </Button>
-        </Tooltip>
       </Header>
 
       <Layout>
@@ -303,14 +293,13 @@ const AppLayout: React.FC = () => {
         <Content style={{ background: tokens.bgBase, overflow: 'hidden' }}>
           <Outlet />
         </Content>
-        {/* R38.6 §26: right-side Workbench (file tree, changes,
-            tasks, deliverables). The panel is always mounted but
-            collapses to width 0 when closed (no layout shift on
-            toggle). The internal WorkbenchPanel has its own
-            collapse toggle for the tab strip itself. */}
+        {/* Right-side Workbench. When open it hosts WorkbenchPanel
+            + TaskTracker; when closed it keeps a slim rail with a
+            reopen button — the toggle lives in the Workbench
+            header (the topbar button was removed). */}
         <Sider
           width={workbenchWidth}
-          collapsedWidth={0}
+          collapsedWidth={44}
           collapsible={false}
           trigger={null}
           style={{
@@ -320,20 +309,33 @@ const AppLayout: React.FC = () => {
           }}
           data-testid="workbench-sider"
         >
-          {workbenchOpen && (
+          {workbenchOpen ? (
             <div style={{
               height: '100%', display: 'flex',
               flexDirection: 'column', minHeight: 0,
             }}>
-              {/* Workbench takes a natural slice; the TaskTracker
-                  below it absorbs the rest. Both scroll independently
-                  so file tree + task list stay visible at the same
-                  time (R38.6.4: user request). */}
               <div style={{ flex: '0 0 auto', minHeight: 0,
                           display: 'flex', flexDirection: 'column' }}>
                 <WorkbenchPanel />
               </div>
               <TaskTracker />
+            </div>
+          ) : (
+            <div style={{
+              height: '100%', display: 'flex',
+              flexDirection: 'column', alignItems: 'center',
+              paddingTop: 8,
+            }}>
+              <Tooltip title="Show workbench" placement="left">
+                <Button
+                  type="text"
+                  icon={<AppstoreOutlined />}
+                  onClick={toggleWorkbench}
+                  data-testid="workbench-open-rail"
+                  style={{ color: tokens.labelSecondary }}
+                  aria-label="Show workbench"
+                />
+              </Tooltip>
             </div>
           )}
         </Sider>

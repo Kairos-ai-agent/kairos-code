@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import logging
+import os
 import traceback
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from kairos import __version__
 from kairos.config.settings import settings
@@ -275,7 +277,17 @@ async def global_messages(limit: int = 100):
 
 @app.get("/")
 async def root():
-    """Root endpoint - redirects to frontend or shows API info."""
+    """Root endpoint - redirects to the SPA when a built frontend dist is
+    present (packaged single-EXE / production), else shows API info JSON.
+
+    NOTE: the StaticFiles mount at "/" is added at the very end of this
+    module, AFTER this route. Starlette matches routes in registration
+    order, so this explicit ``@app.get("/")`` wins over the catch-all
+    mount for the literal "/" path (and was shadowing the SPA). Redirecting
+    here makes a browser hitting "/" land on the real UI.
+    """
+    if _frontend_dist_dir() is not None:
+        return RedirectResponse(url="/index.html")
     return JSONResponse({
         "name": "Kairos Code",
         "version": __version__,
@@ -305,3 +317,42 @@ async def dashboard():
         "agents": agent_states,
         "recent_messages": messages,
     }
+
+
+# ---------------------------------------------------------------------------
+# Single-EXE / production frontend serving. MUST stay the LAST thing added
+# so the "/" mount never shadows the /api routes registered above.
+#
+# Resolves web/dist from (in order):
+#   1. KAIROS_FRONTEND_DIST — set by the packaged launcher (kairos/desktop_main.py)
+#   2. <repo>/web/dist       — a normal checkout
+#   3. sys._MEIPASS/web/dist — PyInstaller onefile extraction dir
+# If none exists, "/" keeps returning the API info JSON above.
+# ---------------------------------------------------------------------------
+def _frontend_dist_dir() -> Path | None:
+    env = os.environ.get("KAIROS_FRONTEND_DIST", "").strip()
+    if env and Path(env).is_dir():
+        return Path(env)
+    try:
+        import sys
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            p = Path(meipass) / "web" / "dist"
+            if p.is_dir():
+                return p
+    except Exception:  # noqa: BLE001
+        pass
+    checkout = Path(__file__).resolve().parent.parent / "web" / "dist"
+    if checkout.is_dir():
+        return checkout
+    return None
+
+
+try:
+    from fastapi.staticfiles import StaticFiles
+    _dist = _frontend_dist_dir()
+    if _dist is not None:
+        app.mount("/", StaticFiles(directory=str(_dist), html=True),
+                  name="frontend")
+except Exception:  # noqa: BLE001
+    log.debug("frontend static mount skipped", exc_info=True)

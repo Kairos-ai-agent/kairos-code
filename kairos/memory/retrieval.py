@@ -260,6 +260,25 @@ def assemble_coder_memory(
         # we get failure-relevant history even when the requirement is
         # terse (e.g. "fix it").
         history = persistence.search_loop_rounds(project_id, query, limit=5)
+        # Semantic re-rank: FTS rank is term-frequency-driven, so a
+        # round that shares more raw words can outrank one that is
+        # actually closer in meaning. Re-order the FTS hits by
+        # TF-IDF cosine against the full requirement.
+        if history and query:
+            try:
+                from kairos.memory.semantic import rank_by_similarity
+                docs = [
+                    "{} {} {}".format(
+                        r.get("coder_summary") or "",
+                        r.get("review_summary") or "",
+                        r.get("issues_text") or "",
+                    )
+                    for r in history
+                ]
+                order = rank_by_similarity(query, docs)
+                history = [history[i] for i, _ in order]
+            except Exception:
+                logger.debug("memory: semantic rerank failed", exc_info=True)
         rendered = _render_relevant_history(history)
         if rendered:
             sections.append(rendered)

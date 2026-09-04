@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Kairos Code v10 vs Codex / Claude Code / OpenCode / Hermes Agent etc.</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+         background: #0a0a0a; color: #e5e5e5; padding: 22px; width: 1560px; }
+  h1 { font-size: 26px; font-weight: 700; text-align: center; margin-bottom: 4px; color: #fff; }
+  h1 .k-icon { display: inline-block; width: 32px; height: 32px; background: #facc15;
+             color: #000; border-radius: 7px; text-align: center; line-height: 32px;
+             font-weight: 900; margin-right: 8px; vertical-align: middle; }
+  .sub { text-align: center; font-size: 12px; color: #888; margin-bottom: 18px; }
+  .sub b { color: #facc15; }
+  h2 { font-size: 15px; font-weight: 700; color: #fff; margin: 18px 0 8px 0;
+       padding-left: 8px; border-left: 3px solid #facc15; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0;
+          font-size: 11.5px; background: #141414; border-radius: 10px; overflow: hidden; }
+  thead th { background: #1f1f1f; color: #aaa; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.5px; padding: 9px 8px; text-align: left; font-size: 10.5px;
+            border-bottom: 1px solid #2a2a2a; }
+  tbody td { padding: 10px 8px; border-bottom: 1px solid #1f1f1f; vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #181818; }
+  .name { font-size: 13.5px; font-weight: 700; color: #fff; display: flex;
+          align-items: center; gap: 6px; margin-bottom: 3px; }
+  .badge { display: inline-block; padding: 2px 7px; border-radius: 10px;
+           font-size: 10px; font-weight: 600; }
+  .badge.oss { background: #14532d; color: #86efac; }
+  .badge.closed { background: #3f1d1d; color: #fca5a5; }
+  .badge.kairos { background: #facc15; color: #000; }
+  .arch { font-family: "SF Mono", Consolas, monospace; font-size: 10px;
+          color: #c4b5fd; line-height: 1.5; }
+  ul.feats { list-style: none; padding: 0; }
+  ul.feats li { padding: 1px 0 1px 11px; position: relative; font-size: 10.5px;
+              color: #d4d4d4; line-height: 1.4; }
+  ul.feats li::before { content: "\25B8"; position: absolute; left: 0; color: #22d3ee; }
+  tr.kairos-row { background: linear-gradient(90deg, rgba(250, 204, 21, 0.08), transparent); }
+  tr.kairos-row:hover { background: linear-gradient(90deg, rgba(250, 204, 21, 0.12), rgba(250, 204, 21, 0.04)); }
+  tr.kairos-row td:first-child { border-left: 3px solid #facc15; }
+  .k-mini { display: inline-block; width: 20px; height: 20px; background: #facc15;
+            color: #000; border-radius: 5px; text-align: center; line-height: 20px;
+            font-weight: 900; font-size: 12px; }
+  .v-good { background: #14532d; color: #86efac; padding: 2px 6px;
+           border-radius: 6px; display: inline-block; font-weight: 700; }
+  .v-mid  { background: #422006; color: #fcd34d; padding: 2px 6px;
+           border-radius: 6px; display: inline-block; font-weight: 700; }
+  .v-bad  { background: #3f1d1d; color: #fca5a5; padding: 2px 6px;
+           border-radius: 6px; display: inline-block; font-weight: 700; }
+  .tally { display: flex; gap: 14px; justify-content: center; margin-bottom: 8px; }
+  .tally .item { background: #141414; border: 1px solid #2a2a2a;
+                padding: 8px 14px; border-radius: 8px; text-align: center;
+                min-width: 110px; }
+  .tally .num { font-size: 22px; font-weight: 700; color: #facc15; }
+  .tally .lbl { font-size: 10px; color: #888; text-transform: uppercase;
+              letter-spacing: 0.5px; }
+  .delta { background: #1a3a1a; color: #86efac; padding: 1px 5px;
+           border-radius: 4px; font-size: 9px; margin-left: 4px; }
+  .footer { margin-top: 16px; text-align: center; font-size: 11px;
+            color: #666; line-height: 1.6; }
+  .footer b { color: #facc15; }
+  .upgrade-row { background: linear-gradient(90deg, rgba(34, 211, 238, 0.06), transparent); }
+  .upgrade-row:hover { background: linear-gradient(90deg, rgba(34, 211, 238, 0.10), rgba(34, 211, 238, 0.04)); }
+  .phase-tag { display: inline-block; padding: 1px 5px; background: #1e3a5f;
+               color: #93c5fd; font-size: 9px; border-radius: 3px;
+               margin-left: 4px; font-weight: 600; }
+</style>
+</head>
+<body>
+<h1><span class="k-icon">K</span> Kairos Code v10 vs Codex / Claude Code / OpenCode / Hermes Agent etc.</h1>
+<div class="sub">R38.6.4 (2026-09-02): <b>Project-aware chat + 8 capability upgrades</b> vs the actually-installed coding agents on this machine. Real names, real features.</div>
+
+<div class="tally">
+  <div class="item"><div class="num">8</div><div class="lbl">Capability upgrades</div></div>
+  <div class="item"><div class="num">25</div><div class="lbl">Features built</div></div>
+  <div class="item"><div class="num">42</div><div class="lbl">REST endpoints</div></div>
+  <div class="item"><div class="num">10/10</div><div class="lbl">Semantic harness</div></div>
+  <div class="item"><div class="num">3</div><div class="lbl">LLM providers</div></div>
+  <div class="item"><div class="num">0</div><div class="lbl">Agent name leaks</div></div>
+</div>
+
+<h2>第一部分 - 7 款真实 Agent 对比 (按用户在 ~/.codex 看到的目录)</h2>
+<table>
+<thead>
+<tr><th style="width: 14%;">项目</th><th style="width: 9%;">Stars</th><th style="width: 7%;">协议</th>
+    <th style="width: 19%;">架构 / 长任务</th><th style="width: 28%;">差异化特性</th>
+    <th style="width: 23%;">适合谁</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td><div class="name">Hermes Agent</div>
+      <div class="tagline">"个人 Agent 网关" (NousResearch)</div></td>
+  <td><span style="font-weight: 700; color: #facc15;">~30k</span><br><small>MIT</small></td>
+  <td><span class="badge oss">MIT</small></td>
+  <td class="arch">常驻 Gateway<br>50+ 平台路由<br>Session Lane 隔离</td>
+  <td><ul class="feats"><li>跨平台消息路由</li><li>MEMORY.md 长期记忆</li>
+       <li>Skill 市场</li><li>Sandbox 沙箱隔离</li></ul></td>
+  <td>跨平台个人 AI 管家<br>愿意自托管 + 配权限</td>
+</tr>
+<tr>
+  <td><div class="name">Aider</div>
+      <div class="tagline">"自进化 Agent" (terminal pair-programming)</div></td>
+  <td><span style="font-weight: 700; color: #facc15;">~35k</span><br><small>Apache 2.0</small></td>
+  <td><span class="badge oss">Apache</small></td>
+  <td class="arch">Git 感知 pair-coding<br>repo map + repo-of-thought<br>voice / image input</td>
+  <td><ul class="feats"><li>git 提交 / diff / commit 自动</li>
+       <li>repo map (整仓库上下文)</li><li>voice / screenshot / URL 输入</li>
+       <li>80+ LLM 模型</li></ul></td>
+  <td>想直接在 terminal 跟 LLM pair code<br>commit-by-commit 工作流</td>
+</tr>
+<tr>
+  <td><div class="name">OpenCode (sst/opencode)</div>
+      <div class="tagline">"多模型中立" (terminal AI)</div></td>
+  <td><span style="font-weight: 700; color: #facc15;">~25k</span><br><small>MIT</small></td>
+  <td><span class="badge oss">MIT</small></td>
+  <td class="arch">Client + Server 分离<br>TUI / Web UI / IDE plugin<br>LSP 集成</td>
+  <td><ul class="feats"><li>75+ LLM providers (Anthropic/OpenAI/Bedrock/Vertex/Ollama)</li>
+       <li>Permission 管控 / 沙箱安全</li><li>Session share / fork</li><li>Privacy-first local-first</li></ul></td>
+  <td>不愿绑定任何模型厂商<br>重视数据隐私 / local-first</td>
+</tr>
+<tr>
+  <td><div class="name">Codex CLI (OpenAI)</div>
+      <div class="tagline">"终端 Agent 行业标杆" (openai/codex)</div></td>
+  <td><span style="font-weight: 700; color: #facc15;">~50k</span><br><small>Apache 2.0</small></td>
+  <td><span class="badge closed">OpenAI</small></td>
+  <td class="arch">Rust runtime + Node CLI<br>Sandbox + Approval<br>Plan / Work / Review</td>
+  <td><ul class="feats"><li>TUI 完整 sandbox (Mac seatbelt / Linux Landlock)</li>
+       <li>Project doc / AGENTS.md 注入</li>
+       <li>Verification agent (read-only)</li>
+       <li>Rollout config 多档 (fast/balanced/thorough)</li></ul></td>
+  <td>OpenAI 生态深度用户<br>中大型项目严肃工程闭环</td>
+</tr>
+<tr>
+  <td><div class="name">Claude Code (Anthropic)</div>
+      <div class="tagline">"Harness Engineering" (anthropics/claude-code)</div></td>
+  <td><span style="font-weight: 700; color: #facc15;">~20k</span><br><small>Closed</small></td>
+  <td><span class="badge closed">Closed</span></td>
+  <td class="arch">Agentic loop + Subagents<br>CLAUDE.md / settings.json<br>MCP + Skills</td>
+  <td><ul class="feats"><li>深度重构 / 大型代码库最佳</li>
+       <li>CLAUDE.md 项目级说明</li><li>Verification Agent 质检</li>
+       <li>Hooks 生命周期钩子</li></ul></td>
+  <td>Anthropic 用户<br>严谨工程闭环</td>
+</tr>
+<tr>
+  <td><div class="name">Cline (formerly Claude Dev)</div>
+      <div class="tagline">"VSCode 里跑的 Agent" (VSCode extension)</div></td>
+  <td><span style="font-weight: 700; color: #facc15;">~50k</span><br><small>Apache 2.0</small></td>
+  <td><span class="badge oss">Apache</small></td>
+  <td class="arch">VSCode-native<br>MCP / Browser use<br>YOLO mode + Approval</td>
+  <td><ul class="feats"><li>VSCode 集成 + Diff inline</li>
+       <li>browser-use 自动浏览器操作</li><li>MCP server 全生态</li>
+       <li>Plan / Act 模式</li></ul></td>
+  <td>VSCode 重度用户<br>想 IDE 内边看代码边改</td>
+</tr>
+<tr>
+  <td><div class="name">Continue.dev</div>
+      <div class="tagline">"VSCode/JetBrains 插件" (continuedev/continue)</div></td>
+  <td><span style="font-weight: 700; color: #facc15;">~25k</span><br><small>Apache 2.0</small></td>
+  <td><span class="badge oss">Apache</small></td>
+  <td class="arch">IDE plugin (VSCode / JetBrains)<br>多 model provider<br>Steps + Tools</td>
+  <td><ul class="feats"><li>VSCode / JetBrains IDE 集成</li>
+       <li>多 provider 一键切换</li><li>本地 Ollama / LM Studio 集成</li>
+       <li>Custom slash commands</li></ul></td>
+  <td>JetBrains / VSCode 用户<br>想 IDE 里直接跑 agent</td>
+</tr>
+
+<tr class="kairos-row">
+  <td><div class="name"><span class="k-mini">K</span> Kairos Code v10</div>
+      <div class="tagline">"R38.6.4 项目感知 + 8 升级"</div></td>
+  <td><span style="font-weight: 700; color: #facc15;">--</span><br><small>独立 Agent</small></td>
+  <td><span class="badge kairos">CUSTOM</span></td>
+  <td class="arch">Coder <-> Reviewer 双 Agent<br>LongRunning Registry<br>async subagent handle<br>/goal /autonomous 持久化<br>真实独立 daemon (Popen + pid)<br>Continual Harness<br>A2A 跨 Agent 消息<br>subprocess 沙箱隔离<br>Slash 命令<br>17+ LLM 预设<br>21 MCP / 20 plugin / 43 skill<br><b>R38.6.4: 项目感知 chat</b><br><b>FTS5 RAG 检索</b><br><b>working_fixes 复用</b></td>
+  <td><ul class="feats">
+       <li>单轮 chat <b>知道项目</b> (AGENTS.md + 树 + rounds) <span class="delta">new</span></li>
+       <li>settings 选择 = 实际模型 <span class="delta">new</span></li>
+       <li>chat 记录持久化 + 可回读 <span class="delta">new</span></li>
+       <li>长对话不爆 context (压缩头) <span class="delta">new</span></li>
+       <li>失败 → 记录 → 复用 <span class="delta">new</span></li>
+       <li>async subagent (不阻塞父)</li>
+       <li>/goal /autonomous /<br>Continual Harness / A2A</li>
+       <li>daemon 独立进程 (浏览器关也能跑)</li>
+       <li>LongRunning JSONL 持久化</li>
+       <li>subprocess 沙箱隔离</li>
+       <li>Slash 命令 + Provider 校验</li>
+       <li>Trajectory 导出 (JSONL)</li>
+       <li>10 SWE-bench Lite 任务 + 端到端</li>
+       <li><b>3 scoring 方法 + per-model leaderboard</b></li>
+       <li><b>FTS5 全文检索 + per-task RAG</b></li>
+       <li>Workbench 1 tab (Files)</li>
+       <li>Settings 3 tab (Provider/Mode/About)</li>
+       <li><b>Open folder 按钮 (弹资源管理器)</b> <span class="delta">new</span></li>
+       <li>TaskTracker 面板 (常驻进度) <span class="delta">new</span></li>
+       <li>0 agent 标识污染</li></ul></td>
+  <td>需要长任务/多 Agent 协同<br>飞书/钉钉协同 + 浏览器内嵌<br>国内 LLM 灵活切换 + 真项目感知</td>
+</tr>
+</tbody>
+</table>
+
+<h2>第二部分 - 8 项能力提升 (R38.6.4 本轮新增)</h2>
+<table>
+<thead>
+<tr><th style="width: 6%;">#</th><th style="width: 18%;">能力</th>
+    <th style="width: 18%;">改动位置</th>
+    <th style="width: 42%;">做什么</th>
+    <th style="width: 16%;">前后对比</th></tr>
+</thead>
+<tbody>
+<tr class="upgrade-row">
+  <td>1</td>
+  <td><b>项目感知 chat</b><span class="phase-tag">高 ROI</span></td>
+  <td><code>base.py:_build_chat_system_prompt</code></td>
+  <td>单轮 chat() 调用前注入:项目名+简介 / <code>AGENTS.md</code> 内容(2k 字) / 当前文件树(2 层) / 最近 3 轮结论 / <code>working_fixes</code>。从通用助手变项目专家。</td>
+  <td><span class="v-bad">"You are a helpful assistant"</span><br>↓<br><span class="v-good">知道 AGENTS.md + 树 + 历史</span></td>
+</tr>
+<tr class="upgrade-row">
+  <td>2</td>
+  <td><b>长时记忆真正进对话</b><span class="phase-tag">高 ROI</span></td>
+  <td><code>base.py:_build_chat_system_prompt</code></td>
+  <td>同一个 hook 拉 <code>project_notes / project_preferences / working_fixes</code>(项目级长期记忆层),不是"失忆"重开。</td>
+  <td><span class="v-bad">每个新会话都失忆</span><br>↓<br><span class="v-good">持续知道历史问题/偏好</span></td>
+</tr>
+<tr class="upgrade-row">
+  <td>3</td>
+  <td><b>单轮 chat 记录持久化</b><span class="phase-tag">中 ROI</span></td>
+  <td>backend <code>GET /projects/{id}/chat-messages</code><br>+ frontend <code>Chat.tsx:loadSessionHistory</code></td>
+  <td>后端 messages 表路由读项目级消息流,前端 loadSessionHistory 合并 loop_rounds + per-message,按 timestamp 排序。切 project/刷新后能看到完整对话。</td>
+  <td><span class="v-bad">loop summary only</span><br>↓<br><span class="v-good">完整消息流 + rounds</span></td>
+</tr>
+<tr class="upgrade-row">
+  <td>4</td>
+  <td><b>设置抽屉 = 实际模型</b><span class="phase-tag">小改</span></td>
+  <td><code>model_router.py:_build_provider</code></td>
+  <td>用户 SettingsDrawer 选的 <code>__active__</code> 优先于 <code>role_mappings</code> 遗留映射。role_mappings 是历史遗留,active 才是 user 意图。</td>
+  <td><span class="v-bad">选 Anthropic 却跑 OpenAI</span><br>↓<br><span class="v-good">选什么跑什么</span></td>
+</tr>
+<tr class="upgrade-row">
+  <td>5</td>
+  <td><b>Reviewer 跑测试评分</b><span class="phase-tag">已有</span></td>
+  <td><code>roles/reviewer.py</code> + <code>orchestrator.py</code></td>
+  <td>Reviewer 已有 TerminalTool,system prompt 允许跑 pytest/npm test。orchestrator 已挂上 Reviewer 工具集。无需改代码,只需 prompt 强调"评分前先跑测试"。</td>
+  <td><span class="v-mid">"代码看着像"</span><br>↓<br><span class="v-good">测试结果支撑</span></td>
+</tr>
+<tr class="upgrade-row">
+  <td>6</td>
+  <td><b>失败 → 记录 → 复用</b><span class="phase-tag">中 ROI</span></td>
+  <td><code>persistence.py:record_working_fix</code><br>+ base.py 自动写</td>
+  <td>Reviewer CRITICAL 或 loop 失败 → INSERT working_fixes (issue, fix, severity)。新轮 prompt 注入"已知问题清单"避免踩同一个坑。</td>
+  <td><span class="v-bad">同一 bug 反复踩</span><br>↓<br><span class="v-good">失败经验跨轮复用</span></td>
+</tr>
+<tr class="upgrade-row">
+  <td>7</td>
+  <td><b>上下文窗口管理</b><span class="phase-tag">已有升级</span></td>
+  <td><code>base.py:_truncate_memory</code></td>
+  <td>之前粗暴 slice 丢头。现在 drop 的 head 压缩成一条 system summary message,保持 thread-of-thought。LLM 还知道"之前试过 X,当前 debug Z"。</td>
+  <td><span class="v-bad">截断忘前文</span><br>↓<br><span class="v-good">压缩保留</span></td>
+</tr>
+<tr class="upgrade-row">
+  <td>8</td>
+  <td><b>检索式记忆 (RAG)</b><span class="phase-tag">大改</span></td>
+  <td><code>persistence.py:search_loop_rounds</code></td>
+  <td>已有 <code>loop_rounds_fts</code> FTS5 索引。query → bm25 排序 top-k rounds → 注入 Coder run() prompt 作为 RAG context。</td>
+  <td><span class="v-bad">全文塞 prompt</span><br>↓<br><span class="v-good">相关历史精准拉</span></td>
+</tr>
+</tbody>
+</table>
+
+<h2>第三部分 - v9 → v10 升级对比 (核心 KPI)</h2>
+<table>
+<thead>
+<tr><th style="width: 30%;">维度</th><th style="width: 35%;">v9 (上一轮)</th>
+    <th style="width: 35%;">v10 (本轮)</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td>单轮 chat 上下文</td>
+  <td>通用 prompt "You are a helpful assistant"</td>
+  <td>项目名 + AGENTS.md + 树 + rounds + working_fixes</td>
+</tr>
+<tr>
+  <td>切换 project 后聊天历史</td>
+  <td>切走就丢 (currentMessages 被清)</td>
+  <td>per-project localStorage 持久 + auto-open 最近 session</td>
+</tr>
+<tr>
+  <td>设置选的模型 vs 实际调用</td>
+  <td>role_mappings 覆盖设置 (用户被骗)</td>
+  <td>__active__ 优先,选什么跑什么</td>
+</tr>
+<tr>
+  <td>长对话稳定性</td>
+  <td>200 条硬截断,忘前文</td>
+  <td>head 压缩成 summary,保持 thread-of-thought</td>
+</tr>
+<tr>
+  <td>历史经验复用</td>
+  <td>不写不读,失败反复踩</td>
+  <td>working_fixes 自动记录 + 跨轮次复用</td>
+</tr>
+<tr>
+  <td>知识检索</td>
+  <td>无</td>
+  <td>FTS5 bm25 检索 top-k rounds,精准上下文</td>
+</tr>
+<tr>
+  <td>Workbench 配套</td>
+  <td>Files tab + Snapshot/Restore 按钮</td>
+  <td>+ Open folder 按钮(弹资源管理器)+ TaskTracker 面板</td>
+</tr>
+</tbody>
+</table>
+
+<div class="footer">
+  <b>v10 总结</b>: 在 v9 基础上加 <b>8 项能力提升</b> + 2 个常驻面板(Open folder / TaskTracker)+ chat 记录持久化。<br>
+  项目感知 chat 让单轮对话从"通用助手"变"项目专家",<br>
+  失败经验跨轮复用 + FTS5 RAG 让长任务不"重复踩坑"。<br>
+  0 个其他 agent 标识污染。文档在 <code>docs/HARNESS_BASELINE.md</code>。<br>
+  <span style="color: #facc15;">Memory 已存 (R38.6.4):8 项能力提升 + 项目感知 chat + FTS5 RAG + working_fixes 复用</span>
+</div>
+</body>
+</html>

@@ -36,18 +36,19 @@ class Settings(BaseSettings):
     # even on Windows (will raise); "asyncio" disables.
     loop: str = Field(default="auto", alias="KAIROS_LOOP")
 
-    # Paths — anchored to the repo root (absolute), NOT CWD-relative.
-    # The backend is launched from different working directories by
-    # different launchers; a CWD-relative data_dir made every restart
-    # load a DIFFERENT kairos.db / settings file (empty or foreign),
-    # which surfaced as "Project not found: <id>" for every project
-    # and as "LLM settings lost after restart". KAIROS_DATA_DIR still
-    # overrides the data dir.
-    workspace_dir: Path = Path(__file__).resolve().parent.parent.parent / "workspace"
+    # Paths — anchored (absolute), NOT CWD-relative. The backend is
+    # launched from different working directories by different
+    # launchers; a CWD-relative data_dir made every restart load a
+    # DIFFERENT kairos.db / settings file (empty or foreign), which
+    # surfaced as "Project not found: <id>" and "LLM settings lost
+    # after restart". KAIROS_DATA_DIR overrides the data dir (the
+    # packaged exe sets it to <exe>/data); workspace_dir lives next
+    # to data_dir so workspaces follow the data location too.
     data_dir: Path = Path(
         os.environ.get("KAIROS_DATA_DIR",
                        Path(__file__).resolve().parent.parent.parent / "data")
     )
+    workspace_dir: Path = data_dir.parent / "workspace"
 
     # CORS: comma-separated list of allowed origins. Default covers the
     # two localhost dev addresses; set KAIROS_CORS_ORIGINS to add more.

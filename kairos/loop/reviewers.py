@@ -8,7 +8,7 @@ import re
 import uuid
 from typing import Any, Dict, Iterable
 
-from kairos.agents.base import AgentTask
+# R38.6.4 packaging: was 'from kairos.agents.base import AgentTask' — replaced with __getattr__ lazy load
 from kairos.core.message_bus import Message
 from kairos.loop.gates import PER_ROUND_TIMEOUT_S
 from kairos.loop.prompts import build_reviewer_description
@@ -98,6 +98,13 @@ def _normalize_verdict(data: Any) -> Dict[str, Any] | None:
     failure_mode = data.get("_failure_mode")
     if failure_mode:
         verdict["_failure_mode"] = str(failure_mode)
+    # Test evidence: the Reviewer reports whether it actually ran the
+    # project's test suite. Must survive normalization, otherwise the
+    # loop-runner calibration (require_test_evidence) would treat every
+    # verdict as unverified and never allow approval.
+    evidence = data.get("tests_evidence")
+    if isinstance(evidence, dict):
+        verdict["tests_evidence"] = evidence
     # Confidence calibration: Reviewer may emit _confidence (0.0-1.0)
     # reflecting how certain they are about the verdict. Clamp to the
     # valid range; absent value defaults to 0.5 (medium-low).
@@ -149,6 +156,10 @@ async def run_reviewer_round_for(
     precheck_hint: str = "",
 ) -> Dict[str, Any]:
     """Run one Reviewer agent and return a normalized verdict."""
+    # R38.6.4 packaging: AgentTask is lazy-loaded via module __getattr__,
+    # which does not fire for a bare-name lookup inside this function —
+    # import locally so the name resolves at runtime.
+    from kairos.agents.base import AgentTask
     role = getattr(reviewer, "role", "reviewer")
     name = getattr(reviewer, "name", "Reviewer")
     task = AgentTask(
@@ -247,3 +258,15 @@ async def run_reviewers_parallel(
         "summary": " | ".join(summaries),
         "_per_reviewer": per_reviewer,
     }
+
+
+
+# R38.6.4 packaging: lazy import so PyInstaller onefile
+# can resolve this module (eager top-level imports trip
+# the bootloader when --collect-submodules misses the
+# symbol).
+def __getattr__(name):
+    if name in ['AgentTask']:
+        import importlib as _il, kairos.agents.base as _m
+        return getattr(_m, name)
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

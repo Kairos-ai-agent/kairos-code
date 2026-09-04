@@ -71,6 +71,9 @@ import hashlib
 import json
 import logging
 import mimetypes
+import os
+import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import List, Optional
@@ -360,6 +363,124 @@ def _walk(root: Path, current: Path, rel: str, depth: int,
             # Recurse one level deep so the tree can be expanded lazily.
             out.extend(_walk(root, child, rel_child, depth - 1, manifest))
     return out
+
+
+@router.post("/workbench/open-folder")
+async def open_folder(
+    project_id: str = Query(..., description="Project id"),
+) -> dict:
+    """Open the project work_dir in the OS file explorer.
+
+    R38.6.4: convenience button next to the Files tab. Spawns
+    explorer.exe (Windows) / xdg-open (Linux) / open (macOS) as
+    a detached subprocess so the response returns immediately.
+    Chrome blocks file:// from JS for security, so we proxy through
+    the backend.
+
+    R38.6.4.2: if the resolved path doesn't exist, we now look at
+    a few alternates before giving up. Projects created earlier
+    may store a relative ``work_dir`` like ``./workspace/...`` that
+    resolves to different absolute paths depending on the backend
+    process's CWD at request time. Common fallbacks we try:
+      1. the resolved path (preferred)
+      2. the raw stored ``work_dir`` (sometimes already absolute)
+      3. ``./workspace/<project_id>`` (matches New chat creation)
+      4. the orchestrator's ``workspace_base`` default
+    The first one that exists wins. We also report every candidate
+    in the response so the user can see what the backend saw.
+    """
+    project = _orch().get_project(project_id)
+    if not project:
+        raise HTTPException(
+            status_code=404, detail=f"project not found: {project_id}")
+    raw_wd = getattr(project, "work_dir", None) or str(
+        getattr(project, "workspace", ""))
+
+    candidates: list[Path] = []
+    try:
+        candidates.append(Path(raw_wd).resolve())
+    except Exception:
+        pass
+    if raw_wd:
+        candidates.append(Path(raw_wd))
+    # The orchestrator's per-project workspace — it is mkdir'd every
+    # time the project loads, so it is the reliable fallback when
+    # work_dir points at a folder that no longer exists on this
+    # machine (a path from another computer / unmounted drive).
+    try:
+        ws_attr = getattr(project, "workspace", None)
+        if ws_attr:
+            candidates.append(Path(str(ws_attr)).resolve())
+    except Exception:
+        pass
+    # Common default location New chat uses — anchored to the repo's
+    # workspace dir (NOT CWD-relative: the backend can be launched
+    # from any directory, and a CWD-relative "./workspace" candidate
+    # is exactly why open-folder kept returning "not found").
+    try:
+        from kairos.config.settings import settings
+        candidates.append(settings.workspace_dir / project_id)
+    except Exception:
+        candidates.append(Path("./workspace") / project_id)
+    # Orchestrator default
+    try:
+        candidates.append(Path(getattr(_orch(), "workspace_base", "./workspace")))
+    except Exception:
+        pass
+
+    seen: set[Path] = set()
+    root: Path | None = None
+    for c in candidates:
+        try:
+            c = c.resolve()
+        except Exception:
+            continue
+        if c in seen:
+            continue
+        seen.add(c)
+        if c.exists():
+            root = c
+            break
+    if root is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "no work_dir candidate exists. Tried: "
+                + ", ".join(str(c) for c in candidates)))
+
+    # Make sure the path exists before launching the file manager —
+    # some platforms (e.g. xdg-open) refuse to open non-existent
+    # paths. We try a best-effort mkdir; if it fails (read-only,
+    # permission denied, etc.) we still return the resolved path so
+    # the user can see what the backend saw.
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        logger.warning(
+            "open-folder: mkdir failed for %s: %s", root, exc)
+
+    try:
+        if sys.platform.startswith("win"):
+            subprocess.Popen(["explorer", str(root)],
+                             creationflags=getattr(
+                                 subprocess, "DETACHED_PROCESS", 0))
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(root)], start_new_session=True)
+        else:
+            subprocess.Popen(["xdg-open", str(root)], start_new_session=True)
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"no file manager available: {exc}")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"failed to open folder: {type(exc).__name__}: {exc}")
+    return {
+        "ok": True,
+        "path": str(root),
+        "candidates_tried": [str(c) for c in candidates],
+    }
 
 
 @router.get("/workbench/tree", response_model=TreeResponse)

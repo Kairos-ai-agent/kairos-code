@@ -153,20 +153,20 @@ def landlock_available() -> bool:
 
 
 def _linux_landlock_sandbox(policy: SandboxPolicy) -> Optional[int]:
-    """Apply a Landlock ruleset to the current process.
+    """Build a Landlock ruleset (does NOT restrict the calling task).
 
-    Returns the Landlock FD on success, or None if Landlock isn't
-    available. The FD should be passed to the subprocess via
-    `os.set_inheritable(True)` so the child inherits the restriction
-    (Landlock is per-task, not per-mount, so child processes keep
-    the constraint set by the parent).
+    Returns the ruleset FD on success, or None if Landlock isn't available.
+    The caller must keep the FD open in the child (via ``pass_fds``) and run
+    ``_landlock_restrict_self(fd)`` there as a ``preexec_fn`` so only the
+    subprocess is confined. ``restrict_self`` is deliberately NOT called on
+    the parent — doing so would sandbox the main process (previously a bug).
 
     Implementation notes:
 
     * Landlock ABI v1 (kernel 5.13+) uses 3 syscalls:
       - landlock_create_ruleset  → ruleset fd
       - landlock_add_rule       → add a path-beneath rule
-      - landlock_restrict_self   → enforce in the calling task
+      - landlock_restrict_self   → enforce in a task (the child)
     * Syscall numbers are architecture-specific; we hardcode the
       x86_64 / aarch64 values (the two Kairos targets) and bail
       with `None` on anything else.
@@ -294,21 +294,34 @@ def _linux_landlock_sandbox(policy: SandboxPolicy) -> Optional[int]:
         finally:
             libc.close(parent_fd)
 
-        # 3) Restrict the calling task. After this, the kernel will
-        # reject any filesystem access outside the allowed_root.
-        rc = libc.syscall(SYSCALL_NR_RESTRICT, fd, 0)
-        if rc < 0:
-            err = ctypes.get_errno()
-            libc.close(fd)
-            logger.debug("sandbox: landlock_restrict_self failed errno=%s", err)
-            return None
-        # Caller must `os.set_inheritable(fd, True)` to pass to the
-        # subprocess. We don't do that here because we don't know
-        # whether the caller has already started the subprocess.
+        # NOTE: we deliberately do NOT call ``landlock_restrict_self`` here.
+        # Applying it in the *parent* would sandbox the main process and
+        # lock Kairos out of its own filesystem — the exact bug this guard
+        # fixes. The caller runs ``_landlock_restrict_self(fd)`` in the
+        # forked CHILD via ``preexec_fn`` so only the subprocess is confined.
         return fd
     except Exception as e:  # noqa: BLE001
         logger.debug("sandbox: Landlock setup failed: %s", e)
         return None
+
+
+def _landlock_restrict_self(fd: int) -> None:
+    """Apply an already-built Landlock ruleset to the CURRENT task.
+
+    Meant to be used as a ``preexec_fn`` so it runs inside the forked child
+    (before ``exec``), restricting only the child. The parent never calls
+    this, so the main process can never be locked out.
+    """
+    if _LANDLOCK_RESTRICT_SELF is None:
+        return
+    try:
+        libc = ctypes.CDLL(ctypes.util.find_library("c") or "libc.so.6",
+                           use_errno=True)
+        libc.syscall.restype = ctypes.c_long
+        libc.syscall.argtypes = [ctypes.c_long]
+        libc.syscall(_LANDLOCK_RESTRICT_SELF, fd, 0)
+    except Exception:  # noqa: BLE001
+        logger.debug("sandbox: landlock_restrict_self (child) failed", exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -462,11 +475,13 @@ def apply_to_subprocess(
     if sys.platform.startswith("linux"):
         fd = _linux_landlock_sandbox(policy)
         if fd is not None:
-            # We have a Landlock FD set up on ourselves. Mark it
-            # inheritable so the child keeps the same rules.
+            # Keep the ruleset FD open in the forked child and apply the
+            # restriction THERE (preexec_fn), never in the parent. This is
+            # what actually confines only the subprocess.
             try:
                 os.set_inheritable(fd, True)
                 kwargs.setdefault("pass_fds", (fd,))
+                kwargs["preexec_fn"] = lambda: _landlock_restrict_self(fd)
             except Exception:
                 pass
     # Tier 2b: macOS Seatbelt (Darwin).

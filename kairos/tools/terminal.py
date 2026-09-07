@@ -12,6 +12,37 @@ from typing import Callable, List, Optional, Tuple
 
 from kairos.tools.base import BaseTool, ToolResult
 
+
+def _split_command(command: str) -> List[str]:
+    """Split a command line into argv without a shell.
+
+    On POSIX we use ``shlex.split(..., posix=True)``. On Windows we use the
+    real ``CommandLineToArgvW`` parser so backslash paths (``C:\\dir\\x``)
+    and quoted arguments survive intact — ``shlex(posix=True)`` would treat
+    ``\\`` as an escape and mangle them.
+    """
+    if os.name != "nt":
+        return shlex.split(command, posix=True)
+    try:
+        import ctypes
+        cmd_line = ctypes.windll.shell32.CommandLineToArgvW
+        cmd_line.argtypes = [ctypes.c_wchar_p, ctypes.POINTER(ctypes.c_int)]
+        cmd_line.restype = ctypes.POINTER(ctypes.c_wchar_p)
+        argc = ctypes.c_int()
+        argv = cmd_line(command, ctypes.byref(argc))
+        if not argv or argc.value <= 0:
+            return shlex.split(command, posix=True)
+        try:
+            return [argv[i] for i in range(argc.value)]
+        finally:
+            local_free = ctypes.windll.kernel32.LocalFree
+            local_free.argtypes = [ctypes.c_void_p]
+            local_free.restype = ctypes.c_void_p
+            local_free(ctypes.cast(argv, ctypes.c_void_p))
+    except Exception:  # noqa: BLE001
+        return shlex.split(command, posix=True)
+
+
 class TerminalTool(BaseTool):
     """Execute a command in a sandboxed project directory (argv, no shell).
 
@@ -53,7 +84,7 @@ class TerminalTool(BaseTool):
         # *through their project config* by design; that is exactly what the
         # OS-level sandbox layer is meant to confine (see sandbox.py).
         "pytest": (), "pyright": (),
-        "npm": (), "pnpm": (), "yarn": (), "npx": (),
+        "npm": (), "pnpm": (), "yarn": (),  # npx removed: `npx <pkg>` is remote code-exec
         "go": (), "cargo": (), "rustc": (),
         "make": (), "cmake": (),
         # Read-only inspection (no code exec, no env/secret dump)
@@ -106,6 +137,10 @@ class TerminalTool(BaseTool):
         # Network exfiltration / shells
         r"\bnc\s+-e\b",
         r"\bbash\s+-i\b.*>/dev/tcp/",
+        # find -exec / -execdir followed by an interpreter or shell: even
+        # without a shell, `find . -exec rm -rf {} +` (or `... ;`) runs an
+        # arbitrary command when the '+'/';' terminator is present.
+        r"\s-exec(?:dir)?\s+(rm|sh|bash|zsh|python|python3|node|nodejs|perl|ruby|php|powershell|pwsh|cmd|curl|wget|nc|ncat|socat)\b",
     ]
 
     # Command heads that are never allowed, regardless of deny-pattern outcome.
@@ -120,10 +155,10 @@ class TerminalTool(BaseTool):
     def _is_safe_command(self, command: str) -> Optional[str]:
         """Return the rule that blocked the command, or None if allowed."""
         # 1. Parse with shlex so spacing tricks ("rm  -rf /") collapse.
-        #    We always use posix=True: the parsed argv is what we actually
-        #    exec (no shell), so quoting is resolved uniformly on every OS.
+        #    ``_split_command`` is Windows-aware (CommandLineToArgvW) so
+        #    backslash paths aren't mangled.
         try:
-            tokens = shlex.split(command, posix=True)
+            tokens = _split_command(command)
         except ValueError:
             return "could not parse command safely"
 
@@ -164,6 +199,46 @@ class TerminalTool(BaseTool):
             if re.search(pat, normalized, re.IGNORECASE):
                 return f"blocked by deny pattern: {pat}"
 
+        # 6. Block argv tokens that resolve to an existing path OUTSIDE the
+        #    allowed cwd (e.g. ``grep -r key C:\\Users\\...`` or
+        #    ``grep -r x ../../etc/passwd``). The cwd lock only constrains
+        #    the working directory, not absolute/``..`` paths a tool reads.
+        escape = self._escapes_cwd(tokens)
+        if escape:
+            return f"argument '{escape}' resolves to a path outside the project directory"
+
+        return None
+
+    def _escapes_cwd(self, tokens: List[str]) -> Optional[str]:
+        """Return the first token that resolves to an *existing* path outside
+        ``self._allowed_cwd``, else ``None``. Flags are skipped; every other
+        token is resolved against the cwd and checked. Tokens that don't map
+        to a real existing path (regex patterns, not-yet-created files) are
+        left alone, so this mainly stops reads of existing absolute / ``..``
+        paths that escape the project."""
+        for tok in tokens:
+            if tok.startswith("-"):
+                continue
+            # ``shlex(..., posix=True)`` treats ``\\`` as an escape on every
+            # OS, so a Windows drive path may arrive de-cased; also try the
+            # backslash-normalized form so ``C:\\Windows\\...`` is still seen.
+            for cand in (tok, tok.replace("\\", "/")):
+                try:
+                    if (os.path.isabs(cand) or cand.startswith("/")
+                            or cand.startswith("\\\\")
+                            or re.match(r"^[A-Za-z]:[\\/]", cand)):
+                        resolved = Path(cand).resolve()
+                    else:
+                        resolved = (self._allowed_cwd / cand).resolve()
+                except (OSError, ValueError):
+                    continue
+                try:
+                    resolved.relative_to(self._allowed_cwd)
+                except ValueError:
+                    # Outside the allowed cwd; only reject if it truly exists
+                    # (a dangling/absolute path arg that doesn't exist is inert).
+                    if resolved.exists():
+                        return tok
         return None
 
     def _resolve_cwd(self, cwd: Optional[str]) -> Path:
@@ -265,7 +340,7 @@ class TerminalTool(BaseTool):
             # is the *actual* executable and shell chaining/redirection is
             # impossible. The parsed argv is regenerated here (the parse in
             # ``_is_safe_command`` is only used for validation).
-            argv = shlex.split(command, posix=True)
+            argv = _split_command(command)
             process = await asyncio.create_subprocess_exec(
                 *argv,
                 stdout=asyncio.subprocess.PIPE,

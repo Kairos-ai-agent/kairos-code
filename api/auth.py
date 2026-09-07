@@ -7,14 +7,16 @@ Kairos is a local-first tool. Two layers keep it safe:
    unless the operator deliberately binds a non-loopback address.
 
 2. **Shared API token (opt-in).** Set ``KAIROS_API_TOKEN`` and every
-   ``/api`` route (except a small allow-list and CORS preflight) requires
-   it, presented as ``Authorization: Bearer <token>``, ``X-API-Token``,
-   or ``?token=``. When no token is configured the API stays open for
-   local use on loopback — don't expose a token-less instance on a
-   non-loopback interface (see api/auth.install_auth).
+   ``/api`` route **and the /ws socket** (except a small allow-list and CORS
+   preflight) requires it, presented as ``Authorization: Bearer <token>``,
+   ``X-API-Token``, or ``?token=``. The browser WS handshake can't set a
+   header, so in this mode the SPA must append ``?token=<token>`` to the
+   WebSocket URL. When no token is configured the API stays open for local
+   use on loopback — don't expose a token-less instance on a non-loopback
+   interface (see api/auth.install_auth).
 
-WebSocket ``/ws`` upgrades are intentionally not gated here (token-based
-WS auth is a separate concern; the loopback bind covers the local case).
+WebSocket ``/ws`` upgrades are gated by the same token (via ``?token=``) so a
+token-configured deployment isn't left with a wide-open socket.
 """
 
 from __future__ import annotations
@@ -45,10 +47,7 @@ class _AuthMiddleware(BaseHTTPMiddleware):
             # CORS preflight never carries our token; let it through.
             return await call_next(request)
         path = request.url.path
-        if path in _NO_AUTH_PATHS or path.startswith("/docs") or path.startswith("/ws"):
-            # /ws (and sub-paths) are exempt: the bundled SPA connects the
-            # WebSocket without a token, so gating it would break the UI when
-            # a token is configured. The loopback bind covers the local case.
+        if path in _NO_AUTH_PATHS or path.startswith("/docs"):
             return await call_next(request)
         token = os.environ["KAIROS_API_TOKEN"].strip()
         provided: str | None = None

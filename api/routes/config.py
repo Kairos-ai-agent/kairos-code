@@ -96,9 +96,17 @@ async def get_settings():
             masked[k] = ""
     # SECURITY: never return ``raw_keys``. Only the masked form leaves the
     # API; a caller that needs to *set* a key uses POST /api/config/settings.
+    # Also strip any plaintext ``api_key`` inside ``custom_models`` (the
+    # legacy R8 shape stores ``api_key`` per-model, see model_router.py).
+    custom = []
+    for m in settings.get("custom_models", []):
+        safe = {k: v for k, v in m.items() if k not in ("api_key", "apiKey")}
+        if m.get("api_key"):
+            safe["api_key_set"] = True
+        custom.append(safe)
     return {
         "api_keys": masked,
-        "custom_models": settings.get("custom_models", []),
+        "custom_models": custom,
     }
 
 class SettingsRequest(BaseModel):

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import shlex
 from pathlib import Path
 from typing import Optional
 
@@ -61,9 +62,10 @@ class GitTool(BaseTool):
         if sub not in ALLOWED_SUBCMDS:
             return ToolResult(success=False, output="", error=f"git subcommand '{sub}' is not allowed")
 
-        # Tokenize args to inspect per-token.
+        # Tokenize args to inspect per-token. Use shlex (not str.split) so a
+        # quoted arg like ``--format="%H %s"`` isn't split on the inner space.
         try:
-            arg_tokens = args.split() if args else []
+            arg_tokens = shlex.split(args, posix=True) if args else []
         except Exception:
             return ToolResult(success=False, output="", error="could not parse args")
 

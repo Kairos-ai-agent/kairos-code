@@ -247,7 +247,8 @@ async def _run_async_job(job_id: str, task: str, project_id: str):
             project = _orch().get_project(project_id) if project_id else None
             if project and project.coder:
                 from kairos.agents.base import AgentTask
-                t = AgentTask(title="Async: " + task[:60],
+                t = AgentTask(id=uuid.uuid4().hex[:12],
+                              title="Async: " + task[:60],
                               description=task, priority="low")
                 result = await project.coder.run(t)
                 _jobs[job_id]["result"] = {
@@ -826,10 +827,14 @@ async def a2a_list_agents():
     history = await bus.recent(limit=200)
     agents = set()
     for m in history:
-        if m.get("sender"):
-            agents.add(m["sender"])
-        if m.get("receiver"):
-            agents.add(m["receiver"])
+        # ``history`` items are Message objects (not dicts) — use attributes,
+        # not .get(), which would raise AttributeError -> HTTP 500.
+        sender = getattr(m, "sender", None)
+        receiver = getattr(m, "receiver", None)
+        if sender:
+            agents.add(sender)
+        if receiver:
+            agents.add(receiver)
     return {"agents": sorted(agents)}
 
 

@@ -951,6 +951,20 @@ class Orchestrator:
         Called from FastAPI's lifespan shutdown. Idempotent — calling
         twice is a no-op.
         """
+        # First cancel any in-flight loop tasks so they stop awaiting the
+        # LLM clients we're about to close below (otherwise a background
+        # loop can keep holding an already-closed HTTP client). Brief await
+        # so the cancel lands; best-effort on timeout.
+        for project in list(self._projects.values()):
+            task = getattr(project, "loop_task", None)
+            if task is not None and not task.done():
+                task.cancel()
+                try:
+                    await asyncio.wait_for(
+                        asyncio.gather(task, return_exceptions=True), timeout=5
+                    )
+                except (asyncio.TimeoutError, asyncio.CancelledError, Exception):
+                    pass
         for project in list(self._projects.values()):
             # Sync cleanup first (watchers, worktrees), then async
             # (MCP subprocesses).
@@ -1232,6 +1246,13 @@ class Orchestrator:
             return False
         project.loop_session.request_stop()
         project.loop_session.reject_plan()
+        # Also cancel the loop task so "stop" takes effect immediately,
+        # instead of waiting for the current Coder/Reviewer round to hit
+        # its PER_ROUND_TIMEOUT_S (up to 600s). _on_loop_done handles a
+        # cancelled task and marks the project "stopped".
+        task = getattr(project, "loop_task", None)
+        if task is not None and not task.done():
+            task.cancel()
         return True
 
     def approve_plan(self, project_id: str, plan_text: str = "") -> bool:

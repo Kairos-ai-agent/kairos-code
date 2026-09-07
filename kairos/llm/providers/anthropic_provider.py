@@ -34,11 +34,14 @@ class AnthropicProvider(BaseLLMProvider):
         }
 
     def _convert_messages(self, messages: List[LLMMessage]):
-        system = ""
+        system_parts: List[str] = []
         converted = []
         for msg in messages:
             if msg.role == "system":
-                system = msg.content
+                # CONCATENATE, don't overwrite. The memory summary arrives as
+                # a *second* system message and must not clobber the main
+                # system prompt (role instructions / skills / AGENTS.md).
+                system_parts.append(msg.content)
             elif msg.role == "tool":
                 # Anthropic uses "user" role for tool results
                 tool_use_id = msg.tool_call_id
@@ -74,6 +77,7 @@ class AnthropicProvider(BaseLLMProvider):
                 converted.append({"role": "assistant", "content": content_blocks})
             else:
                 converted.append({"role": msg.role, "content": msg.content})
+        system = "\n\n".join(p for p in system_parts if p)
         return system, converted
 
     async def complete(

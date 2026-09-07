@@ -662,9 +662,12 @@ class KairosAgent:
             else:
                 prompt += f"# Turns to summarize:\n{transcript}"
             with self._traced_llm_call([LLMMessage(role="user", content=prompt)]) as _trace_span:
-                response = await self._llm.complete([
-                    LLMMessage(role="user", content=prompt)
-                ])
+                # Wrap with the same per-call timeout as the main loop so a
+                # hung summarize can't stall the whole run() forever.
+                response = await asyncio.wait_for(
+                    self._llm.complete([LLMMessage(role="user", content=prompt)]),
+                    timeout=self._llm_timeout_s,
+                )
                 _trace_span.set_output(
                     content=(response.content or "")[:500],
                     prompt_tokens=response.usage.get("prompt_tokens", 0),
@@ -772,6 +775,10 @@ class KairosAgent:
                     )
                 except asyncio.TimeoutError:
                     timed_out = True
+                    # This is a timeout, NOT a tool-call-limit: clear the
+                    # sentinel so the post-loop block below doesn't overwrite
+                    # our timeout message with "Tool call limit reached".
+                    hit_turn_limit = False
                     result = (
                         f"LLM call timed out after {self._llm_timeout_s:.0f}s "
                         f"on turn {turn + 1}/{self.MAX_TOOL_TURNS}"

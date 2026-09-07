@@ -134,7 +134,10 @@ async def collaboration_ws(websocket: WebSocket):
 async def broadcast(message: dict):
     """Broadcast to all alive clients."""
     dead = []
-    for cid, client in _clients.items():
+    # Snapshot the dict: we await inside the loop and a client disconnect
+    # mutates _clients, which would raise "dictionary changed size during
+    # iteration".
+    for cid, client in list(_clients.items()):
         if not client.alive:
             dead.append(cid)
             continue

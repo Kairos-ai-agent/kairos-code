@@ -63,12 +63,12 @@ Review for:
 
 For each issue found, respond in this JSON format:
 [
-  {{
+  {
     "category": "CRITICAL|MAJOR|MINOR|SUGGESTION",
     "description": "Description of the issue",
     "code_snippet": "the problematic code",
     "suggestion": "how to fix it"
-  }}
+  }
 ]
 
 If no issues found, return an empty array [].
@@ -82,7 +82,14 @@ class ReviewEngine:
 
     async def review_file(self, file_path: str, code: str) -> FileReview:
         """Review a single file."""
-        prompt = REVIEW_PROMPT.format(file_path=file_path, code=code[:8000])  # Limit code size
+        # ``.replace`` (not ``.format``) so braces in the *reviewed code*
+        # can't break the template — a dict literal like ``{"a": 1}`` would
+        # otherwise raise and silently kill the review.
+        prompt = (
+            REVIEW_PROMPT
+            .replace("{file_path}", file_path)
+            .replace("{code}", code[:8000])
+        )
 
         messages = [LLMMessage(role="user", content=prompt)]
         response = await self._llm.complete(messages)

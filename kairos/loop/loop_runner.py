@@ -60,13 +60,15 @@ def _plan_snapshot(session) -> Optional[dict]:
         logger.debug("plan snapshot failed (non-fatal)", exc_info=True)
         return None
 
-async def _run_coder_round(session, requirement, round_no, plan_mode=False):
+async def _run_coder_round(session, requirement, round_no, plan_mode=False, coder=None):
     # R38.6.4 packaging: AgentTask is lazy-loaded at module level via
     # __getattr__, which does NOT fire for this bare-name lookup inside
     # the function body — import it locally so the name resolves.
     from kairos.agents.base import AgentTask
     bus = session.message_bus
-    coder = session.coder
+    # ``coder`` is optional so best-of-N can inject a forked per-attempt
+    # worker; default to the session's own Coder.
+    coder = coder or session.coder
     target_temp = CODER_TEMPERATURE_START if plan_mode else coder_temperature_for_round(round_no)
     if hasattr(coder, "set_temperature"):
         try:
@@ -623,10 +625,18 @@ async def _best_of_n_attempts(session, requirement, round_no, n, bus):
         coder_result = await _run_coder_round(session, requirement, round_no)
         return coder_result, 0
     try:
-        tasks = [
-            asyncio.create_task(_run_coder_round(session, requirement, round_no))
-            for _ in range(n)
-        ]
+        tasks = []
+        for _ in range(n):
+            try:
+                # Fork the Coder per attempt so each worker has an isolated
+                # memory + its own lock — otherwise N runs share one agent
+                # (fake "parallel" + cross-attempt context pollution).
+                worker = session.coder.fork()
+            except Exception:
+                worker = session.coder  # fallback: old shared behavior
+            tasks.append(asyncio.create_task(
+                _run_coder_round(session, requirement, round_no, coder=worker)
+            ))
         results = await asyncio.gather(*tasks, return_exceptions=True)
     except Exception:
         logger.debug("best-of-N spawn failed, using single attempt", exc_info=True)

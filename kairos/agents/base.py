@@ -344,6 +344,34 @@ class KairosAgent:
         self._llm_config = llm_config
         self._llm = create_provider(llm_config)
 
+    def fork(self) -> "KairosAgent":
+        """Return a parallel-worker copy of this agent.
+
+        Shares the LLM client, tools, message bus, and checkpointer, but gets
+        an ISOLATED copy of ``_memory`` (and ``_memory_summary``) plus a fresh
+        ``_lock``. This lets best-of-N / team workers run *truly concurrently*
+        without one attempt's tool/message history leaking into another.
+
+        The copy keeps the same ``agent_id`` / ``role`` / ``model``; only
+        mutable per-run state is reset.
+        """
+        import copy
+
+        clone = copy.copy(self)
+        # Isolate the mutable per-run state. The baseline ``LLMMessage``
+        # objects are appended-to-in-place (run() only appends new ones), so
+        # a shallow list copy gives each worker its own history view.
+        clone._memory = list(self._memory)
+        clone._memory_summary = self._memory_summary
+        clone._last_summarized_at_turn = self._last_summarized_at_turn
+        clone._lock = asyncio.Lock()
+        clone.status = type(self.status).IDLE
+        clone.current_turn = 0
+        clone.current_tool = None
+        clone.current_task = None
+        clone.total_turns = 0
+        return clone
+
     def _get_tool_schemas(self) -> Optional[List[dict]]:
         """Get tool schemas for LLM function calling."""
         if not self.tools:

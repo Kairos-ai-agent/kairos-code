@@ -1038,6 +1038,16 @@ async def run_loop(session, requirement, *, unbounded: bool = False):
                 session.total_tokens_used += session.round_tokens
             except Exception:
                 pass
+            # Guard: a Coder that returns *no output* (e.g. it timed out)
+            # must not be graded as if it produced a diff. Count it as an
+            # infra failure (so the infra_streak gate can react) and give the
+            # Reviewer an explicit "nothing to review" marker instead of "".
+            if not (coder_text or "").strip():
+                session.infra_failure_streak = getattr(session, "infra_failure_streak", 0) + 1
+                coder_result = (
+                    "```\n[Coder returned no output this round (likely a timeout).\n"
+                    "Nothing was produced to review.]\n```"
+                )
             workspace = Path(getattr(session.project, "work_dir", None) or getattr(session.project, "workspace", ""))
             precheck_hint, precheck_fixable = await _run_precheck(session, workspace, round_no, bus)
             if getattr(session, "specialist_reviewers", None):

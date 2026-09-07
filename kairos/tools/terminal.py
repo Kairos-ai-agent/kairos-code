@@ -341,19 +341,44 @@ class TerminalTool(BaseTool):
             # impossible. The parsed argv is regenerated here (the parse in
             # ``_is_safe_command`` is only used for validation).
             argv = _split_command(command)
-            process = await asyncio.create_subprocess_exec(
-                *argv,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                stdin=asyncio.subprocess.PIPE if stdin else None,
-                cwd=str(safe_cwd),
-                env=full_env,
+
+            popen_kwargs = {
+                "stdout": asyncio.subprocess.PIPE,
+                "stderr": asyncio.subprocess.PIPE,
+                "stdin": asyncio.subprocess.PIPE if stdin else None,
+                "cwd": str(safe_cwd),
+                "env": full_env,
                 **new_session_kw,
-            )
+            }
+            # Apply the OS-level sandbox to the spawn kwargs. On Linux this
+            # attaches a ``preexec_fn`` + ``pass_fds`` so the Landlock
+            # ruleset is applied in the forked CHILD (never the parent); on
+            # Windows it's a no-op (Job Object is applied after spawn).
+            if policy is not None:
+                try:
+                    from kairos.sandbox import apply_to_subprocess
+                    popen_kwargs = apply_to_subprocess(policy, popen_kwargs)
+                except Exception:
+                    pass
+                # macOS's Seatbelt integration stores a profile marker that
+                # is NOT a valid subprocess kwarg; terminal doesn't wrap with
+                # sandbox-exec, so drop it (macOS isolation stays best-effort).
+                popen_kwargs.pop("__kairos_seatbelt_profile", None)
+
+            try:
+                process = await asyncio.create_subprocess_exec(*argv, **popen_kwargs)
+            except (TypeError, ValueError):
+                # Some asyncio loops / Popen builds reject preexec_fn/pass_fds;
+                # retry without them so the command still runs (at reduced
+                # isolation) rather than failing outright.
+                for k in ("preexec_fn", "pass_fds"):
+                    popen_kwargs.pop(k, None)
+                process = await asyncio.create_subprocess_exec(*argv, **popen_kwargs)
 
             # Wire the OS-level sandbox for this child (Windows Job Object
-            # KILL_ON_JOB_CLOSE; a no-op on platforms without one). Kept
-            # best-effort so a sandbox failure never breaks the command.
+            # KILL_ON_JOB_CLOSE; called in the child for Linux via the
+            # preexec_fn above). Kept best-effort so a sandbox failure never
+            # breaks the command.
             if policy is not None:
                 try:
                     assign_child_to_sandbox(policy, process.pid)

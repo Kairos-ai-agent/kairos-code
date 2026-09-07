@@ -53,11 +53,18 @@ class TerminalTool(BaseTool):
         backticks are impossible, and the allow-listed head *is* the real
         executable.
       - the head must be on an allow-list; interpreter / leak-prone heads
-        (``python``, ``node``, ``env``, ``cat``, …) are excluded by default.
+        (``python``, ``node``, ``env``, ``cat``, …) are excluded, and the
+        package-manager / build-tool RCE heads (``npm`` / ``pnpm`` / ``yarn``
+        / ``go`` / ``cargo`` / ``rustc`` / ``make`` / ``cmake``) are OFF by
+        default — enable them explicitly (``enable_build_commands=True`` or
+        ``KAIROS_ENABLE_BUILD_COMMANDS``) once the build/test workflow needs
+        them.
       - shell-control tokens and destructive deny-patterns are rejected.
       - the portable ``kairos.sandbox`` deny-list is also applied, and the
-        child PID is handed to the OS-level sandbox (Windows Job Object) so
-        the process tree dies with the parent.
+        child is handed to the OS-level sandbox: on Linux a Landlock ruleset
+        is applied in the forked child (via ``preexec_fn``); on Windows the
+        child PID is attached to a Job Object (KILL_ON_JOB_CLOSE) so the
+        process tree dies with the parent.
 
     The list of "safe" heads is intentionally conservative — production
     usage should extend it via subclassing, not by relaxing the defaults.
@@ -67,34 +74,41 @@ class TerminalTool(BaseTool):
     description = "Execute a shell command inside the project directory"
     max_output = 10000
 
-    # Commands agents are allowed to invoke by default.
-    # Each entry is (head, allowed_arg_substrings) — if allowed_arg_substrings
-    # is empty, no flag-level restriction is applied to that head.
+    # Commands agents are allowed to invoke by default. Each entry is
+    # (head, allowed_arg_substrings) — if allowed_arg_substrings is empty, no
+    # flag-level restriction is applied to that head.
     #
-    # SECURITY (R38.6 hardening): interpreter / leak-prone heads are
-    # deliberately NOT here. ``python -c`` / ``node -e`` / ``env`` / ``cat``
-    # are arbitrary-code-exec or secret-dump primitives, so the default
-    # allow-list is conservative. Production usage can extend it via
-    # subclassing (mirroring the docs), but the shipped default exposes the
-    # smallest surface that still covers the Coder/Reviewer workflow
-    # (``pytest`` / ``npm test`` / ``go test`` / ``git status``).
+    # SECURITY (default-tightened): the DEFAULT allow-list contains NO
+    # arbitrary-code-exec head. ``python -c`` / ``node -e`` / ``env`` /
+    # ``cat`` are excluded outright, and the package-manager / build-tool
+    # RCE primitives (``npm`` / ``pnpm`` / ``yarn`` / ``go`` / ``cargo`` /
+    # ``rustc`` / ``make`` / ``cmake``) are **opt-in** — they run arbitrary
+    # code *through project config* (install scripts, Makefile recipes,
+    # ``go test``) and are only enabled when BUILD_COMMANDS is turned on
+    # (see ``enable_build_commands`` / ``KAIROS_ENABLE_BUILD_COMMANDS``).
     ALLOWED_COMMANDS = {
-        # Build/test — interpreter-free runners documented in the role
-        # prompts (pytest / npm test / go test). These run arbitrary code
-        # *through their project config* by design; that is exactly what the
-        # OS-level sandbox layer is meant to confine (see sandbox.py).
+        # Test runner used by the Reviewer loop (Python-first project).
+        # NOTE: ``pytest`` still executes the project's test code — the
+        # genuinely-sandboxed path is the OS-layer (see sandbox.py).
         "pytest": (), "pyright": (),
-        "npm": (), "pnpm": (), "yarn": (),  # npx removed: `npx <pkg>` is remote code-exec
-        "go": (), "cargo": (), "rustc": (),
-        "make": (), "cmake": (),
         # Read-only inspection (no code exec, no env/secret dump)
         "ls": (), "dir": (), "grep": (), "rg": (), "find": (),
         "wc": (), "echo": (), "pwd": (),
-        # VCS
+        # VCS (read-ish subcommands by default; write ones stay available)
         "git": ("status", "log", "diff", "show", "branch", "remote",
                 "add", "commit", "push", "pull", "fetch", "merge",
                 "checkout", "switch", "stash", "tag", "init", "clone",
                 "config", "rev-parse", "ls-files", "ls-tree"),
+    }
+
+    # Arbitrary-code-exec build/test toolchain. OFF by default; merged into
+    # ALLOWED_COMMANDS only when explicitly enabled (constructor flag or
+    # KAIROS_ENABLE_BUILD_COMMANDS env). ``npx`` was removed permanently:
+    # `npx <pkg>` is remote code-exec and has no safe subset.
+    BUILD_COMMANDS = {
+        "npm": (), "pnpm": (), "yarn": (),
+        "go": (), "cargo": (), "rustc": (),
+        "make": (), "cmake": (),
     }
 
     # Tokens that only ever appear as shell control operators. Under argv
@@ -148,9 +162,21 @@ class TerminalTool(BaseTool):
                           "powershell", "cmd", "reg", "sc", "bcdedit",
                           "diskpart", "shutdown", "reboot", "sudo", "su"}
 
-    def __init__(self, allowed_cwd: str | Path = "."):
+    def __init__(self, allowed_cwd: str | Path = ".",
+                 enable_build_commands: bool | None = None):
         self._allowed_cwd = Path(allowed_cwd).resolve()
         self._allowed_cwd.mkdir(parents=True, exist_ok=True)
+        # Build/test RCE heads are OFF by default. They can be turned on
+        # explicitly (``enable_build_commands=True``) or via the
+        # KAIROS_ENABLE_BUILD_COMMANDS env var. Default = no RCE surface.
+        if enable_build_commands is None:
+            enable_build_commands = bool(
+                os.environ.get("KAIROS_ENABLE_BUILD_COMMANDS", "").strip()
+                and os.environ["KAIROS_ENABLE_BUILD_COMMANDS"].strip().lower()
+                not in ("0", "false", "no", "off")
+            )
+        if enable_build_commands:
+            self.ALLOWED_COMMANDS = {**self.ALLOWED_COMMANDS, **self.BUILD_COMMANDS}
 
     def _is_safe_command(self, command: str) -> Optional[str]:
         """Return the rule that blocked the command, or None if allowed."""

@@ -305,21 +305,50 @@ def _linux_landlock_sandbox(policy: SandboxPolicy) -> Optional[int]:
         return None
 
 
+# libc handle + syscall are resolved ONCE, in the parent. The forked child
+# must never dlopen()/find_library() again — those are NOT async-signal-safe
+# and can be fragile after fork(). The ``preexec_fn`` only calls the cached
+# syscall handle, so no dynamic loading happens inside the child.
+_LANDLOCK_LIBC_CACHE: Optional[Any] = None
+_LANDLOCK_SYSCALL_CACHE: Optional[Any] = None
+
+
+def _landlock_syscall() -> Optional[Any]:
+    """Return a ready-to-call ``libc.syscall``, cached so it is loaded once
+    in the parent (never re-loaded inside a forked child)."""
+    global _LANDLOCK_LIBC_CACHE, _LANDLOCK_SYSCALL_CACHE
+    if _LANDLOCK_SYSCALL_CACHE is None:
+        try:
+            libc = ctypes.CDLL(ctypes.util.find_library("c") or "libc.so.6",
+                               use_errno=True)
+            libc.syscall.restype = ctypes.c_long
+            libc.syscall.argtypes = [ctypes.c_long]
+            _LANDLOCK_LIBC_CACHE = libc
+            _LANDLOCK_SYSCALL_CACHE = libc.syscall
+        except Exception:  # noqa: BLE001
+            logger.debug("sandbox: libc.syscall setup failed", exc_info=True)
+            return None
+    return _LANDLOCK_SYSCALL_CACHE
+
+
 def _landlock_restrict_self(fd: int) -> None:
     """Apply an already-built Landlock ruleset to the CURRENT task.
 
     Meant to be used as a ``preexec_fn`` so it runs inside the forked child
     (before ``exec``), restricting only the child. The parent never calls
     this, so the main process can never be locked out.
+
+    Uses the parent-cached libc handle (``_landlock_syscall``) instead of
+    doing ``ctypes.CDLL(find_library("c"))`` here — dynamic loading after
+    fork() is not async-signal-safe.
     """
     if _LANDLOCK_RESTRICT_SELF is None:
         return
     try:
-        libc = ctypes.CDLL(ctypes.util.find_library("c") or "libc.so.6",
-                           use_errno=True)
-        libc.syscall.restype = ctypes.c_long
-        libc.syscall.argtypes = [ctypes.c_long]
-        libc.syscall(_LANDLOCK_RESTRICT_SELF, fd, 0)
+        syscall = _landlock_syscall()
+        if syscall is None:
+            return
+        syscall(_LANDLOCK_RESTRICT_SELF, fd, 0)
     except Exception:  # noqa: BLE001
         logger.debug("sandbox: landlock_restrict_self (child) failed", exc_info=True)
 
@@ -477,9 +506,11 @@ def apply_to_subprocess(
         if fd is not None:
             # Keep the ruleset FD open in the forked child and apply the
             # restriction THERE (preexec_fn), never in the parent. This is
-            # what actually confines only the subprocess.
+            # what actually confines only the subprocess. Warm the libc
+            # syscall handle HERE so the child's preexec_fn never dlopen()s.
             try:
                 os.set_inheritable(fd, True)
+                _landlock_syscall()  # preload cache in the parent
                 kwargs.setdefault("pass_fds", (fd,))
                 kwargs["preexec_fn"] = lambda: _landlock_restrict_self(fd)
             except Exception:

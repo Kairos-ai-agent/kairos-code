@@ -174,9 +174,14 @@ Kairos is a local-first tool; keep it on your own machine.
   and executed via `create_subprocess_exec`, so shell chaining/redirection is
   impossible; the allow-listed head is the real executable. Interpreter and
   leak-prone heads (`python`, `node`, `env`, `cat`, `head`, `tail`, `which`,
-  `where`) are excluded by default. The `kairos.sandbox` deny-list is applied,
-  and the child PID is attached to the platform sandbox (Windows Job Object)
-  for process-tree cleanup.
+  `where`) are excluded, and the package-manager / build-tool RCE heads
+  (`npm`, `pnpm`, `yarn`, `go`, `cargo`, `rustc`, `make`, `cmake`) are **off
+  by default** — enable them with `KAIROS_ENABLE_BUILD_COMMANDS=1` (or the
+  `enable_build_commands=True` constructor arg) only when the build/test
+  workflow needs them. Read/query commands (`ls`, `grep`, `git status`,
+  `pytest`, …) stay enabled. The `kairos.sandbox` deny-list is applied; on
+  Linux a Landlock ruleset is applied in the child (via `preexec_fn`), and on
+  Windows the child PID is attached to a Job Object for process-tree cleanup.
 - **Web fetch / config endpoints block SSRF.** `webfetch` refuses loopback,
   private, link-local, and cloud-metadata hosts (`169.254.169.254`) and does
   not follow redirects. The provider-config endpoints additionally block
@@ -187,6 +192,9 @@ Kairos is a local-first tool; keep it on your own machine.
   the historical whole-drive browsing, or to a comma-separated path list.
 - **No plaintext key round-trip.** `GET /api/config/settings` only returns
   masked keys; the full keys stay on disk in `data/settings.json`.
+
+The status of OS-level isolation and the path to real containment is
+documented in [`docs/SANDBOX_ISOLATION.md`](docs/SANDBOX_ISOLATION.md).
 
 ## License
 

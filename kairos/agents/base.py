@@ -492,6 +492,35 @@ class KairosAgent:
             removed = self._memory.pop(0)
             total -= self._count_tokens(removed.content)
 
+    @staticmethod
+    def _sanitize_memory(mem: List[LLMMessage]) -> List[LLMMessage]:
+        """Drop ``tool`` messages that aren't a valid reply to a preceding
+        assistant ``tool_calls`` message.
+
+        OpenAI rejects a ``role='tool'`` message unless the immediately
+        preceding message is an assistant message with ``tool_calls``
+        (and the tool message's ``tool_call_id`` matches one of them).
+        An interrupted loop / tool call can leave a dangling ``tool``
+        message at the end of ``self._memory``; sending it raises a 400
+        ("Messages with role 'tool' must be a response to a preceding
+        message with 'tool_calls'"). We re-validate at build time so a
+        stale orphan is simply dropped instead of breaking the call.
+        """
+        out: List[LLMMessage] = []
+        for m in mem:
+            if m.role == "tool":
+                prev = out[-1] if out else None
+                if prev is None or not getattr(prev, "tool_calls", None):
+                    continue  # no preceding tool_calls → orphaned → drop
+                if m.tool_call_id:
+                    ids = {getattr(tc, "id", "") for tc in prev.tool_calls}
+                    if ids and m.tool_call_id not in ids:
+                        continue
+                out.append(m)
+            else:
+                out.append(m)
+        return out
+
     def _build_messages(self) -> List[LLMMessage]:
         """Build messages for LLM including system prompt and memory."""
         self._truncate_memory()
@@ -566,8 +595,7 @@ class KairosAgent:
         # system prompt. This is the agent's "earlier context" memory
         # for the long-running session.
         msgs: List[LLMMessage] = [LLMMessage(role="system", content=system)]
-        if self._memory_summary:
-            msgs.append(LLMMessage(
+        if self._memory_summary:            msgs.append(LLMMessage(
                 role="system",
                 content=(
                     "# Earlier conversation summary\n"
@@ -578,7 +606,7 @@ class KairosAgent:
                     f"{self._memory_summary}"
                 ),
             ))
-        msgs.extend(self._memory)
+        msgs.extend(self._sanitize_memory(self._memory))
         return msgs
 
     async def _maybe_summarize_memory(self, current_turn: int) -> None:
@@ -1081,7 +1109,7 @@ class KairosAgent:
         for turn in range(self.MAX_CHAT_TURNS):
             self.current_turn = turn + 1
             self._truncate_memory()
-            messages = [LLMMessage(role="system", content=chat_system)] + self._memory
+            messages = [LLMMessage(role="system", content=chat_system)] + self._sanitize_memory(self._memory)
             try:
                 with self._traced_llm_call(messages, tool_schemas) as _trace_span:
                     response = await asyncio.wait_for(

@@ -42,9 +42,18 @@ class WebFetchTool(BaseTool):
             return ToolResult(success=False, output="", error="url is required")
         if not (url.startswith("http://") or url.startswith("https://")):
             return ToolResult(success=False, output="", error="url must be http(s)")
+        # SSRF guard: never fetch loopback / private / metadata / link-local
+        # hosts (incl. cloud metadata 169.254.169.254). We also disable
+        # redirect-following so a re-direct can't bounce us onto an internal
+        # host after the initial URL passed the check.
+        from kairos.netsec import validate_public_url
+        try:
+            validate_public_url(url, what="url")
+        except ValueError as e:
+            return ToolResult(success=False, output="", error=str(e))
         try:
             async with httpx.AsyncClient(timeout=self._timeout,
-                                          follow_redirects=True) as client:
+                                          follow_redirects=False) as client:
                 resp = await client.get(url)
             text = resp.text
             if len(text) > max_chars:

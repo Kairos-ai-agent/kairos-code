@@ -441,16 +441,18 @@ async def _check_gates(session, round_no, bus):
          done.
       2. cost_cap — token budget exhausted. Cheaper to stop than to
          keep hitting the API.
-      3. infra_streak — Reviewer kept failing to grade (timeout / parse
+      3. time_cap — wall-clock budget exceeded (``session.started_at``
+         vs the adaptive ``time_cap_s``, default 30 min).
+      4. infra_streak — Reviewer kept failing to grade (timeout / parse
          fail / tool limit). Different from no_progress because the
          Coder is innocent; we just could not read its output.
-      4. no_progress — exact same issue signature repeating; the Coder
+      5. no_progress — exact same issue signature repeating; the Coder
          is stuck on the same failure mode. Fires at NO_PROGRESS_LIMIT.
-      5. stagnation — score is flat near (but below) the approve
+      6. stagnation — score is flat near (but below) the approve
          threshold AND no_progress is small (we are plateauing, not
          looping on the same error). Requires score >= 60 so that
          genuinely stuck low-score rounds are caught by no_progress.
-      6. safety_cap — hard round ceiling; the absolute backstop.
+      7. safety_cap — hard round ceiling; the absolute backstop.
 
     Every return path also bumps the ``kairos_loop_rounds_total``
     Prometheus counter so dashboards can see how loops end over time.
@@ -489,6 +491,24 @@ async def _check_gates(session, round_no, bus):
         ))
         record_loop_round("cost_cap")
         return "cost_cap"
+    # Wall-clock cost cap: the loop must not run literally forever on a
+    # slow-but-cheap task. Uses the adaptive time_cap_s (default 30 min;
+    # doubled for heavy tasks via gates.dynamic_caps).
+    time_cap_s = int(caps.get("time_cap_s") or COST_TIME_CAP_S)
+    elapsed_s = time.time() - float(getattr(session, "started_at", time.time()))
+    if elapsed_s >= time_cap_s:
+        await bus.publish(Message(
+            sender="orchestrator", topic="loop.time_cap",
+            content=(
+                f"Wall-clock budget exhausted ({elapsed_s:.0f}s "
+                f">= {time_cap_s}s)"
+            ),
+            msg_type="warning",
+            metadata={"project_id": session.project.id,
+                      "session_id": session.session_id},
+        ))
+        record_loop_round("time_cap")
+        return "time_cap"
     if session.infra_failure_streak >= INFRA_FAILURE_LIMIT:
         await bus.publish(Message(
             sender="orchestrator", topic="loop.infra_streak",

@@ -13,13 +13,20 @@ from typing import Callable, List, Optional, Tuple
 from kairos.tools.base import BaseTool, ToolResult
 
 class TerminalTool(BaseTool):
-    """Execute a shell command in a sandboxed project directory.
+    """Execute a command in a sandboxed project directory (argv, no shell).
 
-    Safety model: command + each arg is split with shlex, the head is
-    checked against an allowlist of common dev/build commands, and the
-    full argv is scanned for destructive patterns. This is more robust
-    than regex-on-raw-string because `rm -rf  /` (two spaces) and
-    `echo "rm -rf /" | bash` both get normalized away.
+    Safety model (R38.6 hardening):
+      - the command is parsed with ``shlex`` and executed via
+        ``create_subprocess_exec`` — there is **no shell**, so shell
+        chaining (``&&`` / ``;`` / ``|``), redirection, ``$()`` and
+        backticks are impossible, and the allow-listed head *is* the real
+        executable.
+      - the head must be on an allow-list; interpreter / leak-prone heads
+        (``python``, ``node``, ``env``, ``cat``, …) are excluded by default.
+      - shell-control tokens and destructive deny-patterns are rejected.
+      - the portable ``kairos.sandbox`` deny-list is also applied, and the
+        child PID is handed to the OS-level sandbox (Windows Job Object) so
+        the process tree dies with the parent.
 
     The list of "safe" heads is intentionally conservative — production
     usage should extend it via subclassing, not by relaxing the defaults.
@@ -32,21 +39,38 @@ class TerminalTool(BaseTool):
     # Commands agents are allowed to invoke by default.
     # Each entry is (head, allowed_arg_substrings) — if allowed_arg_substrings
     # is empty, no flag-level restriction is applied to that head.
+    #
+    # SECURITY (R38.6 hardening): interpreter / leak-prone heads are
+    # deliberately NOT here. ``python -c`` / ``node -e`` / ``env`` / ``cat``
+    # are arbitrary-code-exec or secret-dump primitives, so the default
+    # allow-list is conservative. Production usage can extend it via
+    # subclassing (mirroring the docs), but the shipped default exposes the
+    # smallest surface that still covers the Coder/Reviewer workflow
+    # (``pytest`` / ``npm test`` / ``go test`` / ``git status``).
     ALLOWED_COMMANDS = {
-        # Build/test
-        "python": (), "python3": (), "pytest": (), "pyright": (),
-        "node": (), "npm": (), "pnpm": (), "yarn": (), "npx": (),
-        "go": (), "cargo": (), "rustc": (), "make": (), "cmake": (),
-        # Read-only inspection
-        "ls": (), "dir": (), "cat": (), "head": (), "tail": (),
-        "grep": (), "rg": (), "find": (), "wc": (), "echo": (),
-        "pwd": (), "env": (), "which": (), "where": (),
+        # Build/test — interpreter-free runners documented in the role
+        # prompts (pytest / npm test / go test). These run arbitrary code
+        # *through their project config* by design; that is exactly what the
+        # OS-level sandbox layer is meant to confine (see sandbox.py).
+        "pytest": (), "pyright": (),
+        "npm": (), "pnpm": (), "yarn": (), "npx": (),
+        "go": (), "cargo": (), "rustc": (),
+        "make": (), "cmake": (),
+        # Read-only inspection (no code exec, no env/secret dump)
+        "ls": (), "dir": (), "grep": (), "rg": (), "find": (),
+        "wc": (), "echo": (), "pwd": (),
         # VCS
         "git": ("status", "log", "diff", "show", "branch", "remote",
                 "add", "commit", "push", "pull", "fetch", "merge",
                 "checkout", "switch", "stash", "tag", "init", "clone",
                 "config", "rev-parse", "ls-files", "ls-tree"),
     }
+
+    # Tokens that only ever appear as shell control operators. Under argv
+    # execution a lone ``&&`` / ``;`` / ``|`` / ``>`` token means the caller
+    # tried to chain or redirect — reject it outright (no shell is used, so
+    # these operators should never be a legitimate part of the command).
+    SHELL_OPERATORS = {"&&", "||", ";", "|", ">", ">>", "<", "&", "<&", ">&"}
 
     # Patterns that are NEVER allowed, even if the head looks innocent.
     # These match anywhere in the command string (post-shlex reassembly too).
@@ -96,13 +120,22 @@ class TerminalTool(BaseTool):
     def _is_safe_command(self, command: str) -> Optional[str]:
         """Return the rule that blocked the command, or None if allowed."""
         # 1. Parse with shlex so spacing tricks ("rm  -rf /") collapse.
+        #    We always use posix=True: the parsed argv is what we actually
+        #    exec (no shell), so quoting is resolved uniformly on every OS.
         try:
-            tokens = shlex.split(command, posix=(__import__("os").name != "nt"))
+            tokens = shlex.split(command, posix=True)
         except ValueError:
             return "could not parse command safely"
 
         if not tokens:
             return "empty command"
+
+        # 1b. Reject shell control operators. A lone ``&&`` / ``;`` / ``|``
+        #     token can only come from a chaining/redirect attempt, which is
+        #     impossible under argv execution and bypasses the head allowlist.
+        for tok in tokens:
+            if tok in self.SHELL_OPERATORS:
+                return f"shell operator '{tok}' is not allowed (chaining and redirection are disabled)"
 
         head = tokens[0]
         head_lower = head.lower()
@@ -193,6 +226,20 @@ class TerminalTool(BaseTool):
         except PermissionError as e:
             return ToolResult(success=False, output="", error=str(e))
 
+        # Defense-in-depth: run the portable sandbox deny-list too. This
+        # keeps the terminal aligned with kairos.sandbox even when the
+        # allow-list here is extended by a subclass.
+        policy = None
+        try:
+            from kairos.sandbox import SandboxPolicy, check_policy, assign_child_to_sandbox
+            policy = SandboxPolicy(allowed_root=safe_cwd)
+            rule = check_policy(policy, command)
+            if rule:
+                return ToolResult(success=False, output="",
+                                  error=f"Blocked by sandbox policy: {rule}")
+        except Exception:
+            policy = None
+
         effective_timeout = float(timeout_s) if timeout_s is not None else 60.0
         full_env = dict(os.environ)
         if env:
@@ -214,8 +261,13 @@ class TerminalTool(BaseTool):
             else:
                 new_session_kw = {"start_new_session": True}
 
-            process = await asyncio.create_subprocess_shell(
-                command,
+            # SECURITY: execute via argv (no shell) so the head allow-list
+            # is the *actual* executable and shell chaining/redirection is
+            # impossible. The parsed argv is regenerated here (the parse in
+            # ``_is_safe_command`` is only used for validation).
+            argv = shlex.split(command, posix=True)
+            process = await asyncio.create_subprocess_exec(
+                *argv,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 stdin=asyncio.subprocess.PIPE if stdin else None,
@@ -223,6 +275,15 @@ class TerminalTool(BaseTool):
                 env=full_env,
                 **new_session_kw,
             )
+
+            # Wire the OS-level sandbox for this child (Windows Job Object
+            # KILL_ON_JOB_CLOSE; a no-op on platforms without one). Kept
+            # best-effort so a sandbox failure never breaks the command.
+            if policy is not None:
+                try:
+                    assign_child_to_sandbox(policy, process.pid)
+                except Exception:
+                    pass
 
             if stdin is not None:
                 try:

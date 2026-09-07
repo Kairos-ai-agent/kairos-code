@@ -173,6 +173,64 @@ def _posix_mount_roots() -> List[FsRoot]:
     return roots
 
 
+# ---------------------------------------------------------------------------
+# Allowed-roots (SSRF / path traversal hardening)
+# ---------------------------------------------------------------------------
+# ``KAIROS_FS_ALLOW_ROOTS`` is a comma-separated list of absolute paths the
+# folder picker may descend into. ``*`` means "everything" (the historical
+# local-tool behavior). When unset we default to workspace_dir + home so an
+# accidentally-exposed /fs/* endpoint cannot enumerate the whole filesystem.
+# See also api/auth.py — the authoritative boundary is authentication.
+
+
+def _fs_allow_roots() -> Optional[list]:
+    """Return allowed root Paths (resolved), or ``None`` to mean *all*."""
+    raw = os.environ.get("KAIROS_FS_ALLOW_ROOTS", "").strip()
+    if raw == "*":
+        return None
+    if raw:
+        roots = []
+        for part in raw.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            p = Path(part)
+            roots.append(p if p.is_absolute() else (Path.cwd() / p).resolve())
+        return roots
+    roots = []
+    ws = settings.workspace_dir
+    ws_abs = ws if ws.is_absolute() else (Path.cwd() / ws).resolve()
+    roots.append(ws_abs)
+    roots.append(Path.home())
+    return roots
+
+
+def _list_path_allowed(p: Path) -> bool:
+    """True iff ``p`` is under an allowed root (or all are allowed)."""
+    allowed = _fs_allow_roots()
+    if allowed is None:
+        return True
+    resolved = p.resolve()
+    return any(
+        resolved == ar.resolve() or resolved.is_relative_to(ar.resolve())
+        for ar in allowed
+    )
+
+
+def _root_reaches_allowed(entry) -> bool:
+    """True iff a browsable root is an allowed root or one of its ancestors
+    (so the picker can be seeded at ``C:\\`` and still reach an allowed
+    subdirectory)."""
+    allowed = _fs_allow_roots()
+    if allowed is None:
+        return True
+    pr = Path(entry.path).resolve()
+    return any(
+        pr == ar.resolve() or ar.resolve().is_relative_to(pr)
+        for ar in allowed
+    )
+
+
 @router.get("/fs/roots", response_model=List[FsRoot])
 async def list_roots() -> List[FsRoot]:
     """List the user's starting points for the folder picker.
@@ -196,6 +254,10 @@ async def list_roots() -> List[FsRoot]:
         roots = _home_roots() + _windows_drives()
     else:
         roots = _home_roots() + _posix_mount_roots()
+    # Only surface roots that can reach an allowed directory (see
+    # ``_fs_allow_roots``). With the default workspace+home policy this
+    # filters out unrelated drive letters / mount points.
+    roots = [r for r in roots if _root_reaches_allowed(r)]
     # De-dupe by absolute path (in case workspace_dir == home, or
     # /home is also a separate root).
     seen: set = set()
@@ -238,6 +300,13 @@ async def list_directory(
         raise HTTPException(status_code=404, detail=f"path does not exist: {p}")
     if not p.is_dir():
         raise HTTPException(status_code=400, detail=f"not a directory: {p}")
+    # Root whitelist: refuse to enumerate directories outside the allowed
+    # roots (default workspace_dir + home; see _fs_allow_roots).
+    if not _list_path_allowed(p):
+        raise HTTPException(
+            status_code=403,
+            detail="path is not under an allowed root (set KAIROS_FS_ALLOW_ROOTS to grant access)",
+        )
     try:
         entries: List[FsEntry] = []
         for child in sorted(p.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):

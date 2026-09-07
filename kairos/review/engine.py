@@ -156,6 +156,20 @@ class ReviewEngine:
         if file_extensions is None:
             file_extensions = [".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java"]
 
+        # SECURITY: only concrete dot-prefixed extensions are allowed.
+        # Empty or glob-y values (``""`` / ``"*"`` / ``"**"``) would widen
+        # ``rglob(f"*{ext}")`` into ``rglob("*")`` and read every file.
+        clean: List[str] = []
+        for ext in file_extensions:
+            ext = (ext or "").strip()
+            if not ext.startswith("."):
+                continue
+            # Strip glob metacharacters so a value can never become ``**``.
+            ext = "".join(ch for ch in ext if ch.isalnum() or ch in "._-")
+            if len(ext) >= 2 and any(ch.isalnum() for ch in ext[1:]):
+                clean.append(ext)
+        file_extensions = clean or [".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java"]
+
         project = Path(project_path)
         report = ReviewReport(project_path=project_path)
 

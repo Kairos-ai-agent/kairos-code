@@ -61,7 +61,7 @@ def _detect_popen_kwargs():
     return {"start_new_session": True}
 
 
-def start_daemon(work_dir=None, port=8900, host="0.0.0.0"):
+def start_daemon(work_dir=None, port=8900, host="127.0.0.1"):
     state = _state_dir(work_dir)
     pid = _read_pid(work_dir)
     if _pid_alive(pid):
@@ -150,7 +150,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("command", choices=["start", "stop", "status", "restart"])
     p.add_argument("--port", type=int, default=8900)
-    p.add_argument("--host", default="0.0.0.0")
+    p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--work-dir", default=".")
     args = p.parse_args()
     work_dir = Path(args.work_dir).resolve()

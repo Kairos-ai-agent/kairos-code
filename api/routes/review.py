@@ -22,20 +22,29 @@ class ReviewFileRequest(BaseModel):
 @router.post("/project")
 async def review_project(request: ReviewProjectRequest):
     """Review an entire project."""
+    # SECURITY: the requested path must be inside a known project workspace.
+    # There is intentionally NO "no projects => allow anything" escape hatch
+    # (it was a path-traversal / arbitrary-file-read hole). Empty or
+    # non-dot-prefixed file_extensions are also rejected so a caller can't
+    # turn `rglob("*.ext")` into `rglob("*")`.
+    if any(not ext or not ext.startswith(".") for ext in request.file_extensions):
+        raise HTTPException(
+            status_code=400,
+            detail="file_extensions must be non-empty dot-prefixed extensions (e.g. '.py')",
+        )
+
     project_path = Path(request.project_path)
 
-    # Validate path is within known project workspaces
+    if not project_path.exists():
+        raise HTTPException(status_code=404, detail=f"Project not found: {request.project_path}")
+
     known_projects = [Path(p.workspace) for p in orchestrator.list_projects()]
     is_known = any(
         project_path.resolve().is_relative_to(wp.resolve())
         for wp in known_projects
-    ) if known_projects else True  # Allow if no projects (first run)
-
+    )
     if not is_known:
         raise HTTPException(status_code=403, detail="Path not in known project directories")
-
-    if not project_path.exists():
-        raise HTTPException(status_code=404, detail=f"Project not found: {request.project_path}")
 
     engine = get_review_engine()
     try:

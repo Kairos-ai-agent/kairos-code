@@ -23,7 +23,10 @@ class Settings(BaseSettings):
     """Global application settings."""
 
     # Server
-    host: str = Field(default="0.0.0.0", alias="KAIROS_HOST")
+    # SECURITY: default to a loopback bind so the API is only reachable
+    # from this machine. To expose to the LAN/network, set KAIROS_HOST
+    # explicitly (and set KAIROS_API_TOKEN — see api/auth.py).
+    host: str = Field(default="127.0.0.1", alias="KAIROS_HOST")
     port: int = Field(default=8900, alias="KAIROS_PORT")
     debug: bool = Field(default=False, alias="KAIROS_DEBUG")
     # Number of uvicorn worker processes. 0 = auto-pick

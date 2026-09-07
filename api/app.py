@@ -9,13 +9,14 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from kairos import __version__
 from kairos.config.settings import settings
 from kairos.metrics import install_middleware, install_metrics_endpoint
+from api.auth import install_auth, token_configured
 from api.deps import orchestrator
 from api.routes.agents import router as agents_router
 from api.routes.agents_md import router as agents_md_router
@@ -194,6 +195,17 @@ app.add_middleware(
 # Prometheus metrics: request count + latency histogram, exposed at /metrics
 install_middleware(app)
 install_metrics_endpoint(app)
+
+# Optional API auth: when KAIROS_API_TOKEN is set, every /api route (except
+# the allow-list) requires it. Default bind is 127.0.0.1 (see settings.py);
+# if you bind a non-loopback host you MUST set KAIROS_API_TOKEN.
+install_auth(app)
+if not token_configured() and settings.host not in ("127.0.0.1", "localhost", "::1"):
+    log.warning(
+        "KAIROS_API_TOKEN is not set but KAIROS_HOST=%s is non-loopback. "
+        "The API is reachable without authentication — set KAIROS_API_TOKEN.",
+        settings.host,
+    )
 
 
 # R38.6 §22: global exception handler. Without this, any unhandled

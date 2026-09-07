@@ -94,9 +94,10 @@ async def get_settings():
             masked[k] = "****"
         else:
             masked[k] = ""
+    # SECURITY: never return ``raw_keys``. Only the masked form leaves the
+    # API; a caller that needs to *set* a key uses POST /api/config/settings.
     return {
         "api_keys": masked,
-        "raw_keys": api_keys,
         "custom_models": settings.get("custom_models", []),
     }
 
@@ -160,6 +161,14 @@ class FetchModelsRequest(BaseModel):
 async def fetch_custom_models(request: FetchModelsRequest):
     """Fetch models from OpenAI-compatible or Anthropic-compatible API."""
     base = request.base_url.rstrip("/")
+    # SSRF guard: never let a supplied base_url touch link-local /
+    # cloud-metadata (169.254.0.0/16). Loopback + private LAN are allowed
+    # so a local/internal LLM server still works once auth is enforced.
+    from kairos.netsec import validate_config_url
+    try:
+        validate_config_url(base, what="base_url")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     headers = {}
 
     if request.protocol == "anthropic":
@@ -170,7 +179,7 @@ async def fetch_custom_models(request: FetchModelsRequest):
             if request.api_key:
                 headers["x-api-key"] = request.api_key
                 headers["anthropic-version"] = "2023-06-01"
-            async with httpx.AsyncClient(timeout=5, follow_redirects=True,
+            async with httpx.AsyncClient(timeout=5, follow_redirects=False,
                                          trust_env=False) as client:
                 resp = await client.get(f"{base}/models", headers=headers)
                 if resp.status_code == 200:
@@ -200,7 +209,7 @@ async def fetch_custom_models(request: FetchModelsRequest):
         url = f"{base}/models"
         if request.api_key:
             headers["Authorization"] = f"Bearer {request.api_key}"
-        async with httpx.AsyncClient(timeout=10, follow_redirects=True,
+        async with httpx.AsyncClient(timeout=10, follow_redirects=False,
                                      trust_env=False) as client:
             resp = await client.get(url, headers=headers)
             if resp.status_code == 200:
@@ -273,6 +282,15 @@ async def test_provider(request: TestProviderRequest):
 
     if not api_key and protocol == "anthropic":
         return {"success": False, "message": "API Key is required for Anthropic protocol"}
+
+    # SSRF guard (config-mode): loopback + private LAN are allowed for
+    # local/internal LLM servers, but link-local / cloud-metadata is not.
+    if base_url:
+        from kairos.netsec import validate_config_url
+        try:
+            validate_config_url(base_url, what="base_url")
+        except ValueError as e:
+            return {"success": False, "message": str(e)}
 
     try:
         config = LLMConfig(
@@ -613,6 +631,16 @@ async def test_connection(req: TestConnectionRequest = Body(...)):
         raise HTTPException(
             status_code=400,
             detail="provider must be 'openai' or 'anthropic'")
+    # SSRF guard: endpoint_url / base_url is fully user-supplied, so block
+    # link-local / cloud-metadata targets (169.254.0.0/16) before we POST
+    # the API key to it. Loopback / private LAN stay allowed so a local
+    # LLM server can still be tested.
+    from kairos.netsec import validate_config_url
+    target = req.endpoint_url.strip() or req.base_url.strip()
+    try:
+        validate_config_url(target, what="endpoint_url")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     if provider == "openai":
         result = _probe_post_openai_chat(
             req.endpoint_url.strip(),

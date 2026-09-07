@@ -41,6 +41,9 @@ class FileEditTool(BaseTool):
         try:
             file_path.parent.mkdir(parents=True, exist_ok=True)
             file_path.write_text(content, encoding="utf-8")
+            # Invalidate the per-round read cache so a read-after-write in the
+            # same round doesn't return the stale pre-edit contents.
+            self._invalidate_cache(path, file_path)
             meta = {"bytes_written": len(content)}
             if snap_err:
                 meta["auto_checkpoint_error"] = snap_err
@@ -95,6 +98,7 @@ class FileEditReplaceTool(BaseTool):
                 return ToolResult(success=False, output="", error="old_text not found in file")
             new_content = content.replace(old_text, new_text, 1)
             file_path.write_text(new_content, encoding="utf-8")
+            self._invalidate_cache(path, file_path)
             meta = {"path": path}
             if snap_err:
                 meta["auto_checkpoint_error"] = snap_err
@@ -176,6 +180,7 @@ class MultiEditTool(BaseTool):
                     failed.append(f"#{i}: old_text not found in {path}")
                     continue
                 fp.write_text(content.replace(old, new, 1), encoding="utf-8")
+                self._invalidate_cache(path, fp)
                 applied += 1
             except PermissionError as e:
                 failed.append(f"#{i}: permission denied ({e})")

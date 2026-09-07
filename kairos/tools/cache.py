@@ -65,6 +65,25 @@ class ToolCache:
         with self._lock:
             self._data[key] = value
 
+    def invalidate_path(self, path: str) -> None:
+        """Drop any cached entry whose args reference ``path``.
+
+        Called by the write/edit tools so a read-after-write in the SAME round
+        doesn't return the stale pre-edit content. Paths are compared with
+        ``\\`` normalized to ``/`` so ``src/app.py`` and ``src\\app.py`` match.
+        """
+        path = str(path).replace("\\", "/")
+        with self._lock:
+            stale = []
+            for key in list(self._data.keys()):
+                _tool, args = key
+                for _k, v in args:
+                    if str(v).replace("\\", "/") == path:
+                        stale.append(key)
+                        break
+            for key in stale:
+                self._data.pop(key, None)
+
     @property
     def hit_rate(self) -> float:
         total = self.hits + self.misses
@@ -122,3 +141,12 @@ def clear_round() -> None:
     """Wipe the active cache (call at the end of each round)."""
     cache = _resolve()
     cache.clear()
+
+
+def invalidate_path(path: str) -> None:
+    """Invalidate cached entries for ``path`` (used by write/edit tools).
+
+    A convenience wrapper so tools don't have to ``get_cache()`` + call
+    ``invalidate_path`` themselves.
+    """
+    _resolve().invalidate_path(path)

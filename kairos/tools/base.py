@@ -54,6 +54,27 @@ class BaseTool(ABC):
             raise PermissionError(f"Path outside project directory: {target}")
         return target
 
+    def _invalidate_cache(self, path, resolved_path=None) -> None:
+        """Invalidate the per-round tool-result cache for a written path.
+
+        Call from a write tool after a successful write so a read-after-write
+        in the same round returns fresh content instead of stale cached bytes.
+        Best-effort; a cache failure never affects the write result.
+        """
+        try:
+            from kairos.tools.cache import invalidate_path as _invalidate
+            seen = set()
+            for p in (path, resolved_path):
+                if not p:
+                    continue
+                key = str(p)
+                if key in seen:
+                    continue
+                seen.add(key)
+                _invalidate(key)
+        except Exception:  # noqa: BLE001
+            pass
+
     @abstractmethod
     async def execute(self, **kwargs) -> ToolResult:
         """Execute the tool with given arguments."""

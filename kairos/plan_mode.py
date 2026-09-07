@@ -169,25 +169,27 @@ Respond with a JSON array. No commentary, no markdown fences.
 
 Example response:
 [
-  {{"title": "Read project structure", "detail": "Get a lay of the land", "tool_hint": "find"}},
-  {{"title": "Add config module", "detail": "Create kairos/config.py with the env-loader", "tool_hint": "edit"}}
+  {"title": "Read project structure", "detail": "Get a lay of the land", "tool_hint": "find"},
+  {"title": "Add config module", "detail": "Create kairos/config.py with the env-loader", "tool_hint": "edit"}
 ]"""
 
 
-def build_plan_from_llm(user_task: str, project_context: str,
-                         llm_complete_fn, proposed_by: str = "planner") -> Plan:
+async def build_plan_from_llm(user_task: str, project_context: str,
+                              llm_complete_fn, proposed_by: str = "planner") -> Plan:
     """Ask the LLM to lay out a plan. Returns a draft Plan.
 
-    `llm_complete_fn(prompt: str) -> str` is a callable that
+    `llm_complete_fn(prompt) -> str` is an AWAITABLE callable that
     sends a prompt to the active LLM and returns the raw
     completion. It MUST return a JSON array (the function
     falls back to a 1-step generic plan if parsing fails).
     """
     plan_id = uuid.uuid4().hex[:12]
-    raw = llm_complete_fn(
-        PLAN_GENERATION_PROMPT.format(
-            user_task=user_task, project_context=project_context,
-        )
+    # ``.replace`` (not ``.format``) so braces inside user content can't
+    # break the prompt template.
+    raw = await llm_complete_fn(
+        PLAN_GENERATION_PROMPT
+        .replace("{user_task}", user_task)
+        .replace("{project_context}", project_context)
     )
     steps: List[PlanStep] = []
     # Try to parse JSON — strip markdown fences if present

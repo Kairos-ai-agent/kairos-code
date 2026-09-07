@@ -98,33 +98,20 @@ async def generate_plan(project_id: str, body: GeneratePlanBody):
     PlanStore, build_plan_from_llm, _ = _kplan()
     store = PlanStore(work_dir=_work_dir(project))
 
-    def _llm_complete(prompt: str) -> str:
+    async def _llm_complete(prompt: str) -> str:
         try:
             from kairos.config.settings import settings as ksettings
             from kairos.llm.model_router import ModelRouter
-            import httpx
+            from kairos.llm.base import LLMMessage
             mr = ModelRouter(settings=ksettings)
-            cfg = mr.get_active_config()
-            base = (cfg.base_url or "").rstrip("/")
-            url = base + "/chat/completions" if base else cfg.endpoint_url
-            if not url or not cfg.api_key:
-                return "[]"
-            with httpx.Client(timeout=60) as client:
-                r = client.post(url, headers={
-                    "Authorization": f"Bearer {cfg.api_key}",
-                    "Content-Type": "application/json",
-                }, json={
-                    "model": cfg.model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.3,
-                })
-            r.raise_for_status()
-            return r.json()["choices"][0]["message"]["content"]
+            provider = mr.get_provider_for_role("coder")
+            resp = await provider.complete([LLMMessage(role="user", content=prompt)])
+            return resp.content or ""
         except Exception as exc:  # noqa: BLE001
             logger.warning("plan LLM call failed: %s", exc)
             return "[]"
 
-    plan = build_plan_from_llm(
+    plan = await build_plan_from_llm(
         user_task=body.task,
         project_context=body.project_context,
         llm_complete_fn=_llm_complete,

@@ -1149,7 +1149,9 @@ async def run_loop(session, requirement, *, unbounded: bool = False):
                 logger.debug("memory: round-end writes failed", exc_info=True)
 
             try:
-                if _maybe_rollback_on_regression(session, coder_result):
+                # git reset --hard + log run blocking subprocess; do it off
+                # the event loop.
+                if await asyncio.to_thread(_maybe_rollback_on_regression, session, coder_result):
                     await bus.publish(Message(
                         sender="orchestrator", topic="loop.regression_rollback",
                         content="Score regressed; workspace rolled back to last known-good checkpoint",
@@ -1161,7 +1163,13 @@ async def run_loop(session, requirement, *, unbounded: bool = False):
             except Exception:
                 logger.debug("regression check failed (non-fatal)", exc_info=True)
             try:
-                _auto_checkpoint(session, round_no, session.last_score, session.last_approve, review.get("summary", ""))
+                # Run the checkpoint's git commands off the event loop
+                # (they use blocking subprocess.run up to 30s per call).
+                await asyncio.to_thread(
+                    _auto_checkpoint, session, round_no,
+                    session.last_score, session.last_approve,
+                    review.get("summary", ""),
+                )
             except Exception:
                 logger.debug("auto-checkpoint failed", exc_info=True)
             gate = await _check_gates(session, round_no, bus)

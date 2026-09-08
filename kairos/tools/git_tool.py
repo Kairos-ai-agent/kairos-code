@@ -36,7 +36,12 @@ FORBIDDEN_ARGS = {
 
 class GitTool(BaseTool):
     name = "git"
-    description = "Run a read-only-ish git subcommand (status, diff, log, add, commit, ...)"
+    description = (
+        "Run git commands for version control operations. Allowed subcommands: "
+        "status, diff, log, show, branch, add, commit, rev-parse, ls-files, "
+        "remote, config. Blocked: push, force operations, clean, reset. "
+        "Use 'diff' to see changes, 'log' for history, 'status' for working tree state."
+    )
 
     def to_schema(self) -> dict:
         return {

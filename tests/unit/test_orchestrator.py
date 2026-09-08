@@ -116,12 +116,14 @@ def test_agent_progress_defaults_when_idle():
 
 def test_coder_and_reviewer_have_separate_turn_budgets():
     from kairos.agents.roles import Coder, Reviewer
-    assert Coder.MAX_TOOL_TURNS == 25, "Coder needs higher turn budget"
+    from kairos.config.settings import settings
+    # Coder needs higher turn budget for complex tasks (default 200)
+    assert Coder.MAX_TOOL_TURNS == settings.coder.max_tool_turns, \
+        f"Coder MAX_TOOL_TURNS should match config ({settings.coder.max_tool_turns})"
     # Reviewer needs enough turns to read several files + run tests
-    # before emitting a verdict. 12 was too low and triggered the
-    # no-progress counter on turn-limit hits. See
-    # kairos/agents/roles/reviewer.py for the matching change.
-    assert Reviewer.MAX_TOOL_TURNS == 20, "Reviewer needs ≥20 turns to grade a round"
+    # before emitting a verdict.
+    assert Reviewer.MAX_TOOL_TURNS == settings.reviewer.max_tool_turns, \
+        f"Reviewer MAX_TOOL_TURNS should match config ({settings.reviewer.max_tool_turns})"
 
 # ---------------------------------------------------------------------- Review verdict parser
 

@@ -7,10 +7,22 @@ from typing import Optional
 from kairos.tools.base import BaseTool, ToolResult
 
 class FileEditTool(BaseTool):
-    """Write file contents inside the project directory."""
+    """Write or overwrite file contents inside the project directory.
+    
+    Creates the file if it doesn't exist, overwrites if it does.
+    Always read the file first using file_read to understand its
+    current state before writing. Creates parent directories as needed.
+    
+    Example usage:
+        {"path": "src/new_file.py", "content": "# Python code here"}
+    """
 
     name = "file_write"
-    description = "Write content to a file"
+    description = (
+        "Create or overwrite a file with the given content. Use this for "
+        "creating new files or replacing entire file contents. For targeted "
+        "edits to existing files, prefer file_edit_replace or multi_edit."
+    )
 
     def to_schema(self) -> dict:
         return {
@@ -61,7 +73,11 @@ class FileEditReplaceTool(BaseTool):
     """Replace text in a file inside the project directory."""
 
     name = "file_edit_replace"
-    description = "Replace text in a file"
+    description = (
+        "Replace the FIRST occurrence of old_text with new_text in a file. "
+        "The file must exist and contain old_text exactly. For multiple "
+        "replacements across files, use multi_edit instead."
+    )
 
     def to_schema(self) -> dict:
         return {
@@ -71,7 +87,7 @@ class FileEditReplaceTool(BaseTool):
                 "type": "object",
                 "properties": {
                     "path": {"type": "string", "description": "Path to the file"},
-                    "old_text": {"type": "string", "description": "Text to find and replace"},
+                    "old_text": {"type": "string", "description": "Text to find and replace (must match exactly)"},
                     "new_text": {"type": "string", "description": "Replacement text"},
                 },
                 "required": ["path", "old_text", "new_text"],
@@ -121,7 +137,12 @@ class MultiEditTool(BaseTool):
     """
 
     name = "multi_edit"
-    description = "Apply multiple text replacements across multiple files in one call"
+    description = (
+        "Apply multiple text replacements across multiple files in one call. "
+        "Each edit has path, old_text, and new_text. Edits are applied in order. "
+        "If any edit fails, the whole call returns an error but partial edits "
+        "remain applied. Use this for coordinated changes across multiple files."
+    )
 
     def to_schema(self) -> dict:
         return {
@@ -132,7 +153,7 @@ class MultiEditTool(BaseTool):
                 "properties": {
                     "edits": {
                         "type": "array",
-                        "description": "List of edits to apply, in order",
+                        "description": "List of edits to apply, in order. Each edit has path, old_text, and new_text.",
                         "items": {
                             "type": "object",
                             "properties": {

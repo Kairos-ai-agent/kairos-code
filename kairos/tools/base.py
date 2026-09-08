@@ -81,7 +81,12 @@ class BaseTool(ABC):
         ...
 
     def to_schema(self) -> dict:
-        """Return JSON schema for the tool (for LLM function calling)."""
+        """Return JSON schema for the tool (for LLM function calling).
+        
+        Subclasses should override this to provide detailed parameter
+        descriptions that help the LLM understand when and how to use
+        the tool correctly.
+        """
         return {
             "name": self.name,
             "description": self.description,
@@ -91,3 +96,11 @@ class BaseTool(ABC):
                 "additionalProperties": False,
             },
         }
+    
+    @property
+    def detailed_description(self) -> str:
+        """Extended description with usage examples and caveats.
+        
+        Override in subclasses to provide richer context for the LLM.
+        """
+        return self.description

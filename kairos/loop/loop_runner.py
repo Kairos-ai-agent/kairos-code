@@ -13,7 +13,7 @@ import re
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 # R38.6.4 packaging: was 'from kairos.agents.base import AgentTask' — replaced with __getattr__ lazy load
 from kairos.core.message_bus import Message
@@ -22,7 +22,7 @@ from kairos.loop.cross_loop import (
     coder_temperature_for_round,
     load_history_digest,
 )
-from kairos.loop.gates import (
+from kairos.config.gates import (
     APPROVE_SCORE_THRESHOLD,
     COST_TOKEN_CAP,
     COST_TIME_CAP_S,
@@ -34,6 +34,7 @@ from kairos.loop.gates import (
     STAGNATION_WINDOW,
     dynamic_caps,
     issues_signature,
+    PLAN_DISABLE_AUTO_APPROVE,
 )
 from kairos.loop.plan_mode import is_plan_dirty, sanitize_plan_text
 from kairos.loop.prompts import build_next_prompt
@@ -140,7 +141,6 @@ def _auto_checkpoint(session, round_no, score, approved, summary):
     except Exception:
         logger.debug("auto-checkpoint failed", exc_info=True)
         return None
-
 
 async def _run_loop_reflection(session, gate: str, round_no: int, bus) -> None:
     """Best-effort Coder self-reflection at the end of a loop.
@@ -544,7 +544,8 @@ async def _check_gates(session, round_no, bus):
             ),
             msg_type="warning",
             metadata={"project_id": session.project.id,
-                      "session_id": session.session_id},
+                      "session_id": session.session_id,
+                      "round": round_no},
         ))
         record_loop_round("stagnation")
         return "stagnation"
@@ -554,7 +555,8 @@ async def _check_gates(session, round_no, bus):
             content=f"Round {session.round} reached safety cap {safety_cap}",
             msg_type="warning",
             metadata={"project_id": session.project.id,
-                      "session_id": session.session_id},
+                      "session_id": session.session_id,
+                      "round": round_no},
         ))
         record_loop_round("safety_cap")
         return "safety_cap"
@@ -705,7 +707,13 @@ def _is_trivial_requirement(requirement: str) -> bool:
     """Heuristic: a requirement is "trivial" when it is small, single-file,
     and has no architectural keywords. Plan mode adds latency for trivial
     tasks; we auto-approve those.
+    
+    Respects the PLAN_DISABLE_AUTO_APPROVE setting - when True, no plans
+    are auto-approved regardless of size.
     """
+    if PLAN_DISABLE_AUTO_APPROVE:
+        return False
+        
     if not requirement:
         return True
     text = requirement.strip()

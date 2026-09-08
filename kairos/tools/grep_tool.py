@@ -14,7 +14,12 @@ from kairos.tools.base import BaseTool, ToolResult
 
 class GrepTool(BaseTool):
     name = "grep"
-    description = "Search for a regex pattern across files in the project"
+    description = (
+        "Search for a regex pattern across files in the project. "
+        "Similar to ripgrep but simpler. Skips .git, node_modules, __pycache__, "
+        "and other common build dirs. Returns up to max_results matches "
+        "with file path, line number, and content."
+    )
 
     def to_schema(self) -> dict:
         return {

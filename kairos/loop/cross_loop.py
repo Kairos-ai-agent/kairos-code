@@ -5,14 +5,10 @@ import json
 import logging
 from typing import List
 
-from kairos.loop.gates import APPROVE_SCORE_THRESHOLD
+from kairos.config.gates import APPROVE_SCORE_THRESHOLD, MAX_HISTORY_ROUNDS, CODER_TEMPERATURE_START, CODER_TEMPERATURE_END, CODER_TEMPERATURE_DECAY_ROUNDS
 
 logger = logging.getLogger(__name__)
 
-MAX_HISTORY_ROUNDS = 5
-CODER_TEMPERATURE_START = 0.7
-CODER_TEMPERATURE_END = 0.15
-CODER_TEMPERATURE_DECAY_ROUNDS = 15
 
 def coder_temperature_for_round(round_no: int) -> float:
     """Linearly decay exploration temperature, clamped at both ends."""

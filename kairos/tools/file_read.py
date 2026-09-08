@@ -7,10 +7,25 @@ from typing import Optional
 from kairos.tools.base import BaseTool, ToolResult
 
 class FileReadTool(BaseTool):
-    """Read the contents of a file inside the project directory."""
+    """Read the contents of a file inside the project directory.
+    
+    Use this to inspect file contents before editing, or to understand
+    existing code structure. Supports reading text files up to 50KB
+    (larger files are truncated with a marker). Returns directory
+    listings when given a folder path.
+    
+    Example usage:
+        - Read a specific file: {"path": "src/main.py"}
+        - List a directory: {"path": "src/"}
+    """
 
     name = "file_read"
-    description = "Read the contents of a file"
+    description = (
+        "Read the contents of a text file. Returns the full text content "
+        "or a directory listing if given a folder path. Files larger than "
+        "50KB are truncated. Use this BEFORE editing a file to understand "
+        "its current state."
+    )
 
     def to_schema(self) -> dict:
         return {

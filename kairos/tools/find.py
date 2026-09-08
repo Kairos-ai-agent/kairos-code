@@ -13,7 +13,11 @@ from kairos.tools.base import BaseTool, ToolResult
 
 class FindTool(BaseTool):
     name = "find"
-    description = "Find files by glob pattern (e.g. '**/*.py', 'src/*.ts')"
+    description = (
+        "Find files matching a glob pattern. Skips .git, node_modules, __pycache__, "
+        "and other common build directories. Use patterns like '**/*.py' for recursive "
+        "search or 'src/*.ts' for single-level search."
+    )
 
     def to_schema(self) -> dict:
         return {

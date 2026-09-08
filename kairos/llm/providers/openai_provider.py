@@ -68,7 +68,14 @@ class OpenAIProvider(BaseLLMProvider):
             kwargs["tools"] = [{"type": "function", "function": t} for t in tools]
             kwargs["tool_choice"] = "auto"
 
-        response = await self._client.chat.completions.create(**kwargs)
+        try:
+            response = await self._client.chat.completions.create(**kwargs)
+        except Exception as e:
+            # Enhanced error handling for better diagnostics
+            if "text/plain" in str(e).lower() or "not json" in str(e).lower():
+                raise type(e)(f"API returned text/plain instead of JSON. Check base_url and model availability: {e}") from e
+            raise
+        
         choice = response.choices[0]
 
         # Parse tool calls

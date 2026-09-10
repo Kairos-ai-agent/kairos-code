@@ -759,6 +759,12 @@ def _calibrate_review(review: Any, require_evidence: bool) -> Any:
     """
     if not require_evidence or not isinstance(review, dict):
         return review
+    # R38.7: the simplified bug-only Reviewer is not a test runner — it may
+    # run tests to check a doubt, but it is never required to. Demanding
+    # tests_evidence from it would clamp every "no bugs" verdict below the
+    # approval bar, so the loop could never finish. Skip calibration for it.
+    if review.get("_simple_bug_review"):
+        return review
     # Parallel multi-reviewer merge has no single tests_evidence field
     # (each sub-verdict lives in _per_reviewer). Multiple independent
     # reviewers IS the stronger evidence, so skip calibration here

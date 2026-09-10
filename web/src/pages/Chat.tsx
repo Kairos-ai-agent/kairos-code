@@ -31,7 +31,7 @@ import {
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import ChatThread from '../components/ChatThread';
-import ChatComposer from '../components/ChatComposer';
+import ChatComposer, { ChatAttachment } from '../components/ChatComposer';
 import { classifyIntent } from '../utils/intent';
 import api, { onWebSocketMessage, onWebSocketState } from '../api/client';
 import type { Message, LoopSession, SessionRound } from '../types';
@@ -54,6 +54,7 @@ const Chat: React.FC = () => {
   const currentMessages = useChatStore((s) => s.currentMessages);
   const setCurrentMessages = useChatStore((s) => s.setCurrentMessages);
   const appendMessage = useChatStore((s) => s.appendMessage);
+  const updateMessage = useChatStore((s) => s.updateMessage);
   const appendStreamChunk = useChatStore((s) => s.appendStreamChunk);
   const finalizeStream = useChatStore((s) => s.finalizeStream);
   const setSessions = useChatStore((s) => s.setSessions);
@@ -563,35 +564,54 @@ const Chat: React.FC = () => {
   //   - intent='task'  → POST /start (full Coder ↔ Reviewer loop)
   //   - intent='chat'  → POST /chat  (single-turn reply)
   //   - askState.pending always wins (answer the reviewer's question).
-  const handleSubmit = async (text: string) => {
+  const handleSubmit = async (text: string, attachments: ChatAttachment[] = []) => {
     if (!currentProject) {
       msgApi.warning('Pick a project or folder first.');
       return;
     }
     setBusy(true);
     try {
-      // Optimistic: render the user's bubble immediately.
+      // Optimistic: render the user's bubble immediately. R38.7: the id is
+      // kept so the server-echoed message (text + [附件] block) can replace
+      // the optimistic content once the request lands.
+      const bubbleId = `user-${Date.now()}`;
+      const relPaths = attachments.map((a) => a.rel_path);
       appendMessage({
-        id: `user-${Date.now()}`,
+        id: bubbleId,
         sender: 'user',
         receiver: askState?.pending ? 'reviewer' : 'agent',
         topic: askState?.pending ? 'ask.answer' : 'user.input',
-        content: text, msg_type: 'text',
-        timestamp: Date.now() / 1000, metadata: {},
+        content: text || relPaths.map((x) => x.split('/').pop()).join(', '),
+        msg_type: 'text',
+        timestamp: Date.now() / 1000,
+        metadata: relPaths.length ? { attachments: relPaths } : {},
       });
       if (askState?.pending) {
         await api.post(`/projects/${currentProject.id}/ask/answer`,
                        { answer: text });
         setAskState(null);
       } else if (classifyIntent(text) === 'task') {
-        await api.post(`/projects/${currentProject.id}/start`,
-                       { requirement: text });
+        const rs = await api.post<{ message?: string }>(
+          `/projects/${currentProject.id}/start`,
+          { requirement: text, attachments: relPaths });
+        // The server folds the attachments into the requirement; echo that
+        // back into the bubble so the thread matches the persisted message.
+        if (rs.data?.message && rs.data.message !== text) {
+          updateMessage(bubbleId, { content: rs.data.message });
+        }
       } else {
         // Single-turn chat. POST and wait for the reply, then
         // append it as a coder bubble so the thread reads like a
         // conversation. No loop is started.
-        const r = await api.post<{ reply: string; mode: string }>(
-          `/projects/${currentProject.id}/chat`, { message: text });
+        const r = await api.post<{ reply: string; mode: string; message?: string }>(
+          `/projects/${currentProject.id}/chat`,
+          { message: text, attachments: relPaths });
+        // R38.7: replace the optimistic bubble with the message the server
+        // actually persisted (it appends the [附件] block) so a refresh and
+        // the live thread show the same thing.
+        if (r.data?.message && r.data.message !== text) {
+          updateMessage(bubbleId, { content: r.data.message });
+        }
         const reply = (r.data?.reply || '').trim();
                if (reply) {
           // The Coder also publishes the reply over the WebSocket

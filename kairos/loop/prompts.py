@@ -46,6 +46,18 @@ def build_next_prompt(session: Any, review: Dict[str, Any]) -> str:
     score = review.get("score", 0)
     approve = review.get("approve", False)
 
+    # R38.7: the Reviewer is bug-only now, so the next round is framed as
+    # "fix these bugs" instead of "raise this score". The (approve, score)
+    # pair stays in the header only because the loop's gates still use it.
+    bug_count = len(issues)
+    if review.get("_simple_bug_review"):
+        header = (f"Round {session.round} of the loop. The Reviewer found "
+                  f"{bug_count} bug(s) in the previous round "
+                  f"(approve={approve}).")
+    else:
+        header = (f"Round {session.round} of the loop. The previous round was "
+                  f"NOT approved (approve={approve}, score={score}).")
+
     issues_block = "\n".join(
         f"- [{issue.get('severity', '?')}] {issue.get('file', '?')}:"
         f"{issue.get('line', '?')} - {issue.get('description', '')}\n"
@@ -115,19 +127,19 @@ def build_next_prompt(session: Any, review: Dict[str, Any]) -> str:
 
     return (
         memory_prepend
-        + f"Round {session.round} of the loop. The previous round was NOT approved "
-        f"(approve={approve}, score={score})."
+        + header
         + answer_block
         + self_debug_block
         + "\n\n"
         + f"Reviewer summary: {summary}"
         + history_hint
         + precheck_block
-        + "\n\nIssues to fix this round:\n"
+        + "\n\nBugs to fix this round:\n"
         + issues_block
         + "\n\nOriginal user requirement (do not modify):\n"
         + str(session.original_requirement)
-        + "\n\nFix only the failures and issues above. Do not introduce new scope. "
+        + "\n\nFix only the bugs above. Do not refactor, rename, restyle or "
+        "add features — the Reviewer only fails you on real bugs. "
         "Run the relevant checks before reporting completion."
     )
 
@@ -171,6 +183,11 @@ def build_reviewer_description(
         + (f"\nPrevious review summary:\n{previous_summary}\n" if previous_summary else "")
         + focus_block
         + check_block
-        + "\nInspect the actual workspace diff and run relevant tests. Return the "
-        "strict JSON verdict only."
+        + "\nLook at the actual workspace diff and decide whether the code has "
+        "bugs. Report ONLY real bugs: crashes, wrong results, or cases the "
+        "requirement needs but the code misses. Ignore style, design, "
+        "performance, security hardening, test coverage and anything else "
+        "that is not a bug. Return this JSON and nothing else: "
+        '{"has_bugs": bool, "bugs": [{"file", "line", "description", "fix"}], '
+        '"summary": str}'
     )

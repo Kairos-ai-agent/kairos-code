@@ -33,12 +33,24 @@ import { Button, Tooltip, App as AntdApp } from 'antd';
 import {
   ArrowUpOutlined, PaperClipOutlined, ThunderboltOutlined,
   MessageOutlined, RobotOutlined, SettingOutlined,
+  CloseOutlined, FileOutlined, LoadingOutlined,
 } from '@ant-design/icons';
 
+import api from '../api/client';
 import { useThemeTokens } from '../hooks/useThemeTokens';
+import { useChatStore } from '../stores/chatStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { classifyIntent } from '../utils/intent';
 import FolderPicker from './FolderPicker';
+
+/** One uploaded chat attachment (shape returned by the upload endpoint). */
+export interface ChatAttachment {
+  name: string;
+  size: number;
+  mime: string;
+  /** Path relative to the project root — what the Coder's file tools open. */
+  rel_path: string;
+}
 
 interface Props {
   value?: string;
@@ -46,8 +58,9 @@ interface Props {
   /**
    * Called when the user submits. The intent is auto-classified
    * by the composer (no manual Chat/Task toggle since R38.6).
+   * `attachments` carries the files uploaded for this message (R38.7).
    */
-  onSubmit: (text: string) => Promise<void> | void;
+  onSubmit: (text: string, attachments: ChatAttachment[]) => Promise<void> | void;
   placeholder?: string;
   busy?: boolean;
   disabled?: boolean;
@@ -56,12 +69,29 @@ interface Props {
 
 const MAX_TEXTAREA_HEIGHT = 240;
 
+function humanSize(n: number): string {
+  const val = Number(n) || 0;
+  if (val < 1024) return `${val} B`;
+  if (val < 1024 * 1024) return `${(val / 1024).toFixed(1)} KB`;
+  if (val < 1024 * 1024 * 1024) return `${(val / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(val / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
 const ChatComposer: React.FC<Props> = ({
   value, onChange, onSubmit, placeholder, busy, disabled, disabledHint,
 }) => {
   const tokens = useThemeTokens();
+  const { message: msgApi } = AntdApp.useApp();
   const [text, setText] = useState(value || '');
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+  // R38.7: chat attachments. Files are uploaded the moment they are picked
+  // (progress visible in the chip row), then their project-relative paths are
+  // sent with the message so the Coder can open them with file_read.
+  const projectId = useChatStore((s) => s.currentProject?.id || '');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [uploading, setUploading] = useState(0);
+  const [dragOver, setDragOver] = useState(false);
   // R38: read the active provider's model from the settings store so
   // we can show it on the action row. The provider switches the
   // model in real-time (the user can change it in Settings → LLM
@@ -93,14 +123,53 @@ const ChatComposer: React.FC<Props> = ({
     el.style.height = `${next}px`;
   }, [text]);
 
+  // Upload the picked/dropped/pasted files immediately (any format). The
+  // backend writes them into <project root>/attachments/ and echoes back the
+  // relative path used by the message and by the Coder's file tools.
+  const uploadFiles = async (list: FileList | File[] | null | undefined) => {
+    const files = Array.from(list || []);
+    if (files.length === 0) return;
+    if (!projectId) {
+      msgApi.warning('先选一个项目或文件夹，再上传附件。');
+      return;
+    }
+    const form = new FormData();
+    files.forEach((f) => form.append('files', f, f.name));
+    setUploading((n) => n + files.length);
+    try {
+      const r = await api.post<{ attachments: ChatAttachment[] }>(
+        `/projects/${projectId}/attachments`, form);
+      const added = r.data?.attachments || [];
+      setAttachments((prev) => [...prev, ...added]);
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail;
+      msgApi.error(typeof detail === 'string' && detail.trim()
+        ? detail : '附件上传失败，请重试。');
+    } finally {
+      setUploading((n) => Math.max(0, n - files.length));
+    }
+  };
+
+  const removeAttachment = async (att: ChatAttachment) => {
+    const next = attachments.filter((a) => a.rel_path !== att.rel_path);
+    setAttachments(next);
+    try {
+      await api.delete(`/projects/${projectId}/attachments/${att.rel_path}`);
+    } catch {
+      // Best effort: a stale file on disk is harmless, the chip is gone.
+    }
+  };
+
   const submit = async () => {
     const trimmed = text.trim();
-    if (!trimmed || disabled || busy) return;
+    if ((!trimmed && attachments.length === 0) || disabled || busy
+        || uploading > 0) return;
     try {
-      await onSubmit(trimmed);
+      await onSubmit(trimmed, attachments);
       setText('');
+      setAttachments([]);
     } catch {
-      // Caller surfaces the error; keep the text so the user can retry.
+      // Caller surfaces the error; keep text + attachments so the user can retry.
     }
   };
 
@@ -123,20 +192,109 @@ const ChatComposer: React.FC<Props> = ({
       padding: '8px 16px 20px',
       background: 'linear-gradient(to top, ' + tokens.bgBase + ' 60%, transparent 100%)',
     }}>
-      <div style={{
+      <div
+        data-testid="composer-box"
+        onDragOver={(e) => {
+          if (e.dataTransfer?.types?.includes('Files')) {
+            e.preventDefault();
+            setDragOver(true);
+          }
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          if (e.dataTransfer?.files?.length) {
+            e.preventDefault();
+            setDragOver(false);
+            uploadFiles(e.dataTransfer.files);
+          }
+        }}
+        style={{
         maxWidth: 768, margin: '0 auto',
         background: tokens.bgLay1,
-        border: `1px solid ${tokens.borderStrong}`,
+        border: `1px solid ${dragOver ? tokens.labelPrimary : tokens.borderStrong}`,
         borderRadius: 18,
         padding: '10px 12px',
         transition: 'border-color 0.15s, box-shadow 0.15s',
       }}>
+        {/* R38.7: attachment chips — uploaded files (any format) waiting to
+            ride along with the next message. */}
+        {(attachments.length > 0 || uploading > 0) && (
+          <div
+            data-testid="composer-attachments"
+            style={{
+              display: 'flex', flexWrap: 'wrap', gap: 6,
+              padding: '2px 4px 8px',
+            }}
+          >
+            {attachments.map((a) => (
+              <span
+                key={a.rel_path}
+                data-testid="composer-attachment"
+                title={`${a.rel_path} · ${a.mime}`}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '2px 8px', borderRadius: 10,
+                  background: tokens.bgLay2, color: tokens.labelSecondary,
+                  fontSize: 12, maxWidth: 260,
+                  border: `1px solid ${tokens.border}`,
+                }}
+              >
+                <FileOutlined style={{ fontSize: 12 }} />
+                <span style={{
+                  overflow: 'hidden', textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}>{a.name}</span>
+                <span style={{ opacity: 0.6, flexShrink: 0 }}>
+                  {humanSize(a.size)}
+                </span>
+                <CloseOutlined
+                  data-testid="composer-attachment-remove"
+                  aria-label={`Remove ${a.name}`}
+                  onClick={() => removeAttachment(a)}
+                  style={{ fontSize: 10, cursor: 'pointer', flexShrink: 0 }}
+                />
+              </span>
+            ))}
+            {uploading > 0 && (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '2px 8px', borderRadius: 10,
+                background: tokens.bgLay2, color: tokens.labelTertiary,
+                fontSize: 12,
+              }}>
+                <LoadingOutlined style={{ fontSize: 12 }} />
+                上传中… ({uploading})
+              </span>
+            )}
+          </div>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          hidden
+          data-testid="composer-file-input"
+          onChange={(e) => {
+            uploadFiles(e.target.files);
+            // Reset so picking the same file twice fires onChange again.
+            e.target.value = '';
+          }}
+        />
         <textarea
           ref={taRef}
           value={text}
           onChange={(e) => {
             setText(e.target.value);
             onChange?.(e.target.value);
+          }}
+          onPaste={(e) => {
+            // R38.7: pasting a file (e.g. a screenshot) attaches it instead
+            // of dumping "[object File]" into the message.
+            const files = Array.from(e.clipboardData?.files || []);
+            if (files.length > 0) {
+              e.preventDefault();
+              uploadFiles(files);
+            }
           }}
           onKeyDown={onKeyDown}
           rows={1}
@@ -197,9 +355,20 @@ const ChatComposer: React.FC<Props> = ({
             </span>
           </Tooltip>
           <div style={{ flex: 1 }} />
-          <Tooltip title="Attach file (coming soon)">
-            <Button type="text" icon={<PaperClipOutlined />} disabled
-                    style={{ color: tokens.labelTertiary }} />
+          <Tooltip
+            title={projectId
+              ? 'Attach files — any format. Saved to the project and readable by the Coder.'
+              : 'Pick a project or folder first'}
+          >
+            <Button
+              type="text"
+              icon={<PaperClipOutlined />}
+              disabled={!projectId || disabled || busy}
+              onClick={() => fileInputRef.current?.click()}
+              style={{ color: tokens.labelTertiary }}
+              data-testid="composer-attach"
+              aria-label="Attach file"
+            />
           </Tooltip>
           <Tooltip title={sendTitle}>
             <Button
@@ -207,7 +376,8 @@ const ChatComposer: React.FC<Props> = ({
               shape="circle"
               icon={isTask ? <ThunderboltOutlined /> : <ArrowUpOutlined />}
               onClick={submit}
-              disabled={disabled || busy || !text.trim()}
+              disabled={disabled || busy || uploading > 0
+                        || (!text.trim() && attachments.length === 0)}
               loading={busy}
               style={{
                 background: sendColor, color: tokens.bgBase,
@@ -271,7 +441,7 @@ const ChatComposer: React.FC<Props> = ({
         fontSize: 11, color: tokens.labelTertiary,
         textAlign: 'center',
       }}>
-        Enter to send · Shift+Enter for newline
+        Enter to send · Shift+Enter for newline · 📎 拖拽 / 粘贴 / 点回形针上传任意格式文件
       </div>
     </div>
   );

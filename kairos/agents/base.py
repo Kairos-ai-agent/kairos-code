@@ -1283,21 +1283,53 @@ class KairosAgent:
                 content=last_response.content,
                 msg_type="text",
             ))
-        else:
-            # An empty reply means the UI shows NOTHING at all — no bubble and
-            # no error (the route still returns HTTP 200). Log it loudly so a
-            # silent "chat doesn't answer" is actually diagnosable.
-            logger.warning(
-                "%s: chat produced an EMPTY reply — model=%s finish_reason=%s "
-                "tool_calls=%s usage=%s. The UI will show no reply.",
-                self.agent_id,
-                getattr(self._llm_config, "model", "?"),
-                getattr(last_response, "finish_reason", "?"),
-                bool(getattr(last_response, "tool_calls", None)),
-                getattr(last_response, "usage", None),
-            )
+            return last_response.content
 
-        return last_response.content
+        # An empty reply means the UI shows NOTHING at all — no bubble and
+        # no error (the route still returns HTTP 200), so the user just sees
+        # a chat that never answers. A thinking/reasoning model produces
+        # exactly this when it spends the whole completion budget on hidden
+        # reasoning: finish_reason="length", content="", and every
+        # completion token accounted for as reasoning_tokens. Log it
+        # loudly AND surface a readable notice as the reply bubble, so the
+        # failure is visible in the thread instead of looking like a hang.
+        model = getattr(self._llm_config, "model", "?")
+        usage = getattr(last_response, "usage", None) or {}
+        reasoning_tokens = (usage.get("completion_tokens_details") or {}).get(
+            "reasoning_tokens")
+        finish_reason = getattr(last_response, "finish_reason", "") or "?"
+        logger.warning(
+            "%s: chat produced an EMPTY reply — model=%s finish_reason=%s "
+            "tool_calls=%s usage=%s. Surfacing a notice to the UI.",
+            self.agent_id,
+            model,
+            finish_reason,
+            bool(getattr(last_response, "tool_calls", None)),
+            usage,
+        )
+        if finish_reason == "length" and reasoning_tokens:
+            notice = (
+                f"⚠️ 模型 {model} 没有返回正文：它把整个输出预算（"
+                f"{usage.get('completion_tokens', '?')} tokens，其中 "
+                f"reasoning_tokens={reasoning_tokens}）都花在了内部思考上，"
+                "没有产出回答。\n"
+                "这通常意味着当前配置的是「思考型 / 推理型」模型，不适合直接聊天。\n"
+                "解决办法：打开设置把模型换成非思考模型（例如 deepseek-chat）"
+                "后重试；或者把需求拆小一点再发一次。"
+            )
+        else:
+            notice = (
+                f"⚠️ 模型 {model} 这次没有返回任何内容"
+                f"（finish_reason={finish_reason}）。\n"
+                "请重试一次；如果持续出现，请在设置里检查模型名与 API Key。"
+            )
+        await self.message_bus.publish(Message(
+            sender=self.agent_id,
+            topic="agent.chat",
+            content=notice,
+            msg_type="text",
+        ))
+        return notice
 
     def _build_task_prompt(self, task: AgentTask) -> str:
         parts = [

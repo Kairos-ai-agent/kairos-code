@@ -377,7 +377,9 @@ const Loop: React.FC = () => {
         </Tag>
         {loop && (
           <Tag color={loop.last_approve ? 'green' : 'orange'}>
-            score {loop.last_score}
+            {loop.last_approve
+              ? 'no bugs'
+              : `${lastRound?.issues ?? lastIssues.length} bug(s)`}
           </Tag>
         )}
         {loop && loop.no_progress_count > 0 && (
@@ -602,7 +604,7 @@ const Loop: React.FC = () => {
         {/* Middle: stats, plan viz, diff, checkpoints */}
         <div style={{ width: 380, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
 
-          {/* Score chart + cost */}
+          {/* Bug chart + cost */}
           {stats && (
             <Card title={<><BarChartOutlined /> Stats</>} size="small"
                   bodyStyle={{ padding: 8 }}>
@@ -622,7 +624,7 @@ const Loop: React.FC = () => {
                   }}>
                     {stats.rounds.map((r) => (
                       <Tooltip key={r.round}
-                               title={'R' + r.round + ': ' + r.score + '/100 ' + (r.approve ? 'OK' : '')}>
+                               title={'R' + r.round + ': ' + r.issues + ' bug(s)' + (r.approve ? ' · passed' : '')}>
                         <div style={{
                           flex: 1,
                           height: Math.max(4, r.score) + '%',

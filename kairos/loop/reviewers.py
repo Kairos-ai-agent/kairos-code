@@ -57,9 +57,97 @@ def _balanced_json_objects(text: str) -> Iterable[str]:
                 yield text[start:index + 1]
                 start = None
 
+def _as_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "yes", "1", "y"}
+    return bool(value)
+
+
+def _coerce_line(value: Any) -> int:
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return 0
+
+
+def _normalize_bug_verdict(data: Any) -> Dict[str, Any] | None:
+    """Map the R38.7 simple Reviewer shape onto the internal verdict.
+
+    The simplified Reviewer answers one question only — "are there bugs?" —
+    with ``{"has_bugs": bool, "bugs": [{file, line, description, fix}],
+    "summary": str}``. The loop, the UI and the memory store all speak the
+    older ``{approve, score, issues, summary}`` shape, so translate instead
+    of ripping that plumbing out:
+
+    - no bugs  -> approve=True,  score=100 (clears the 85 approval bar)
+    - N bugs   -> approve=False, score=max(0, 100 - 20N)
+
+    Returns None for anything that is not the simple shape, so the legacy
+    rubric verdict still parses (old sessions, old replays, existing tests).
+    """
+    if not isinstance(data, dict):
+        return None
+    if "bugs" not in data and "has_bugs" not in data:
+        return None
+
+    raw_bugs = data.get("bugs")
+    raw_bugs = raw_bugs if isinstance(raw_bugs, list) else []
+    issues: list = []
+    for raw in raw_bugs:
+        if not isinstance(raw, dict):
+            continue
+        description = str(
+            raw.get("description") or raw.get("summary") or "Bug"
+        ).strip()[:2000]
+        issues.append({
+            "category": "bug",
+            "severity": "BUG",
+            "file": str(raw.get("file") or ""),
+            "line": _coerce_line(raw.get("line")),
+            "description": description,
+            "fix_instruction": str(
+                raw.get("fix") or raw.get("fix_instruction")
+                or "Fix this bug.").strip()[:2000],
+        })
+
+    has_bugs = bool(issues) or _as_bool(data.get("has_bugs"))
+    if has_bugs and not issues:
+        # "has_bugs: true" with an empty list — keep the rejection (the Coder
+        # still gets told to look) instead of approving a round the Reviewer
+        # refused to approve.
+        issues.append({
+            "category": "bug",
+            "severity": "BUG",
+            "file": "",
+            "line": 0,
+            "description": "Reviewer reported bugs without listing them.",
+            "fix_instruction": (
+                "Re-check the changes for the bug the Reviewer saw and fix it."),
+        })
+
+    summary = str(data.get("summary") or "").strip()
+    if not summary:
+        summary = (f"{len(issues)} bug(s) found." if has_bugs
+                   else "No bugs found.")
+    return {
+        "approve": not has_bugs,
+        "score": 100 if not has_bugs else max(0, 100 - 20 * len(issues)),
+        "issues": issues,
+        "summary": summary[:4000],
+        "_simple_bug_review": True,
+        "_confidence": 0.7,
+    }
+
+
 def _normalize_verdict(data: Any) -> Dict[str, Any] | None:
     if not isinstance(data, dict):
         return None
+    # R38.7: the bug-only Reviewer shape first (current default).
+    simple = _normalize_bug_verdict(data)
+    if simple is not None:
+        return simple
     if not any(key in data for key in ("approve", "score", "issues", "summary")):
         return None
     raw_score = data.get("score", 0)

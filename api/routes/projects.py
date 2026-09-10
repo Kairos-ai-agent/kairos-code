@@ -5,6 +5,8 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import mimetypes
+import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
@@ -121,11 +123,18 @@ async def start_loop(project_id: str, request: "StartLoopRequest"):
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     if project.loop_task and not project.loop_task.done():
         raise HTTPException(status_code=409, detail="A loop is already running for this project")
+    # R38.7: attachments ride along with the requirement the same way they do
+    # for /chat — the Coder reads them through its normal file tools.
+    requirement = request.requirement or ""
+    block = attachment_prompt_block(_project_root(project), request.attachments)
+    if block:
+        requirement = f"{requirement}\n\n{block}" if requirement.strip() else block
     try:
-        session_id = await _orch().start_loop(project_id, request.requirement)
+        session_id = await _orch().start_loop(project_id, requirement)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    return {"status": "started", "project_id": project_id, "session_id": session_id}
+    return {"status": "started", "project_id": project_id,
+            "session_id": session_id, "message": requirement}
 
 
 # ---------------------------------------------------------------------------
@@ -176,8 +185,16 @@ async def chat(project_id: str, request: "ChatRequest"):
             raise HTTPException(status_code=503, detail=detail)
 
         text = (request.message or "").strip()
-        if not text:
+        if not text and not request.attachments:
             raise HTTPException(status_code=400, detail="message is required")
+        # R38.7: fold the attachments into the message. The model then knows
+        # which files the user attached and where they live (relative to the
+        # project root, which is exactly what the Coder's file tools are
+        # sandboxed to), and the persisted user message keeps the list too so
+        # the thread still shows it after a refresh.
+        block = attachment_prompt_block(_project_root(project), request.attachments)
+        if block:
+            text = f"{text}\n\n{block}" if text else block
 
         # R38.6.5: persist the user's own message. Until now only the
         # Coder's replies reached the bus (and therefore the DB), so
@@ -232,7 +249,8 @@ async def chat(project_id: str, request: "ChatRequest"):
     # reply bubble. Publishing a second `agent.chat_reply` event here
     # only doubles the WS traffic — nothing consumes it. The REST
     # response carries the reply for callers that don't watch the WS.
-    return {"project_id": project_id, "reply": reply, "mode": "chat"}
+    return {"project_id": project_id, "reply": reply, "mode": "chat",
+            "message": text}
 
 
 @router.post("/{project_id}/stop")
@@ -875,6 +893,262 @@ async def delete_reference_file(project_id: str, file_id: str):
     return {"status": "deleted" if ok else "not_found", "file_id": file_id}
 
 # ============================================================================
+# Chat attachments (any file format)
+# ============================================================================
+#
+# Reference files (above) are inline in SQLite with a 5 MB cap and get
+# digest-injected into the loop prompt. Attachments are what the user drops
+# into the chat composer: any format, kept verbatim on disk inside the
+# project root so the Coder's sandboxed file tools (``file_read``, ``grep``,
+# ...) can open them by relative path. The path list is appended to the user
+# message so the model knows what was attached. Binaries are deliberately NOT
+# copied into SQLite — base64-ing a 20 MB PDF into a TEXT column would bloat
+# the DB and poison the reference digest.
+
+MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024      # 50 MB per file
+ATTACHMENTS_DIRNAME = "attachments"
+
+
+def _project_root(project) -> Path:
+    """Directory the Coder's file tools are sandboxed to.
+
+    Mirrors ``project_factory`` (``work_dir`` when set, else ``workspace``)
+    so an attachment written here is readable by ``file_read`` with a plain
+    relative path.
+    """
+    raw = getattr(project, "work_dir", "") or getattr(project, "workspace", "")
+    return Path(str(raw)).expanduser().resolve()
+
+
+def _repair_mojibake(name: str) -> str:
+    """Undo a latin-1/UTF-8 double decode in an uploaded filename.
+
+    Browsers send the filename as raw UTF-8 bytes; clients that instead let
+    the multipart header be decoded as latin-1 (some curl/proxy stacks) hand
+    us "½çÃ¦..." for "界面...". Encoding back to
+    latin-1 and decoding as UTF-8 restores the original name. Anything that
+    isn't that exact pattern is returned untouched.
+    """
+    if not name or name.isascii():
+        return name
+    try:
+        repaired = name.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return name
+    return repaired or name
+
+
+def _safe_attachment_name(name: str) -> str:
+    """Basename only: strip any path part / traversal, keep the extension."""
+    base = Path(_repair_mojibake(str(name or ""))).name.replace("\\", "_").strip()
+    if base in ("", ".", ".."):
+        base = "attachment.bin"
+    for ch in '<>:"|?*\x00':
+        base = base.replace(ch, "_")
+    return base[:180]
+
+
+def _unique_attachment_path(dir_path: Path, name: str) -> Path:
+    """``cat.png`` → ``cat.png`` / ``cat-1.png`` / ``cat-2.png`` …"""
+    target = dir_path / name
+    if not target.exists():
+        return target
+    stem, suffix = target.stem, target.suffix
+    for i in range(1, 1000):
+        cand = dir_path / f"{stem}-{i}{suffix}"
+        if not cand.exists():
+            return cand
+    return dir_path / f"{stem}-{uuid.uuid4().hex[:6]}{suffix}"
+
+
+def _resolve_attachment(root: Path, rel_path: str) -> Path:
+    """Resolve a client-supplied attachment path inside ``root``.
+
+    Raises 400 when the path escapes the project root (the client controls
+    this string), 404 when it doesn't exist.
+    """
+    rel = str(rel_path or "").strip().lstrip("/\\")
+    if not rel:
+        raise HTTPException(status_code=400, detail="empty attachment path")
+    target = (root / rel).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"attachment outside the project directory: {rel_path}")
+    if not target.is_file():
+        raise HTTPException(status_code=404,
+                            detail=f"attachment not found: {rel_path}")
+    return target
+
+
+def _human_size(n: int) -> str:
+    val = float(n or 0)
+    for unit in ("B", "KB", "MB"):
+        if val < 1024 or unit == "MB":
+            return f"{val:.0f} {unit}" if unit == "B" else f"{val:.1f} {unit}"
+        val /= 1024
+    return f"{val:.1f} MB"
+
+
+# Windows' mimetypes module only knows what the registry maps, so common
+# dev/text formats (.md, .py, .csv, ...) come back as None. The model reads
+# the mime in the [附件] block, so fill the gaps explicitly.
+_EXTRA_MIME_TYPES = {
+    ".md": "text/markdown", ".markdown": "text/markdown",
+    ".txt": "text/plain", ".log": "text/plain", ".env": "text/plain",
+    ".csv": "text/csv", ".tsv": "text/tab-separated-values",
+    ".json": "application/json", ".jsonl": "application/json",
+    ".yaml": "application/yaml", ".yml": "application/yaml",
+    ".toml": "application/toml", ".ini": "text/plain",
+    ".py": "text/x-python", ".pyi": "text/x-python",
+    ".js": "text/javascript", ".jsx": "text/jsx",
+    ".ts": "text/typescript", ".tsx": "text/tsx",
+    ".sh": "application/x-sh", ".bat": "application/x-batch",
+    ".ps1": "application/x-powershell",
+    ".c": "text/x-c", ".h": "text/x-c", ".hpp": "text/x-c++",
+    ".cpp": "text/x-c++", ".cc": "text/x-c++",
+    ".rs": "text/x-rust", ".go": "text/x-go", ".java": "text/x-java",
+    ".kt": "text/x-kotlin", ".rb": "text/x-ruby", ".php": "text/x-php",
+    ".sql": "application/sql", ".ipynb": "application/json",
+    ".html": "text/html", ".htm": "text/html", ".css": "text/css",
+    ".scss": "text/scss", ".xml": "application/xml",
+    ".svg": "image/svg+xml", ".pdf": "application/pdf",
+}
+
+
+def _guess_mime(name: str) -> str:
+    """Mime type for a filename, with a fallback table for dev formats.
+
+    The table wins over ``mimetypes`` so the answer doesn't depend on the
+    host's registry (Windows maps ``.csv`` to ``application/vnd.ms-excel``,
+    which is useless to the model reading the [附件] block).
+    """
+    suffix = Path(str(name or "")).suffix.lower()
+    if suffix in _EXTRA_MIME_TYPES:
+        return _EXTRA_MIME_TYPES[suffix]
+    return (mimetypes.guess_type(str(name or ""))[0]
+            or "application/octet-stream")
+
+
+def attachment_prompt_block(root: Path, attachments) -> str:
+    """Render the ``[附件]`` block appended to a user message.
+
+    Single source of truth for ``/chat`` and ``/start`` so the model always
+    sees the same shape: paths relative to the project root, size and mime
+    type. Returns "" when there is nothing attached.
+    """
+    lines: list[str] = []
+    for rel in attachments or []:
+        path = _resolve_attachment(root, rel)
+        stat = path.stat()
+        mime = _guess_mime(path.name)
+        lines.append(
+            f"- {path.relative_to(root).as_posix()} "
+            f"({_human_size(stat.st_size)}, {mime})")
+    if not lines:
+        return ""
+    return ("[附件 / attachments] 用户上传了以下文件，已经保存在项目目录里，"
+            "可以直接用 file_read / grep 等工具按相对路径读取：\n"
+            + "\n".join(lines))
+
+
+@router.post("/{project_id}/attachments")
+async def upload_attachments(project_id: str, files: list[UploadFile] = File(...)):
+    """Upload one or more chat attachments — any file format.
+
+    The multipart payload is repeated ``files`` parts (one per attachment).
+    Each is written to ``<project root>/attachments/<name>`` and the
+    response returns the relative path to send back with the chat message.
+    """
+    project = _orch().get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404,
+                            detail=f"Project not found: {project_id}")
+    if not files:
+        raise HTTPException(status_code=400, detail="no files provided")
+
+    root = _project_root(project)
+    out_dir = root / ATTACHMENTS_DIRNAME
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise HTTPException(status_code=500,
+                            detail=f"cannot create attachments dir: {e}")
+
+    saved: list[dict] = []
+    for upload in files:
+        data = await upload.read()
+        if len(data) > MAX_ATTACHMENT_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=(f"{upload.filename} is too large "
+                        f"(max {MAX_ATTACHMENT_BYTES // (1024 * 1024)} MB)"))
+        name = _safe_attachment_name(upload.filename or "")
+        target = _unique_attachment_path(out_dir, name)
+        try:
+            target.write_bytes(data)
+        except OSError as e:
+            raise HTTPException(status_code=500,
+                                detail=f"cannot write {name}: {e}")
+        # Many clients send no content-type (or a generic octet-stream) for
+        # the part; fall back to the filename so the [附件] block is useful.
+        mime = (upload.content_type or "").strip()
+        if not mime or mime == "application/octet-stream":
+            mime = _guess_mime(target.name)
+        saved.append({
+            "name": target.name,
+            "size": len(data),
+            "mime": mime,
+            "rel_path": f"{ATTACHMENTS_DIRNAME}/{target.name}",
+        })
+
+    logger.info("attachments: project=%s saved=%s", project_id,
+                [s["name"] for s in saved])
+    return {"status": "ok", "attachments": saved}
+
+
+@router.get("/{project_id}/attachments")
+async def list_attachments(project_id: str):
+    """List the attachments currently sitting in the project directory."""
+    project = _orch().get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404,
+                            detail=f"Project not found: {project_id}")
+    root = _project_root(project)
+    out_dir = root / ATTACHMENTS_DIRNAME
+    items: list[dict] = []
+    if out_dir.is_dir():
+        for path in sorted(out_dir.iterdir()):
+            if not path.is_file():
+                continue
+            items.append({
+                "name": path.name,
+                "size": path.stat().st_size,
+                "mime": _guess_mime(path.name),
+                "rel_path": f"{ATTACHMENTS_DIRNAME}/{path.name}",
+            })
+    return {"attachments": items}
+
+
+@router.delete("/{project_id}/attachments/{rel_path:path}")
+async def delete_attachment(project_id: str, rel_path: str):
+    """Remove an attachment (the composer calls this when a chip is removed)."""
+    project = _orch().get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404,
+                            detail=f"Project not found: {project_id}")
+    root = _project_root(project)
+    target = _resolve_attachment(root, rel_path)
+    try:
+        target.unlink()
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"cannot delete: {e}")
+    return {"status": "deleted", "rel_path": target.relative_to(root).as_posix()}
+
+
+# ============================================================================
 # Per-file revert (uses git SHA captured at auto-checkpoint)
 # ============================================================================
 
@@ -896,6 +1170,10 @@ class CreateProjectRequest(BaseModel):
 
 class StartLoopRequest(BaseModel):
     requirement: str
+    # R38.7: chat attachments (paths returned by POST /{id}/attachments).
+    # They are appended to the requirement as an "[附件]" block so the Coder
+    # can read the uploaded files with its own file tools.
+    attachments: list[str] = []
 
 
 class ChatRequest(BaseModel):
@@ -910,6 +1188,10 @@ class ChatRequest(BaseModel):
     # — when set, the agent reads the plan's step list and
     # asks the user to approve each step before executing.
     plan_id: str = ""
+    # R38.7: attachments uploaded through POST /{project_id}/attachments.
+    # Paths are relative to the project root; they are folded into the
+    # message (and therefore into the persisted history) as an "[附件]" block.
+    attachments: list[str] = []
 
 class RevertFileRequest(BaseModel):
     sha: str

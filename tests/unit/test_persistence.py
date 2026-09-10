@@ -82,3 +82,65 @@ def test_migration_adds_project_id_column_on_old_db(tmp_path):
     assert after_new[0]["content"] == "new"
     # Unfiltered load returns both (legacy + new).
     assert len(p.load_messages()) == 2
+
+
+def test_chat_only_drops_stream_and_tool_noise(db):
+    """R38.6.5: a busy project's newest rows are almost all
+    ``stream.chunk`` deltas, so ``chat_only`` must keep just the
+    conversation topics — otherwise the chat page renders noise and
+    the real bubbles never fit in the ``limit`` window."""
+    db.save_message(Message(sender="p1.coder", topic="stream.chunk",
+                            content="tok", metadata={"project_id": "p1"}))
+    db.save_message(Message(sender="p1.coder", topic="tool.call",
+                            content="{}", metadata={"project_id": "p1"}))
+    db.save_message(Message(sender="user", topic="user.chat",
+                            content="hello", metadata={"project_id": "p1"}))
+    db.save_message(Message(sender="p1.coder", topic="agent.response",
+                            content="hi", metadata={"project_id": "p1"}))
+
+    rows = db.load_messages(project_id="p1", chat_only=True, limit=50)
+    assert {r["topic"] for r in rows} == {"user.chat", "agent.response"}
+
+
+def test_chat_only_cursor_pages_backwards_without_gaps(db):
+    """The (timestamp, id) keyset cursor must walk the whole history
+    exactly once — no duplicates, no skipped rows."""
+    for i in range(5):
+        db.save_message(Message(sender="p1.coder", topic="agent.response",
+                                content=f"m{i}", timestamp=float(i),
+                                metadata={"project_id": "p1"}))
+
+    page1 = db.load_messages(project_id="p1", chat_only=True, limit=2)
+    assert [r["content"] for r in page1] == ["m4", "m3"]
+    oldest = page1[-1]
+
+    page2 = db.load_messages(project_id="p1", chat_only=True, limit=2,
+                             before_ts=oldest["timestamp"],
+                             before_id=oldest["id"])
+    assert [r["content"] for r in page2] == ["m2", "m1"]
+
+    page3 = db.load_messages(project_id="p1", chat_only=True, limit=2,
+                             before_ts=page2[-1]["timestamp"],
+                             before_id=page2[-1]["id"])
+    assert [r["content"] for r in page3] == ["m0"]
+
+    seen = [r["content"] for r in page1 + page2 + page3]
+    assert seen == ["m4", "m3", "m2", "m1", "m0"]
+
+
+def test_cursor_handles_equal_timestamps(db):
+    """Rows sharing a timestamp must still be paged by id tie-breaker."""
+    for i in range(3):
+        db.save_message(Message(sender="p1.coder", topic="agent.response",
+                                content=f"t{i}", timestamp=1.0,
+                                metadata={"project_id": "p1"}))
+
+    page1 = db.load_messages(project_id="p1", chat_only=True, limit=1)
+    page2 = db.load_messages(project_id="p1", chat_only=True, limit=1,
+                             before_ts=page1[-1]["timestamp"],
+                             before_id=page1[-1]["id"])
+    page3 = db.load_messages(project_id="p1", chat_only=True, limit=1,
+                             before_ts=page2[-1]["timestamp"],
+                             before_id=page2[-1]["id"])
+    ids = [r["id"] for r in page1 + page2 + page3]
+    assert len(set(ids)) == 3

@@ -29,7 +29,7 @@ import {
   CloseCircleOutlined, ReloadOutlined, AimOutlined,
 } from '@ant-design/icons';
 
-import api from '../api/client';
+import api, { onWebSocketMessage } from '../api/client';
 import { formatError } from '../utils/formatError';
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
@@ -39,9 +39,13 @@ const { Text } = Typography;
 interface TaskItem {
   id: string;
   title: string;
-  status: 'pending' | 'in_progress' | 'done' | 'failed' | string;
+  status: 'pending' | 'in_progress' | 'done' | 'rejected' | 'failed' | string;
+  detail?: string;
   round?: number;
   session_id?: string;
+  /** "plan" (Coder decomposed the task) | "round" | "task". */
+  source?: string;
+  /** Legacy alias for ``detail`` — kept for older payloads. */
   details?: string;
 }
 
@@ -50,6 +54,13 @@ interface TasksResponse {
   round: number;
   score: number;
   last_approve: boolean;
+  /** True while the review loop is running (drives the refresh rate). */
+  running?: boolean;
+  /** Which fallback produced ``tasks`` — see TaskItem.source. */
+  source?: string;
+  /** The requirement being worked on, shown as the panel's header. */
+  task_title?: string;
+  session_id?: string;
 }
 
 const STATUS_META: Record<string, {
@@ -58,6 +69,10 @@ const STATUS_META: Record<string, {
   done: { color: 'green', icon: <CheckCircleOutlined />, label: 'Done' },
   in_progress: { color: 'blue', icon: <LoadingOutlined spin />, label: 'Running' },
   pending: { color: 'default', icon: <ClockCircleOutlined />, label: 'Pending' },
+  // R38.6.6: a round that finished but did not pass review. It is
+  // complete as a unit of work, so it is not "failed" — but it is
+  // certainly not "done" either.
+  rejected: { color: 'orange', icon: <CloseCircleOutlined />, label: 'Rejected' },
   failed: { color: 'red', icon: <CloseCircleOutlined />, label: 'Failed' },
 };
 
@@ -69,38 +84,59 @@ const TaskTracker: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     if (!currentProject) {
       setResp(null);
       return;
     }
-    setLoading(true);
+    if (!silent) setLoading(true);
     setError(null);
     try {
-      // R38.6.4: the backend's /workbench/tasks returns the
-      // current loop_session's plan + status. It doesn't yet
-      // accept session_id, so we just send project_id and let
-      // the backend decide which session is "current". A future
-      // enhancement could pass session_id to drill into a
-      // specific past loop.
+      // R38.6.6: the endpoint now returns a checklist for the whole
+      // task — the Coder's plan todos when it decomposed the work,
+      // otherwise one item per loop round, otherwise the requirement
+      // itself — so there is always something to show.
       const r = await api.get<TasksResponse>('/workbench/tasks', {
-        params: { project_id: currentProject.id },
+        params: {
+          project_id: currentProject.id,
+          ...(currentSessionId ? { session_id: currentSessionId } : {}),
+        },
       });
       setResp(r.data);
     } catch (e: any) {
-      setError(e?.response?.data?.detail || 'failed to load tasks');
+      setError(formatError(e, 'failed to load tasks'));
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  }, [currentProject]);
+  }, [currentProject, currentSessionId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // R38.6.6: a long task has to show per-item progress WHILE it runs.
+  // The panel used to load once per project, so a todo being ticked
+  // off never showed up. Poll faster while the loop is running, and
+  // refresh immediately on the loop's own events.
+  const running = !!resp?.running;
+  useEffect(() => {
+    if (!currentProject) return;
+    const ms = running ? 2500 : 15000;
+    const timer = window.setInterval(() => { load(true); }, ms);
+    return () => window.clearInterval(timer);
+  }, [load, running, currentProject]);
+
+  useEffect(() => {
+    const off = onWebSocketMessage((data: any) => {
+      const topic = data?.message?.topic || '';
+      if (/^(plan\.|loop\.|task\.)/.test(topic)) load(true);
+    });
+    return () => off();
+  }, [load]);
 
   // Aggregate counts by status. Memoized so a re-render without
   // a new ``resp`` reference doesn't recompute.
   const stats = useMemo(() => {
     const out: Record<string, number> = {
-      done: 0, in_progress: 0, pending: 0, failed: 0, other: 0,
+      done: 0, in_progress: 0, pending: 0, rejected: 0, failed: 0, other: 0,
     };
     const tasks = resp?.tasks || [];
     for (const t of tasks) {
@@ -136,7 +172,7 @@ const TaskTracker: React.FC = () => {
         <Tooltip title="Refresh">
           <Button
             size="small" type="text" icon={<ReloadOutlined />}
-            onClick={load} loading={loading} disabled={!currentProject} />
+            onClick={() => load()} loading={loading} disabled={!currentProject} />
         </Tooltip>
       </div>
 
@@ -149,12 +185,26 @@ const TaskTracker: React.FC = () => {
       ) : (
         <>
           <div style={{ padding: '4px 12px 8px' }}>
+            {/* R38.6.6: always show WHAT is being tracked. */}
+            {resp?.task_title && (
+              <Tooltip title={resp.task_title}>
+                <Text style={{
+                  fontSize: 11, color: tokens.labelSecondary,
+                  display: 'block', marginBottom: 4,
+                  overflow: 'hidden', textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {resp.task_title}
+                </Text>
+              </Tooltip>
+            )}
             <Progress
               percent={pct}
               size="small"
               status={
                 (stats.failed || 0) > 0 ? 'exception'
-                : (stats.in_progress || 0) > 0 ? 'active' : 'success'}
+                : (stats.in_progress || 0) > 0 || (stats.rejected || 0) > 0
+                  ? 'active' : 'success'}
             />
             <div style={{
               display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4,
@@ -174,6 +224,11 @@ const TaskTracker: React.FC = () => {
                   ○ {stats.pending} pending
                 </Tag>
               )}
+              {(stats.rejected || 0) > 0 && (
+                <Tag color="orange" style={{ margin: 0, fontSize: 11 }}>
+                  ↻ {stats.rejected} rejected
+                </Tag>
+              )}
               {(stats.failed || 0) > 0 && (
                 <Tag color="red" style={{ margin: 0, fontSize: 11 }}>
                   ✗ {stats.failed} failed
@@ -181,6 +236,8 @@ const TaskTracker: React.FC = () => {
               )}
               <Text type="secondary" style={{ fontSize: 10, marginLeft: 'auto' }}>
                 {completed}/{total}
+                {resp?.source === 'rounds' ? ' · rounds'
+                  : resp?.source === 'plan' ? ' · plan' : ''}
               </Text>
             </div>
           </div>
@@ -209,6 +266,10 @@ const TaskTracker: React.FC = () => {
                                || { color: 'default',
                                     icon: <ClockCircleOutlined />,
                                     label: t.status };
+                  // R38.6.6: the backend sends the per-item reason
+                  // (score / issue / error) so a finished item can say
+                  // WHY it did not pass.
+                  const detail = t.detail || t.details || '';
                   return (
                     <List.Item
                       data-testid={`task-item-${t.id}`}
@@ -249,6 +310,17 @@ const TaskTracker: React.FC = () => {
                               </Text>
                             )}
                           </div>
+                          {detail && (
+                            <Tooltip title={detail}>
+                              <Text type="secondary" style={{
+                                fontSize: 10, display: 'block', marginTop: 2,
+                                overflow: 'hidden', textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}>
+                                {detail}
+                              </Text>
+                            </Tooltip>
+                          )}
                         </div>
                       </div>
                     </List.Item>

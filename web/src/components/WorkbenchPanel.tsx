@@ -86,11 +86,12 @@ interface FileDiff {
 }
 
 interface TaskItem {
+  id?: string;
   title: string;
-  status: 'pending' | 'in_progress' | 'done' | 'failed';
+  status: 'pending' | 'in_progress' | 'done' | 'rejected' | 'failed';
   detail?: string | null;
   round?: number | null;
-  timestamp: number;
+  timestamp?: number;
 }
 
 interface TasksResponse {
@@ -740,6 +741,7 @@ const TasksTab: React.FC<{ projectId: string }> = ({ projectId }) => {
            renderItem={(t) => {
              const icon = t.status === 'done' ? <CheckCircleOutlined style={{ color: 'green' }} />
                : t.status === 'in_progress' ? <LoadingOutlined style={{ color: tokens.coderAccent }} />
+               : t.status === 'rejected' ? <RollbackOutlined style={{ color: 'orange' }} />
                : t.status === 'failed' ? <RollbackOutlined style={{ color: 'red' }} />
                : <span style={{ display: 'inline-block', width: 14, height: 14,
                                  borderRadius: '50%', border: `1px solid ${tokens.labelTertiary}` }} />;

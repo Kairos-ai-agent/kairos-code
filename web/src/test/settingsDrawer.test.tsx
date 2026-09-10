@@ -12,6 +12,12 @@ function renderDrawer() {
   );
 }
 
+// The drawer opens on the "Provider" (LLM) tab; the coder-mode controls
+// live under the "Mode" tab, so tests must switch to it first.
+function openModeTab() {
+  fireEvent.click(screen.getByText('Mode'));
+}
+
 describe('SettingsDrawer', () => {
   beforeEach(() => {
     // reset the store between tests
@@ -33,6 +39,7 @@ describe('SettingsDrawer', () => {
 
   it('renders the Coder mode tab with three options', () => {
     renderDrawer();
+    openModeTab();
     expect(screen.getByTestId('coder-mode-default')).toBeTruthy();
     expect(screen.getByTestId('coder-mode-read_only')).toBeTruthy();
     expect(screen.getByTestId('coder-mode-sandbox')).toBeTruthy();
@@ -40,6 +47,7 @@ describe('SettingsDrawer', () => {
 
   it('clicking read_only updates the store', () => {
     renderDrawer();
+    openModeTab();
     const before = useSettingsStore.getState().coderMode;
     expect(before).toBe('default');
     fireEvent.click(screen.getByTestId('coder-mode-read_only'));
@@ -48,6 +56,7 @@ describe('SettingsDrawer', () => {
 
   it('clicking sandbox updates the store', () => {
     renderDrawer();
+    openModeTab();
     fireEvent.click(screen.getByTestId('coder-mode-sandbox'));
     expect(useSettingsStore.getState().coderMode).toBe('sandbox');
   });

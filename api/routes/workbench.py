@@ -40,11 +40,14 @@ POST /api/workbench/restore?project_id=...&path=...
     Restore a single path (or "all") from the latest
     checkpoint. Returns ``{restored, path}``.
 
-GET /api/workbench/tasks?project_id=...
-    List the current loop's planned tasks with status
-    (pending / in_progress / done). The Coder emits
-    these as part of its planning phase. ``{tasks: [...],
-    round, score, last_approve}``.
+GET /api/workbench/tasks?project_id=...&session_id=...
+    The task checklist for the project — always non-empty once a
+    task exists. Preference order: the Coder's plan todos (with
+    their own per-item status), else one item per loop round,
+    else the requirement itself. Rounds survive a backend restart
+    because they are replayed from the messages table.
+    ``{tasks: [{id, title, status, detail, round, source}],
+    round, score, last_approve, running, source, task_title}``.
 
 GET /api/workbench/deliverables?project_id=...
     Files the agent has created or modified in the current
@@ -72,11 +75,12 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -259,10 +263,13 @@ class RestoreResult(BaseModel):
 
 
 class TaskItem(BaseModel):
+    id: str = ""
     title: str
-    status: str  # "pending" | "in_progress" | "done" | "failed"
+    status: str  # "pending" | "in_progress" | "done" | "rejected" | "failed"
     detail: Optional[str] = None
     round: Optional[int] = None
+    session_id: str = ""
+    source: str = ""  # "plan" | "round" | "task"
     timestamp: float = 0.0
 
 
@@ -272,6 +279,13 @@ class TasksResponse(BaseModel):
     score: int = 0
     last_approve: bool = False
     running: bool = False
+    # R38.6.6: the tracker must always have something to show, even for
+    # a task the Coder never decomposed into a plan. ``source`` says
+    # which data the list came from and ``task_title`` carries the
+    # requirement so the panel can render a header.
+    source: str = "none"  # "plan" | "rounds" | "task" | "none"
+    task_title: str = ""
+    session_id: str = ""
 
 
 class DeliverableItem(BaseModel):
@@ -732,74 +746,453 @@ async def restore(
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Task tracker (R38.6.6)
+#
+# The tracker has to answer three questions for a long task:
+#   1. what are the work items?            → plan todos, else loop rounds
+#   2. which of them are done?             → per-item status, never a guess
+#   3. what if the Coder never made a plan? → still show the task
+#
+# The previous implementation read ``session.history[-1]["plan"]`` and
+# walked it as a list of step dicts. A plan snapshot is actually
+# ``{"todos": [{"status", "content", "activeForm"}], "updated_at": …}``
+# — a DICT — so ``enumerate()`` yielded the key strings, every entry
+# failed ``isinstance(step, dict)`` and the task list came back empty.
+# Hence "No tasks yet" for every long task. And after a backend restart
+# even that was unavailable: the loop session (and its plan) only ever
+# lives in memory.
+# ---------------------------------------------------------------------------
+
+#: Loop events that describe the work units of a long task. Replayed
+#: oldest-first from the messages table when no live session exists.
+_TASK_EVENT_TOPICS = (
+    "loop.started", "loop.coder_started", "loop.reviewer_started",
+    "task.result", "task.error", "agent.response", "plan.updated",
+)
+
+#: The Coder's plan vocabulary → the tracker's.
+_TODO_STATUS = {
+    "completed": "done", "complete": "done", "done": "done",
+    "in_progress": "in_progress", "running": "in_progress",
+    "active": "in_progress",
+    "pending": "pending", "todo": "pending", "open": "pending",
+    "rejected": "rejected",
+    "failed": "failed", "error": "failed",
+    "cancelled": "failed", "canceled": "failed", "skipped": "failed",
+}
+
+
+def _meta_of(ev: dict) -> dict:
+    """Metadata of a message row (JSON string in the DB, dict in memory)."""
+    md = ev.get("metadata")
+    if isinstance(md, str):
+        try:
+            md = json.loads(md)
+        except Exception:
+            return {}
+    return md if isinstance(md, dict) else {}
+
+
+def _first_line(text: Any, limit: int = 70) -> str:
+    """One tidy line of prose — used for round titles."""
+    if text is None:
+        return ""
+    if not isinstance(text, str):
+        try:
+            text = json.dumps(text, ensure_ascii=False)
+        except Exception:
+            text = str(text)
+    if not text or text in ("null", "None", "{}", "[]"):
+        return ""
+    raw = text.strip()
+    if not raw:
+        return ""
+    line = raw.splitlines()[0].strip()
+    line = re.sub(r'^[#*\->\s]+', '', line)
+    line = re.sub(r'\s+', ' ', line)
+    return line[:limit]
+
+
+def _todos_of(plan: Any) -> List[dict]:
+    """Normalise a plan snapshot into a list of todo dicts.
+
+    Accepts a ``Plan`` object, the ``{"todos": [...]}`` dict stored in
+    ``session.history`` / ``plan.updated``, or a bare list. Anything
+    else yields ``[]``.
+    """
+    if plan is None:
+        return []
+    if hasattr(plan, "to_dict"):
+        try:
+            plan = plan.to_dict()
+        except Exception:
+            return []
+    if isinstance(plan, dict):
+        plan = plan.get("todos") or plan.get("items") or plan.get("steps") or []
+    if not isinstance(plan, (list, tuple)):
+        return []
+    return [t for t in plan if isinstance(t, dict)]
+
+
+def _todo_title(todo: dict, idx: int) -> str:
+    for key in ("content", "title", "task", "description", "activeForm"):
+        val = todo.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return f"Step {idx + 1}"
+
+
+def _todo_detail(todo: dict) -> Optional[str]:
+    for key in ("activeForm", "description", "detail"):
+        val = todo.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return None
+
+
+def _verdict_from_content(content: Any) -> Optional[dict]:
+    """Parse a Reviewer verdict out of a ``task.result`` payload.
+
+    Stored content is capped at 2000 chars, so long verdicts are cut
+    mid-string and ``json.loads`` fails. The Reviewer prompt always
+    emits ``approve`` / ``score`` first, so a regex over the leading
+    fields recovers what the tracker needs.
+    """
+    text = content if isinstance(content, str) else json.dumps(content or {}, ensure_ascii=False)
+    data: Any = None
+    stripped = text.strip()
+    if stripped.startswith("{"):
+        try:
+            data = json.loads(stripped)
+        except Exception:
+            data = None
+    if isinstance(data, dict) and "approve" in data:
+        return data
+    m = re.search(r'"approve"\s*:\s*(true|false)', text, re.I)
+    if not m:
+        return None
+    out: Dict[str, Any] = {"approve": m.group(1).lower() == "true"}
+    m_score = re.search(r'"score"\s*:\s*(-?\d+)', text)
+    if m_score:
+        out["score"] = int(m_score.group(1))
+    m_sum = re.search(r'"summary"\s*:\s*"((?:[^"\\]|\\.){0,200})', text)
+    if m_sum:
+        out["summary"] = m_sum.group(1)
+    return out
+
+
+def _verdict_detail(verdict: dict) -> str:
+    """One-line human summary of a verdict: score, outcome, top issue."""
+    bits = [f"score {int(verdict.get('score') or 0)}",
+            "approved" if verdict.get("approve") else "rejected"]
+    issues = verdict.get("issues") or []
+    if isinstance(issues, list) and issues and isinstance(issues[0], dict):
+        desc = str(issues[0].get("description") or "").strip()
+        if desc:
+            bits.append(f"{issues[0].get('severity', '?')}: {desc[:80]}")
+    summary = _first_line(verdict.get("summary"), 100)
+    if summary:
+        bits.append(summary)
+    return " · ".join(bits)
+
+
+def _task_title_of(project: Any, session: Any) -> str:
+    """The requirement this tracker is tracking, as one short line."""
+    for src in (getattr(session, "original_requirement", "") if session else "",
+                getattr(project, "requirements", "") if project else ""):
+        line = _first_line(src, 90)
+        if line:
+            return line
+    return ""
+
+
+def _with_note(detail: Optional[str], note: str) -> str:
+    """Keep the item's own context and append why it stopped."""
+    return f"{detail} · {note}" if detail else note
+
+
+def _plan_task_items(session: Any, round_n: int, running: bool,
+                     last_approve: bool) -> List[TaskItem]:
+    """Merge every plan snapshot the session kept — last write wins.
+
+    Each snapshot is keyed by todo content, so a todo that was
+    ``in_progress`` in round 3 and ``completed`` in round 5 shows as
+    done, and items added later appear at the end.
+    """
+    snapshots: List[tuple] = []
+    for item in list(getattr(session, "history", []) or []):
+        if isinstance(item, dict):
+            todos = _todos_of(item.get("plan"))
+            if todos:
+                snapshots.append((int(item.get("round") or 0), todos))
+    live = _todos_of(getattr(session, "plan_todos", None))
+    if live:
+        snapshots.append((round_n, live))
+    merged: "Dict[str, dict]" = {}
+    order: List[str] = []
+    for rnd, todos in snapshots:
+        for idx, todo in enumerate(todos):
+            title = _todo_title(todo, idx)
+            status = _TODO_STATUS.get(str(todo.get("status") or "").lower(), "pending")
+            detail = _todo_detail(todo)
+            if (not running) and (not last_approve) and status == "in_progress":
+                # the loop ended without approving: this item never finished
+                status = "failed"
+                detail = _with_note(detail, "loop ended before this item finished")
+            key = title
+            if key not in merged:
+                order.append(key)
+            merged[key] = {"title": title, "status": status,
+                           "detail": detail,
+                           "round": rnd or round_n}
+    sid = str(getattr(session, "session_id", "") or "")
+    out: List[TaskItem] = []
+    for i, key in enumerate(order):
+        info = merged[key]
+        out.append(TaskItem(
+            id=f"plan-{i + 1}", title=info["title"], status=info["status"],
+            detail=info["detail"], round=info["round"], session_id=sid,
+            source="plan",
+        ))
+    return out
+
+
+def _round_items_from_session(session: Any, running: bool) -> List[TaskItem]:
+    """Work items for a task with no plan: one per completed round."""
+    sid = str(getattr(session, "session_id", "") or "")
+    current = int(getattr(session, "round", 0) or 0)
+    seen: Dict[int, TaskItem] = {}
+    for item in list(getattr(session, "history", []) or []):
+        if not isinstance(item, dict):
+            continue
+        rnd = int(item.get("round") or 0)
+        if rnd <= 0:
+            continue
+        review = item.get("review") if isinstance(item.get("review"), dict) else None
+        if item.get("rollback"):
+            status = "failed"
+            detail = f"rolled back: {item.get('reason') or 'score regression'}"
+        elif review is not None:
+            status = "done" if review.get("approve") else "rejected"
+            detail = _verdict_detail(review)
+        else:
+            status, detail = "pending", None
+        title = (_first_line(review.get("summary"), 70) if review else "") or f"Round {rnd}"
+        seen[rnd] = TaskItem(
+            id=f"round-{rnd}", title=title, status=status, detail=detail,
+            round=rnd, session_id=sid, source="round",
+        )
+    if current and running and current not in seen and seen:
+        # Only synthesise the in-flight round once at least one round
+        # finished; before that the endpoint shows the requirement
+        # itself, which is far more useful than "Round 1".
+        seen[current] = TaskItem(
+            id=f"round-{current}", title=f"Round {current}", status="in_progress",
+            detail="running…", round=current, session_id=sid, source="round",
+        )
+    return [seen[k] for k in sorted(seen)]
+
+
+def _plan_items_from_events(events: List[dict], running: bool,
+                            session_id: str = "") -> List[TaskItem]:
+    """Rebuild the Coder's plan from persisted ``plan.updated`` events.
+
+    A decomposed plan is the best possible checklist, so it is
+    preferred over rounds even after a restart. The newest snapshot
+    wins; the Coder's own per-item status is preserved.
+    """
+    newest: List[dict] = []
+    for ev in events:
+        if ev.get("topic") != "plan.updated":
+            continue
+        todos = _todos_of(_meta_of(ev).get("plan"))
+        if todos:
+            newest = todos
+    if not newest:
+        return []
+    items: List[TaskItem] = []
+    for idx, todo in enumerate(newest):
+        title = _todo_title(todo, idx)
+        status = _TODO_STATUS.get(str(todo.get("status") or "").lower(), "pending")
+        detail = _todo_detail(todo)
+        if not running and status == "in_progress":
+            status = "failed"
+            detail = _with_note(detail, "loop stopped before this item finished")
+        items.append(TaskItem(
+            id=f"plan-{idx + 1}", title=title, status=status,
+            detail=detail, session_id=session_id, source="plan",
+        ))
+    return items
+
+
+def _round_items_from_events(events: List[dict],
+                             running: bool) -> tuple:
+    """Rebuild the round list from persisted loop events.
+
+    Used when the in-memory session is gone (backend restart): the
+    messages table still holds ``loop.coder_started`` (one per round,
+    ``metadata.round``) and the Reviewer's ``task.result`` verdicts,
+    which is enough to render the same checklist.
+    """
+    latest_sid = ""
+    for ev in events:
+        sid = str(_meta_of(ev).get("session_id") or "")
+        if sid:
+            latest_sid = sid
+    starts: Dict[int, float] = {}
+    for ev in events:
+        if ev.get("topic") != "loop.coder_started":
+            continue
+        md = _meta_of(ev)
+        sid = str(md.get("session_id") or "")
+        if latest_sid and sid and sid != latest_sid:
+            continue
+        rnd = int(md.get("round") or 0)
+        if rnd > 0:
+            starts.setdefault(rnd, float(ev.get("timestamp") or 0.0))
+    if not starts:
+        return [], latest_sid
+
+    def _round_at(ts: float) -> int:
+        best = 0
+        for rnd, started in starts.items():
+            if started <= ts and rnd > best:
+                best = rnd
+        return best
+
+    verdicts: Dict[int, dict] = {}
+    errors: Dict[int, str] = {}
+    titles: Dict[int, str] = {}
+    for ev in events:
+        topic = ev.get("topic")
+        ts = float(ev.get("timestamp") or 0.0)
+        rnd = _round_at(ts)
+        if rnd <= 0:
+            continue
+        sender = str(ev.get("sender") or "")
+        if topic == "task.result":
+            if "reviewer" in sender:
+                verdict = _verdict_from_content(ev.get("content"))
+                if verdict:
+                    verdicts[rnd] = verdict
+        elif topic == "task.error":
+            if rnd not in errors:
+                errors[rnd] = _first_line(ev.get("content"), 90)
+        elif topic == "agent.response" and sender.endswith(".coder"):
+            line = _first_line(ev.get("content"), 70)
+            if line:
+                titles[rnd] = line
+
+    last_round = max(starts)
+    out: List[TaskItem] = []
+    for rnd in sorted(starts):
+        verdict = verdicts.get(rnd)
+        if verdict is not None:
+            status = "done" if verdict.get("approve") else "rejected"
+            detail: Optional[str] = _verdict_detail(verdict)
+        elif rnd in errors:
+            status, detail = "failed", errors[rnd]
+        elif rnd == last_round and running:
+            status, detail = "in_progress", "running…"
+        elif rnd == last_round:
+            status, detail = "failed", "loop ended without a verdict"
+        else:
+            # The round ran but the Reviewer never returned a verdict
+            # (tool-call limit, crash, …) — it did not pass review.
+            status, detail = "failed", "round finished without a verdict"
+        title = titles.get(rnd) or ""
+        summary = _first_line((verdict or {}).get("summary"), 70)
+        out.append(TaskItem(
+            id=f"round-{rnd}", title=summary or title or f"Round {rnd}",
+            status=status, detail=detail, round=rnd, session_id=latest_sid,
+            source="round",
+        ))
+    return out, latest_sid
+
+
 @router.get("/workbench/tasks", response_model=TasksResponse)
 async def get_tasks(
     project_id: str = Query(...),
+    session_id: str = Query(""),
 ) -> TasksResponse:
-    """Return the current loop's tasks with checkmark status.
+    """Return the task checklist for a project — always, if a task exists.
 
-    The Coder emits ``task.plan`` events as it plans; we read the
-    loop_session.history for the plan items + the latest
-    round to derive which are done.
+    Order of preference:
+      1. the live session's plan todos (the Coder's own decomposition,
+         with its own per-item status),
+      2. the live session's rounds (a task the Coder never decomposed),
+      3. the persisted loop events (after a backend restart), and
+      4. the bare requirement, so the panel is never blank while a
+         task exists.
 
-    Status mapping:
-      - task in plan and round < N: pending
-      - task in plan and round == N: in_progress
-      - task in plan and round < latest round: done
-      - task in plan that failed: failed
+    Status mapping: the Coder's ``completed`` → ``done``, ``in_progress``
+    → ``in_progress``; a round the Reviewer rejected → ``rejected``
+    (finished, not accepted); a round that errored → ``failed``.
     """
     project = _orch().get_project(project_id)
     if not project:
-        raise HTTPException(status_code=404, detail=f"project not found: {project_id}")
+        raise HTTPException(status_code=404,
+                            detail=f"project not found: {project_id}")
     session = getattr(project, "loop_session", None)
+    if session_id and session is not None:
+        if str(getattr(session, "session_id", "") or "") != session_id:
+            session = None  # asked for a different (past) session
+    running = bool(getattr(project, "loop_task", None)
+                   and not project.loop_task.done())
+    round_n = int(getattr(session, "round", 0) or 0) if session else 0
+    last_score = int(getattr(session, "last_score", 0) or 0) if session else 0
+    last_approve = bool(getattr(session, "last_approve", False)) if session else False
+    sid = str(getattr(session, "session_id", "") or "") if session else session_id
+    task_title = _task_title_of(project, session)
+
     tasks: List[TaskItem] = []
-    if session is None:
-        return TasksResponse(tasks=[], running=False)
-    round_n = int(getattr(session, "round", 0) or 0)
-    last_score = int(getattr(session, "last_score", 0) or 0)
-    last_approve = bool(getattr(session, "last_approve", False))
-    running = bool(project.loop_task and not project.loop_task.done())
-    # Walk session.history. Each history item may have a "plan"
-    # key (a list of step dicts with 'title' / 'description') and
-    # an "issues" list. We surface the plan steps as the task
-    # list, and the latest round's issues as failures.
-    history = list(getattr(session, "history", []) or [])
-    if not history:
-        return TasksResponse(tasks=[], round=round_n, score=last_score,
-                            last_approve=last_approve, running=running)
-    latest = history[-1]
-    plan = latest.get("plan") or []
-    issues = latest.get("issues") or []
-    issue_set = set()
-    for iss in issues:
-        if isinstance(iss, dict):
-            title = iss.get("title") or iss.get("description")
-            if title:
-                issue_set.add(title)
-    for i, step in enumerate(plan):
-        if not isinstance(step, dict):
-            continue
-        title = step.get("title") or step.get("description") or f"Step {i+1}"
-        # Naive status mapping: if there's only one plan, every
-        # step is "in_progress" while running, "done" when loop
-        # ended. For multi-round loops the user gets a
-        # round-keyed view in the Loop page; this is the
-        # single-round overview.
-        if not running:
-            status = "done"
+    source = "none"
+    if session is not None:
+        tasks = _plan_task_items(session, round_n, running, last_approve)
+        if tasks:
+            source = "plan"
         else:
-            status = "in_progress"
-        if title in issue_set:
-            status = "failed"
-        tasks.append(TaskItem(
-            title=title,
-            status=status,
-            detail=step.get("description") if isinstance(step.get("description"), str) else None,
-            round=round_n,
-            timestamp=time.time(),
-        ))
-    return TasksResponse(tasks=tasks, round=round_n, score=last_score,
-                          last_approve=last_approve, running=running)
+            tasks = _round_items_from_session(session, running)
+            if tasks:
+                source = "rounds"
+        if not tasks and task_title:
+            # A task exists but has produced no plan and no round yet.
+            tasks = [TaskItem(
+                id="task-1", title=task_title,
+                status="in_progress" if running else "pending",
+                round=round_n, session_id=sid, source="task",
+            )]
+            source = "task"
+    if not tasks:
+        # No live session (fresh backend): replay the persisted events.
+        db = getattr(_orch(), "_db", None)
+        events: List[dict] = []
+        if db is not None:
+            try:
+                events = db.load_events(project_id, list(_TASK_EVENT_TOPICS))
+            except Exception:
+                logger.debug("task tracker: load_events failed", exc_info=True)
+        tasks = _plan_items_from_events(events, running, sid)
+        if tasks:
+            source = "plan"
+        else:
+            tasks, replayed_sid = _round_items_from_events(events, running)
+            if tasks:
+                source = "rounds"
+                sid = sid or replayed_sid
+            elif task_title:
+                tasks = [TaskItem(
+                    id="task-1", title=task_title,
+                    status="in_progress" if running else "pending",
+                    session_id=sid, source="task",
+                )]
+                source = "task"
+    return TasksResponse(
+        tasks=tasks, round=round_n, score=last_score,
+        last_approve=last_approve, running=running, source=source,
+        task_title=task_title, session_id=sid,
+    )
 
 
 # ---------------------------------------------------------------------------

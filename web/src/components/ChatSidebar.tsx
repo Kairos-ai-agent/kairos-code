@@ -85,18 +85,21 @@ const ChatSidebar: React.FC = () => {
       .finally(() => setLoading(false));
   }, [currentProject, setSessions]);
 
-  // Sort projects: current first, then by created_at desc.
+  // Order projects by created_at desc — a FIXED order that does not
+  // depend on which one is selected. R38.6.5: the old comparator
+  // bubbled the current project to the top, so clicking a project (or
+  // auto-opening its latest session) silently reordered the sidebar.
+  // The active row is marked with the left bar + highlight instead,
+  // which is enough to show where you are without moving anything.
   const sortedProjects = useMemo(() => {
-    const arr = [...projects];
-    arr.sort((a, b) => {
-      // Current project bubbles to the top.
-      if (currentProject && a.id === currentProject.id) return -1;
-      if (currentProject && b.id === currentProject.id) return 1;
-      // Otherwise most recent first.
-      return (b.created_at || 0) - (a.created_at || 0);
+    return [...projects].sort((a, b) => {
+      const dt = (b.created_at || 0) - (a.created_at || 0);
+      if (dt !== 0) return dt;
+      // Stable tie-breaker: equal timestamps must not shuffle on
+      // re-render (Array#sort is not guaranteed stable for ties).
+      return (a.id || '').localeCompare(b.id || '');
     });
-    return arr;
-  }, [projects, currentProject]);
+  }, [projects]);
 
   const visibleProjects = projectsExpanded
     ? sortedProjects

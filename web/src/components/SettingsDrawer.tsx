@@ -677,10 +677,11 @@ const OpenAICompatForm: React.FC<{
       // when the endpoint is unreachable) so the click never
       // silently does nothing. `error` is set by
       // /api/config/models/custom/fetch when the provider call
-      // failed; `note` carries informational text on success paths.
-      if (r.data.error) setModelFetchError(r.data.error);
-      else if (r.data.note) setModelFetchError(r.data.note);
-      else setModelFetchError(null);
+      // failed; `note` is informational on success (e.g. "fetched 3
+      // models from https://api.deepseek.com/v1") and the success
+      // line under the Select already reports it — treating `note`
+      // as an error labelled a SUCCESSFUL fetch "拉取 model 列表失败".
+      setModelFetchError(r.data.error || null);
       // If the current model is not in the fetched list and
       // the Select is showing it, keep it (don't blow it
       // away). The Select's options will list fetched + the
@@ -888,6 +889,17 @@ const OpenAICompatForm: React.FC<{
               ? '从下拉选 model'
               : (preset.defaultModel || '先点右上方「拉取 model 列表」')}
           options={modelOptions}
+          onInputKeyDown={(e) => {
+            // Escape hatch when 「拉取 model 列表」 fails (backend down,
+            // key without /models scope, …): type the model id in the
+            // search box and press Enter to use it as-is.
+            const el = e.currentTarget as unknown as HTMLInputElement;
+            const typed = (el?.value || '').trim();
+            if (e.key === 'Enter' && typed) {
+              e.preventDefault();
+              applyModel(typed);
+            }
+          }}
           filterOption={(input, option) =>
             (option?.label as string ?? '')
               .toLowerCase()
@@ -928,7 +940,8 @@ const OpenAICompatForm: React.FC<{
           <Text style={{ color: tokens.labelTertiary, fontSize: 11,
                           display: 'block', marginTop: 4 }}>
             填写 endpoint URL 和 API key 后，点上方「拉取 model 列表」
-            从 provider 实时获取 model。可选 "Custom" 输入未列出的 model。
+            从 provider 实时获取 model。也可以在搜索框直接输入 model 名
+            后按回车（或选 "Custom"）使用未列出的 model。
           </Text>
         )}
       </div>
@@ -1235,7 +1248,11 @@ const AboutPanel: React.FC = () => {
 
 export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
   const tokens = useThemeTokens();
-  const [tab, setTab] = useState('coder');
+  // Default must be one of the Tabs item keys below ('provider' | 'mode' |
+  // 'about'). It used to be 'coder' — a leftover from the pre-R38.6.3 8-tab
+  // layout — which matched no item, so Ant Design rendered NO panel at all and
+  // the drawer opened empty: the LLM provider form was unreachable.
+  const [tab, setTab] = useState('provider');
   // Use the current project (from chat store) for the Skills tab.
   const currentProject = useChatStore((s) => s.currentProject);
   const projectId = currentProject?.id ?? null;

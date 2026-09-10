@@ -13,14 +13,22 @@ WshShell.Run "cmd /c cd /d """ & scriptDir & """ && del /s /q /f __pycache__ >nu
 ' Agents then run on the main checkout instead of isolated worktrees.
 ' Remove the var if worktree isolation is wanted (and add a Defender
 ' exclusion for the repo to make checkout fast again).
-backendCmd = "cmd /c cd /d """ & scriptDir & """ && set KAIROS_SKIP_WORKTREES=1 && .venv\Scripts\activate.bat && python -m kairos.main"
+' R38.6.4: backend launch lives in start_backend.bat (single source of
+' truth, shared with watchdog.bat). It calls the venv interpreter by
+' ABSOLUTE PATH — the venv's activate.bat still hard-codes the OLD repo
+' location (D:\software_bak\Kairos_code; the repo now lives on E:), which
+' prepended a non-existent Scripts dir to PATH, made `python` resolve to a
+' foreign interpreter without pydantic_settings, and the backend died in
+' <1s → every /api call 500 → "LLM 设置连接不上". Output goes to
+' logs\backend_out.log so the next crash is diagnosable instead of silent.
+backendCmd = "cmd /c cd /d """ & scriptDir & """ && start_backend.bat"
 WshShell.Run backendCmd, 0, False
 
 WScript.Sleep 4000
 
 ' Start Frontend (hidden)
-' vite.config.ts auto-detects the backend port (8900/8964/8966) at
-' startup, so no KAIROS_PORT is needed here.
+' vite.config.ts re-resolves the backend port on every /api request
+' (8900/9527/8964/8966/8909/8000, 1.5s cache), so no KAIROS_PORT needed here.
 frontendCmd = "cmd /c cd /d """ & scriptDir & "\web"" && node node_modules\vite\bin\vite.js --host"
 WshShell.Run frontendCmd, 0, False
 

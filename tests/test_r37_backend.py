@@ -158,10 +158,11 @@ def test_chat_endpoint_runs_coder_once(monkeypatch):
     from api.routes import projects as projects_route
     orch, project = _make_mock_orch()
 
-    # Mock the coder to return a fixed reply
-    async def fake_run(task):
+    # Mock the coder to return a fixed reply. R38.6.3: the route calls
+    # ``coder.chat()`` (single LLM turn), not ``coder.run()``.
+    async def fake_chat(task):
         return "Sure, here's what I think."
-    project.coder.run = fake_run
+    project.coder.chat = fake_chat
 
     monkeypatch.setattr(projects_route, "_orch", lambda: orch)
     c = TestClient(app)
@@ -171,6 +172,65 @@ def test_chat_endpoint_runs_coder_once(monkeypatch):
     assert data["reply"] == "Sure, here's what I think."
     assert data["mode"] == "chat"
     assert data["project_id"] == "p1"
+
+
+def test_chat_endpoint_persists_the_user_message(monkeypatch):
+    """R38.6.5: the user's own message is written to the DB (topic
+    ``user.chat``) so the chat page can re-hydrate the WHOLE
+    conversation — previously only the Coder's replies were stored and
+    the user's bubbles vanished on refresh."""
+    from api.app import app
+    from api.routes import projects as projects_route
+
+    saved = []
+    db = MagicMock()
+    db.save_message = MagicMock(side_effect=lambda m: saved.append(m))
+
+    orch, project = _make_mock_orch()
+    orch._db = db
+
+    async def fake_chat(task):
+        return "pong"
+    project.coder.chat = fake_chat
+
+    monkeypatch.setattr(projects_route, "_orch", lambda: orch)
+    c = TestClient(app)
+    r = c.post("/api/projects/p1/chat", json={"message": "hello there"})
+    assert r.status_code == 200
+    assert len(saved) == 1
+    msg = saved[0]
+    assert msg.sender == "user"
+    assert msg.topic == "user.chat"
+    assert msg.content == "hello there"
+    assert msg.metadata.get("project_id") == "p1"
+
+
+def test_chat_messages_endpoint_returns_the_thread(monkeypatch):
+    """R38.6.5 regression: this route used to do
+    ``from api.deps import orchestrator as _orch`` (an INSTANCE) and then
+    call ``_orch()``, so EVERY request raised TypeError -> HTTP 500 and
+    the chat page silently showed nothing. It must use the module-level
+    ``_orch()`` helper and forward ``chat_only`` to the DB layer."""
+    from api.app import app
+    from api.routes import projects as projects_route
+
+    db = MagicMock()
+    db.load_messages = MagicMock(return_value=[{
+        "id": "m1", "project_id": "p1", "sender": "p1.coder",
+        "receiver": "user", "topic": "agent.response", "content": "hi",
+        "msg_type": "text", "timestamp": 1.0, "metadata": {},
+    }])
+    orch, _project = _make_mock_orch()
+    orch._db = db
+
+    monkeypatch.setattr(projects_route, "_orch", lambda: orch)
+    c = TestClient(app)
+    r = c.get("/api/projects/p1/chat-messages")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["count"] == 1
+    assert data["messages"][0]["content"] == "hi"
+    assert db.load_messages.call_args.kwargs["chat_only"] is True
 
 
 def test_chat_endpoint_rejects_empty_message(monkeypatch):
@@ -201,7 +261,7 @@ def test_chat_endpoint_500_on_coder_failure(monkeypatch):
 
     async def boom(task):
         raise RuntimeError("LLM down")
-    project.coder.run = boom
+    project.coder.chat = boom
 
     monkeypatch.setattr(projects_route, "_orch", lambda: orch)
     c = TestClient(app)

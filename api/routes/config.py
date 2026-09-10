@@ -165,10 +165,30 @@ class FetchModelsRequest(BaseModel):
     api_key: str = ""
     protocol: str = "openai"  # "openai" or "anthropic"
 
+def _normalize_models_base(base: str) -> str:
+    """Trim a chat-completions suffix so ``{base}/models`` hits the API root.
+
+    The SettingsDrawer derives ``baseUrl`` by dropping the last path segment
+    of the endpoint URL, so
+    ``https://api.deepseek.com/v1/chat/completions`` becomes
+    ``https://api.deepseek.com/v1/chat``. Appending ``/models`` then requests
+    ``/v1/chat/models`` and every provider answers 404 — the user-visible
+    symptom is "拉取 model 列表失败" even though the key is fine. Strip the
+    same suffixes ``LLMConfig`` strips, but keep ``/v1`` because that is
+    where OpenAI-compatible providers serve ``/models``.
+    """
+    b = (base or "").rstrip("/")
+    for suffix in ("/chat/completions", "/completions", "/messages", "/chat"):
+        if b.lower().endswith(suffix):
+            b = b[: -len(suffix)]
+            break
+    return b or (base or "").rstrip("/")
+
+
 @router.post("/models/custom/fetch")
 async def fetch_custom_models(request: FetchModelsRequest):
     """Fetch models from OpenAI-compatible or Anthropic-compatible API."""
-    base = request.base_url.rstrip("/")
+    base = _normalize_models_base(request.base_url)
     # SSRF guard: never let a supplied base_url touch link-local /
     # cloud-metadata (169.254.0.0/16). Loopback + private LAN are allowed
     # so a local/internal LLM server still works once auth is enforced.

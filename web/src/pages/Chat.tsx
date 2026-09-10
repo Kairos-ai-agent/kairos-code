@@ -100,79 +100,147 @@ const Chat: React.FC = () => {
     metadata: m.metadata || {},
   });
 
-  const loadSessionHistory = useCallback(async (pid: string, sid: string) => {
-    lastLoadedRef.current = `${pid}:${sid}`;
-    try {
-      const r = await api.get<{ rounds: SessionRound[] }>(
-        `/projects/${pid}/sessions/${sid}/rounds`);
-      const rounds = r.data.rounds || [];
-      const msgs: Message[] = [];
-      for (const rd of rounds) {
-        if (rd.coder_summary) {
-          msgs.push({
-            id: `${sid}-${rd.round}-coder`,
-            sender: 'coder',
-            receiver: 'user',
-            topic: 'coder.summary',
-            content: rd.coder_summary,
-            msg_type: 'text',
-            timestamp: rd.created_at,
-            metadata: { round: rd.round },
-          });
-        }
-        if (rd.review_summary || rd.score) {
-          msgs.push({
-            id: `${sid}-${rd.round}-reviewer`,
-            sender: 'reviewer',
-            receiver: 'coder',
-            topic: 'reviewer.summary',
-            content: rd.review_summary,
-            msg_type: 'text',
-            timestamp: rd.created_at,
-            metadata: {
-              round: rd.round,
-              score: rd.score,
-              approve: !!rd.approve,
-            },
-          });
-        }
+  // Load every chat message of a project from the DB, paging backwards
+  // with the keyset cursor until the history is exhausted.
+  //
+  // R38.6.5: this used to be a single ``limit=200`` request with no
+  // topic filter. On any project that has streamed a reply, the newest
+  // 200 rows of the ``messages`` table are ~all ``stream.chunk``
+  // deltas, so the request came back with zero real chat bubbles and
+  // the thread looked empty even though the DB held the whole
+  // conversation. ``chat_only`` keeps just the conversation topics.
+  const fetchAllChatMessages = useCallback(async (pid: string): Promise<Message[]> => {
+    const PAGE = 500;
+    const MAX_PAGES = 40;  // 20k bubbles — far beyond real usage
+    const out: Message[] = [];
+    let beforeTs = 0;
+    let beforeId = '';
+    for (let page = 0; page < MAX_PAGES; page += 1) {
+      const params: Record<string, unknown> = { limit: PAGE, chat_only: true };
+      if (beforeTs) {
+        params.before_ts = beforeTs;
+        params.before_id = beforeId;
       }
-      // R38.6.4 #3: also load per-message chat history from the
-      // ``messages`` table. This is the full thread (not just
-      // round summaries), so a chat-only session (no loop rounds)
-      // still rehydrates with all user/agent bubbles. The merge
-      // is a simple union by message id; if both the loop-round
-      // summary AND a per-message row cover the same content,
-      // we keep the loop-round summary (more structured).
+      const r = await api.get<{ messages: any[] }>(
+        `/projects/${pid}/chat-messages`, { params });
+      const batch = r.data.messages || [];
+      if (!batch.length) break;
+      for (const m of batch) out.push(toMsgFromBackend(m));
+      const last = batch[batch.length - 1];
+      const nextTs = last?.timestamp || 0;
+      const nextId = last?.id || '';
+      // A cursor that does not advance would page forever.
+      if (batch.length < PAGE || (nextTs === beforeTs && nextId === beforeId)) {
+        break;
+      }
+      beforeTs = nextTs;
+      beforeId = nextId;
+    }
+    return out;
+  }, []);
+
+  // Merge the DB history with the thread this browser already has.
+  //
+  // R38.6.5: the DB only started persisting the user's own messages
+  // now, so anything sent earlier (plus the optimistic bubble for a
+  // message still in flight) exists only in the local store. The DB is
+  // authoritative for the agent side, the local store fills in the
+  // user side.
+  //
+  // Dedupe by id first (agent rows carry the same bus id in both
+  // copies). User rows need content matching too: the optimistic
+  // bubble has a locally generated id (``user-<ms>``) while its
+  // persisted twin has a bus id, so collapse a local user bubble when
+  // a DB copy with the same text within 5s exists — and only then, so
+  // two genuinely identical messages sent minutes apart both survive.
+  const mergeHistory = (dbMsgs: Message[], localMsgs: Message[]): Message[] => {
+    const seenIds = new Set<string>();
+    const textOf = (m: Message) =>
+      (typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? '')).trim().slice(0, 200);
+    const isUser = (m: Message) => (m.sender || '') === 'user';
+    const out: Message[] = [];
+    const dbUser: { text: string; ts: number }[] = [];
+    for (const m of dbMsgs) {
+      if (!m || !m.id || seenIds.has(m.id)) continue;
+      seenIds.add(m.id);
+      if (isUser(m)) dbUser.push({ text: textOf(m), ts: m.timestamp || 0 });
+      out.push(m);
+    }
+    for (const m of localMsgs) {
+      if (!m || !m.id || seenIds.has(m.id)) continue;
+      if (isUser(m)) {
+        const text = textOf(m);
+        const ts = m.timestamp || 0;
+        if (dbUser.some((d) => d.text === text && Math.abs(d.ts - ts) <= 5)) continue;
+      }
+      seenIds.add(m.id);
+      out.push(m);
+    }
+    out.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+    return out;
+  };
+
+  // Rehydrate the chat thread for a project, optionally scoped to one
+  // session's loop rounds. R38.6.5: ``sid`` may be null — the middle
+  // panel then shows the project's whole conversation instead of an
+  // empty thread when no session is selected.
+  const loadHistory = useCallback(async (pid: string, sid: string | null) => {
+    lastLoadedRef.current = `${pid}:${sid || ''}`;
+    const msgs: Message[] = [];
+    if (sid) {
       try {
-        const cm = await api.get<{ messages: any[] }>(
-          `/projects/${pid}/chat-messages`, { params: { limit: 200 } });
-        const existingIds = new Set(msgs.map((m) => m.id));
-        for (const m of (cm.data.messages || [])) {
-          // Skip loop-round summaries and tool events for clarity
-          if (m.topic && m.topic.startsWith('coder.summary')) continue;
-          if (m.topic && m.topic.startsWith('reviewer.summary')) continue;
-          if (existingIds.has(m.id)) continue;
-          msgs.push(toMsgFromBackend(m));
+        const r = await api.get<{ rounds: SessionRound[] }>(
+          `/projects/${pid}/sessions/${sid}/rounds`);
+        const rounds = r.data.rounds || [];
+        for (const rd of rounds) {
+          if (rd.coder_summary) {
+            msgs.push({
+              id: `${sid}-${rd.round}-coder`,
+              sender: 'coder',
+              receiver: 'user',
+              topic: 'coder.summary',
+              content: rd.coder_summary,
+              msg_type: 'text',
+              timestamp: rd.created_at,
+              metadata: { round: rd.round },
+            });
+          }
+          if (rd.review_summary || rd.score) {
+            msgs.push({
+              id: `${sid}-${rd.round}-reviewer`,
+              sender: 'reviewer',
+              receiver: 'coder',
+              topic: 'reviewer.summary',
+              content: rd.review_summary,
+              msg_type: 'text',
+              timestamp: rd.created_at,
+              metadata: {
+                round: rd.round,
+                score: rd.score,
+                approve: !!rd.approve,
+              },
+            });
+          }
         }
       } catch {
-        /* offline / endpoint missing — fall through to rounds only */
+        /* no rounds yet / offline — chat messages below still load */
       }
-      // Sort by timestamp so the chat thread is always in order,
-      // regardless of which source (loop rounds or per-message
-      // rows) contributed each entry.
-      msgs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-      setCurrentMessages(msgs);
-    } catch (e) {
-      // 404 / network error = no rounds yet. R38.6.4: don't
-      // wipe currentMessages — the local store already has the
-      // user's chat bubbles (and possibly the agent's streamed
-      // reply), which is what they want to see. The backend
-      // session-rounds API only knows about loop rounds, not
-      // plain chat messages. Replacing the store with [] here
-      // was the root cause of "刷新后聊天记录还是没有了".
     }
-  }, [setCurrentMessages]);
+    let dbMsgs: Message[] = [];
+    try {
+      dbMsgs = await fetchAllChatMessages(pid);
+    } catch {
+      /* offline / endpoint down — fall through to the local thread */
+    }
+    const st = useChatStore.getState();
+    const localMsgs = st.currentProject?.id === pid
+      ? st.currentMessages
+      : (st.messagesByProject[pid] || []);
+    const merged = mergeHistory(msgs.concat(dbMsgs), localMsgs);
+    // R38.6.4: never wipe a thread we failed to reload (backend down)
+    // — the local store is then the only copy the user can still see.
+    if (merged.length) setCurrentMessages(merged);
+  }, [fetchAllChatMessages, setCurrentMessages]);
 
   // ----- WebSocket plumbing -----
   //
@@ -376,7 +444,7 @@ const Chat: React.FC = () => {
           if (wsSid && wsSid !== sessionId) {
             setCurrentSessionId(wsSid);
             navigate(`/chat/${wsSid}`, { replace: true });
-            loadSessionHistory(currentProject.id, wsSid);
+            loadHistory(currentProject.id, wsSid);
           }
           api.get<{ sessions: LoopSession[] }>(`/projects/${currentProject.id}/sessions`)
             .then((r) => setSessions(r.data.sessions || []))
@@ -390,9 +458,9 @@ const Chat: React.FC = () => {
               if (fetchedSid !== sessionId) {
                 setCurrentSessionId(fetchedSid);
                 navigate(`/chat/${fetchedSid}`, { replace: true });
-                loadSessionHistory(currentProject.id, fetchedSid);
+                loadHistory(currentProject.id, fetchedSid);
               } else {
-                loadSessionHistory(currentProject.id, fetchedSid);
+                loadHistory(currentProject.id, fetchedSid);
               }
             }
           }).catch(() => {});
@@ -411,7 +479,7 @@ const Chat: React.FC = () => {
     return () => { offMsg(); offState(); };
   }, [currentProject, sessionId, navigate,
      setCurrentMessages, appendMessage, setCurrentSessionId, setSessions,
-     loadSessionHistory]);
+     loadHistory]);
 
   useEffect(() => {
     if (!currentProject) return;
@@ -444,22 +512,15 @@ const Chat: React.FC = () => {
   }, [currentProject]);
 
   useEffect(() => {
-    if (currentProject && sessionId) {
-      const key = `${currentProject.id}:${sessionId}`;
-      if (lastLoadedRef.current !== key) {
-        loadSessionHistory(currentProject.id, sessionId);
-      }
-    } else {
-      // R38.6.4: don't wipe currentMessages here. The user
-      // could be on /chat (no sessionId) with chat-only bubbles
-      // already in the store. Wiping them on mount was the root
-      // cause of "刷新后聊天记录还是没有了". loadSessionHistory
-      // also no longer clears the store on 404 (see its catch
-      // block above), so the local chat thread survives across
-      // refresh + project re-mount.
-      lastLoadedRef.current = '';
-    }
-  }, [currentProject, sessionId, loadSessionHistory, setCurrentMessages]);
+    if (!currentProject) return;
+    const pid = currentProject.id;
+    const key = `${pid}:${sessionId || ''}`;
+    if (lastLoadedRef.current === key) return;
+    // R38.6.5: load with OR without a session. Without one the panel
+    // shows the project's whole chat history instead of an empty
+    // thread (the old code just reset the guard and left it blank).
+    loadHistory(pid, sessionId || null);
+  }, [currentProject, sessionId, loadHistory]);
 
   // R38.6.4: when a project is selected but no session is chosen
   // (e.g. right after switching projects in the sidebar, where the
@@ -483,7 +544,11 @@ const Chat: React.FC = () => {
         if (latest?.session_id && !useChatStore.getState().currentSessionId) {
           setCurrentSessionId(latest.session_id);
           navigate(`/chat/${latest.session_id}`, { replace: true });
-          loadSessionHistory(projectId, latest.session_id);
+          // R38.6.5: no explicit history load here — changing
+          // ``sessionId`` re-runs the effect above, which loads the
+          // session's rounds on top of the project-level history that
+          // is already in flight. Loading twice raced two responses
+          // into ``setCurrentMessages``.
         }
       })
       .catch(() => { /* offline / first paint — sidebar will retry */ });

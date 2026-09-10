@@ -172,7 +172,7 @@ describe('ChatSidebar project list', () => {
     expect(p1FirstSpan.style.width).not.toBe('4px');
   });
 
-  it('current project is sorted to the top of the list', () => {
+  it('keeps a fixed created_at order — the current project does NOT jump to the top', () => {
     const p1 = makeProject('p1', 'Alpha', 1);
     const p2 = makeProject('p2', 'Bravo', 2);
     const p3 = makeProject('p3', 'Charlie', 3);
@@ -180,9 +180,30 @@ describe('ChatSidebar project list', () => {
     useChatStore.getState().setCurrentProject(p1);  // oldest
     const { container } = renderSidebar();
     const rows = container.querySelectorAll('[data-testid^="project-row-"]');
-    // p1 should be first (current bubbles to top), then p3, then p2.
-    expect(rows[0].getAttribute('data-testid')).toBe('project-row-p1');
-    expect(rows[1].getAttribute('data-testid')).toBe('project-row-p3');
-    expect(rows[2].getAttribute('data-testid')).toBe('project-row-p2');
+    // R38.6.5: newest first, selection does not reorder anything.
+    expect(rows[0].getAttribute('data-testid')).toBe('project-row-p3');
+    expect(rows[1].getAttribute('data-testid')).toBe('project-row-p2');
+    expect(rows[2].getAttribute('data-testid')).toBe('project-row-p1');
+  });
+
+  it('clicking a project does not change the list order', () => {
+    const p1 = makeProject('p1', 'Alpha', 1);
+    const p2 = makeProject('p2', 'Bravo', 2);
+    const p3 = makeProject('p3', 'Charlie', 3);
+    useChatStore.getState().setProjects([p1, p2, p3]);
+    useChatStore.getState().setCurrentProject(p2);
+    const { container } = renderSidebar();
+    const order = () => Array.from(
+      container.querySelectorAll('[data-testid^="project-row-"]'),
+    ).map((r) => r.getAttribute('data-testid'));
+    expect(order()).toEqual([
+      'project-row-p3', 'project-row-p2', 'project-row-p1',
+    ]);
+    // Switch to the oldest project — it must stay last.
+    fireEvent.click(screen.getByTestId('project-row-p1'));
+    expect(useChatStore.getState().currentProject?.id).toBe('p1');
+    expect(order()).toEqual([
+      'project-row-p3', 'project-row-p2', 'project-row-p1',
+    ]);
   });
 });

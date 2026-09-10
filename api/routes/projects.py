@@ -179,6 +179,25 @@ async def chat(project_id: str, request: "ChatRequest"):
         if not text:
             raise HTTPException(status_code=400, detail="message is required")
 
+        # R38.6.5: persist the user's own message. Until now only the
+        # Coder's replies reached the bus (and therefore the DB), so
+        # after a refresh the chat thread showed the agent's answers but
+        # none of the user's questions — the frontend's localStorage
+        # thread was the only copy, and it gets replaced when history is
+        # re-hydrated from the DB. Saved straight to the DB (not
+        # published on the bus) so the live WebSocket stream doesn't
+        # render a second bubble for a message the UI already showed
+        # optimistically.
+        try:
+            from kairos.core.message_bus import Message as _BusMessage
+            _orch()._db.save_message(_BusMessage(
+                sender="user", receiver=f"{project_id}.coder",
+                topic="user.chat", content=text, msg_type="text",
+                metadata={"project_id": project_id},
+            ))
+        except Exception:
+            logger.exception("failed to persist user chat message")
+
         # R38.6.3: /chat calls the Coder's ``chat()`` method
         # (not ``run()``). ``chat()`` uses MAX_CHAT_TURNS=5 with
         # a single conversational prompt — no tool calls, no
@@ -399,22 +418,44 @@ async def list_loop_sessions(project_id: str):
 @router.get("/{project_id}/chat-messages")
 async def list_chat_messages(
     project_id: str,
-    limit: int = Query(200, ge=1, le=2000),
+    limit: int = Query(200, ge=1, le=5000),
     since: float = Query(0.0, description="Unix timestamp; only return newer than this"),
+    chat_only: bool = Query(
+        True,
+        description="Only conversation bubbles (user/agent chat). "
+                    "Drops stream.chunk + tool.* noise that otherwise "
+                    "fills the newest N rows of a busy project."),
+    before_ts: float = Query(
+        0.0, ge=0.0,
+        description="Keyset cursor: return messages older than this timestamp"),
+    before_id: str = Query(
+        "", description="Keyset cursor tie-breaker for identical timestamps"),
 ) -> dict:
     """R38.6.4 #3: return chat-thread messages for a project.
 
     The ``messages`` table accumulates every user/agent message routed
     through the bus. The chat page previously only knew about
     ``loop_rounds`` (summaries) — single-turn chat history looked
-    "lost" on refresh. This route returns the full per-message
-    stream so the chat page can re-hydrate the thread from DB.
+    "lost" on refresh. This route returns the per-message stream so the
+    chat page can re-hydrate the whole thread from DB.
+
+    R38.6.5: the route was calling the orchestrator singleton as if it
+    were a factory (``_orch()``), which raised
+    ``TypeError: 'Orchestrator' object is not callable`` and made the
+    endpoint return HTTP 500. The frontend swallows that error, so the
+    chat thread never rehydrated — "刷新后聊天记录没有了".
     """
-    from api.deps import orchestrator as _orch
-    if _orch() is None or _orch().get_project(project_id) is None:
+    # R38.6.5: use the module-level ``_orch()`` helper. The previous
+    # code imported ``api.deps.orchestrator`` under the SAME name,
+    # shadowing the helper with the instance and then calling it —
+    # ``TypeError: 'Orchestrator' object is not callable`` on every
+    # request.
+    if _orch().get_project(project_id) is None:
         raise HTTPException(
             status_code=404, detail=f"project not found: {project_id}")
-    rows = _orch()._db.load_messages(limit=limit, project_id=project_id)
+    rows = _orch()._db.load_messages(  # type: ignore[attr-defined]
+        limit=limit, project_id=project_id, chat_only=chat_only,
+        before_ts=before_ts, before_id=before_id)
     if since:
         rows = [r for r in rows if r.get("timestamp", 0) > since]
     out = []
@@ -436,7 +477,17 @@ async def list_chat_messages(
             "timestamp": r.get("timestamp", 0.0),
             "metadata": meta or {},
         })
-    return {"messages": out, "count": len(out)}
+    # ``out`` is newest-first (SQL ORDER BY timestamp DESC). The cursor
+    # for the next page is the oldest row of this page.
+    next_before_ts = out[-1]["timestamp"] if out else 0.0
+    next_before_id = out[-1]["id"] if out else ""
+    return {
+        "messages": out,
+        "count": len(out),
+        "has_more": len(out) >= limit,
+        "next_before_ts": next_before_ts,
+        "next_before_id": next_before_id,
+    }
 
 
 @router.get("/{project_id}/sessions/{session_id}/rounds")

@@ -8,11 +8,17 @@ from __future__ import annotations
 
 import time
 
-import boto3
 import pytest
-from moto import mock_aws
 
-from kairos.s3_cloud import S3Cloud, S3CloudError, S3Config
+# boto3/moto are optional dev deps. Skip (rather than erroring out the whole
+# suite's collection) when they aren't installed.
+pytest.importorskip("boto3")
+pytest.importorskip("moto")
+
+import boto3  # noqa: E402
+from moto import mock_aws  # noqa: E402
+
+from kairos.s3_cloud import S3Cloud, S3CloudError, S3Config  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

@@ -1221,7 +1221,12 @@ class Orchestrator:
                 if tier == "fast" and getattr(session, "coder", None) is not None:
                     fast_provider = self.model_router.get_provider_for_task_strict("fast")
                     if fast_provider is not None:
+                        # Swap atomically and keep _llm_config in sync so
+                        # state.model reports the model actually in use.
                         session.coder._llm = fast_provider
+                        cfg = getattr(fast_provider, "config", None)
+                        if cfg is not None:
+                            session.coder._llm_config = cfg
                         await self.message_bus.publish(Message(
                             sender="orchestrator", topic="loop.difficulty_routed",
                             content="Trivial requirement detected: Coder routed to fast tier.",
@@ -1479,6 +1484,14 @@ class Orchestrator:
     def refresh_all_agents(self):
         for agent_id, agent in self._agents.items():
             role = agent_id.split(".")[-1] if "." in agent_id else agent.role
+            # Skip agents that are mid-run: swapping the provider under a
+            # running loop mixes models mid-conversation and can close a
+            # client that is still in use. Their next run picks up the new
+            # config instead.
+            lock = getattr(agent, "_lock", None)
+            if lock is not None and lock.locked():
+                logger.debug("Skipping model refresh for busy agent %s", agent_id)
+                continue
             try:
                 provider = self.model_router.get_provider_for_role(role)
                 agent.refresh_model(provider.config)

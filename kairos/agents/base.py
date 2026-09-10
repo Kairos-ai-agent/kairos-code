@@ -341,8 +341,44 @@ class KairosAgent:
         )
 
     def refresh_model(self, llm_config: LLMConfig):
+        """Swap this agent's LLM provider safely.
+
+        Builds the new provider BEFORE mutating state (so a construction
+        failure leaves the agent usable), then hands the previous provider to
+        a deferred, best-effort close — an in-flight request on the old
+        client gets a short grace period instead of failing with
+        "client has been closed".
+        """
+        new_llm = create_provider(llm_config)
+        old_llm = getattr(self, "_llm", None)
+        # Config first, then the live reference in a single assignment, so a
+        # concurrent reader never sees a new config paired with an old
+        # provider.
         self._llm_config = llm_config
-        self._llm = create_provider(llm_config)
+        self._llm = new_llm
+        if old_llm is not None and old_llm is not new_llm:
+            self._defer_provider_close(old_llm)
+
+    def _defer_provider_close(self, provider) -> None:
+        """Close a replaced provider after a short grace period.
+
+        Runs as a background task so we never close a client that a still
+        in-flight call is using. With no running loop (sync caller) we just
+        drop the reference and let GC reclaim it.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+
+        async def _close():
+            try:
+                await asyncio.sleep(5)
+                await provider.close()
+            except Exception:  # noqa: BLE001
+                logger.debug("deferred provider close failed", exc_info=True)
+
+        loop.create_task(_close())
 
     def fork(self) -> "KairosAgent":
         """Return a parallel-worker copy of this agent.
@@ -1021,6 +1057,23 @@ class KairosAgent:
         """Direct chat with this agent (for UI interaction)."""
         async with self._lock:
             return await self._chat_impl(message)
+
+    async def agenerate(self, prompt: str) -> str:
+        """Single-shot completion with NO memory/tool side effects.
+
+        Used by post-loop self-reflection (``kairos.reflection.run_reflection``
+        looks for ``agenerate``/``generate``). Deliberately bypasses
+        ``self._memory`` and the tool loop so reflection can't pollute the
+        agent's conversation state. Returns "" on failure (never raises).
+        """
+        try:
+            resp = await self._llm.complete(
+                [LLMMessage(role="user", content=prompt)]
+            )
+            return resp.content or ""
+        except Exception:  # noqa: BLE001
+            logger.debug("agenerate failed", exc_info=True)
+            return ""
 
     def _build_chat_system_prompt(self) -> str:
         """Build a project-aware system prompt for single-turn chat.

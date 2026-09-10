@@ -58,7 +58,11 @@ const SettingsPage: React.FC = () => {
         api.get('/config/settings'),
         api.get('/config/models'),
       ]);
-      const keys = settingsRes.data.raw_keys || {};
+      // ``raw_keys`` is intentionally NOT returned by the backend (it leaks
+      // plaintext keys). Use the masked ``api_keys``; a masked value like
+      // ``sk-a****wxyz`` posted back is ignored server-side, so the real key
+      // is preserved.
+      const keys = settingsRes.data.api_keys || {};
       setDeepseekKey(keys.deepseek || '');
       setCustomModels(settingsRes.data.custom_models || []);
       setRoleMappings(modelsRes.data.role_mappings || {});

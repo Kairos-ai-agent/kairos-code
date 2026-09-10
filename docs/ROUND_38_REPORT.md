@@ -588,7 +588,7 @@ Layout (R38):
 
 §10's fix only addressed the trailing-`/v1` doubling. After the
 user reported **another** `Fail · Not Found` against the proxy
-`https://apihub.agnes-ai.com/v1` with model `agnes-2.5-flash`, it
+`https://api.example.com/v1` with model `example-model`, it
 became clear the deeper bug is the choice of probe endpoint.
 
 ### 11.1 The actual bug
@@ -597,7 +597,7 @@ The OpenAI probe was hitting `GET /v1/models`. This endpoint is
 supported by `api.openai.com` (and a handful of other big hosts)
 but **many OpenAI-compatible proxies do not expose it** — they
 only implement the chat-completions surface, which is what the
-user actually wants to call. Agnes AI's `apihub` is one such
+user actually wants to call. an OpenAI-compatible gateway's `apihub` is one such
 proxy; so are most custom gateways.
 
 `GET /v1/models` → 404 → user sees `Fail · Not Found`. Wrong
@@ -651,7 +651,7 @@ tests) + 35 R37 source (15 R37 + 5 R38 §9 FolderPicker/dedup +
 ### 11.5 Result
 
 - `Test connection` now works against OpenAI-compatible proxies
-  that only expose chat-completions (Agnes AI, custom gateways).
+  that only expose chat-completions (an OpenAI-compatible gateway, custom gateways).
   The probe URL is `/v1/chat/completions`, the same endpoint the
   user will actually hit on every message — so a green probe is
   a strong guarantee that real requests will work.
@@ -666,7 +666,7 @@ against most OpenAI-compatible proxies. But two follow-up issues
 came back from the user:
 
 1. **"Test connection still Not Found"** — the user reported
-   that even with the §11 fix, the Agnes AI endpoint still
+   that even with the §11 fix, the an OpenAI-compatible gateway endpoint still
    returned 404. Two possible reasons:
      - The dev server was still running the old binary (no
        restart after the §11 code change).
@@ -691,7 +691,7 @@ test probe uses it as-is, with no path manipulation:
 ```typescript
 // web/src/stores/settingsStore.ts
 export interface OpenAIConfig {
-  endpointUrl: string;   // e.g. https://apihub.agnes-ai.com/v1/chat/completions
+  endpointUrl: string;   // e.g. https://api.example.com/v1/chat/completions
   baseUrl: string;       // legacy: for the orchestrator's real chat calls
   apiKey: string;
   model: string;
@@ -713,8 +713,8 @@ anthropic: {
 },
 ```
 
-The user can paste any URL — for Agnes AI they'd paste
-`https://apihub.agnes-ai.com/v1/chat/completions`; for a custom
+The user can paste any URL — for an OpenAI-compatible gateway they'd paste
+`https://api.example.com/v1/chat/completions`; for a custom
 proxy they might paste
 `https://my-proxy.example.com/api/llm/chat` (any path the proxy
 exposes). The probe hits it as-is.
@@ -848,14 +848,14 @@ legacy migration).
    up until the running Python process is replaced.
 2. Open Settings → LLM Models. You'll see the new layout:
    - "Endpoint URL" (full URL you paste, e.g.
-     `https://apihub.agnes-ai.com/v1/chat/completions`)
+     `https://api.example.com/v1/chat/completions`)
    - "Base URL (for real chat calls)" (auto-derived, but
      editable if your orchestrator path differs)
    - "API key"
    - "Model"
 3. Click "Test connection". The probe now hits the URL you
-   pasted — no path guessing. For Agnes AI, paste
-   `https://apihub.agnes-ai.com/v1/chat/completions` and you
+   pasted — no path guessing. For an OpenAI-compatible gateway, paste
+   `https://api.example.com/v1/chat/completions` and you
    should see a green `OK · POST ... -> 200`.
 4. Watch the "Saved · Xs ago" indicator at the top of the
    drawer. It flips to "Saving…" while your edit is in the
@@ -961,7 +961,7 @@ derive helper + 1 from §9 legacy migration).
 
 Restart the backend (Ctrl+C → `start.bat`). The LLM Models
 form will now show only the Endpoint URL field. Paste the
-full URL (`https://apihub.agnes-ai.com/v1/chat/completions`)
+full URL (`https://api.example.com/v1/chat/completions`)
 and click Test connection — you should see a green `OK`
 tag. The base URL is auto-derived behind the scenes for the
 orchestrator's real chat calls.
@@ -1125,7 +1125,7 @@ On page refresh:
    `setProvider(...)` call either was a no-op or actively
    overwrote any in-flight value with the default — making the
    chip stay at `gpt-4o` instead of the user's saved
-   `agnes-2.5-flash`.
+   `example-model`.
 
 The same "trust the backend over localStorage" failure mode
 that bit the project list in §20 was now biting the settings

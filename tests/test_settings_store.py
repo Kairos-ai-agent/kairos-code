@@ -320,10 +320,10 @@ def test_settings_store_persists_openai_anthropic_configs(tmp_path: Path):
         "provider": {
             "active": "openai",
             "openai": {
-                "endpointUrl": "https://apihub.agnes-ai.com/v1/chat/completions",
-                "baseUrl": "https://apihub.agnes-ai.com/v1",
+                "endpointUrl": "https://api.example.com/v1/chat/completions",
+                "baseUrl": "https://api.example.com/v1",
                 "apiKey": "sk-test-openai-1234",
-                "model": "agnes-2.5-flash",
+                "model": "example-model",
             },
             "anthropic": {
                 "endpointUrl": "https://api.anthropic.com/v1/messages",
@@ -340,14 +340,14 @@ def test_settings_store_persists_openai_anthropic_configs(tmp_path: Path):
     # ``provider_openai`` positions — the migration code reads
     # both shapes).
     on_disk = json.loads(path.read_text(encoding="utf-8"))
-    assert on_disk["provider"]["openai"]["model"] == "agnes-2.5-flash"
+    assert on_disk["provider"]["openai"]["model"] == "example-model"
     assert on_disk["provider"]["openai"]["apiKey"] == "sk-test-openai-1234"
     assert on_disk["provider"]["openai"]["endpointUrl"] == \
-        "https://apihub.agnes-ai.com/v1/chat/completions"
+        "https://api.example.com/v1/chat/completions"
     assert on_disk["provider"]["anthropic"]["model"] == \
         "claude-3-5-sonnet-latest"
     # Top-level mirror for legacy readers (e.g. the model router).
-    assert on_disk["provider_openai"]["model"] == "agnes-2.5-flash"
+    assert on_disk["provider_openai"]["model"] == "example-model"
     assert on_disk["provider_anthropic"]["model"] == \
         "claude-3-5-sonnet-latest"
 
@@ -356,9 +356,9 @@ def test_settings_store_persists_openai_anthropic_configs(tmp_path: Path):
     _ss._store = _ss.SettingsStore(path)
     s = _ss._store.get()
     assert s.provider_openai.apiKey == "sk-test-openai-1234"
-    assert s.provider_openai.model == "agnes-2.5-flash"
+    assert s.provider_openai.model == "example-model"
     assert s.provider_openai.endpointUrl == \
-        "https://apihub.agnes-ai.com/v1/chat/completions"
+        "https://api.example.com/v1/chat/completions"
     assert s.provider_anthropic.apiKey == "sk-ant-test-5678"
     assert s.provider_anthropic.model == "claude-3-5-sonnet-latest"
     assert s.active_provider == "openai"
@@ -398,10 +398,10 @@ def test_api_post_provider_nested_openai_anthropic(client):
         "provider": {
             "active": "openai",
             "openai": {
-                "endpointUrl": "https://apihub.agnes-ai.com/v1/chat/completions",
-                "baseUrl": "https://apihub.agnes-ai.com/v1",
+                "endpointUrl": "https://api.example.com/v1/chat/completions",
+                "baseUrl": "https://api.example.com/v1",
                 "apiKey": "sk-test-1234",
-                "model": "agnes-2.5-flash",
+                "model": "example-model",
             },
             "anthropic": {
                 "endpointUrl": "https://api.anthropic.com/v1/messages",
@@ -417,7 +417,7 @@ def test_api_post_provider_nested_openai_anthropic(client):
     r2 = client.get("/api/projects/settings")
     body = r2.json()
     assert body["provider"]["openai"]["apiKey"] == "sk-test-1234"
-    assert body["provider"]["openai"]["model"] == "agnes-2.5-flash"
+    assert body["provider"]["openai"]["model"] == "example-model"
     assert body["provider"]["anthropic"]["apiKey"] == "sk-ant-5678"
     assert body["provider"]["anthropic"]["model"] == "claude-3-5-sonnet-latest"
 
@@ -440,8 +440,8 @@ def test_model_router_loads_r37_openai_config_from_settings(tmp_path: Path, monk
             "active": "openai",
             "openai": {
                 "apiKey": "sk-test-1234",
-                "baseUrl": "https://apihub.agnes-ai.com/v1",
-                "model": "agnes-2.5-flash",
+                "baseUrl": "https://api.example.com/v1",
+                "model": "example-model",
             },
             "anthropic": {
                 "apiKey": "sk-ant-5678",
@@ -458,9 +458,9 @@ def test_model_router_loads_r37_openai_config_from_settings(tmp_path: Path, monk
         "from settings.json. The user's LLM settings will be "
         "ignored by the actual LLM call."
     )
-    assert active.model == "agnes-2.5-flash"
+    assert active.model == "example-model"
     assert active.api_key == "sk-test-1234"
-    assert active.base_url == "https://apihub.agnes-ai.com/v1"
+    assert active.base_url == "https://api.example.com/v1"
     assert active.provider == "openai"
 
 

@@ -1213,6 +1213,24 @@ const SkillsPanel: React.FC<{ projectId: string | null }> = ({ projectId }) => {
 
 const AboutPanel: React.FC = () => {
   const tokens = useThemeTokens();
+  // Show the model the Coder is ACTUALLY running. This panel used to render a
+  // hardcoded literal ("Model: MiniMax M3") that had nothing to do with the
+  // configured provider — misleading, and it ignored role_mappings.
+  const [model, setModel] = useState('');
+  useEffect(() => {
+    let alive = true;
+    api.get('/dashboard')
+      .then((r) => {
+        if (!alive) return;
+        const agents = r.data?.agents || [];
+        const coder =
+          agents.find((a: any) => String(a?.role || '').toLowerCase().includes('coder'))
+          || agents[0];
+        setModel(String(coder?.model || ''));
+      })
+      .catch(() => { /* cosmetic panel — never surface an error */ });
+    return () => { alive = false; };
+  }, []);
   return (
     <Space direction="vertical" size={8} style={{ width: '100%' }}>
       <Space size={12} align="center">
@@ -1235,9 +1253,11 @@ const AboutPanel: React.FC = () => {
         Multi-agent collaboration platform. Coder &lt;-&gt; Reviewer loop,
         MCP, agents.md / skills, manifest, sandbox, voice, cloud.
       </Text>
-      <Text style={{ color: tokens.labelTertiary, fontSize: 12 }}>
-        Model: MiniMax M3
-      </Text>
+      {model ? (
+        <Text style={{ color: tokens.labelTertiary, fontSize: 12 }}>
+          Model: {model}
+        </Text>
+      ) : null}
     </Space>
   );
 };

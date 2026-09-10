@@ -148,7 +148,12 @@ def is_safe_config_url(url: str) -> bool:
     try:
         infos = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
     except OSError:
-        return False  # fail closed
+        # Can't resolve right now (offline / DNS down / split-horizon VPN).
+        # We cannot *prove* this is a link-local / metadata target, and these
+        # endpoints are authenticated + user-driven, so don't block: the real
+        # HTTP call will surface a clear DNS error. (Webfetch keeps the strict
+        # fail-closed ``is_public_url``.)
+        return True
     for info in infos:
         try:
             ip = ipaddress.ip_address(info[4][0])

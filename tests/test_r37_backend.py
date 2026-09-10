@@ -349,7 +349,7 @@ def test_test_connection_openai_posts_to_chat_completions():
     is the endpoint the user will actually hit on every message.
 
     This is the fix for the user's report: with base URL
-    https://apihub.agnes-ai.com/v1 the previous GET /v1/models
+    https://api.example.com/v1 the previous GET /v1/models
     probe returned 404 → user saw "Fail · Not Found". Switching
     to POST /v1/chat/completions works for all OpenAI-compatible
     servers, including proxies that only expose chat.
@@ -393,7 +393,7 @@ def test_test_connection_openai_posts_to_chat_completions():
 
 
 def test_test_connection_openai_chat_completions_works_for_proxy_without_models():
-    """Some OpenAI-compatible proxies (Agnes AI, custom gateways)
+    """Some OpenAI-compatible proxies (an OpenAI-compatible gateway, custom gateways)
     only expose /v1/chat/completions and 404 on /v1/models. The
     probe must still succeed against a server that only responds
     to chat-completions. We simulate this by patching urlopen to
@@ -421,13 +421,13 @@ def test_test_connection_openai_chat_completions_works_for_proxy_without_models(
     urllib.request.urlopen = fake_urlopen
     try:
         result = _probe_post_openai_chat(
-            endpoint_url="", base_url="https://apihub.agnes-ai.com/v1",
-            api_key="sk-test", model="agnes-2.5-flash")
+            endpoint_url="", base_url="https://api.example.com/v1",
+            api_key="sk-test", model="example-model")
     finally:
         urllib.request.urlopen = orig
 
     # We hit the chat-completions endpoint, not /v1/models.
-    assert captured["url"] == "https://apihub.agnes-ai.com/v1/chat/completions"
+    assert captured["url"] == "https://api.example.com/v1/chat/completions"
     assert result["ok"] is True
 
 
@@ -589,17 +589,17 @@ def test_test_connection_openai_uses_endpoint_url_as_is():
     urllib.request.urlopen = fake_urlopen
     try:
         _probe_post_openai_chat(
-            endpoint_url="https://apihub.agnes-ai.com/v1/chat/completions",
+            endpoint_url="https://api.example.com/v1/chat/completions",
             base_url="",  # ignored when endpoint_url is set
-            api_key="sk-test", model="agnes-2.5-flash")
+            api_key="sk-test", model="example-model")
     finally:
         urllib.request.urlopen = orig
 
     # The probe URL is exactly what the user pasted. No /v1 stripping.
-    assert captured["url"] == "https://apihub.agnes-ai.com/v1/chat/completions"
+    assert captured["url"] == "https://api.example.com/v1/chat/completions"
     # Model from the user is in the body.
     body = json.loads(captured["body"].decode("utf-8"))
-    assert body["model"] == "agnes-2.5-flash"
+    assert body["model"] == "example-model"
 
 
 def test_test_connection_anthropic_uses_endpoint_url_as_is():
@@ -709,8 +709,8 @@ def test_extract_error_message_openai_shape():
         "Incorrect API key provided: sk-****"
 
 
-def test_extract_error_message_agnes_ai_shape():
-    """Agnes AI / similar proxies use the same {"error": {"message": ...}}
+def test_extract_error_message_example_ai_shape():
+    """an OpenAI-compatible gateway / similar proxies use the same {"error": {"message": ...}}
     shape — the user reported seeing this with `Invalid` truncated."""
     from api.routes.config import _extract_error_message
     body = '{"error":{"message":"Invalid model"}}'
@@ -806,7 +806,7 @@ def test_test_connection_openai_404_with_json_error_shows_parsed_message():
     urllib.request.urlopen = fake_urlopen
     try:
         result = _probe_post_openai_chat(
-            endpoint_url="https://apihub.agnes-ai.com/v1/chat/completions",
+            endpoint_url="https://api.example.com/v1/chat/completions",
             base_url="", api_key="sk-test", model="foo")
     finally:
         urllib.request.urlopen = orig
@@ -835,7 +835,7 @@ def test_test_connection_connection_error_includes_url():
     urllib.request.urlopen = fake_urlopen
     try:
         result = _probe_post_openai_chat(
-            endpoint_url="https://apihub.agnes-ai.com/v1/chat/completions",
+            endpoint_url="https://api.example.com/v1/chat/completions",
             base_url="", api_key="sk-test", model="gpt-4o")
     finally:
         urllib.request.urlopen = orig
@@ -844,7 +844,7 @@ def test_test_connection_connection_error_includes_url():
     assert result["status"] == 0
     # Connection error message includes the URL.
     assert "connection failed" in result["detail"].lower()
-    assert "apihub.agnes-ai.com" in result["detail"]
+    assert "api.example.com" in result["detail"]
 
 
 def test_test_connection_anthropic_connection_error_includes_url():
@@ -891,7 +891,7 @@ def test_test_connection_http_error_includes_url():
     urllib.request.urlopen = fake_urlopen
     try:
         result = _probe_post_openai_chat(
-            endpoint_url="https://apihub.agnes-ai.com/v1/chat/completions",
+            endpoint_url="https://api.example.com/v1/chat/completions",
             base_url="", api_key="sk-test", model="gpt-4o")
     finally:
         urllib.request.urlopen = orig
@@ -901,7 +901,7 @@ def test_test_connection_http_error_includes_url():
     # Parsed error message is shown.
     assert "Invalid URL" in result["detail"]
     # AND the URL we attempted is appended.
-    assert "(url: https://apihub.agnes-ai.com/v1/chat/completions)" in \
+    assert "(url: https://api.example.com/v1/chat/completions)" in \
         result["detail"]
 
 

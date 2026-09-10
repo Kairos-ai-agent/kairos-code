@@ -92,7 +92,7 @@ def test_applayout_loads_provider_settings_on_mount():
 
     Without this, the user sees 'gpt-4o' in the chip until they
     open the Settings drawer, even though their saved setting is
-    'agnes-2.5-flash' or whatever they configured. The user
+    'example-model' or whatever they configured. The user
     reported '刷新后依然丢失设置的llm模型' (LLM model still lost
     after refresh) — the model wasn't really lost from the backend
     (R38.6 §14 fix made it persist), it was just not loaded into
@@ -1791,7 +1791,7 @@ def test_config_route_has_strip_v1_helper():
 def test_config_route_uses_chat_completions_for_openai():
     """The OpenAI probe must hit ``/v1/chat/completions`` (the
     actual API surface), NOT ``/v1/models``. Many OpenAI-compatible
-    proxies (Agnes AI, custom gateways) only expose chat-completions
+    proxies (an OpenAI-compatible gateway, custom gateways) only expose chat-completions
     and 404 on /v1/models. The probe must work for the broadest
     range of OpenAI-compatible backends."""
     p = REPO_ROOT / "api" / "routes" / "config.py"

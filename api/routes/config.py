@@ -122,7 +122,31 @@ async def save_settings(request: SettingsRequest):
             existing_keys[k] = v
     settings["api_keys"] = existing_keys
     if request.custom_models:
-        settings["custom_models"] = request.custom_models
+        # MERGE by name (don't replace wholesale). GET /settings never returns
+        # the plaintext ``api_key`` (only ``api_key_set``), so the frontend
+        # round-trips a key-less list — a blind replace would wipe every saved
+        # custom-model key and the LLM would stop answering.
+        prev_by_name = {
+            m.get("name"): m
+            for m in settings.get("custom_models", [])
+            if isinstance(m, dict)
+        }
+        merged: list = []
+        for m in request.custom_models:
+            if not isinstance(m, dict):
+                continue
+            entry = dict(m)
+            entry.pop("api_key_set", None)
+            new_key = entry.get("api_key")
+            prev = prev_by_name.get(entry.get("name"), {})
+            if not new_key or "****" in str(new_key):
+                # No new key supplied → keep the previously-saved one.
+                if prev.get("api_key"):
+                    entry["api_key"] = prev["api_key"]
+                else:
+                    entry.pop("api_key", None)
+            merged.append(entry)
+        settings["custom_models"] = merged
     _save_settings(settings)
     return {"status": "ok", "message": "Settings saved"}
 
@@ -439,7 +463,7 @@ def _extract_error_message(body: str) -> str:
       - OpenAI and Anthropic / most proxies: ``{"error": {"message": "..."}}``
       - Some proxies wrap differently: ``{"error": "string"}``
       - Some proxies: ``{"message": "..."}`` at the top level
-      - Agnes AI apihub, others: ``{"error": {"message": "Invalid ..."}}``
+      - an OpenAI-compatible gateway apihub, others: ``{"error": {"message": "Invalid ..."}}``
 
     We return the first string we find that looks like an error
     message, so the user sees "HTTP 404: Invalid API key" instead

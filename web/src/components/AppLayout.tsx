@@ -157,7 +157,7 @@ const AppLayout: React.FC = () => {
   // model chip shows the user's actual configured model (not the
   // store default) right after page load. Without this, the user
   // sees "gpt-4o" in the chip until they open the Settings
-  // drawer, even though their saved setting is "agnes-2.5-flash".
+  // drawer, even though their saved setting is "example-model".
   //
   // The SettingsDrawer also loads these on open, but that path
   // doesn't help the composer on the chat page. Doing it here
@@ -176,7 +176,7 @@ const AppLayout: React.FC = () => {
   //   - if the backend is stale (pre-§14 code) or returning
   //     default-looking data, the setProvider(...) call can
   //     overwrite the user's localStorage with default values,
-  //     making the chip flip from "agnes-2.5-flash" back to
+  //     making the chip flip from "example-model" back to
   //     "gpt-4o" after the user has already configured it.
   // We defend against this by preferring localStorage whenever
   // it has a configured provider (non-empty apiKey OR non-default

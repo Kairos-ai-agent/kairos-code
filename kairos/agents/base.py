@@ -343,42 +343,19 @@ class KairosAgent:
     def refresh_model(self, llm_config: LLMConfig):
         """Swap this agent's LLM provider safely.
 
-        Builds the new provider BEFORE mutating state (so a construction
-        failure leaves the agent usable), then hands the previous provider to
-        a deferred, best-effort close — an in-flight request on the old
-        client gets a short grace period instead of failing with
-        "client has been closed".
+        Builds the new provider BEFORE mutating state, so a construction
+        failure leaves the agent usable and a concurrent reader never sees a
+        new config paired with an old provider.
+
+        NOTE: we deliberately do NOT close the previous provider here. It may
+        still be referenced by ``ModelRouter._provider_cache`` (providers are
+        cached per role) or by another agent, so closing it would break later
+        calls with "client has been closed". The old provider is left for GC —
+        same as before this method was hardened.
         """
         new_llm = create_provider(llm_config)
-        old_llm = getattr(self, "_llm", None)
-        # Config first, then the live reference in a single assignment, so a
-        # concurrent reader never sees a new config paired with an old
-        # provider.
         self._llm_config = llm_config
         self._llm = new_llm
-        if old_llm is not None and old_llm is not new_llm:
-            self._defer_provider_close(old_llm)
-
-    def _defer_provider_close(self, provider) -> None:
-        """Close a replaced provider after a short grace period.
-
-        Runs as a background task so we never close a client that a still
-        in-flight call is using. With no running loop (sync caller) we just
-        drop the reference and let GC reclaim it.
-        """
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return
-
-        async def _close():
-            try:
-                await asyncio.sleep(5)
-                await provider.close()
-            except Exception:  # noqa: BLE001
-                logger.debug("deferred provider close failed", exc_info=True)
-
-        loop.create_task(_close())
 
     def fork(self) -> "KairosAgent":
         """Return a parallel-worker copy of this agent.
@@ -558,31 +535,63 @@ class KairosAgent:
 
     @staticmethod
     def _sanitize_memory(mem: List[LLMMessage]) -> List[LLMMessage]:
-        """Drop ``tool`` messages that aren't a valid reply to a preceding
-        assistant ``tool_calls`` message.
+        """Make ``mem`` a valid OpenAI/Anthropic message list.
 
-        OpenAI rejects a ``role='tool'`` message unless the immediately
-        preceding message is an assistant message with ``tool_calls``
-        (and the tool message's ``tool_call_id`` matches one of them).
-        An interrupted loop / tool call can leave a dangling ``tool``
-        message at the end of ``self._memory``; sending it raises a 400
-        ("Messages with role 'tool' must be a response to a preceding
-        message with 'tool_calls'"). We re-validate at build time so a
-        stale orphan is simply dropped instead of breaking the call.
+        Two invariants are enforced — each violation is a hard provider 400:
+
+        1. A ``role='tool'`` message must answer a preceding assistant
+           ``tool_calls`` id, so orphan ``tool`` messages are dropped.
+        2. An assistant message declaring ``tool_calls`` MUST be followed by
+           tool messages for **every** declared id. An interrupted turn (hook
+           error, bus error, mid-loop timeout, restored history) can leave one
+           unanswered, which the provider rejects with "An assistant message
+           with 'tool_calls' must be followed by tool messages responding to
+           each 'tool_call_id' (insufficient tool messages …)". Unanswered
+           entries are stripped from the assistant message so the request
+           stays valid and the conversation can continue.
         """
         out: List[LLMMessage] = []
+        tc_idx: Optional[int] = None   # index in ``out`` of the live tool_calls msg
+        answered: set = set()
+
+        def _settle() -> None:
+            """Strip unanswered tool_calls from the pending assistant message."""
+            nonlocal tc_idx, answered
+            if tc_idx is not None:
+                prev = out[tc_idx]
+                declared = list(getattr(prev, "tool_calls", None) or [])
+                keep = [tc for tc in declared
+                        if getattr(tc, "id", "") in answered]
+                if len(keep) != len(declared):
+                    try:
+                        fixed = prev.model_copy(deep=True)
+                        fixed.tool_calls = keep or None
+                        out[tc_idx] = fixed
+                    except Exception:  # noqa: BLE001
+                        logger.debug("sanitize: could not strip tool_calls",
+                                     exc_info=True)
+            tc_idx = None
+            answered = set()
+
         for m in mem:
             if m.role == "tool":
-                prev = out[-1] if out else None
-                if prev is None or not getattr(prev, "tool_calls", None):
-                    continue  # no preceding tool_calls → orphaned → drop
-                if m.tool_call_id:
-                    ids = {getattr(tc, "id", "") for tc in prev.tool_calls}
-                    if ids and m.tool_call_id not in ids:
-                        continue
+                if tc_idx is None:
+                    continue  # orphan tool message → drop
+                declared_ids = {
+                    getattr(tc, "id", "")
+                    for tc in (out[tc_idx].tool_calls or [])
+                }
+                if (m.tool_call_id and declared_ids
+                        and m.tool_call_id not in declared_ids):
+                    continue  # answers a call that is no longer declared
+                answered.add(m.tool_call_id)
                 out.append(m)
             else:
+                _settle()
                 out.append(m)
+                if getattr(m, "tool_calls", None):
+                    tc_idx = len(out) - 1
+        _settle()
         return out
 
     def _build_messages(self) -> List[LLMMessage]:
@@ -869,13 +878,18 @@ class KairosAgent:
                 # we don't flood the message bus with a 50KB JSON plan.
                 interim = (response.content or "").strip()
                 if interim:
-                    await self.message_bus.publish(Message(
-                        sender=self.agent_id,
-                        topic="agent.response",
-                        content=interim[:2000],
-                        msg_type="text",
-                        metadata={"task_id": task.id, "turn": turn + 1},
-                    ))
+                    # Telemetry only — must not abort the turn (a raise here
+                    # would orphan the assistant ``tool_calls`` recorded above).
+                    try:
+                        await self.message_bus.publish(Message(
+                            sender=self.agent_id,
+                            topic="agent.response",
+                            content=interim[:2000],
+                            msg_type="text",
+                            metadata={"task_id": task.id, "turn": turn + 1},
+                        ))
+                    except Exception:
+                        logger.debug("agent.response publish failed", exc_info=True)
 
                 # No tool calls -> done
                 if not response.tool_calls:
@@ -887,26 +901,39 @@ class KairosAgent:
                 self.status = AgentStatus.ACTING
                 for tc in response.tool_calls:
                     self.current_tool = tc.name
-                    # Publish tool call to bus
-                    await self.message_bus.publish(Message(
-                        sender=self.agent_id,
-                        topic="tool.call",
-                        content=f"Calling {tc.name}({json.dumps(tc.arguments, ensure_ascii=False)[:200]})",
-                        msg_type="text",
-                        metadata={"task_id": task.id, "tool": tc.name,
-                                  "turn": turn + 1},
-                    ))
+                    # Publish tool call to bus. Telemetry only — a bus failure
+                    # must never skip the tool result below, which would leave
+                    # this assistant ``tool_calls`` unanswered → provider 400
+                    # ("insufficient tool messages following tool_calls").
+                    try:
+                        await self.message_bus.publish(Message(
+                            sender=self.agent_id,
+                            topic="tool.call",
+                            content=f"Calling {tc.name}({json.dumps(tc.arguments, ensure_ascii=False)[:200]})",
+                            msg_type="text",
+                            metadata={"task_id": task.id, "tool": tc.name,
+                                      "turn": turn + 1},
+                        ))
+                    except Exception:
+                        logger.debug("tool.call publish failed", exc_info=True)
 
                     # Hooks: let user-defined pre_tool_use hooks see (and
                     # optionally rewrite) the arguments before they hit
                     # the tool. Default no-op if no hooks are installed.
+                    # A raising hook must NOT abort the turn before the tool
+                    # result is recorded (that would orphan the tool_calls).
                     from kairos.hooks import get_runner
-                    tc_args = get_runner().pre_tool_use(
-                        tool_name=tc.name,
-                        arguments=tc.arguments if isinstance(tc.arguments, dict) else {},
-                        agent_id=self.agent_id,
-                        project_id=getattr(self, "_current_project_id", ""),
-                    )
+                    try:
+                        tc_args = get_runner().pre_tool_use(
+                            tool_name=tc.name,
+                            arguments=tc.arguments if isinstance(tc.arguments, dict) else {},
+                            agent_id=self.agent_id,
+                            project_id=getattr(self, "_current_project_id", ""),
+                        )
+                    except Exception:
+                        logger.debug("pre_tool_use hook failed; using raw args",
+                                     exc_info=True)
+                        tc_args = None
 
                     # Round 11: built-in ``write_todos`` interception.
                     # The LLM emits TodoWrite-style plan updates as a
@@ -1256,6 +1283,19 @@ class KairosAgent:
                 content=last_response.content,
                 msg_type="text",
             ))
+        else:
+            # An empty reply means the UI shows NOTHING at all — no bubble and
+            # no error (the route still returns HTTP 200). Log it loudly so a
+            # silent "chat doesn't answer" is actually diagnosable.
+            logger.warning(
+                "%s: chat produced an EMPTY reply — model=%s finish_reason=%s "
+                "tool_calls=%s usage=%s. The UI will show no reply.",
+                self.agent_id,
+                getattr(self._llm_config, "model", "?"),
+                getattr(last_response, "finish_reason", "?"),
+                bool(getattr(last_response, "tool_calls", None)),
+                getattr(last_response, "usage", None),
+            )
 
         return last_response.content
 

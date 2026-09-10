@@ -40,7 +40,7 @@ export interface OpenAIConfig {
   /**
    * Full endpoint URL the test probe will hit (e.g.
    * `https://api.openai.com/v1/chat/completions` or
-   * `https://apihub.agnes-ai.com/v1/chat/completions`).
+   * `https://api.example.com/v1/chat/completions`).
    * When set, this overrides the auto-construct logic entirely —
    * the probe just POSTs to this URL as-is. The user owns the path.
    * R38: replaces the brittle "Base URL + /v1/chat/completions"

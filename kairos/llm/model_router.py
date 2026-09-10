@@ -9,7 +9,7 @@ import os
 import time
 import yaml
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -323,8 +323,42 @@ class ModelRouter:
             config = self._create_dynamic_config(model_name)
         if config is None:
             config = self._model_configs.get("default", LLMConfig(
-                provider="openai", model="gpt-4o", api_key="sk-placeholder",
+                provider="openai", model="gpt-4o", api_key="«redacted:sk-…»",
             ))
+
+        # R38.7: never hand an agent a provider it cannot authenticate with.
+        # The built-in tiers in models_config.yaml (`fast`, `default`,
+        # `precise`) carry a model name but no api_key/base_url — they were
+        # written for env-var keys. With loop_config.difficulty_routing on,
+        # `get_provider_for_task_strict("fast")` deliberately bypasses the
+        # active provider, so a trivial requirement routed the Coder to that
+        # keyless config and EVERY loop died on turn 1 with
+        # "No API key for deepseek-chat" before writing a line of code.
+        #
+        # A tier that brings its own endpoint but no key just borrows the key.
+        # A tier with neither is unusable (it would send `gpt-4o` to whatever
+        # endpoint the key belongs to), so fall back to the active provider.
+        if config is not None:
+            active_cfg = self._model_configs.get("__active__")
+            if active_cfg is not None and active_cfg.api_key:
+                if not config.api_key and not config.base_url:
+                    logger.info(
+                        "model config %r has no credentials — using the active "
+                        "provider (%s) instead", model_name, active_cfg.model,
+                    )
+                    config = active_cfg
+                else:
+                    patch: Dict[str, Any] = {}
+                    if not config.api_key:
+                        patch["api_key"] = active_cfg.api_key
+                    if not config.base_url:
+                        patch["base_url"] = active_cfg.base_url
+                    if patch:
+                        logger.info(
+                            "model config %r is missing %s — borrowing from the "
+                            "active provider", model_name, "/".join(sorted(patch)),
+                        )
+                        config = config.model_copy(update=patch)
 
         raw_provider = create_provider(config)
 

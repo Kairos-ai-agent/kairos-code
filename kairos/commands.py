@@ -7,7 +7,10 @@ the message reaches the LLM. They are useful for:
   - **fast access to common workflows** — `/review` triggers a
     reviewer-style read-only pass without a full loop
   - **shell-out to local tools** — `/test` runs `pytest`, `/lint`
-    runs `ruff`, `/format` runs `ruff format`
+    runs `ruff`, `/format` runs `ruff format`. These call the heads the
+    terminal tool allow-lists (never `python -m ...`, which is blocked by
+    design). `ruff` is a build-tool head, so it needs
+    `KAIROS_ENABLE_BUILD_COMMANDS=1`.
   - **session metadata** — `/mode read_only` switches the Coder
     sub-mode for this project
 
@@ -270,7 +273,7 @@ def cmd_test(args: str, ctx: CommandContext) -> CommandResult:
     # Defensive: refuse obviously bad shells.
     if any(t in argv for t in (";", "&&", "||", "|", "`", "$(")):
         return CommandResult(error="/test: shell metacharacters not allowed")
-    return _run_terminal_command(f"python -m pytest {argv} --tb=short -q", ctx)
+    return _run_terminal_command(f"pytest {argv} --tb=short -q", ctx)
 
 
 def cmd_lint(args: str, ctx: CommandContext) -> CommandResult:
@@ -278,7 +281,7 @@ def cmd_lint(args: str, ctx: CommandContext) -> CommandResult:
     argv = args.strip() or "."
     if any(t in argv for t in (";", "&&", "||", "|", "`", "$(")):
         return CommandResult(error="/lint: shell metacharacters not allowed")
-    return _run_terminal_command(f"python -m ruff check {argv}", ctx)
+    return _run_terminal_command(f"ruff check {argv}", ctx)
 
 
 def cmd_format(args: str, ctx: CommandContext) -> CommandResult:
@@ -286,7 +289,7 @@ def cmd_format(args: str, ctx: CommandContext) -> CommandResult:
     argv = args.strip() or "."
     if any(t in argv for t in (";", "&&", "||", "|", "`", "$(")):
         return CommandResult(error="/format: shell metacharacters not allowed")
-    return _run_terminal_command(f"python -m ruff format {argv}", ctx)
+    return _run_terminal_command(f"ruff format {argv}", ctx)
 
 
 def cmd_review(args: str, ctx: CommandContext) -> CommandResult:

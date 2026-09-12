@@ -9,6 +9,7 @@ orchestrator handles checkpointing automatically.
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -36,10 +37,28 @@ def _git(args: list[str], cwd: Path, timeout: int = 30) -> tuple[int, str, str]:
     except Exception as e:
         return 1, "", str(e)
 
+def _toplevel(workspace: Path) -> Optional[Path]:
+    """The root of the git repository containing *workspace*, if any."""
+    rc, out, _ = _git(["rev-parse", "--show-toplevel"], workspace)
+    if rc != 0 or not out.strip():
+        return None
+    try:
+        return Path(out.strip()).resolve()
+    except OSError:
+        return None
+
+
 def ensure_repo(workspace: Path) -> bool:
     """Make sure `workspace` is a git repo. Initializes one if needed.
 
     Returns True on success. Idempotent: safe to call every round.
+
+    NOTE: when the workspace already lives *inside* a repository this
+    returns True, but every caller must scope its add/commit to the
+    workspace subtree — see ``_scope``. A bare ``git -C <nested dir> commit``
+    operates on the repository that owns it, so an unscoped ``git add -A``
+    used to stage the *whole parent repository* (how a 640 MB third-party
+    archive and, later, an entire working tree ended up in the history).
     """
     workspace = Path(workspace)
     if not workspace.exists():
@@ -57,10 +76,37 @@ def ensure_repo(workspace: Path) -> bool:
     _git(["config", "user.name", "Kairos Coder"], workspace)
     return True
 
+
+def _scope(workspace: Path) -> tuple[Optional[Path], str]:
+    """Return (repo_root_to_use, pathspec) for the workspace's own files.
+
+    ``pathspec`` is relative to the returned root: ``"."`` when the workspace
+    *is* the repository root, otherwise the workspace's path inside it. Using it
+    on ``git add`` / ``git commit`` keeps a nested workspace from staging and
+    committing files that have nothing to do with the project.
+
+    Returns ``(None, "")`` when the workspace is not inside any repo.
+    """
+    workspace = Path(workspace).resolve()
+    top = _toplevel(workspace)
+    if top is None:
+        return None, ""
+    if top == workspace:
+        return top, "."
+    try:
+        rel = workspace.relative_to(top)
+    except ValueError:  # pragma: no cover - defensive
+        return None, ""
+    logger.info(
+        "checkpoint scope: %s is not a repository root (repo: %s) — commits are "
+        "limited to %s/", workspace, top, rel)
+    return top, str(rel)
+
+
 def checkpoint_round(workspace: Path, round_no: int, score: int,
                      summary: str, approved: bool,
                      plan: Optional[dict] = None) -> Optional[str]:
-    """Auto-checkpoint a round: stage everything, commit, return SHA.
+    """Auto-checkpoint a round: stage the workspace, commit, return SHA.
 
     No-op (returns None) if there's nothing to commit or git fails.
     The commit message is structured so the UI can parse it back.
@@ -70,13 +116,27 @@ def checkpoint_round(workspace: Path, round_no: int, score: int,
     git history doubles as a Plan history. ``git log`` can be
     parsed back to reconstruct the agent's plan at any past
     commit.
+
+    The staging and the commit are scoped to the workspace subtree so a
+    workspace nested inside a bigger repository can never sweep it (see
+    ``ensure_repo``).
     """
     workspace = Path(workspace)
+    if os.environ.get("KAIROS_NO_CHECKPOINTS") == "1":
+        # Explicit kill-switch for environments that must not touch a git
+        # repository (the test suite sets it, see tests/conftest.py). Without it
+        # a test that runs a real loop against the default workspace (the CWD,
+        # i.e. this checkout) commits the whole repository every round.
+        logger.debug("checkpoint skipped: KAIROS_NO_CHECKPOINTS=1")
+        return None
     if not ensure_repo(workspace):
         return None
-    _git(["add", "-A"], workspace)
+    repo_root, pathspec = _scope(workspace)
+    if repo_root is None:
+        return None
+    _git(["add", "-A", "--", pathspec], repo_root)
     # `git diff --cached --quiet` exits 0 if nothing staged, 1 if changes.
-    rc, _, _ = _git(["diff", "--cached", "--quiet"], workspace)
+    rc, _, _ = _git(["diff", "--cached", "--quiet", "--", pathspec], repo_root)
     if rc == 0:
         return None
     verdict = "approved" if approved else "rejected"
@@ -96,11 +156,11 @@ def checkpoint_round(workspace: Path, round_no: int, score: int,
         except Exception:
             # Plan rendering is best-effort; never break the commit.
             pass
-    rc, out, err = _git(["commit", "-q", "-m", msg], workspace)
+    rc, out, err = _git(["commit", "-q", "-m", msg, "--", pathspec], repo_root)
     if rc != 0:
         logger.warning("git commit failed for round %d: %s", round_no, err)
         return None
-    rc, sha, _ = _git(["rev-parse", "HEAD"], workspace)
+    rc, sha, _ = _git(["rev-parse", "HEAD"], repo_root)
     if rc != 0:
         return None
     return sha.strip()

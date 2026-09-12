@@ -53,19 +53,41 @@ def _issue(file: str = "x.py", line: int = 1, severity: str = "MAJOR",
             "fix_instruction": "fix"}
 
 def _session(coder_responses: List[str], reviewer_responses: List[str],
-             project_id: str = "p1") -> rl.LoopSession:
-    """Build a LoopSession wired to stub agents and a real MessageBus."""
+             project_id: str = "p1",
+             work_dir: str | None = None) -> rl.LoopSession:
+    """Build a LoopSession wired to stub agents and a real MessageBus.
+
+    `work_dir` defaults to a fresh temp directory on purpose: the loop's
+    checkpoint commits the workspace, and the default workspace is the process
+    CWD (this checkout) — which would commit the whole repository on every round.
+    """
+    import tempfile
+    from pathlib import Path as _Path
+
     class StubProject:
         def __init__(self, pid):
             self.id = pid
             self.requirements = "build a thing"
-    return rl.LoopSession(
+
+    workspace = _Path(work_dir) if work_dir else _Path(
+        tempfile.mkdtemp(prefix="kairos-loop-test-"))
+    workspace.mkdir(parents=True, exist_ok=True)
+    session = rl.LoopSession(
         project=StubProject(project_id),
         message_bus=MessageBus(),
         coder=StubAgent(coder_responses),
         reviewer=StubAgent(reviewer_responses),
         persistence=None,
     )
+    # LoopSession keeps its own reference to the working tree; set whichever
+    # attributes this version uses so no code path falls back to the CWD.
+    for attr in ("work_dir", "workspace", "workdir"):
+        if hasattr(session, attr):
+            try:
+                setattr(session, attr, str(workspace))
+            except Exception:
+                pass
+    return session
 
 # ---------------------------------------------------------------- constant tests
 

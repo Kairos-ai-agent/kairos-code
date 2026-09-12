@@ -194,7 +194,8 @@ const FolderPicker: React.FC<FolderPickerProps> = ({
           items={[{
             key: 'manual',
             label: (
-              <span style={{ fontSize: 12, color: tokens.labelSecondary }}>
+              <span data-testid="folder-picker-manual-toggle"
+                    style={{ fontSize: 12, color: tokens.labelSecondary }}>
                 <EditOutlined /> {t('folderPicker.manualHint')}
               </span>
             ),
@@ -367,7 +368,8 @@ const FolderPicker: React.FC<FolderPickerProps> = ({
           items={[{
             key: 'manual',
             label: (
-              <span style={{ fontSize: 12, color: tokens.labelSecondary }}>
+              <span data-testid="folder-picker-manual-toggle"
+                    style={{ fontSize: 12, color: tokens.labelSecondary }}>
                 <EditOutlined /> {t('folderPicker.manualHint')}
               </span>
             ),

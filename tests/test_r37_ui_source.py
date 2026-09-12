@@ -244,10 +244,16 @@ def test_chatstore_persisted_naming_uses_kairos_chat():
         "chatStore persist should use the 'kairos-chat' localStorage key"
     )
     # version: 1 — bump when the shape changes incompatibly.
-    assert "version: 1" in src, (
-        "chatStore persist should have version: 1 so we can "
-        "invalidate the cache on schema changes"
+    # The version must exist and be bumped on incompatible shape changes
+    # (asserting an exact number broke every time the schema moved, which is
+    # the opposite of what this test is for).
+    import re
+    m = re.search(r"version:\s*(\d+)", src)
+    assert m, (
+        "chatStore persist should declare a version so we can invalidate "
+        "the cache on schema changes"
     )
+    assert int(m.group(1)) >= 1
 
 
 def test_settingsstore_persists_provider_to_localstorage():
@@ -666,9 +672,11 @@ def test_workbench_panel_exists_with_four_tabs():
     )
     src = p.read_text(encoding="utf-8")
     # The 4 tab keys must all be present.
-    for tab in ("'files'", "'changes'", "'tasks'", "'deliverables'"):
-        assert tab in src, (
-            f"WorkbenchPanel should have a {tab} tab (minimax-code "
+    # The four tabs, asserted through their testids (the tab keys became
+    # i18n keys during the localisation pass, the testids did not).
+    for tid in ("files-tab", "changes-tab", "tasks-tab", "deliverables-tab"):
+        assert tid in src, (
+            f"WorkbenchPanel should render a '{tid}' panel (minimax-code "
             f"4-tab layout)"
         )
     # Each tab has its own component (FilesTab, ChangesTab,
@@ -712,11 +720,15 @@ def test_applayout_renders_workbench_as_right_sider():
         "AppLayout should render <WorkbenchPanel /> inside the "
         "right-side Sider"
     )
-    # There's a topbar toggle button.
-    assert "workbench-toggle-topbar" in src, (
-        "AppLayout should have a topbar button (testid "
-        "'workbench-toggle-topbar') so the user can show/hide "
-        "the right panel without losing their place in the chat"
+    # The show/hide control moved out of the topbar: the collapsed right
+    # rail exposes a reopen button, and the toggle itself lives in the
+    # panel's own header (see test_workbench_panel_exists_with_four_tabs).
+    assert "workbench-open-rail" in src, (
+        "AppLayout should expose a reopen button on the collapsed right rail"
+    )
+    panel = _read("components/WorkbenchPanel.tsx")
+    assert "workbench-toggle" in panel, (
+        "WorkbenchPanel should own the show/hide toggle in its header"
     )
 
 
@@ -1163,8 +1175,14 @@ def test_chatsidebar_exports_sidebarfooter():
 def test_chatsidebar_footer_has_today_tools_settings_theme():
     """All 4 footer buttons are present with the expected testids."""
     src = _read("components/ChatSidebar.tsx")
+    # The ids are passed to the shared `navBtn(...)` factory, so we assert the
+    # names themselves rather than one exact JSX serialisation.
     for tid in ("footer-today", "footer-tools", "footer-settings", "footer-theme"):
-        assert f'data-testid="{tid}"' in src, f"missing testid: {tid}"
+        assert tid in src, f"missing testid: {tid}"
+    # R38.8: the three primary views are always visible; the rest live in the
+    # collapsed Advanced group.
+    for tid in ("footer-run", "footer-history", "footer-advanced"):
+        assert tid in src, f"missing primary-nav testid: {tid}"
 
 
 def test_chatsidebar_footer_uses_navigate_for_today_and_tools():
@@ -1180,9 +1198,14 @@ def test_chatsidebar_footer_uses_navigate_for_today_and_tools():
     # The footer's onClick passes the store's `toggle` action ref.
     # Allow either `toggle()` (invocation) or `toggle` (reference)
     # depending on the component's call style.
+    # New primary views (R38.8).
+    assert "navigate('/run')" in src
+    assert "navigate('/history')" in src
+    # The theme control is wired to the store's `toggle` action, now handed to
+    # the shared button factory instead of an inline onClick.
     import re
-    assert re.search(r"onClick=\{toggle\}", src), (
-        "footer theme button onClick should be wired to the toggle action"
+    assert re.search(r"footer-theme[\s\S]{0,400}toggle", src), (
+        "footer theme button should be wired to the toggle action"
     )
 
 
@@ -1232,9 +1255,10 @@ def test_chatcomposer_on_submit_takes_text_only():
     The composer auto-classifies intent internally and only passes the
     text to the parent."""
     src = _read("components/ChatComposer.tsx")
-    assert "onSubmit: (text: string)" in src
-    assert "onSubmit: (text: string, runAsTask: boolean)" not in src, (
-        "ChatComposer.onSubmit should no longer take a runAsTask parameter"
+    # R38.7: attachments were added; runAsTask must never come back.
+    assert "onSubmit: (text: string, attachments: ChatAttachment[])" in src
+    assert "runAsTask" not in src, (
+        "ChatComposer.onSubmit should not take a runAsTask parameter"
     )
 
 
@@ -1407,25 +1431,23 @@ def test_chat_tsx_handle_submit_dispatches_via_classify_intent():
     'task' → /start (loop), 'chat' → /chat (single-turn)."""
     src = _read("pages/Chat.tsx")
     # handleSubmit now takes only the text.
-    assert "handleSubmit = async (text: string)" in src
-    assert "handleSubmit = async (text: string, runAsTask: boolean)" not in src, (
-        "Chat.tsx handleSubmit should no longer take runAsTask"
+    assert "handleSubmit = async (text: string, attachments: ChatAttachment[]" in src
+    # The word may still appear in a comment documenting the removal; what
+    # matters is that it is not a parameter any more.
+    assert "runAsTask: boolean" not in src, (
+        "Chat.tsx handleSubmit should not take runAsTask"
     )
     # Uses classifyIntent to decide.
     assert "classifyIntent(text)" in src
     # The dispatch: when 'task', POST /start; otherwise POST /chat.
     # We look for the `if/else` block that uses the result.
-    import re
-    m = re.search(
-        r"if\s*\(\s*classifyIntent\(text\)\s*===\s*['\"]task['\"]\s*\)\s*\{(.*?)\}\s*else\s*\{",
-        src, re.DOTALL,
-    )
-    assert m, "Could not find the classifyIntent dispatch block"
-    body = m.group(1)
-    # The task branch POSTs to /start.
-    assert "/start" in body
-    # The chat branch (in the else block) POSTs to /chat.
-    assert "/chat" in src
+    # The dispatch reads the intent and branches; the attachment branch runs
+    # first now, so we assert on the task branch by position.
+    marker = "classifyIntent(text) === 'task'"
+    assert marker in src, "Could not find the classifyIntent task branch"
+    branch = src[src.index(marker):src.index(marker) + 400]
+    assert "/start" in branch, "the task branch should POST to /start"
+    assert "/chat" in src, "the single-turn chat path should POST to /chat"
 
 
 def test_chat_tsx_submit_error_shows_real_detail_not_generic_fallback():
@@ -1442,12 +1464,16 @@ def test_chat_tsx_submit_error_shows_real_detail_not_generic_fallback():
     assert "console.error" in src
     # It includes an actionable hint for common settings /
     # coder / auth errors so the user knows what to do next.
-    assert "Settings" in src and "LLM Models" in src and "Save" in src, (
-        "Submit error toast should hint at Settings → LLM Models → Save"
+    # The hints are localised (63 languages), so we assert the keys — the
+    # i18n dictionary test guarantees they resolve to real copy.
+    assert "chat.page.hintOpenSettings" in src, (
+        "Submit error toast should hint at opening Settings"
     )
-    # The generic "Failed to submit" fallback is still there as
-    # a last resort but the real detail is preferred.
-    assert "Failed to submit" in src
+    assert "chat.page.hintProjectMissing" in src, (
+        "a stale project_id should get its own hint"
+    )
+    # The generic fallback is still there as a last resort.
+    assert "chat.page.submitFailed" in src
 
 
 # ---------------------------------------------------------------------------
@@ -1470,11 +1496,13 @@ def test_settings_drawer_provider_tab_renamed_to_llm_models():
     renames the tab from 'Provider' to 'LLM Models' and surfaces
     it as the 6th tab (right after Voice / MCP)."""
     src = _read("components/SettingsDrawer.tsx")
-    assert "LLM Models" in src, "Tab label 'LLM Models' missing"
-    # The old label "Provider" should NOT be the user-facing tab
-    # text anymore (the variable name is still 'provider' but the
-    # JSX label is the source of truth).
-    assert 'label: <span><RobotOutlined /> LLM Models' in src
+    # The label is localised; the dictionary key is the contract now.
+    assert "t('settings.provider')" in src, (
+        "the LLM tab label should come from the i18n dictionary"
+    )
+    assert "<RobotOutlined />" in src, (
+        "the LLM tab should keep its robot icon"
+    )
 
 
 def test_settings_drawer_provider_active_uses_only_openai_anthropic():
@@ -1876,9 +1904,9 @@ def test_settings_drawer_has_endpoint_url_input():
     sends the full URL to /config/test_connection."""
     p = REPO_ROOT / "web" / "src" / "components" / "SettingsDrawer.tsx"
     src = p.read_text(encoding="utf-8")
-    # The form has an "Endpoint URL" label.
-    assert ">Endpoint URL<" in src, (
-        "SettingsDrawer.tsx should have an 'Endpoint URL' input"
+    # The form has an Endpoint URL input (label localised).
+    assert "settings.fullURLOfTheChatCompletionsEndpointTheTestProbeH" in src, (
+        "SettingsDrawer.tsx should label the Endpoint URL input"
     )
     # The form sends endpoint_url to the backend (not just base_url).
     assert "endpoint_url:" in src, (
@@ -1894,8 +1922,8 @@ def test_settings_drawer_only_shows_one_url_input():
     never sees or edits it."""
     p = REPO_ROOT / "web" / "src" / "components" / "SettingsDrawer.tsx"
     src = p.read_text(encoding="utf-8")
-    # Endpoint URL label is still present.
-    assert ">Endpoint URL<" in src
+    # Endpoint URL label is still present (localised).
+    assert "settings.fullURLOfTheChatCompletionsEndpointTheTestProbeH" in src
     # The old "Base URL (for real chat calls)" input is GONE.
     # We assert on the full label including the parenthetical
     # because the user explicitly called this out.
@@ -2011,10 +2039,12 @@ def test_settings_drawer_test_failure_renders_as_alert_not_truncated_tag():
     # We check that the failure path doesn't use whiteSpace:nowrap.
     import re
     # Find the "Test connection failed" Alert usage (failure branch).
-    assert "Test connection failed" in src, (
+    # The failure Alert's copy is localised; assert the key + its testid.
+    assert "settings.testConnectionFailed" in src, (
         "SettingsDrawer.tsx should have a 'Test connection failed' "
         "Alert for the error case"
     )
+    assert "openai-test-result" in src
 
 
 def test_settings_drawer_has_save_status_indicator():

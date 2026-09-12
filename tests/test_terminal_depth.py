@@ -217,10 +217,14 @@ async def test_streaming_combined_with_timeout(term, tmp_path: Path):
     def collect(text: str) -> None:
         seen.append(text)
 
+    # timeout_s is deliberately loose: this test checks that streaming delivers
+    # output and that the timeout does NOT fire early. A Python start alone can
+    # take ~0.3-0.5s on a loaded runner, which a 0.5s budget would kill.
+    # test_streaming_timeout_kills_process covers the kill path.
     res = await term.execute(
         "python slow_emit.py",
         cwd=str(tmp_path),
-        stream=True, on_stdout=collect, timeout_s=0.5,
+        stream=True, on_stdout=collect, timeout_s=5.0,
     )
     assert res.success
     assert len(seen) >= 1

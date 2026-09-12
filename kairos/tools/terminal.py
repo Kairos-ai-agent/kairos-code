@@ -109,6 +109,10 @@ class TerminalTool(BaseTool):
         "npm": (), "pnpm": (), "yarn": (),
         "go": (), "cargo": (), "rustc": (),
         "make": (), "cmake": (),
+        # Formatter/linter used by the /lint and /format slash commands.
+        # Opt-in like the rest of this set: `ruff format` rewrites files in
+        # the workspace, and the agent can already do that through file_edit.
+        "ruff": (),
     }
 
     # Tokens that only ever appear as shell control operators. Under argv

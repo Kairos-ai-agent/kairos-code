@@ -231,13 +231,30 @@ def test_check_mcp_config_fails_on_bad_yaml(tmp_path, monkeypatch):
 
 
 def test_check_llm_providers_warns_when_none_set(monkeypatch):
-    """If no API keys are set, the check warns (not fail — Ollama might work)."""
+    """If no API keys are set, the check warns (not fail — Ollama might work).
+
+    The check reads the module-level `settings` object, which is populated from
+    data/settings.json — so clearing the environment is not enough on a machine
+    that has keys on disk. Replace the settings object with an empty one so the
+    test is hermetic.
+    """
     import kairos.config.settings as cfg
     # Save and clear any keys the env might have
     for k in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY",
               "DASHSCOPE_API_KEY", "ZHIPUAI_API_KEY", "GEMINI_API_KEY",
               "OPENROUTER_API_KEY"):
         monkeypatch.delenv(k, raising=False)
+
+    class _NoProvider:
+        api_key = None
+        model = ""
+        base_url = None
+
+    class _EmptySettings:
+        def __getattr__(self, name):  # any provider key -> empty
+            return _NoProvider()
+
+    monkeypatch.setattr(cfg, "settings", _EmptySettings(), raising=False)
     r = check_llm_providers()
     assert r.status == "warn"
 

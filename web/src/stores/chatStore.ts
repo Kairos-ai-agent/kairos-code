@@ -342,13 +342,15 @@ export const useChatStore = create<ChatStore>()(
       // want a clear migration path. We always restore the
       // persisted messages (or fall back to [] if absent) so the
       // thread is in sync with whatever was last saved.
-      merge: (persisted, current) => {
-        const p = (persisted || {}) as Record<string, unknown>;
+      merge: (persisted, current): ChatStore => {
+        // The persisted cache is untyped JSON. Treat it as a partial state and
+        // re-validate the one field we migrate (currentMessages) by hand.
+        const p = (persisted ?? {}) as Partial<ChatStore>;
         return {
           ...current,
           ...p,
           currentMessages: Array.isArray(p.currentMessages)
-                            ? (p.currentMessages as unknown[]).slice(-500)
+                            ? p.currentMessages.slice(-500)
                             : [],
         };
       },

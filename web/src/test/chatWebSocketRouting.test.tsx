@@ -119,7 +119,7 @@ describe('Chat WebSocket message routing', () => {
     expect(msgs[0].topic).toBe('agent.thinking');
   });
 
-  it('agent.response activity adds a Coder bubble', async () => {
+  it('agent.response does not duplicate the streaming bubble', async () => {
     await setup();
     await act(async () => {
       messageHandler!({
@@ -133,9 +133,10 @@ describe('Chat WebSocket message routing', () => {
       });
     });
     const msgs = useChatStore.getState().currentMessages;
-    expect(msgs.some((m) => m.topic === 'agent.response'
-                          && typeof m.content === 'string'
-                          && m.content.includes('refactored'))).toBe(true);
+    // R38.6.3: agent.response is deliberately skipped by the handler — the
+    // stream.chunk bubble already carries the same text, and appending here
+    // rendered every reply two or three times.
+    expect(msgs.some((m) => m.topic === 'agent.response')).toBe(false);
   });
 
   it('tool.call and tool.result are both surfaced', async () => {
@@ -165,6 +166,18 @@ describe('Chat WebSocket message routing', () => {
   });
 
   it('loop.coder_started triggers a session start (sets sessionId + fetches)', async () => {
+    // The handler closes over `currentProject` from the render pass, so the
+    // project must be selected before the component mounts.
+    useChatStore.getState().setProjects([{
+      id: 'p1', name: 'demo', description: '', workspace: '/w',
+      work_dir: '/w', status: 'active', task_count: 0, agent_count: 0,
+      created_at: 1.0,
+    } as any]);
+    useChatStore.getState().setCurrentProject({
+      id: 'p1', name: 'demo', description: '', workspace: '/w',
+      work_dir: '/w', status: 'active', task_count: 0, agent_count: 0,
+      created_at: 1.0,
+    } as any);
     await setup();
     // We have to capture api.get calls. The mock above provides them.
     await act(async () => {

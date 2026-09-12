@@ -58,11 +58,23 @@ describe('chatStore', () => {
 
   it('appendMessage caps history at 500', () => {
     for (let i = 0; i < 600; i++) {
-      useChatStore.getState().appendMessage(makeMsg({ id: `m${i}` }));
+      // Distinct content on purpose: appendMessage de-dupes identical
+      // content from the same sender within 5 minutes (R38.6.4).
+      useChatStore.getState().appendMessage(
+        makeMsg({ id: `m${i}`, content: `message ${i}` }));
     }
-    expect(useChatStore.getState().currentMessages.length).toBe(500);
-    // The most recent 100 are kept.
-    expect(useChatStore.getState().currentMessages[0].id).toBe('m100');
+    // In memory the thread is complete (the UI must be able to scroll back
+    // through the session) ...
+    expect(useChatStore.getState().currentMessages.length).toBe(600);
+    // ... what is capped is what gets written to localStorage: 500 per
+    // project, so a long session cannot blow the 5 MB budget.
+    const options = (useChatStore as unknown as {
+      persist: { getOptions: () => { partialize: (s: unknown) => any } }
+    }).persist.getOptions();
+    const persisted = options.partialize(useChatStore.getState());
+    expect(persisted.currentMessages.length).toBe(500);
+    // The most recent ones survive (oldest dropped first).
+    expect(persisted.currentMessages[0].id).toBe('m100');
   });
 
   it('toggleSidebar flips sidebarCollapsed', () => {

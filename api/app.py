@@ -364,9 +364,35 @@ def _frontend_dist_dir() -> Path | None:
 
 try:
     from fastapi.staticfiles import StaticFiles
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+
+    class SPAStaticFiles(StaticFiles):
+        """StaticFiles with an SPA fallback.
+
+        The UI uses real paths (``/run``, ``/history``, ``/chat/<sid>``) rather
+        than hash routes, so a deep link or a page refresh hits the server with
+        a path that has no file behind it. Plain ``StaticFiles`` answers 404 and
+        the user sees ``{"detail":"Not Found"}`` instead of the app — which is
+        also why ``/run?project=…`` links were broken outside the dev server.
+
+        Anything that is not an API path, not a built asset and has no file
+        extension is served ``index.html`` and the client router takes over.
+        """
+
+        async def get_response(self, path: str, scope):  # type: ignore[override]
+            try:
+                return await super().get_response(path, scope)
+            except StarletteHTTPException as exc:
+                if exc.status_code != 404 or scope.get("method") not in ("GET", "HEAD"):
+                    raise
+                clean = path.lstrip("/")
+                if clean.startswith(("api/", "ws/")) or "." in Path(clean).name:
+                    raise
+                return await super().get_response("index.html", scope)
+
     _dist = _frontend_dist_dir()
     if _dist is not None:
-        app.mount("/", StaticFiles(directory=str(_dist), html=True),
+        app.mount("/", SPAStaticFiles(directory=str(_dist), html=True),
                   name="frontend")
 except Exception:  # noqa: BLE001
     log.debug("frontend static mount skipped", exc_info=True)

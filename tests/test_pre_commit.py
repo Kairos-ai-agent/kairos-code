@@ -1,6 +1,6 @@
 """Tests for the pre-commit hook wrapper.
 
-The wrapper is at `docs/PRE_COMMIT_HOOK.py` and is meant to be
+The wrapper is at `docs/internal/PRE_COMMIT_HOOK.py` and is meant to be
 copied into a project. We test the decision logic (no staged
 files = pass; CRITICAL in output = fail) without actually running
 git, by monkey-patching the subprocess calls.
@@ -17,8 +17,8 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-# Add docs/ to sys.path so we can import the wrapper.
-sys.path.insert(0, str(ROOT / "docs"))
+# Add the wrapper's directory to sys.path so we can import it.
+sys.path.insert(0, str(ROOT / "docs" / "internal"))
 import importlib
 _hook_module = importlib.import_module("PRE_COMMIT_HOOK")
 main = _hook_module.main

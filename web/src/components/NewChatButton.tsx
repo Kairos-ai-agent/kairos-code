@@ -28,6 +28,7 @@ import api from '../api/client';
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import { useT } from '../i18n';
+import type { Project } from '../types';
 import FolderPicker from './FolderPicker';
 
 const NewChatButton: React.FC = () => {
@@ -60,7 +61,10 @@ const NewChatButton: React.FC = () => {
       // child `.kairos_chats` is reserved for ad-hoc new chats.
       const ts = Date.now();
       const workDir = `./workspace/.kairos_chats/chat_${ts}`;
-      const r = await api.post<{ id: string; name: string }>(
+      // The endpoint returns the full project record (kairos/core/
+      // orchestrator.py), so type it as one — the sidebar and FolderPicker
+      // read work_dir/status/task_count off this object.
+      const r = await api.post<Project>(
         '/projects',
         {
           // R38.6.4: name is "Untitled" — no preset topic. The user
@@ -120,6 +124,7 @@ const NewChatButton: React.FC = () => {
     <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
       <Button
         type="primary"
+        data-testid="new-chat-button"
         icon={<PlusOutlined />}
         onClick={startNewSession}
         block
@@ -138,6 +143,7 @@ const NewChatButton: React.FC = () => {
         <Tooltip title={t('shell.newChat.moreOptions')}>
           <Button
             type="primary"
+            data-testid="new-chat-options"
             icon={<DownOutlined />}
             style={{
               background: tokens.labelPrimary, color: tokens.bgBase,

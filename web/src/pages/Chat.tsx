@@ -298,6 +298,12 @@ const Chat: React.FC = () => {
       } else if (topic === 'agent.chat' || topic === 'tool.call'
           || topic === 'tool.result' || topic === 'task.error') {
         // (handled below)
+      } else if (topic.startsWith('loop.')) {
+        // Loop lifecycle (loop.coder_started, loop.completed, …) is handled by
+        // the block further down: it switches the URL to the new session and
+        // refreshes the topbar/sidebar. It never renders a bubble.
+        // NOTE: without this branch the early return below swallowed every
+        // loop.* event, which made that whole block dead code.
       } else {
         return;  // unknown topic — don't render a bubble
       }

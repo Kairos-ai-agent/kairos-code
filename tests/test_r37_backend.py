@@ -18,6 +18,11 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
+from tests._httpx_bridge import (
+    _httpx_bridge_install,
+    _httpx_bridge_restore,
+)
+
 from kairos.loop.gates import LOOP_SAFETY_CAP
 from kairos.loop.prompts import (
     _REVIEW_FOCUS_LABELS, build_reviewer_description,
@@ -370,13 +375,13 @@ def test_test_connection_openai_posts_to_chat_completions():
 
     import urllib.request
     orig = urllib.request.urlopen
-    urllib.request.urlopen = fake_urlopen
+    _httpx_bridge_install(fake_urlopen, captured)
     try:
         result = _probe_post_openai_chat(
             endpoint_url="", base_url="https://api.openai.com",
             api_key="sk-test", model="gpt-4o-mini")
     finally:
-        urllib.request.urlopen = orig
+        _httpx_bridge_restore()
 
     # POST to /v1/chat/completions — the actual API endpoint.
     assert captured["method"] == "POST"
@@ -418,13 +423,13 @@ def test_test_connection_openai_chat_completions_works_for_proxy_without_models(
     import urllib.request
     import urllib.error
     orig = urllib.request.urlopen
-    urllib.request.urlopen = fake_urlopen
+    _httpx_bridge_install(fake_urlopen, captured)
     try:
         result = _probe_post_openai_chat(
             endpoint_url="", base_url="https://api.example.com/v1",
             api_key="sk-test", model="example-model")
     finally:
-        urllib.request.urlopen = orig
+        _httpx_bridge_restore()
 
     # We hit the chat-completions endpoint, not /v1/models.
     assert captured["url"] == "https://api.example.com/v1/chat/completions"
@@ -448,13 +453,13 @@ def test_test_connection_anthropic_uses_post_v1_messages():
 
     import urllib.request
     orig = urllib.request.urlopen
-    urllib.request.urlopen = fake_urlopen
+    _httpx_bridge_install(fake_urlopen, captured)
     try:
         result = _probe_post_anthropic(
             endpoint_url="", base_url="https://api.anthropic.com",
             api_key="sk-ant-test", model="claude-3-5-sonnet")
     finally:
-        urllib.request.urlopen = orig
+        _httpx_bridge_restore()
 
     assert captured["url"] == "https://api.anthropic.com/v1/messages"
     assert captured["headers"]["x-api-key"] == "sk-ant-test"
@@ -514,13 +519,13 @@ def test_test_connection_openai_with_trailing_v1_does_not_double_up():
 
     import urllib.request
     orig = urllib.request.urlopen
-    urllib.request.urlopen = fake_urlopen
+    _httpx_bridge_install(fake_urlopen, captured)
     try:
         _probe_post_openai_chat(
             endpoint_url="", base_url="https://api.openai.com/v1",
             api_key="sk-test", model="gpt-4o-mini")
     finally:
-        urllib.request.urlopen = orig
+        _httpx_bridge_restore()
 
     # The critical assertion: no /v1/v1/ in the URL.
     assert captured["url"] == "https://api.openai.com/v1/chat/completions", (
@@ -545,13 +550,13 @@ def test_test_connection_anthropic_with_trailing_v1_does_not_double_up():
 
     import urllib.request
     orig = urllib.request.urlopen
-    urllib.request.urlopen = fake_urlopen
+    _httpx_bridge_install(fake_urlopen, captured)
     try:
         _probe_post_anthropic(
             endpoint_url="", base_url="https://example-proxy.com/v1",
             api_key="sk-ant-test", model="claude-3-5-sonnet")
     finally:
-        urllib.request.urlopen = orig
+        _httpx_bridge_restore()
 
     assert captured["url"] == "https://example-proxy.com/v1/messages", (
         f"Anthropic probe produced {captured['url']} — trailing /v1 was "
@@ -586,14 +591,14 @@ def test_test_connection_openai_uses_endpoint_url_as_is():
 
     import urllib.request
     orig = urllib.request.urlopen
-    urllib.request.urlopen = fake_urlopen
+    _httpx_bridge_install(fake_urlopen, captured)
     try:
         _probe_post_openai_chat(
             endpoint_url="https://api.example.com/v1/chat/completions",
             base_url="",  # ignored when endpoint_url is set
             api_key="sk-test", model="example-model")
     finally:
-        urllib.request.urlopen = orig
+        _httpx_bridge_restore()
 
     # The probe URL is exactly what the user pasted. No /v1 stripping.
     assert captured["url"] == "https://api.example.com/v1/chat/completions"
@@ -617,14 +622,14 @@ def test_test_connection_anthropic_uses_endpoint_url_as_is():
 
     import urllib.request
     orig = urllib.request.urlopen
-    urllib.request.urlopen = fake_urlopen
+    _httpx_bridge_install(fake_urlopen, captured)
     try:
         _probe_post_anthropic(
             endpoint_url="https://my-anthropic-proxy.example.com/v1/messages",
             base_url="",
             api_key="sk-ant-test", model="claude-3-5-sonnet")
     finally:
-        urllib.request.urlopen = orig
+        _httpx_bridge_restore()
 
     assert captured["url"] == \
         "https://my-anthropic-proxy.example.com/v1/messages"
@@ -646,7 +651,7 @@ def test_test_connection_openai_endpoint_url_can_have_arbitrary_path():
 
     import urllib.request
     orig = urllib.request.urlopen
-    urllib.request.urlopen = fake_urlopen
+    _httpx_bridge_install(fake_urlopen, captured)
     try:
         # A custom proxy that puts chat-completions at /api/llm/chat
         # (not the standard /v1/chat/completions). The probe must
@@ -655,7 +660,7 @@ def test_test_connection_openai_endpoint_url_can_have_arbitrary_path():
             endpoint_url="https://custom-proxy.example.com/api/llm/chat",
             base_url="", api_key="sk-test", model="gpt-4o")
     finally:
-        urllib.request.urlopen = orig
+        _httpx_bridge_restore()
 
     assert captured["url"] == "https://custom-proxy.example.com/api/llm/chat"
 
@@ -677,14 +682,14 @@ def test_test_connection_falls_back_to_base_url_when_endpoint_url_empty():
 
     import urllib.request
     orig = urllib.request.urlopen
-    urllib.request.urlopen = fake_urlopen
+    _httpx_bridge_install(fake_urlopen, captured)
     try:
         _probe_post_openai_chat(
             endpoint_url="",  # legacy: no endpoint_url
             base_url="https://api.openai.com/v1",
             api_key="sk-test", model="gpt-4o")
     finally:
-        urllib.request.urlopen = orig
+        _httpx_bridge_restore()
 
     # Falls back to the legacy path-append behavior.
     assert captured["url"] == "https://api.openai.com/v1/chat/completions"
@@ -803,13 +808,16 @@ def test_test_connection_openai_404_with_json_error_shows_parsed_message():
     import urllib.request
     import urllib.error
     orig = urllib.request.urlopen
-    urllib.request.urlopen = fake_urlopen
+    # The probe result is asserted below; keep the capture dict the
+    # bridge writes into for symmetry with the other tests.
+    captured: dict = {}
+    _httpx_bridge_install(fake_urlopen, captured)
     try:
         result = _probe_post_openai_chat(
             endpoint_url="https://api.example.com/v1/chat/completions",
             base_url="", api_key="sk-test", model="foo")
     finally:
-        urllib.request.urlopen = orig
+        _httpx_bridge_restore()
 
     assert result["ok"] is False
     assert result["status"] == 404
@@ -832,13 +840,16 @@ def test_test_connection_connection_error_includes_url():
 
     import urllib.request
     orig = urllib.request.urlopen
-    urllib.request.urlopen = fake_urlopen
+    # The probe result is asserted below; keep the capture dict the
+    # bridge writes into for symmetry with the other tests.
+    captured: dict = {}
+    _httpx_bridge_install(fake_urlopen, captured)
     try:
         result = _probe_post_openai_chat(
             endpoint_url="https://api.example.com/v1/chat/completions",
             base_url="", api_key="sk-test", model="gpt-4o")
     finally:
-        urllib.request.urlopen = orig
+        _httpx_bridge_restore()
 
     assert result["ok"] is False
     assert result["status"] == 0
@@ -856,14 +867,17 @@ def test_test_connection_anthropic_connection_error_includes_url():
 
     import urllib.request
     orig = urllib.request.urlopen
-    urllib.request.urlopen = fake_urlopen
+    # The probe result is asserted below; keep the capture dict the
+    # bridge writes into for symmetry with the other tests.
+    captured: dict = {}
+    _httpx_bridge_install(fake_urlopen, captured)
     try:
         result = _probe_post_anthropic(
             endpoint_url="https://api.anthropic.com/v1/messages",
             base_url="", api_key="sk-ant-test",
             model="claude-3-5-sonnet")
     finally:
-        urllib.request.urlopen = orig
+        _httpx_bridge_restore()
 
     assert result["ok"] is False
     assert result["status"] == 0
@@ -888,13 +902,16 @@ def test_test_connection_http_error_includes_url():
 
     import urllib.request
     orig = urllib.request.urlopen
-    urllib.request.urlopen = fake_urlopen
+    # The probe result is asserted below; keep the capture dict the
+    # bridge writes into for symmetry with the other tests.
+    captured: dict = {}
+    _httpx_bridge_install(fake_urlopen, captured)
     try:
         result = _probe_post_openai_chat(
             endpoint_url="https://api.example.com/v1/chat/completions",
             base_url="", api_key="sk-test", model="gpt-4o")
     finally:
-        urllib.request.urlopen = orig
+        _httpx_bridge_restore()
 
     assert result["ok"] is False
     assert result["status"] == 404

@@ -16,6 +16,7 @@
  * HTML/Markdown, or copy the badge for a PR description.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Alert, Button, Card, Col, Empty, Input, Row, Select, Space, Spin, Table, Tag,
   Tooltip, Typography, message,
@@ -113,7 +114,12 @@ const Run: React.FC = () => {
   const currentProject = useChatStore((s) => s.currentProject);
   const setCurrentProject = useChatStore((s) => s.setCurrentProject);
 
-  const [projectId, setProjectId] = useState<string>(currentProject?.id || '');
+  // ?project=<id> makes a run shareable / bookmarkable (and lets the sidebar
+  // link straight to a project's gate). It wins over the last-used project.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [projectId, setProjectId] = useState<string>(
+    searchParams.get('project') || currentProject?.id || '',
+  );
   const [gate, setGate] = useState<GatePayload | null>(null);
   const [prevGate, setPrevGate] = useState<GatePayload | null>(null);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
@@ -126,6 +132,14 @@ const Run: React.FC = () => {
   useEffect(() => {
     if (!projectId && currentProject) setProjectId(currentProject.id);
   }, [currentProject, projectId]);
+
+  useEffect(() => {
+    const next: Record<string, string> = projectId ? { project: projectId } : {};
+    if (searchParams.get('project') !== projectId) {
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
 
   useEffect(() => {
     if (!projectId && projects.length) setProjectId(projects[0].id);
@@ -147,12 +161,35 @@ const Run: React.FC = () => {
     setError('');
     try {
       const [sessionsRes, loopRes] = await Promise.all([
-        api.get(`/projects/${projectId}/sessions`),
+        api.get(`/projects/${projectId}/sessions`).catch(() => ({ data: null })),
         api.get(`/projects/${projectId}/loop`).catch(() => ({ data: null })),
       ]);
-      const rows: SessionRow[] = sessionsRes.data.sessions || [];
-      setSessions(rows);
       setLoop(loopRes.data);
+      let rows: SessionRow[] = sessionsRes.data?.sessions || [];
+
+      // Fallback: the session list lives in the orchestrator's memory, but the
+      // gate report is read straight from SQLite. If the project has not been
+      // loaded since the last backend restart, rebuild the row list from the
+      // report so the page still shows the receipts.
+      if (!rows.length) {
+        const agg = await api.get(`/projects/${projectId}/gate-report`, {
+          params: { format: 'json' },
+        });
+        if (agg.data?.rounds_total) {
+          rows = [{
+            session_id: agg.data.session_id || '(latest)',
+            round_count: agg.data.rounds_total,
+            last_score: agg.data.final_score,
+            last_approve: Boolean(agg.data.passed),
+            started_at: agg.data.rounds?.[0]?.created_at || 0,
+          }];
+          setGate(agg.data);
+          setSessions(rows);
+          setPrevGate(null);
+          return;
+        }
+      }
+      setSessions(rows);
 
       const [current, previous] = rows;
       if (current?.session_id) {
@@ -265,7 +302,7 @@ const Run: React.FC = () => {
       <div style={{ padding: 24 }} data-testid="run-empty">
         <Empty description={t('run.noProject')} />
         <Paragraph type="secondary" style={{ marginBlockStart: 12 }}>
-          {t('run.demoHint')} <Text code>kairos demo</Text>
+          {t('run.demoHint')} <Text code>{t('run.demoCommand')}</Text>
         </Paragraph>
       </div>
     );
@@ -311,7 +348,7 @@ const Run: React.FC = () => {
             {t('run.noRunsHint')}
           </Paragraph>
           <Paragraph type="secondary">
-            {t('run.demoHint')} <Text code>kairos demo</Text>
+            {t('run.demoHint')} <Text code>{t('run.demoCommand')}</Text>
           </Paragraph>
         </Card>
       ) : null}

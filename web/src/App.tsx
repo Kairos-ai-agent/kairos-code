@@ -28,9 +28,9 @@ const App: React.FC = () => {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        // Three primary views: Run (business output), History (receipts) and
-        // Settings (a drawer). Everything else lives under "Advanced" in
-        // the sidebar but keeps its own route.
+        {/* Three primary views: Run (business output), History (receipts)
+            and Settings (a drawer). Everything else lives under "Advanced"
+            in the sidebar but keeps its own route. */}
         <Route path="/" element={<Navigate to="/run" replace />} />
         <Route path="/run" element={<Run />} />
         <Route path="/history" element={<History />} />

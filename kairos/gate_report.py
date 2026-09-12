@@ -124,6 +124,10 @@ STRINGS: Dict[str, Dict[str, str]] = {
     },
     "issues.none": {"en": "No open issues in this round.", "zh": "本轮没有未解决问题。"},
     "cost.none": {"en": "No cost recorded for this session.", "zh": "本会话没有记录花费。"},
+    "cost.window": {"en": "Sum of ledger entries inside this run's time window.",
+                    "zh": "本次运行时间窗内的账本合计。"},
+    "cost.global": {"en": "Ledger total (no entries fell inside this run's window).",
+                    "zh": "账本总额（本次运行时间窗内没有条目）。"},
     "learned.none": {"en": "Nothing captured yet.", "zh": "还没有沉淀。"},
     "learned.fixes": {"en": "working fixes", "zh": "可复用修法"},
     "learned.skills": {"en": "project skills", "zh": "项目技能"},
@@ -218,6 +222,7 @@ class GateReport:
     cost_usd: float = 0.0
     cost_calls: int = 0
     cost_by_model: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    cost_windowed: bool = False   # True when the figure is THIS run's slice of the ledger
     tokens: int = 0
     learned: Dict[str, int] = field(default_factory=dict)
     eval_latest: Optional[Dict[str, Any]] = None  # from results/*.json via kairos.trend
@@ -391,6 +396,9 @@ class GateReport:
 
         add(f"### {t('section.cost', lang)}")
         add("")
+        if self.cost_by_model or self.cost_usd:
+            add(f"_{t('cost.window' if self.cost_windowed else 'cost.global', lang)}_")
+            add("")
         if not self.cost_by_model and not self.cost_usd:
             add(t("cost.none", lang))
         else:
@@ -630,6 +638,8 @@ footer {{ margin-top:32px; padding-top:14px; border-top:1px solid var(--line);
                 parts.append("</tbody></table>")
 
         parts.append(f"<h2>{both('section.cost')}</h2>")
+        if self.cost_by_model or self.cost_usd:
+            parts.append(f"<p class=\"sub\">{both('cost.window' if self.cost_windowed else 'cost.global')}</p>")
         if not self.cost_by_model and not self.cost_usd:
             parts.append(f"<p>{both('cost.none')}</p>")
         else:
@@ -910,7 +920,21 @@ def collect(
     if not session_id and rounds:
         session_id = rounds[-1].session_id
 
-    cost_usd, cost_calls, by_model = _cost_snapshot()
+    # Cost belongs to a run, but the ledger has no project column — so we sum
+    # the entries inside this session's time window instead of the whole ledger.
+    window = None
+    if rounds:
+        starts = [r.created_at for r in rounds if r.created_at]
+        if starts:
+            window = (min(starts) - 120.0, max(starts) + 120.0)
+    cost_usd, cost_calls, by_model, cost_windowed = _cost_snapshot(window)
+    if not tokens and by_model:
+        # The per-round review_json only carries usage when the provider reported
+        # it; the cost ledger always does. Falls back to the ledger so the
+        # "what did it cost" card is not stuck at 0 tokens.
+        tokens = sum(int(slot.get("prompt_tokens") or 0)
+                     + int(slot.get("completion_tokens") or 0)
+                     for slot in by_model.values())
     learned = _learned_counts(resolved_id, db_path=db_path)
     requirement = str(project.get("requirements") or project.get("description") or "")
     requirement = _oneline(requirement, 400)
@@ -935,6 +959,7 @@ def collect(
         cost_usd=cost_usd,
         cost_calls=cost_calls,
         cost_by_model=by_model,
+        cost_windowed=cost_windowed,
         tokens=tokens,
         learned=learned,
         eval_latest=_latest_eval(resolved_id, db_path=db_path),
@@ -942,15 +967,29 @@ def collect(
     return report
 
 
-def _cost_snapshot() -> tuple[float, int, Dict[str, Dict[str, Any]]]:
-    """Cost from the in-process ledger plus the on-disk JSONL log."""
-    total, calls, by_model = 0.0, 0, {}
+def _ledger_entries() -> List[Dict[str, Any]]:
+    """Every recorded LLM call: in-process buffer + the JSONL, deduped.
+
+    The buffer's entries are also flushed to the JSONL, so dedupe on the per-call
+    id (falling back to a natural key) before summing — otherwise every call in
+    the current process counts twice.
+    """
+    entries: List[Dict[str, Any]] = []
+    seen: set = set()
+
+    def _key(entry: Dict[str, Any]):
+        return entry.get("call_id") or (
+            entry.get("timestamp"), entry.get("model"), entry.get("cost_usd"),
+            entry.get("prompt_tokens"), entry.get("completion_tokens"),
+        )
+
     try:  # pragma: no cover - exercised through cost.py itself
-        from kairos import cost as cost_mod  # local import: keeps this module light
-        summary = cost_mod.cost_summary()
-        total += float(summary.get("cost_usd") or 0.0)
-        calls += int(summary.get("calls") or 0)
-        by_model = dict(summary.get("models") or {})
+        from kairos import cost as cost_mod
+        for entry in cost_mod.get_buffer():
+            raw = entry.__dict__ if hasattr(entry, "__dict__") else entry
+            if isinstance(raw, dict):
+                entries.append(dict(raw))
+                seen.add(_key(raw))
     except Exception:
         pass
 
@@ -958,7 +997,6 @@ def _cost_snapshot() -> tuple[float, int, Dict[str, Dict[str, Any]]]:
         from kairos import cost as cost_mod
         log_path = cost_mod._get_log_path()  # noqa: SLF001 - intentional: same module
         if log_path and Path(log_path).exists():
-            seen = set()
             for line in Path(log_path).read_text(encoding="utf-8", errors="replace").splitlines():
                 line = line.strip()
                 if not line:
@@ -969,33 +1007,63 @@ def _cost_snapshot() -> tuple[float, int, Dict[str, Dict[str, Any]]]:
                     continue
                 if not isinstance(entry, dict):
                     continue
-                # The in-process buffer's entries are flushed to the same JSONL, so
-                # dedupe on the per-call id (falling back to the natural key) before
-                # summing — otherwise every call is counted twice.
-                key = entry.get("call_id") or (
-                    entry.get("timestamp"), entry.get("model"), entry.get("cost_usd"),
-                    entry.get("prompt_tokens"), entry.get("completion_tokens"),
-                )
+                key = _key(entry)
                 if key in seen:
                     continue
                 seen.add(key)
-                model = str(entry.get("model") or "unknown")
-                slot = by_model.setdefault(model, {
-                    "calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
-                    "cost_usd": 0.0, "avg_duration_ms": 0,
-                })
-                slot["calls"] = int(slot.get("calls") or 0) + 1
-                slot["prompt_tokens"] = int(slot.get("prompt_tokens") or 0) + int(
-                    entry.get("prompt_tokens") or 0)
-                slot["completion_tokens"] = int(slot.get("completion_tokens") or 0) + int(
-                    entry.get("completion_tokens") or 0)
-                slot["cost_usd"] = float(slot.get("cost_usd") or 0.0) + float(
-                    entry.get("cost_usd") or 0.0)
-                total += float(entry.get("cost_usd") or 0.0)
-                calls += 1
+                entries.append(entry)
     except Exception:
         pass
+    return entries
+
+
+def _ledger_stats(
+    entries: List[Dict[str, Any]],
+    window: Optional[tuple] = None,
+) -> tuple:
+    """(cost_usd, calls, by_model) for the entries inside ``window`` (or all)."""
+    total, calls = 0.0, 0
+    by_model: Dict[str, Dict[str, Any]] = {}
+    for entry in entries:
+        if window is not None:
+            try:
+                ts = float(entry.get("timestamp") or 0.0)
+            except (TypeError, ValueError):
+                continue
+            if ts < window[0] or ts > window[1]:
+                continue
+        model = str(entry.get("model") or "unknown")
+        slot = by_model.setdefault(model, {
+            "calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
+            "cost_usd": 0.0, "avg_duration_ms": 0,
+        })
+        slot["calls"] = int(slot.get("calls") or 0) + 1
+        slot["prompt_tokens"] = int(slot.get("prompt_tokens") or 0) + int(
+            entry.get("prompt_tokens") or 0)
+        slot["completion_tokens"] = int(slot.get("completion_tokens") or 0) + int(
+            entry.get("completion_tokens") or 0)
+        slot["cost_usd"] = float(slot.get("cost_usd") or 0.0) + float(
+            entry.get("cost_usd") or 0.0)
+        total += float(entry.get("cost_usd") or 0.0)
+        calls += 1
+    for slot in by_model.values():
+        n = slot["calls"] or 1
+        slot["avg_duration_ms"] = int(slot.get("avg_duration_ms") or 0) // n
     return round(total, 6), calls, by_model
+
+
+def _cost_snapshot(window: Optional[tuple] = None) -> tuple:
+    """This run's cost when a window is given and it has entries, else the lot.
+
+    Returns (cost_usd, calls, by_model, windowed).
+    """
+    entries = _ledger_entries()
+    if window is not None:
+        total, calls, by_model = _ledger_stats(entries, window)
+        if calls:
+            return total, calls, by_model, True
+    total, calls, by_model = _ledger_stats(entries, None)
+    return total, calls, by_model, False
 
 
 def _learned_counts(project_id: str, *, db_path: Optional[Path] = None) -> Dict[str, int]:

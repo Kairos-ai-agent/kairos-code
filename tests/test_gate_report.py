@@ -251,6 +251,65 @@ def test_cost_jsonl_is_deduped(tmp_path, monkeypatch):
     cost_mod.set_log_path(Path("data") / "cost.jsonl")
 
 
+def test_cost_is_scoped_to_the_run_window(tmp_path, monkeypatch):
+    """Cost must belong to THIS run.
+
+    The ledger records no project id (it is process-global), so a project's
+    report used to print the whole ledger as its own spend. The figure is now
+    the sum of entries inside the session's time window.
+    """
+    db = tmp_path / "kairos.db"
+    _seed_db(db)
+    log = tmp_path / "cost.jsonl"
+    now = time.time()
+    inside = _entry("in-1", 0.02)
+    inside["timestamp"] = now - 500          # inside the seeded session window
+    outside = _entry("out-1", 9.99)
+    outside["timestamp"] = now - 100000      # some other project, long ago
+    log.write_text(json.dumps(inside) + "\n" + json.dumps(outside) + "\n", encoding="utf-8")
+    monkeypatch.setattr(cost_mod, "_BUFFER", [])
+    cost_mod.set_log_path(log)
+    report = gr.collect(PID, db_path=db)
+    assert report.cost_windowed is True
+    assert report.cost_calls == 1
+    assert report.cost_usd == pytest.approx(0.02)     # not 10.01
+    assert "time window" in report.to_markdown("en")
+    cost_mod.set_log_path(Path("data") / "cost.jsonl")
+
+
+def test_cost_falls_back_to_global_and_says_so(tmp_path, monkeypatch):
+    """With nothing in the window we report the ledger total — and flag it."""
+    db = tmp_path / "kairos.db"
+    _seed_db(db)
+    log = tmp_path / "cost.jsonl"
+    old = _entry("old-1", 0.5)
+    old["timestamp"] = time.time() - 100000
+    log.write_text(json.dumps(old) + "\n", encoding="utf-8")
+    monkeypatch.setattr(cost_mod, "_BUFFER", [])
+    cost_mod.set_log_path(log)
+    report = gr.collect(PID, db_path=db)
+    assert report.cost_windowed is False
+    assert report.cost_usd == pytest.approx(0.5)
+    assert "Ledger total" in report.to_markdown("en")
+    cost_mod.set_log_path(Path("data") / "cost.jsonl")
+
+
+def test_tokens_fall_back_to_the_ledger(tmp_path, monkeypatch):
+    """review_json has no usage in some providers — tokens come from the ledger."""
+    db = tmp_path / "kairos.db"
+    _seed_db(db)
+    log = tmp_path / "cost.jsonl"
+    entry = _entry("tok-1", 0.0)
+    entry["timestamp"] = time.time() - 500
+    entry["prompt_tokens"], entry["completion_tokens"] = 1200, 300
+    log.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+    monkeypatch.setattr(cost_mod, "_BUFFER", [])
+    cost_mod.set_log_path(log)
+    report = gr.collect(PID, db_path=db)
+    assert report.tokens == 1500
+    cost_mod.set_log_path(Path("data") / "cost.jsonl")
+
+
 def test_cost_jsonl_tolerates_garbage_lines(tmp_path, monkeypatch):
     db = tmp_path / "kairos.db"
     _seed_db(db)

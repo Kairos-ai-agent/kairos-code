@@ -413,9 +413,9 @@ export const SidebarFooter: React.FC = () => {
         }}
       >
         <div style={{ display: 'flex', gap: 4 }}>
-          <Tooltip title={t('shell.sidebar.newChat')} placement="top">
+          <Tooltip title={t('shell.newChat.newChat')} placement="top">
             {navBtn('footer-chat', <MessageOutlined style={{ fontSize: 14 }} />,
-                    t('shell.sidebar.newChat'), () => navigate('/chat'))}
+                    t('shell.newChat.newChat'), () => navigate('/chat'))}
           </Tooltip>
           <Tooltip title={t('shell.sidebar.today')} placement="top">
             {navBtn('footer-today', <AppstoreOutlined style={{ fontSize: 14 }} />,

@@ -7,7 +7,7 @@
   "nav.advancedHint": {"zh": "聊天、工具、追踪、项目等", "en": "Chat, tools, trace, projects and more"},
   "nav.loop": {"zh": "循环", "en": "Loop"},
   "nav.trace": {"zh": "追踪", "en": "Trace"},
-  "nav.projects": {"zh": "项目", "en": "Projects"},
+  "nav.projects": {"zh": "全部项目", "en": "All projects"},
   "nav.dashboard": {"zh": "看板", "en": "Dashboard"},
 
   "run.title": {"zh": "运行", "en": "Run"},
@@ -15,6 +15,7 @@
   "run.loadFailed": {"zh": "加载失败", "en": "Failed to load"},
   "run.noProject": {"zh": "还没有项目。先创建一个项目，或先跑一次演示。", "en": "No project yet. Create one, or try the demo first."},
   "run.demoHint": {"zh": "不需要 API Key 就能看到完整门禁流程：", "en": "See the whole gate with no API key:"},
+  "run.demoCommand": {"zh": "kairos demo", "en": "kairos demo"},
   "run.noRuns": {"zh": "这个项目还没有跑过任何一轮。", "en": "This project has not run yet."},
   "run.noRunsHint": {"zh": "在下面写一句需求，点“开始运行”，Coder 写、Reviewer 审、门禁决定是否放行。", "en": "Write a requirement below and start a run: the Coder writes, the Reviewer gates, the ledger records."},
   "run.state.passed": {"zh": "已通过", "en": "Passed"},

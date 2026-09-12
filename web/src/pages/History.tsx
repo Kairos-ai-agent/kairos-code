@@ -7,6 +7,7 @@
  * the second of the three primary views (Run / History / Settings).
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Alert, Button, Card, Empty, Select, Space, Spin, Table, Tag, Tooltip, Typography,
 } from 'antd';
@@ -50,7 +51,10 @@ const History: React.FC = () => {
   const projects = useChatStore((s) => s.projects);
   const currentProject = useChatStore((s) => s.currentProject);
 
-  const [projectId, setProjectId] = useState(currentProject?.id || '');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [projectId, setProjectId] = useState(
+    searchParams.get('project') || currentProject?.id || '',
+  );
   const [rows, setRows] = useState<SessionRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -58,6 +62,13 @@ const History: React.FC = () => {
   useEffect(() => {
     if (!projectId && projects.length) setProjectId(projects[0].id);
   }, [projects, projectId]);
+
+  useEffect(() => {
+    if (searchParams.get('project') !== projectId) {
+      setSearchParams(projectId ? { project: projectId } : {}, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
 
   const reportUrl = useCallback(
     (sessionId: string, format: 'html' | 'md' | 'json' = 'html', download = false) => {
@@ -74,8 +85,27 @@ const History: React.FC = () => {
     setLoading(true);
     setError('');
     try {
-      const res = await api.get(`/projects/${projectId}/sessions`);
-      const sessions: SessionRow[] = res.data.sessions || [];
+      const res = await api.get(`/projects/${projectId}/sessions`)
+        .catch(() => ({ data: null }));
+      let sessions: SessionRow[] = res.data?.sessions || [];
+      if (!sessions.length) {
+        // Same fallback as Run: the report is DB-backed, the session list is not.
+        const agg = await api.get(`/projects/${projectId}/gate-report`, {
+          params: { format: 'json' },
+        });
+        if (agg.data?.rounds_total) {
+          sessions = [{
+            session_id: agg.data.session_id || '(latest)',
+            round_count: agg.data.rounds_total,
+            started_at: agg.data.rounds?.[0]?.created_at || 0,
+            last_score: agg.data.final_score,
+            last_approve: Boolean(agg.data.passed),
+            gate: agg.data as GatePayload,
+          }];
+          setRows(sessions);
+          return;
+        }
+      }
       // Fetch the receipt for the most recent runs so the table can show the
       // verdict + cost without opening anything (sessions are few in practice).
       const withGate = await Promise.all(sessions.slice(0, 25).map(async (s) => {

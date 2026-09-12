@@ -1592,7 +1592,7 @@ the path label are always absolute.
 
 - 140 tests pass (139 + 1 new).
 - Smoke test on this Windows machine:
-  `~ (user)`, `workspace (D:\software_bak\Kairos_code\workspace)`,
+  `~ (user)`, `workspace (<repo>\workspace)`,
   `C:`, `D:` — 4 roots, all absolute.
 - Backend restart required for the new logic to take
   effect.

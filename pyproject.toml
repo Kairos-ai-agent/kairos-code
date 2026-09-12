@@ -77,6 +77,9 @@ daemon = ["psutil>=5.9"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24.0",
+    # CI runs the suite with --timeout so a stuck test fails by name instead of
+    # silently consuming the job's budget.
+    "pytest-timeout>=2.3.0",
     "ruff>=0.6.0",
     "mypy>=1.11.0",
     "textual>=0.80,<1.0",
@@ -86,6 +89,12 @@ dev = [
 all = [
     "kairos-code[ollama,dashscope,zhipuai,tui,metrics,mcp,voice,memory,browser,cloud,llm,telemetry,daemon]",
 ]
+
+[project.scripts]
+# `pip install kairos-code` gives users a real `kairos` command. Bare `kairos`
+# still starts the server (the CLI's documented default); the subcommands are
+# serve / exec / gate / demo.
+kairos = "kairos.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/Kairos-ai-agent/kairos-code"

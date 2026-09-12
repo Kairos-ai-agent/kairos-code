@@ -1,6 +1,6 @@
 # Kairos Code 系统完整审查报告 v3
 
-> **审查范围**：`D:\software_bak\Kairos_code`（Kairos Code v0.1.0）  
+> **审查范围**：`<repo>`（Kairos Code v0.1.0）  
 > **审查时间**：2026-07-18 02:00-02:20（基于 v2 报告后用户修复了 4 个文件）  
 > **审查方法**：单测 mock + 端到端真 LLM（MiniMax，Anthropic 协议）+ Provider 协议层 trace  
 > **报告版本**：v3.0（覆盖 v1.0 + v2.0）
@@ -356,7 +356,7 @@ def format_messages_for_openai(messages):
 **验证方法**（修完后再跑一次 e2e）：
 
 ```bash
-cd D:\software_bak\Kairos_code
+cd kairos-code
 python -c "
 # 模拟 base.py 在多轮 tool-calling 后的 memory，验证 provider 转换
 from kairos.llm.providers.base import format_messages_for_openai

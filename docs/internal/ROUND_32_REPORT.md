@@ -62,10 +62,10 @@ $ python -m kairos.doctor
     [OK]    Settings: host=0.0.0.0 port=8900 default=openai
 
   FILESYSTEM
-    [OK]    Data dir: D:\software_bak\Kairos_code\data
+    [OK]    Data dir: <repo>\data
     [OK]    Workspace dir: workspace
-    [OK]    Alerts history: writable at D:\software_bak\Kairos_code\data\alerts.jsonl
-    [OK]    Vendor dir: D:\software_bak\Kairos_code\vendor (0 wheels)
+    [OK]    Alerts history: writable at <repo>\data\alerts.jsonl
+    [OK]    Vendor dir: <repo>\vendor (0 wheels)
 
   LLM
     [WARN]  LLM providers: no API keys set; will use Ollama if reachable

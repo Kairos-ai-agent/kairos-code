@@ -87,7 +87,7 @@ This made tasks 1, 5, 7, 8 go from FAIL to PASS without changing the LLM at all 
 $env:MINIMAX_API_KEY = "sk-cp-..."
 
 # 2. Run the 3 baseline methods
-cd D:\software_bak\Kairos_code
+cd kairos-code
 python -m kairos.bench.harness_eval --out diff_baseline.json
 python -m kairos.bench.harness_pytest_eval --out pytest_baseline.json
 python -m kairos.bench.harness_semantic_eval --out semantic_baseline.json

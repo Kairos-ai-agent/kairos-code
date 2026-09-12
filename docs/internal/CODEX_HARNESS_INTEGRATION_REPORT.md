@@ -1,6 +1,6 @@
 # Kairos 借鉴 Codex Harness 设计 — 集成报告 v3
 
-> **范围**：`D:\software_bak\Kairos_code`  
+> **范围**：`<repo>`  
 > **背景**：2026-08-25 用户拍板"方案 3 走起"——借鉴 OpenAI 2026-08-19 开源的 Codex Harness 设计模式，而不是集成 Rust runtime。  
 > **完成日期**：2026-08-25  
 > **本报告**：覆盖 4 个模块（retained reasoning / Manifest / Review guardrail / OS sandbox）从 v1 IMPLEMENTATION_PLAN 到全部落地。

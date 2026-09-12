@@ -16,7 +16,7 @@ WshShell.Run "cmd /c cd /d """ & scriptDir & """ && del /s /q /f __pycache__ >nu
 ' R38.6.4: backend launch lives in start_backend.bat (single source of
 ' truth, shared with watchdog.bat). It calls the venv interpreter by
 ' ABSOLUTE PATH — the venv's activate.bat still hard-codes the OLD repo
-' location (D:\software_bak\Kairos_code; the repo now lives on E:), which
+' location (<repo>; the repo now lives on E:), which
 ' prepended a non-existent Scripts dir to PATH, made `python` resolve to a
 ' foreign interpreter without pydantic_settings, and the backend died in
 ' <1s → every /api call 500 → "LLM 设置连接不上". Output goes to

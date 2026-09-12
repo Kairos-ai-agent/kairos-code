@@ -1,6 +1,6 @@
 # Kairos 相对 Codex / Claude Code 能力补齐 — 进度报告
 
-> **范围**：`D:\software_bak\Kairos_code`  
+> **范围**：`<repo>`  
 > **完成日期**：2026-08-25（首轮 P0 三个完成）  
 > **状态**：**P0 全部完成，P1/P2 排队中**
 

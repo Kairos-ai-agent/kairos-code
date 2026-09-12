@@ -1,0 +1,264 @@
+name: Release
+
+# Tag `v0.1.0` (or run this manually as a dry run) and every installable artifact
+# is built, verified by actually running it, and published to the GitHub Release:
+#
+#   python-dist : kairos_code-<v>-py3-none-any.whl + .tar.gz  (the Web UI is inside
+#                 the wheel, so `pip install kairos-code` gives a working product)
+#   binary      : standalone executables for Linux / macOS / Windows — no Python
+#                 required, double-click and the browser opens
+#   docker      : ghcr.io/<owner>/<repo>:<v>  (+ :latest on tags)
+#
+# Manual runs never publish a Release; only a `v*` tag does. Every artifact is
+# smoke-tested before it is uploaded: the wheel is installed into a clean venv
+# and runs the zero-key demo; each binary and the container are started headless
+# and must answer /api/health and serve the bundled UI.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  meta:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      is_tag: ${{ steps.v.outputs.is_tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        name: "Version from the tag, or from pyproject.toml for a dry run"
+        run: |
+          set -eu
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"; IS_TAG=true
+          else
+            VERSION=$(python3 -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+            IS_TAG=false
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "is_tag=$IS_TAG"   >> "$GITHUB_OUTPUT"
+          echo "### kairos-code $VERSION (publish=$IS_TAG)" >> "$GITHUB_STEP_SUMMARY"
+
+  dist:
+    name: Wheel and sdist
+    needs: meta
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build the Web UI (the wheel ships it)
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build wheel and sdist
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+
+      - name: Assert the wheel really ships the UI and a console script
+        run: |
+          python - <<'PY'
+          import glob, zipfile
+          whl = sorted(glob.glob("dist/*.whl"))[-1]
+          names = zipfile.ZipFile(whl).namelist()
+          assert "web/dist/index.html" in names, f"{whl} does not ship the Web UI"
+          assert any(n.endswith("entry_points.txt") for n in names), "no console script in the wheel"
+          print(f"{whl}: {len(names)} entries, "
+                f"{len([n for n in names if n.startswith('web/dist/')])} under web/dist/")
+          PY
+
+      - name: Install the wheel in a clean venv and run the zero-key demo
+        run: |
+          python -m venv /tmp/clean
+          /tmp/clean/bin/pip install --quiet dist/*.whl
+          /tmp/clean/bin/kairos --version
+          /tmp/clean/bin/kairos demo --json --quiet
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+          if-no-files-found: error
+
+  binary:
+    name: Binary (${{ matrix.label }})
+    needs: meta
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, label: linux-x86_64 }
+          - { os: macos-latest, label: macos-arm64 }
+          - { os: windows-latest, label: windows-x86_64 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build the Web UI (the binary bundles it)
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install the project and PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install . pyinstaller
+
+      - name: Freeze a standalone executable
+        run: python scripts/build_binary.py --out dist
+
+      - name: "Smoke test it — headless, health endpoint plus the bundled UI"
+        shell: bash
+        run: |
+          BIN=dist/kairos-code
+          [ -f dist/kairos-code.exe ] && BIN=dist/kairos-code.exe
+          python scripts/smoke_binary.py "$BIN" --port 9988 --timeout 180
+
+      - name: Package the archive
+        shell: bash
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+          LABEL: ${{ matrix.label }}
+        run: |
+          python - <<'PY'
+          import os, pathlib, shutil, textwrap
+          version, label = os.environ["VERSION"], os.environ["LABEL"]
+          src = next(p for p in (pathlib.Path("dist/kairos-code.exe"),
+                                 pathlib.Path("dist/kairos-code")) if p.exists())
+          base = f"kairos-code-{version}-{label}"
+          root = pathlib.Path("out"); root.mkdir(exist_ok=True)
+          stage = root / base
+          if stage.exists():
+              shutil.rmtree(stage)
+          stage.mkdir(parents=True)
+          shutil.copy2(src, stage / src.name)
+          (stage / "README.txt").write_text(textwrap.dedent(f"""\
+              Kairos Code {version} — standalone build for {label}
+
+              Run it:        ./{src.name}          (a browser opens on the UI)
+              Pick a port:   ./{src.name} --port 9100
+              No browser:    ./{src.name} --no-browser
+              Data lives in: your per-user application directory
+
+              macOS note: this build is not code-signed. If Gatekeeper refuses it,
+              clear the quarantine flag once:  xattr -d com.apple.quarantine {src.name}
+
+              License: AGPL-3.0-or-later (see LICENSE in the repository).
+              """))
+          fmt = "zip" if os.name == "nt" else "gztar"
+          path = shutil.make_archive(str(root / base), fmt, root_dir=root, base_dir=base)
+          print("packaged:", path, f"({pathlib.Path(path).stat().st_size/1048576:.1f} MB)")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.label }}
+          path: |
+            out/*.zip
+            out/*.tar.gz
+          if-no-files-found: error
+
+  docker:
+    name: Docker image
+    needs: meta
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build --tag kairos-code:${{ needs.meta.outputs.version }} .
+
+      - name: Smoke test the container (health and the bundled UI)
+        run: |
+          set -eu
+          docker run --detach --name kairos-smoke \
+            --publish 9988:8900 kairos-code:${{ needs.meta.outputs.version }}
+          ok=""
+          for _ in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9988/api/health || true)
+            if [ "$code" = "200" ]; then ok=yes; break; fi
+            sleep 2
+          done
+          if [ -z "$ok" ]; then
+            echo "container never became healthy:"
+            docker logs --tail 40 kairos-smoke
+            exit 1
+          fi
+          echo "health: 200"
+          curl -sf http://127.0.0.1:9988/ | grep -q '<div id="root"' && echo "UI: served"
+          docker rm --force kairos-smoke
+
+      - name: Push to ghcr.io (tags only)
+        if: needs.meta.outputs.is_tag == 'true'
+        run: |
+          set -eu
+          IMAGE=ghcr.io/${{ github.repository }}
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker tag kairos-code:${{ needs.meta.outputs.version }} "$IMAGE:${{ needs.meta.outputs.version }}"
+          docker tag kairos-code:${{ needs.meta.outputs.version }} "$IMAGE:latest"
+          docker push "$IMAGE:${{ needs.meta.outputs.version }}"
+          docker push "$IMAGE:latest"
+
+  release:
+    name: Publish the GitHub Release
+    needs: [meta, dist, binary, docker]
+    if: needs.meta.outputs.is_tag == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Attach everything to the Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          ls -la artifacts
+          gh release create "v${{ needs.meta.outputs.version }}" \
+            --repo "${{ github.repository }}" \
+            --title "Kairos Code v${{ needs.meta.outputs.version }}" \
+            --generate-notes \
+            artifacts/**

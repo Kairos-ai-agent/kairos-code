@@ -1,6 +1,6 @@
 # Kairos Code 系统完整审查报告 v10
 
-> **审查范围**：`D:\software_bak\Kairos_code`（Kairos Code v0.1.0）
+> **审查范围**：`<repo>`（Kairos Code v0.1.0）
 > **审查时间**：2026-07-18 14:54-15:10（基于 v9 报告后用户修复了 9 个文件）
 > **审查方法**：import 测试 + TTL 单测 + 端到端真 LLM + 源码 audit
 > **报告版本**：v10.0（覆盖 v1.0 → v9.0）

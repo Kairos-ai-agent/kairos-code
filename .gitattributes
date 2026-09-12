@@ -1,0 +1,31 @@
+# Keep the repository's language stats honest and the diffs readable.
+#
+# The i18n dictionaries are machine-generated: 63 languages x ~1100 lines would
+# otherwise dominate GitHub's language bar (marking this repo "TypeScript") and
+# bury every real change in a PR. They are real files, just not hand-written.
+web/src/i18n/locales/*.ts   linguist-generated=true
+web/src/i18n/languages.ts   linguist-generated=true
+web/src/i18n/languages.json linguist-generated=true
+web/src/i18n/catalog/*.json linguist-generated=true
+
+# Vendored third-party skills: not our code, so keep it out of the stats too.
+vendor/**                   linguist-vendored=true
+
+# Binary assets: never attempt text diffs / line-ending conversion.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.ico  binary
+*.svg  text
+*.pdf  binary
+*.whl  binary
+*.exe  binary
+
+# Lockfiles and generated reports: collapsed by default in diffs.
+package-lock.json           linguist-generated=true
+web/package-lock.json       linguist-generated=true
+
+# Shell/batch launchers on Windows want CRLF; everything else lives as-is.
+*.bat text eol=crlf
+*.vbs text eol=crlf
+*.sh  text eol=lf

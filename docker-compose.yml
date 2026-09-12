@@ -1,0 +1,22 @@
+services:
+  kairos:
+    build: .
+    image: kairos-code:local
+    container_name: kairos
+    ports:
+      # Bind to loopback by default: the API can drive agents and read project
+      # files, so it should not be reachable from the network until you put a
+      # proxy with authentication in front of it.
+      - "127.0.0.1:8900:8900"
+    environment:
+      KAIROS_HOST: "0.0.0.0"
+      KAIROS_PORT: "8900"
+      KAIROS_DATA_DIR: "/data"
+      # Optional: protect the API with a bearer token.
+      # KAIROS_TOKEN: "change-me"
+    volumes:
+      # Settings (data/settings.json), the SQLite DB, the cost ledger, workspaces.
+      - ./data:/data
+      # Mount a project you want the agent to work on. Keep it OUTSIDE /data.
+      # - /path/to/your/project:/work
+    restart: unless-stopped

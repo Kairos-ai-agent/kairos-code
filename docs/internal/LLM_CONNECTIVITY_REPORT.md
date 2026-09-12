@@ -70,7 +70,7 @@ export DEEPSEEK_API_KEY="sk-your-key"
 配置完成后运行以下命令测试：
 
 ```powershell
-cd E:\D_bak\software_bak\Kairos_code
+cd /path/to/Kairos_code
 
 # 检查配置加载
 python -c "from kairos.config.settings import settings; print('OpenAI Key:', 'SET' if settings.openai.api_key else 'NOT SET')"

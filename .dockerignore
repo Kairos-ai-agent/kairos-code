@@ -1,0 +1,26 @@
+# Keep the build context small and free of host state.
+.venv/
+venv/
+**/__pycache__/
+*.py[cod]
+
+web/node_modules/
+web/dist/
+web/.vite/
+
+data/
+logs/
+workspace/
+.agn_tmp/
+.loop_tmp/
+.kairos/
+
+.git/
+.github/
+docs/
+tests/
+
+*.log
+*.bundle
+.env
+.env.*

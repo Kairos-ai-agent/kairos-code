@@ -1,0 +1,72 @@
+name: Bug report
+description: Something behaves differently than it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. A couple of things speed this up a lot:
+        * `kairos demo` runs the whole gate offline — if it fails, that is a
+          reproducible bug on a fresh clone and we would love the output.
+        * Please redact API keys, tokens and absolute personal paths from logs.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what did you get instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How can we reproduce it?
+      description: Exact commands, in order. Smallest possible repro is best.
+      placeholder: |
+        1. kairos demo
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: Output of `kairos --version`, or the commit SHA you run.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part?
+      multiple: true
+      options:
+        - Review loop / gate (Coder ↔ Reviewer)
+        - Gate Report (kairos gate report)
+        - Demo (kairos demo)
+        - Web UI
+        - Model providers / routing
+        - Cost ledger
+        - Sandbox / tools / permissions
+        - i18n (languages)
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, Node version (if the UI is involved), provider/model.
+      placeholder: |
+        OS: Windows 11 / macOS 15 / Ubuntu 24.04
+        Python: 3.11.15
+        Node: 20
+        Provider: deepseek-chat via direct API
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant output from the terminal, `logs/backend_out.log`, or the browser console.
+      render: shell
+    validations:
+      required: false

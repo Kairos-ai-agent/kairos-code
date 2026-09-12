@@ -1,0 +1,45 @@
+name: Feature request
+description: Suggest a capability or an improvement
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The project's centre of gravity is the **gate + the ledger**: who writes,
+        who reviews, under what conditions work is allowed through, and what each
+        round cost. Ideas that strengthen that are the easiest to accept.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the situation, not the solution — then the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Including "do nothing" and any workaround you already use.
+    validations:
+      required: false
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Where would this live?
+      multiple: true
+      options:
+        - Backend / loop
+        - Web UI
+        - CLI
+        - Providers / routing
+        - Cost or eval harness
+        - Docs
+        - Other
+    validations:
+      required: false

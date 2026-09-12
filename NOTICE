@@ -1,0 +1,35 @@
+# Third-party notices
+
+Kairos Code is MIT licensed (see [LICENSE](LICENSE)). It bundles or depends on
+the following third-party work; the original license files are kept next to the
+sources under `vendor/`.
+
+## Vendor: `vendor/_oss/anthropic-skills/`
+
+Anthropic's Agent Skills collection (upstream: <https://github.com/anthropics/skills>).
+Vendored so the skill loader has a stable, offline fixture set. Its own
+attribution notices — covering e.g. `imageio` / `imageio-ffmpeg` under BSD
+2-Clause — are retained at
+`vendor/_oss/anthropic-skills/THIRD_PARTY_NOTICES.md`.
+
+## Vendor: `vendor/_oss/superpowers/`
+
+`superpowers` v6.3.0, Copyright (c) 2025 Jesse Vincent — **MIT License**
+(full text at `vendor/_oss/superpowers/LICENSE`).
+
+## Vendor: `vendor/_oss/claude-skills/`
+
+Skill definitions (`code-reviewer`, `senior-architect`, `tdd-guide`) adapted
+from Anthropic's Agent Skills collection (upstream:
+<https://github.com/anthropics/skills>).
+
+## Runtime dependencies
+
+Python and Node dependencies keep their own licenses; see `pyproject.toml`
+(Python) and `web/package.json` (frontend). Nothing here relicenses them.
+
+## Branding
+
+The Kairos name, logo and icon assets (`kairos-icon*.png`, `web/public/branding/*`)
+are original work by the Kairos Code authors and are covered by the project's
+MIT license.

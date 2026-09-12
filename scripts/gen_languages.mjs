@@ -13,8 +13,11 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const REPO = 'E:/D_bak/software_bak/Kairos_code';
+// Repo root = the parent of this script's directory, so the generator works
+// from any checkout (it used to hardcode the author's E:\ path).
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ANTD = path.join(REPO, 'web/node_modules/antd/locale');
 const DAYJS = path.join(REPO, 'web/node_modules/dayjs/locale');
 

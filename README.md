@@ -1,201 +1,328 @@
+<div align="center">
+
 # Kairos Code
 
-**LoopReview development harness — one Coder agent and one Reviewer agent, locked in an auto-review loop until the Reviewer approves.**
+**Self-hosted, model-agnostic multi-agent pipeline with enforced review gates and cost accounting.**
 
-Kairos Code runs a single universal Coder agent (full tools: file read/write/edit, grep, find, git, terminal allowlist, web fetch/search, subagent fork) against a single strict Reviewer agent (read-only + tests). The Reviewer grades each round on a 0-100 weighted rubric and the orchestrator runs them in a loop until approval, max rounds, or one of the early-stop gates fires.
+*You don't ship what the agent didn't pass.*
 
-## LoopReview Model
+[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![Node 20+](https://img.shields.io/badge/node-20%2B-339933.svg)](https://nodejs.org)
+[![UI languages: 63](https://img.shields.io/badge/UI%20languages-63-blueviolet.svg)](#internationalisation)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-Two roles, one loop:
+</div>
 
-| Role | Job | Default Model |
-|---|---|---|
-| Coder | Reads requirement, edits files, runs tests, iterates | OpenAI `gpt-4o` |
-| Reviewer | Reads diff, runs tests, returns strict JSON verdict `{approve, score, issues[], summary}` | Anthropic `claude-sonnet-4` |
+---
 
-The loop is a single background `asyncio.Task`. UI sees everything via the MessageBus → WebSocket pipeline.
+A Coder agent writes. A Reviewer agent grades it, round after round, and nothing
+is accepted until the Reviewer's verdict passes the gate. Every round, every
+token and every dollar is written to a ledger you can audit — and the whole run
+exports as a one-file **Gate Report** you can paste into a PR.
 
-## Stop Conditions
+Kairos Code is not a chat assistant and not a single-agent coding CLI. It is the
+**checkpoint**, the **receipt** and the **invoice** around whichever model you
+already pay for.
 
-The loop exits on whichever fires first:
+## 60 seconds, no API key
 
-1. **Approve gate** — Reviewer returns `approve=true`, `score ≥ 75`, no CRITICAL issue
-2. **Cost cap (tokens)** — cumulative prompt+completion tokens exceed `COST_TOKEN_CAP` (default 500k)
-3. **Cost cap (wall-clock)** — `time.time() - session.started_at ≥ COST_TIME_CAP_S` (default 30 min); doubled for heavy tasks via `dynamic_caps`
-4. **Infra-failure streak** — Reviewer returns 5 consecutive parse/tool-limit failures (no_progress never trips on infra failures, so this catches the stuck-broker case)
-5. **Score stagnation** — last 3 scores within ±2 of each other AND below approval threshold
-6. **No-progress** — same issue signature repeats for 5 rounds
-7. **Safety cap** — hard limit at 50 rounds (defensive, should rarely fire now)
-8. **User stop** — user clicks stop in the UI
+```bash
+pip install -e .
+kairos demo
+```
 
-Each gate publishes `loop.stopped` with a `reason` field so the UI can show why the loop ended.
+```
+Kairos demo — the review gate, in about a minute, with no API key.
+A scripted model plays the Coder and the Reviewer; the loop, the gate and the ledger are the real thing.
+[1/6] building a tiny repo (relay.py + test_relay.py)
+[2/6] no API key needed — the real loop meets a scripted model
+[3/6] running the loop: Coder → Reviewer → gate
+      R1 ✗ rejected · score 40 · 3 bug(s): the exponent is negated, so the delay shrinks with every attempt inste
+      R2 ✗ rejected · score 80 · 1 bug(s): Retry-After is read but never applied to the last delay (test_retry_af
+      R3 ✓ approved · score 100 · no bugs
+[4/6] verifying the final state with the repo's own tests
+      3 passed in 0.04s
+[5/6] generating the Gate Report
+[6/6] done in 7.1s
+Badge:  Kairos Gate ✅ · 3 round(s) · $0.0000
+```
+
+That is the real loop with a scripted model standing in for the LLM: the same
+`loop_runner`, the same gates, the same SQLite round history, the same ledger.
+Point it at a real provider and it runs your model — same gate, same scores,
+same receipt. The `$0.0000` is honest (no network calls were made).
+
+## Why this exists
+
+| | ChatGPT / Claude | Claude Code / Codex CLI | **Kairos Code** |
+|---|---|---|---|
+| Unit of work | an answer | a task you supervise | a **gated round** |
+| Who judges the result | you | you | a **second agent**, against a score threshold |
+| Cost visibility | per chat | per session (if any) | **per round, per run, with alerts** |
+| Evidence for "it's done" | you re-read the diff | you re-read the diff | **Gate Report + test output + diff + ledger** |
+| Where it runs | vendor cloud | your machine | **your machine, your keys, your models** |
+
+The honest positioning: a frontier coding CLI beats Kairos at raw code quality on
+any given attempt. Kairos is about **what you can prove afterwards** — that the
+work was reviewed, that it passed a threshold, and what it cost.
+
+## The three things that are actually different
+
+### 1. An enforced gate, not a suggestion
+
+The Reviewer returns a strict verdict and the loop refuses to finish until it
+passes. It stops on the first of eight conditions — approval, token cap,
+wall-clock cap, infra-failure streak, score stagnation, repeated issue
+signature, a hard round cap, or the user pressing stop. See
+[Loop stop conditions](#loop-stop-conditions). Implementation:
+`kairos/loop/loop_runner.py`.
+
+### 2. A ledger you can invoice from
+
+Every provider call records tokens and cost; the UI shows the per-round curve,
+the running total and the cost of each accepted change. `kairos/cost.py` plus
+`data/cost.jsonl` are the source of truth, and `kairos/alerts.py` can fire on
+budget thresholds.
+
+### 3. An eval harness that re-checks your own pipeline
+
+`kairos/eval.py` records runs, replays them deterministically, and derives eval
+cases from real sessions (`scripts/import_session_to_eval.py`), with a
+meta-eval over the Reviewer itself. You can measure your pipeline instead of
+trusting it.
+
+## The Gate Report
+
+The report is the artifact the pipeline produces: a **single self-contained
+HTML file** — no assets, no network — carrying the verdict, the score curve, the
+bugs found per round, the test evidence and the ledger. It ships with English
+and Chinese inline (the language toggle is client-side, both languages are in
+the file), so one file is shareable to a whole team.
+
+![Gate Report](docs/assets/gate-report.png)
+
+```bash
+kairos gate report --project <id> --format html   # or md / json
+kairos gate report --project <id> --lang zh --out gate.html
+```
+
+```http
+GET /api/projects/{id}/gate-report?format=html|md|json&lang=en|zh&download=1
+```
+
+A badge for your PR description:
+`Kairos Gate ✅ · 3 round(s) · $0.0000`
+
+## Install
+
+### From source (recommended today — 0.1 is alpha)
+
+```bash
+git clone https://github.com/OWNER/REPO
+cd REPO
+python -m venv .venv
+. .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"       # drop [dev] for a plain install
+
+# Web UI (optional: the CLI and TUI work without it)
+cd web && npm install && npm run build && cd ..
+
+python -m kairos serve --host 127.0.0.1 --port 8900
+```
+
+Open http://127.0.0.1:8900 — the API serves the built UI, `/docs` has the
+interactive API reference.
+
+### Docker
+
+```bash
+docker compose up --build      # http://127.0.0.1:8900
+```
+
+State (SQLite, settings, ledger) lives in `./data`, which compose mounts as a
+volume. The image binds to loopback by default — see [SECURITY.md](SECURITY.md)
+before exposing it.
+
+### Optional extras
+
+```bash
+pip install -e ".[tui]"        # kairos tui      (Textual terminal UI)
+pip install -e ".[metrics]"    # /metrics        (Prometheus)
+pip install -e ".[mcp]"        # MCP stdio client + bundled filesystem server
+pip install -e ".[all]"        # everything
+```
+
+## Three surfaces, one engine
+
+![Run view](docs/assets/run.png)
+
+- **Web UI** — three views by default: **Run** (did it pass? what did it cost?
+  better or worse than last round?), **History** (every run: verdict, rounds,
+  score, cost, Δ), **Settings**. Everything else (chat, tools, loop internals,
+  trace, kanban) is parked under a collapsed *Advanced* group.
+- **CLI** — `kairos serve`, `kairos exec`, `kairos gate report`, `kairos demo`.
+- **TUI** — `kairos tui` (Textual), for when you live in a terminal.
+- **API** — REST + WebSocket; the UI is just a client. See the [API table](#api).
 
 ## Features
 
-- **LoopReview engine** — Coder ↔ Reviewer auto-loop with gate-based termination
-- **Plan-mode** — first round is prose-only (no tools), user approves before execution starts
-- **Cross-loop memory** — past rounds persist in SQLite; next loop on the same project gets a digest of what was tried
-- **Git checkpoint** — every approved round is auto-committed; user can roll back to any round from the UI
-- **Best-of-N** — run N parallel Coder subagents per round, pick the highest-scoring diff (opt-in via YAML)
-- **Specialist reviewers** — security / perf / design / test focused Reviewers (opt-in via YAML), scores are weighted-averaged
-- **Ask-human gate** — Reviewer can emit `loop.ask_human` to pause and request clarification
-- **Multi-LLM** — OpenAI, Anthropic, DeepSeek, Ollama, DashScope, ZhipuAI, Gemini, OpenRouter, custom providers
-- **Per-role model routing** — bind any model profile to the Coder or Reviewer role via Settings
-- **Hooks** — `data/hooks/*.py` can intercept `pre_tool_use`, `post_tool_use`, `loop_round`, `loop_completed`
-- **WebSocket** — real-time message bus + agent state heartbeat
-- **Inline review comments** — Reviewer issues export as `::code-comment` JSON for editor plugins
+**The loop**
+- Coder ↔ Reviewer auto-loop with weighted scoring and gate-based termination
+- Plan mode — the first round is prose-only; you approve before any edit
+- Cross-loop memory — previous rounds persist in SQLite and are summarised into
+  the next loop on that project
+- Git checkpoint per approved round, with rollback from the UI
+- Best-of-N — N parallel Coder attempts per round, highest score wins (opt-in)
+- Specialist reviewers — security / perf / design / test sub-scores (opt-in)
+- Ask-human gate — the Reviewer can pause and ask a question
 
-## Quick Start
+**Models**
+- Per-role routing: bind any model profile to the Coder or the Reviewer
+- 8 direct providers (OpenAI, Anthropic, DeepSeek, Gemini, OpenRouter, Ollama,
+  DashScope, ZhipuAI) plus LiteLLM for 100+ more, plus any OpenAI-compatible
+  endpoint
+- A deterministic **scripted provider** for offline demos and tests
+  (`kairos/llm/scripted.py`)
 
-### Backend
+**Operations**
+- Cost accounting per call/round/run with budget alerts
+- Eval harness: record / replay / derive / meta-eval
+- OpenTelemetry and Langfuse hooks, plus a built-in Trace view
+- Hooks: `data/hooks/*.py` intercept `pre_tool_use`, `post_tool_use`,
+  `loop_round`, `loop_completed`
+- MCP stdio client, three-tier skills with FTS5 index and hot reload
+- Windows computer-use tools, speech-to-text / text-to-speech, Feishu & Slack
+  webhooks
+- **63-language UI**, RTL-aware, one locale per language
 
-```bash
-cd D:\software_bak\Kairos_code
-pip install -e .
-copy .env.example .env
-# Edit .env with your API keys
-python -m kairos.main
-```
+## Agent roles
 
-Server runs at http://localhost:8900. API docs at http://localhost:8900/docs.
+Two roles, period. Earlier drafts of this README claimed eight (PM/Architect/QA/
+DevOps/…); those were aspirational and never existed. If you want a second
+opinion, enable the specialist reviewers — they run alongside the Reviewer and
+add weighted sub-scores.
 
-### Frontend
-
-```bash
-cd D:\software_bak\Kairos_code\web
-npm install
-npm run dev
-```
-
-Frontend runs at http://localhost:3000.
-
-### Silent start (background)
-
-```bat
-start_silent.bat   :: starts backend, frontend, watchdog; opens browser
-stop_silent.bat    :: kills everything cleanly
-```
+| Role | Job | Default model |
+|---|---|---|
+| Coder | reads the requirement, plans, edits files, runs tests | OpenAI `gpt-4o` (temp 0.7) |
+| Reviewer | reads the diff, runs tests, returns a verdict | Anthropic `claude-sonnet-4` (temp 0.3) |
+| Security / Perf / Design / Test reviewers | extra weighted checks (opt-in) | same as Reviewer |
 
 ## Architecture
 
 ```
-Kairos Code
-├── kairos/
-│   ├── agents/
-│   │   ├── base.py            # KairosAgent — tool-calling loop with memory + streaming
-│   │   └── roles/
-│   │       ├── coder.py       # Universal Coder — full tools, plan-and-execute
-│   │       ├── reviewer.py    # Strict Reviewer — read-only + tests, JSON verdict
-│   │       ├── security.py    # Opt-in: security-focused Reviewer (OWASP)
-│   │       ├── perf.py        # Opt-in: perf-focused Reviewer
-│   │       ├── design.py      # Opt-in: design-focused Reviewer
-│   │       └── test.py        # Opt-in: test-coverage-focused Reviewer
-│   ├── core/
-│   │   ├── orchestrator.py    # Project lifecycle + loop launch
-│   │   ├── message_bus.py     # Async pub/sub
-│   │   └── persistence.py     # SQLite (projects, messages, loop_rounds, comments, files)
-│   ├── llm/
-│   │   ├── base.py            # LLMConfig / LLMResponse / BaseLLMProvider
-│   │   ├── model_router.py    # Per-role model routing + provider discovery
-│   │   └── providers/         # 8 providers + custom
-│   ├── tools/                 # file_read, file_write, file_edit_replace, multi_edit,
-│   │                          # grep, find, git, terminal (allowlist), webfetch,
-│   │                          # websearch, subagent, checkpoint
-│   ├── loop/
-│   │   └── loop_runner.py    # run_loop + gates + plan-mode gate (review_loop.py re-exports)
-│   ├── review/
-│   │   ├── engine.py          # Standalone file/project review (not loop-coupled)
-│   │   ├── comments.py        # Reviewer verdict -> ::code-comment JSON
-│   │   └── mermaid.py         # Plan text -> mermaid flowchart + file tree
-│   └── hooks/                 # Hook runner (loads data/hooks/*.py)
-├── api/                       # FastAPI REST + WebSocket
-├── web/                       # React + TypeScript
-│   ├── Dashboard              # Project overview
-│   ├── Projects               # Create / configure projects
-│   ├── Loop                   # Live loop view: score chart, diff viewer, ask-human modal
-│   └── Settings               # Model + role routing + best-of-N + specialist toggles
-└── tests/                     # Pytest, asyncio_mode = "auto"
+kairos/
+├── agents/          base.py (tool loop + memory + streaming), roles/{coder,reviewer,…}.py
+├── core/            orchestrator.py, message_bus.py, persistence.py (SQLite)
+├── llm/             base.py, model_router.py, providers/ (8 + LiteLLM), scripted.py
+├── tools/           file_read/write/edit, multi_edit, grep, find, git, terminal (allowlist),
+│                    webfetch, websearch, subagent, checkpoint
+├── loop/            loop_runner.py — rounds, gates, plan gate, round persistence
+├── review/          engine.py (standalone review), comments.py, mermaid.py
+├── gate_report.py   the shareable receipt (MD / HTML / JSON, en+zh inline)
+├── demo.py          `kairos demo` — the zero-key first run
+├── cost.py          the ledger
+├── eval.py          record / replay / derive
+└── hooks/           hook runner (data/hooks/*.py)
+api/                 FastAPI REST + WebSocket, serves the built UI
+web/                 React 18 + TypeScript + Ant Design 5 + Vite
+tests/               pytest (asyncio_mode = "auto") + vitest on the frontend
 ```
 
-## Agent Roles
+## Loop stop conditions
 
-Two roles, period. The README used to claim 8 (PM/Architect/QA/DevOps/etc.); those were aspirational and never implemented. If you need a second opinion, enable the specialist reviewers (`security` / `perf` / `design` / `test`) — they run alongside the main Reviewer and add weighted scores.
+Whichever fires first:
 
-| Role | Description | Default Model |
-|---|---|---|
-| Coder | Reads requirement, plans, edits files, runs tests | OpenAI `gpt-4o` (temperature 0.7) |
-| Reviewer | Reads diff, runs tests, returns JSON verdict | Anthropic `claude-sonnet-4` (temperature 0.3) |
-| Security Reviewer | OWASP Top 10, secret leaks, auth checks | (opt-in, same model as Reviewer) |
-| Perf Reviewer | N+1 queries, hot loops, memory growth | (opt-in) |
-| Design Reviewer | Abstractions, fit with existing code | (opt-in) |
-| Test Reviewer | Coverage gaps, edge cases, flaky tests | (opt-in) |
+1. **Approve gate** — verdict passes: no blocking bugs, score ≥ threshold
+2. **Token cap** — cumulative tokens exceed `COST_TOKEN_CAP` (default 500k)
+3. **Wall-clock cap** — `COST_TIME_CAP_S` (default 30 min)
+4. **Infra-failure streak** — 5 consecutive provider/parse failures
+5. **Score stagnation** — last 3 scores within ±2 and below the threshold
+6. **No progress** — the same issue signature repeats for 5 rounds
+7. **Safety cap** — hard limit at 50 rounds
+8. **User stop** — you press stop
+
+Every exit publishes `loop.stopped` with a `reason`, so the UI can explain why
+the loop ended — and the reason lands in the Gate Report.
 
 ## API
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/projects` | GET / POST | List / create projects |
-| `/api/projects/:id` | GET / DELETE | Get / delete a project |
-| `/api/projects/:id/start` | POST | Start the loop (async; status returns immediately) |
-| `/api/projects/:id/stop` | POST | User-initiated stop |
-| `/api/projects/:id/plan` | GET | Current plan (pending/decision/text/mermaid) |
-| `/api/projects/:id/plan/approve` | POST | Approve the Coder plan |
-| `/api/projects/:id/plan/reject` | POST | Reject the plan |
-| `/api/projects/:id/loop` | GET | Current loop state: round, score, issues, history |
-| `/api/projects/:id/stats` | GET | Score history, token usage, cost estimate, gate firings |
-| `/api/projects/:id/diff` | GET | Per-round git diff (from/to round) |
-| `/api/projects/:id/checkpoint` | GET / POST | List rounds / checkout a round |
-| `/api/projects/:id/ask` | POST | Answer a pending Reviewer question |
-| `/api/projects/:id/comments` | GET | Inline `::code-comment` JSON for editor plugins |
-| `/api/projects/:id/files` | GET / POST / DELETE | Reference file upload |
-| `/api/projects/:id/messages` | GET | Project-scoped message history |
-| `/api/agents` | GET | List agent states |
-| `/api/agents/chat` | POST | Chat directly with the Coder |
-| `/api/agents/task` | POST | Assign a one-off task to the Coder |
-| `/api/review/project` | POST | One-shot review of a project (no loop) |
-| `/api/review/file` | POST | One-shot review of a single file |
-| `/api/config/models` | GET / POST | Model profiles + role mapping |
-| `/ws/collaboration` | WS | Real-time updates |
+| `/api/projects` | GET / POST | list / create projects |
+| `/api/projects/:id` | GET / DELETE | get / delete |
+| `/api/projects/:id/start` · `/stop` | POST | start the loop / stop it |
+| `/api/projects/:id/loop` | GET | round, score, issues, history |
+| `/api/projects/:id/stats` | GET | score history, tokens, cost, gate firings |
+| `/api/projects/:id/diff` · `/checkpoint` | GET / POST | per-round diff · rollback |
+| `/api/projects/:id/plan` · `/plan/approve` · `/plan/reject` | GET / POST | plan-mode gate |
+| `/api/projects/:id/gate-report` | GET | **the Gate Report** (`format`, `lang`, `download`) |
+| `/api/projects/:id/ask` | POST | answer a pending Reviewer question |
+| `/api/projects/:id/comments` | GET | inline review comments for editor plugins |
+| `/api/projects/:id/attachments` | GET / POST / DELETE | chat attachments |
+| `/api/projects/:id/messages` | GET | project-scoped message history |
+| `/api/agents` · `/agents/chat` · `/agents/task` | GET / POST | agent states, chat, one-off task |
+| `/api/review/project` · `/api/review/file` | POST | one-shot review, no loop |
+| `/api/config/models` | GET / POST | model profiles + role mapping |
+| `/ws/collaboration` | WS | real-time bus |
+
+## Internationalisation
+
+The UI ships **63 languages** from a single source of truth
+(`web/src/i18n/parts/*.json` fragments merged into per-language catalogs), one
+locale per language — no `en-GB`/`zh-TW` variants — with RTL layout handled by
+logical CSS properties. Adding a language: add it to the generator, run
+`python scripts/merge_i18n.py`, translate with
+`python scripts/translate_i18n.py --langs <code>`, then let
+`node scripts/check_i18n.mjs` prove there is no hardcoded or missing string.
+`tests/test_r37_ui_source.py` and the vitest `i18nKeys` gate keep it that way.
 
 ## Security
 
-Kairos is a local-first tool; keep it on your own machine.
+Kairos runs model-generated commands on your machine. Treat it like a shell
+with an LLM attached.
 
-- **Loopback bind by default.** `KAIROS_HOST` defaults to `127.0.0.1`. To
-  expose the API to a LAN/network, set `KAIROS_HOST` explicitly — and make
-  sure `KAIROS_API_TOKEN` is also set (the app logs a warning if you bind a
-  non-loopback host without a token).
-- **Optional API token.** Set `KAIROS_API_TOKEN` and every `/api` route
-  (except `/api/health`, `/docs`, `/openapi.json`, `/redoc`) requires it via
-  `Authorization: Bearer <token>`, `X-API-Token`, or `?token=`. The `/ws`
-  socket is exempt so the bundled UI still connects. When no token is set the
-  API is open on loopback — don't run that on a non-loopback host.
-- **Terminal tool runs argv, not a shell.** Commands are parsed with `shlex`
-  and executed via `create_subprocess_exec`, so shell chaining/redirection is
-  impossible; the allow-listed head is the real executable. Interpreter and
-  leak-prone heads (`python`, `node`, `env`, `cat`, `head`, `tail`, `which`,
-  `where`) are excluded, and the package-manager / build-tool RCE heads
-  (`npm`, `pnpm`, `yarn`, `go`, `cargo`, `rustc`, `make`, `cmake`) are **off
-  by default** — enable them with `KAIROS_ENABLE_BUILD_COMMANDS=1` (or the
-  `enable_build_commands=True` constructor arg) only when the build/test
-  workflow needs them. Read/query commands (`ls`, `grep`, `git status`,
-  `pytest`, …) stay enabled. The `kairos.sandbox` deny-list is applied; on
-  Linux a Landlock ruleset is applied in the child (via `preexec_fn`), and on
-  Windows the child PID is attached to a Job Object for process-tree cleanup.
-- **Web fetch / config endpoints block SSRF.** `webfetch` refuses loopback,
-  private, link-local, and cloud-metadata hosts (`169.254.169.254`) and does
-  not follow redirects. The provider-config endpoints additionally block
-  link-local/metadata targets (loopback + private LAN stay allowed so a local
-  LLM server still works).
-- **Filesystem browsing is rooted.** `/api/fs/*` only descends into
-  `KAIROS_FS_ALLOW_ROOTS` (default: workspace_dir + home). Set it to `*` for
-  the historical whole-drive browsing, or to a comma-separated path list.
-- **No plaintext key round-trip.** `GET /api/config/settings` only returns
-  masked keys; the full keys stay on disk in `data/settings.json`.
+- **Loopback by default.** `KAIROS_HOST` defaults to `127.0.0.1`. Binding a
+  non-loopback host without `KAIROS_API_TOKEN` logs a warning — don't.
+- **Optional API token.** With `KAIROS_API_TOKEN` set, every `/api` route
+  except `/api/health`, `/docs`, `/openapi.json`, `/redoc` requires it
+  (`Authorization: Bearer …`, `X-API-Token`, or `?token=`).
+- **Terminal tool executes argv, not a shell.** Commands are `shlex`-split and
+  run through `create_subprocess_exec`, so chaining and redirection are
+  impossible. Interpreter/leak-prone heads (`python`, `node`, `env`, `cat`,
+  `head`, `tail`, `which`, `where`) are excluded, and package-manager/build
+  heads (`npm`, `pnpm`, `yarn`, `go`, `cargo`, `rustc`, `make`, `cmake`) are off
+  unless you set `KAIROS_ENABLE_BUILD_COMMANDS=1`.
+- **SSRF guards** on `webfetch` and the provider-config endpoints; loopback,
+  private, link-local and cloud-metadata targets are refused.
+- **Filesystem browsing is rooted** at `KAIROS_FS_ALLOW_ROOTS`.
+- **No plaintext key round-trip.** `GET /api/config/settings` returns masked
+  keys only; secrets stay in `data/settings.json` (never committed).
 
-The status of OS-level isolation and the path to real containment is
-documented in [`docs/SANDBOX_ISOLATION.md`](docs/SANDBOX_ISOLATION.md).
+See [SECURITY.md](SECURITY.md) for reporting and
+[`docs/SANDBOX_ISOLATION.md`](docs/SANDBOX_ISOLATION.md) for the containment
+status (Landlock on Linux, Job Objects on Windows) and what is still missing.
+
+## Status
+
+`0.1.0` — alpha. Workable, tested (1800+ Python tests, 120+ frontend tests), and
+honest about what is not done: no public benchmark scores (we claim process, not
+code quality), a significant mock/offline layer used by the demo, no cloud
+parallel sandbox, no IDE plugin beyond `ide/protocol.py`, and no GitHub App that
+opens PRs. See [CHANGELOG.md](CHANGELOG.md) for what changed and
+`docs/OSS_ADOPTION_ROADMAP.md` for where it is going.
+
+## Contributing
+
+Issues and PRs are welcome — start with [CONTRIBUTING.md](CONTRIBUTING.md) for
+the dev setup, the four gates CI enforces, and how to add a language.
+
+```bash
+./scripts/ci_local.sh      # exactly what CI runs
+```
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE). Third-party notices live in [NOTICE](NOTICE).

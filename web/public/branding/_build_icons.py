@@ -1,9 +1,21 @@
-"""Generate icon sizes from the master K logo for the Kairos UI."""
+"""Generate icon sizes from the master K logo for the Kairos UI.
+
+Usage:
+    python web/public/branding/_build_icons.py <master-logo-image>
+
+The master logo is NOT in the repo (it is a design source file), so the path
+is passed in instead of being hardcoded to the author's machine.
+"""
+import sys
 from pathlib import Path
 from PIL import Image, ImageOps
 
-SRC = Path(r"C:\Users\user\.minimax\v2\assets\2026\08\29\15-32-17-239-asset_20260829-153217-239_c64e4db370a1_9ff5f4c0-字母K圆形图标设计.jpeg")
-OUT_DIR = Path(r"D:\software_bak\Kairos_code\web\public\branding")
+if len(sys.argv) < 2:
+    raise SystemExit(__doc__.strip().splitlines()[-1].strip())
+SRC = Path(sys.argv[1]).expanduser()
+if not SRC.is_file():
+    raise SystemExit(f"master logo not found: {SRC}")
+OUT_DIR = Path(__file__).resolve().parent
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # The source is 1456x1456 (square). Crop the rounded shape if

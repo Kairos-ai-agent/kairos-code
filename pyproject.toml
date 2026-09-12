@@ -5,10 +5,32 @@ build-backend = "hatchling.build"
 [project]
 name = "kairos-code"
 version = "0.1.0"
-description = "Multi-Agent Collaboration Platform for Software Development"
+description = "Self-hosted, model-agnostic multi-agent pipeline with enforced review gates and cost accounting"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
+authors = [{ name = "Kairos Code contributors" }]
+keywords = [
+    "ai-agents",
+    "multi-agent",
+    "code-review",
+    "llm",
+    "self-hosted",
+    "agent-orchestration",
+    "developer-tools",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Build Tools",
+    "Typing :: Typed",
+]
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
@@ -23,18 +45,43 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Alternative model backends (the OpenAI/Anthropic-compatible path needs no extra).
 ollama = ["ollama>=0.3.0"]
 dashscope = ["dashscope>=1.20.0"]
 zhipuai = ["zhipuai>=2.0.0"]
+# Terminal UI (`kairos tui`). Optional: the Web UI and the CLI do not need it.
+tui = ["textual>=0.80,<1.0"]
+# /metrics endpoint + the Cogs dashboard counters.
+metrics = ["prometheus-client>=0.20.0"]
+# Native MCP stdio client and the bundled filesystem MCP server.
+mcp = ["mcp>=1.0.0"]
+# Everything needed to run the test suite the way CI does.
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24.0",
     "ruff>=0.6.0",
     "mypy>=1.11.0",
+    "textual>=0.80,<1.0",
+    "prometheus-client>=0.20.0",
+    "mcp>=1.0.0",
 ]
+all = [
+    "kairos-code[ollama,dashscope,zhipuai,tui,metrics,mcp]",
+]
+
+[project.urls]
+Homepage = "https://github.com/OWNER/REPO"
+Repository = "https://github.com/OWNER/REPO"
+Issues = "https://github.com/OWNER/REPO/issues"
+Changelog = "https://github.com/OWNER/REPO/blob/master/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["kairos", "api"]
+# Ship the built Web UI inside the wheel so `pip install kairos-code` gives you
+# the API *and* the interface (api/app.py serves <site-packages>/web/dist).
+# The directory is gitignored — build it with `cd web && npm run build`; the
+# pattern is simply skipped when it does not exist.
+artifacts = ["web/dist"]
 
 [tool.ruff]
 target-version = "py311"

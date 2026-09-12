@@ -30,10 +30,27 @@ from kairos.bench.harness_eval import (  # noqa: E402
     run_task,
 )
 
-API_KEY = (
-    os.environ.get("MINIMAX_API_KEY")
-    or open(r"C:\Users\user\Desktop\kairos\api_key.txt", encoding="utf-8").read().strip()
-)
+def _load_api_key() -> str:
+    """API key from the environment, or from a file you point us at.
+
+    Used to read a hardcoded C:\\Users\\<author>\\Desktop path, which made
+    the benchmark unusable for anyone else (and leaked a personal path).
+    """
+    env = os.environ.get("MINIMAX_API_KEY")
+    if env:
+        return env.strip()
+    key_file = os.environ.get("KAIROS_BENCH_KEY_FILE")
+    if key_file:
+        try:
+            return Path(key_file).read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            raise SystemExit(f"could not read KAIROS_BENCH_KEY_FILE={key_file}: {exc}")
+    raise SystemExit(
+        "no API key: set MINIMAX_API_KEY, or KAIROS_BENCH_KEY_FILE=<path to a key file>"
+    )
+
+
+API_KEY = _load_api_key()
 BASE_URL = os.environ.get(
     "MINIMAX_BASE_URL", "https://api.minimaxi.com/v1/chat/completions"
 )

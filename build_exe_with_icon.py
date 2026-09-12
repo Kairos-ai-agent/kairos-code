@@ -32,9 +32,12 @@ hidden = [
     "openai", "anthropic",
 ]
 
-workpath = Path(r"C:\Users\user\AppData\Local\Temp\kairos-pyinst-final")
+import tempfile as _tempfile
+
+_build_tmp = Path(_tempfile.gettempdir())
+workpath = _build_tmp / "kairos-pyinst-final"
 workpath.mkdir(parents=True, exist_ok=True)
-specpath = Path(r"C:\Users\user\AppData\Local\Temp\kairos-spec-final")
+specpath = _build_tmp / "kairos-spec-final"
 specpath.mkdir(parents=True, exist_ok=True)
 
 cmd = [str(PYI), "--noconfirm", "--onefile", "--name", "kairos-code",

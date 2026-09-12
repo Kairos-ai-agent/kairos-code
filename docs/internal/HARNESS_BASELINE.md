@@ -31,7 +31,7 @@ python -m kairos.bench.harness_semantic_eval --out semantic_baseline.json
 - **Temperature**: 0.0 (deterministic)
 - **Max output tokens**: 2048
 
-API key resolution order: `MINIMAX_API_KEY` env var → `C:\Users\user\Desktop\kairos\api_key.txt`. Override endpoint/model with `MINIMAX_BASE_URL` / `MINIMAX_MODEL` env vars.
+API key resolution order: `MINIMAX_API_KEY` env var → `$HOME\Desktop\kairos\api_key.txt`. Override endpoint/model with `MINIMAX_BASE_URL` / `MINIMAX_MODEL` env vars.
 
 ## Per-task breakdown (semantic scoring — 10/10 PASS)
 
@@ -83,7 +83,7 @@ This made tasks 1, 5, 7, 8 go from FAIL to PASS without changing the LLM at all 
 ## Reproduction
 
 ```bash
-# 1. Set the API key (or write to C:\Users\user\Desktop\kairos\api_key.txt)
+# 1. Set the API key (or write to $HOME\Desktop\kairos\api_key.txt)
 $env:MINIMAX_API_KEY = "sk-cp-..."
 
 # 2. Run the 3 baseline methods

@@ -175,7 +175,7 @@ const BrowsePanel: React.FC<BrowsePanelProps> = ({ onSelect, disabled }) => {
              User reported only the C drive being pickable and no way
              to switch drives — the Jump-to links at the bottom were
              too easy to miss and the breadcrumb alone only works
-             WITHIN a root. Switching from C:\Users\user to D:\
+             WITHIN a root. Switching from C:\Users\me to D:\
              requires a dedicated switcher. We render the roots as a
              row of pills at the TOP, always visible, with the active
              one highlighted. */}

@@ -27,7 +27,12 @@ data/
 *.swo
 
 # Secrets
-settings.json
+# Anchored to the repo root on purpose: an unanchored `settings.json` also
+# matched web/src/i18n/parts/settings.json (a source-of-truth i18n fragment),
+# which silently kept 298 translation keys out of the repository — every clean
+# clone then failed `merge_i18n.py --strict` with "stale" keys.
+/settings.json
+/data/settings.json
 
 # --- repo hygiene: scratch, build output and unrelated tool state ---
 _dsh_extract/

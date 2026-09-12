@@ -1,0 +1,1194 @@
+{
+  "settings.drawer.agoJustNow": {
+    "zh": "刚刚",
+    "en": "just now"
+  },
+  "settings.drawer.agoSeconds": {
+    "zh": "{n} 秒前",
+    "en": "{n}s ago"
+  },
+  "settings.drawer.agoMinutes": {
+    "zh": "{n} 分钟前",
+    "en": "{n}m ago"
+  },
+  "settings.drawer.agoHours": {
+    "zh": "{n} 小时前",
+    "en": "{n}h ago"
+  },
+  "settings.drawer.savedAgo": {
+    "zh": "已保存 · {ago}",
+    "en": "Saved · {ago}"
+  },
+  "settings.drawer.tabProvider": {
+    "zh": "模型服务",
+    "en": "Provider"
+  },
+  "settings.drawer.tabMode": {
+    "zh": "模式",
+    "en": "Mode"
+  },
+  "settings.drawer.tabAbout": {
+    "zh": "关于",
+    "en": "About"
+  },
+  "settings.shared.requestFailed": {
+    "zh": "请求失败",
+    "en": "request failed"
+  },
+  "settings.shared.saveFailed": {
+    "zh": "保存失败：{detail}",
+    "en": "Save failed: {detail}"
+  },
+  "settings.shared.testConnection": {
+    "zh": "测试连接",
+    "en": "Test connection"
+  },
+  "settings.shared.testFailed": {
+    "zh": "测试失败",
+    "en": "Test failed"
+  },
+  "settings.shared.selectModel": {
+    "zh": "选择模型",
+    "en": "Select a model"
+  },
+  "settings.shared.apiKeyLabel": {
+    "zh": "API Key",
+    "en": "API Key"
+  },
+  "settings.coderMode.intro": {
+    "zh": "Coder 子模式决定智能体可以调用哪些工具。",
+    "en": "The Coder sub-mode controls which tools the agent can call."
+  },
+  "settings.coderMode.default.label": {
+    "zh": "默认",
+    "en": "Default"
+  },
+  "settings.coderMode.default.desc": {
+    "zh": "所有工具均可用：可编辑文件、执行 shell、提交。",
+    "en": "All tools available; can edit files, run shell, commit."
+  },
+  "settings.coderMode.readOnly.label": {
+    "zh": "只读",
+    "en": "Read-only"
+  },
+  "settings.coderMode.readOnly.desc": {
+    "zh": "仅可列出/读取/搜索，不可编辑文件，不可执行 shell。",
+    "en": "List/read/search only. No file edits, no shell."
+  },
+  "settings.coderMode.sandbox.label": {
+    "zh": "沙箱（worktree）",
+    "en": "Sandbox (worktree)"
+  },
+  "settings.coderMode.sandbox.desc": {
+    "zh": "写入被隔离在 git worktree 中，合并前由你审核。",
+    "en": "Writes are isolated in a git worktree; you review before merging."
+  },
+  "settings.coderMode.activeTag": {
+    "zh": "已启用",
+    "en": "active"
+  },
+  "settings.voice.intro": {
+    "zh": "点击麦克风，或发送需要智能体朗读的文本时使用的语音服务。",
+    "en": "Voice providers used when you click the mic or send text that the agent should speak back."
+  },
+  "settings.voice.ttsProvider": {
+    "zh": "TTS 服务商",
+    "en": "TTS provider"
+  },
+  "settings.voice.ttsEdgeLabel": {
+    "zh": "Microsoft Edge（在线、免费、高质量）",
+    "en": "Microsoft Edge (online, free, high quality)"
+  },
+  "settings.voice.ttsMockLabel": {
+    "zh": "Mock（离线、静音占位）",
+    "en": "Mock (offline, silent placeholder)"
+  },
+  "settings.voice.ttsVoiceLabel": {
+    "zh": "TTS 语音",
+    "en": "TTS voice"
+  },
+  "settings.voice.ttsVoicePlaceholder": {
+    "zh": "例如 en-US-AriaNeural、zh-CN-XiaoxiaoNeural",
+    "en": "e.g. en-US-AriaNeural, zh-CN-XiaoxiaoNeural"
+  },
+  "settings.voice.commonVoices": {
+    "zh": "常用语音：en-US-AriaNeural、zh-CN-XiaoxiaoNeural、ja-JP-NanamiNeural、de-DE-KatjaNeural",
+    "en": "Common voices: en-US-AriaNeural, zh-CN-XiaoxiaoNeural, ja-JP-NanamiNeural, de-DE-KatjaNeural"
+  },
+  "settings.voice.sttProvider": {
+    "zh": "STT 服务商",
+    "en": "STT provider"
+  },
+  "settings.voice.sttMockLabel": {
+    "zh": "Mock（离线、确定性占位）",
+    "en": "Mock (offline, deterministic placeholder)"
+  },
+  "settings.voice.sttWhisperLabel": {
+    "zh": "Whisper（需要 faster-whisper）",
+    "en": "Whisper (requires faster-whisper)"
+  },
+  "settings.voice.sttLanguageLabel": {
+    "zh": "STT 语言",
+    "en": "STT language"
+  },
+  "settings.voice.sttLanguagePlaceholder": {
+    "zh": "例如 en、zh、ja",
+    "en": "e.g. en, zh, ja"
+  },
+  "settings.voice.autoPlay": {
+    "zh": "自动播放回复语音",
+    "en": "Auto-play response audio"
+  },
+  "settings.mcp.intro": {
+    "zh": "Kairos 可挂载任何兼容 MCP 的服务器。内置 filesystem 默认启用；如需自定义，可通过",
+    "en": "Kairos can attach any MCP-compatible server. Built-in filesystem is enabled by default; add a custom one via"
+  },
+  "settings.mcp.filesystemDesc": {
+    "zh": "内置 filesystem 服务器（沙箱限制在项目目录内）。",
+    "en": "Built-in filesystem server (sandboxed to project dir)."
+  },
+  "settings.mcp.githubDesc": {
+    "zh": "GitHub MCP（需要 GITHUB_TOKEN 环境变量）。",
+    "en": "GitHub MCP (requires GITHUB_TOKEN env)."
+  },
+  "settings.mcp.postgresDesc": {
+    "zh": "Postgres MCP（需要 DATABASE_URL 环境变量）。",
+    "en": "Postgres MCP (requires DATABASE_URL env)."
+  },
+  "settings.mcp.askBefore": {
+    "zh": "调用 MCP 工具前先询问",
+    "en": "Ask before invoking MCP tools"
+  },
+  "settings.cloud.intro": {
+    "zh": "兼容 S3 的对象存储。支持 AWS S3、MinIO、Cloudflare R2、Backblaze B2、Wasabi 等。凭证从服务器环境读取，不保存在此处。",
+    "en": "S3-compatible object storage. Works with AWS S3, MinIO, Cloudflare R2, Backblaze B2, Wasabi, etc. Credentials are read from the server environment, not stored here."
+  },
+  "settings.cloud.bucket": {
+    "zh": "默认存储桶",
+    "en": "Default bucket"
+  },
+  "settings.cloud.region": {
+    "zh": "区域",
+    "en": "Region"
+  },
+  "settings.cloud.endpointLabel": {
+    "zh": "自定义 endpoint（可选）",
+    "en": "Custom endpoint (optional)"
+  },
+  "settings.cloud.endpointHelp": {
+    "zh": "AWS 留空；其他服务填写你的 MinIO/R2/B2 地址。",
+    "en": "Leave empty for AWS; set to your MinIO/R2/B2 URL otherwise."
+  },
+  "settings.cloud.addressingStyle": {
+    "zh": "寻址方式",
+    "en": "Addressing style"
+  },
+  "settings.cloud.addressing.auto": {
+    "zh": "自动（推荐）",
+    "en": "Auto (recommended)"
+  },
+  "settings.cloud.addressing.virtual": {
+    "zh": "虚拟主机式（AWS 默认）",
+    "en": "Virtual-hosted (AWS default)"
+  },
+  "settings.cloud.addressing.path": {
+    "zh": "路径式（MinIO 等）",
+    "en": "Path-style (MinIO etc.)"
+  },
+  "settings.metrics.intro": {
+    "zh": "Kairos 提供 Prometheus 兼容的",
+    "en": "Kairos exposes a Prometheus-compatible"
+  },
+  "settings.metrics.introAfter": {
+    "zh": "端点，用于监控请求数、延迟、智能体调用和 Loop 结果。",
+    "en": "endpoint for monitoring request count, latency, agent invocations, and loop outcomes."
+  },
+  "settings.metrics.showInFooter": {
+    "zh": "在底栏显示计数器",
+    "en": "Show counter in footer"
+  },
+  "settings.metrics.open": {
+    "zh": "打开 /metrics",
+    "en": "Open /metrics"
+  },
+  "settings.provider.intro1": {
+    "zh": "选择 Coder 与 Reviewer 智能体使用的 LLM。两种 provider 都支持自定义 base URL，可指向 OpenAI、Anthropic 或任何兼容代理（Azure、Together、vLLM、LiteLLM 等）。点击",
+    "en": "Pick the LLM the Coder and Reviewer agents use. Both providers accept a custom base URL so you can point Kairos at OpenAI, Anthropic, or any compatible proxy (Azure, Together, vLLM, LiteLLM, etc.). Click"
+  },
+  "settings.provider.intro2": {
+    "zh": "验证你的 key 与 URL，然后点击",
+    "en": "to verify your key + URL, then"
+  },
+  "settings.provider.intro3": {
+    "zh": "保存。",
+    "en": "to persist."
+  },
+  "settings.provider.keysNote": {
+    "zh": "密钥仅保存在前端（localStorage，由 zustand persist 持久化）。除非你点击",
+    "en": "Keys are stored in the frontend only (localStorage via zustand persist). The backend never sees them unless you click"
+  },
+  "settings.provider.discardChanges": {
+    "zh": "放弃修改",
+    "en": "Discard changes"
+  },
+  "settings.provider.lastSaved": {
+    "zh": "上次保存于 {ago}",
+    "en": "Last saved {ago}"
+  },
+  "settings.provider.savedToast": {
+    "zh": "LLM 设置已保存",
+    "en": "LLM settings saved"
+  },
+  "settings.provider.activeProvider": {
+    "zh": "当前 provider",
+    "en": "Active provider"
+  },
+  "settings.provider.endpointKeyRequired": {
+    "zh": "Endpoint URL 和 API key 均为必填。",
+    "en": "Endpoint URL and API key are both required."
+  },
+  "settings.provider.noDetail": {
+    "zh": "（无详细信息）",
+    "en": "(no detail)"
+  },
+  "settings.provider.upstreamNotJson": {
+    "zh": "[上游返回 {ct}，非 JSON] {detail}",
+    "en": "[upstream returned {ct}, not JSON] {detail}"
+  },
+  "settings.provider.httpStatus": {
+    "zh": "[HTTP {status}] {detail}",
+    "en": "[HTTP {status}] {detail}"
+  },
+  "settings.provider.endpointRequired": {
+    "zh": "请先填写 endpoint URL",
+    "en": "Please fill in the endpoint URL first"
+  },
+  "settings.provider.apiKeyRequired": {
+    "zh": "请先填写 API key",
+    "en": "Please fill in the API key first"
+  },
+  "settings.provider.fetchFailed": {
+    "zh": "拉取失败",
+    "en": "Fetch failed"
+  },
+  "settings.provider.presetLabel": {
+    "zh": "服务商预设",
+    "en": "Provider Preset"
+  },
+  "settings.provider.getApiKey": {
+    "zh": "获取 API Key →",
+    "en": "Get API key →"
+  },
+  "settings.provider.docs": {
+    "zh": "文档 →",
+    "en": "Docs →"
+  },
+  "settings.provider.endpointUrlLabel": {
+    "zh": "Endpoint URL",
+    "en": "Endpoint URL"
+  },
+  "settings.provider.endpointHelp": {
+    "zh": "chat-completions 端点的完整 URL。测试探测会原样请求该地址。编排器真实对话使用的 base URL 会由此自动推导——你只需设置一次 endpoint URL。",
+    "en": "Full URL of the chat-completions endpoint. The test probe hits this URL as-is. The base URL (used by the orchestrator for real chat calls) is auto-derived from this — you only need to set the endpoint URL once."
+  },
+  "settings.provider.anthropicEndpointHelp": {
+    "zh": "Anthropic messages 端点的完整 URL。探测会原样请求该地址。base URL 会自动推导——你只需设置一次 endpoint URL。",
+    "en": "Full URL of the Anthropic messages endpoint. The probe hits this URL as-is. The base URL is auto-derived — you only need to set the endpoint URL once."
+  },
+  "settings.provider.refetchModels": {
+    "zh": "重新拉取（{n}）",
+    "en": "Refetch ({n})"
+  },
+  "settings.provider.fetchModels": {
+    "zh": "拉取 model 列表",
+    "en": "Fetch model list"
+  },
+  "settings.provider.modelSelectPlaceholder": {
+    "zh": "从下拉选 model",
+    "en": "Pick a model from the list"
+  },
+  "settings.provider.modelPickFirst": {
+    "zh": "先点右上方「拉取 model 列表」",
+    "en": "Click “Fetch model list” above first"
+  },
+  "settings.provider.modelNotFoundFetch": {
+    "zh": "点「拉取 model 列表」获取当前 provider 的 model",
+    "en": "Click “Fetch model list” to load this provider's models"
+  },
+  "settings.provider.modelNotFound": {
+    "zh": "无匹配",
+    "en": "No match"
+  },
+  "settings.provider.customModelPlaceholder": {
+    "zh": "输入一个不在列表中的 model（例如 my-fine-tune-7b）",
+    "en": "type a model not in the list (e.g. my-fine-tune-7b)"
+  },
+  "settings.provider.modelFetchFailed": {
+    "zh": "拉取 model 列表失败",
+    "en": "Failed to fetch the model list"
+  },
+  "settings.provider.fetchedSummary": {
+    "zh": "已从 {url} 拉取 {n} 个 model。切换 provider 或修改 endpoint URL 后请重新拉取。",
+    "en": "Fetched {n} models from {url}. Refetch after switching provider or editing the endpoint URL."
+  },
+  "settings.provider.fetchHint": {
+    "zh": "填写 endpoint URL 和 API key 后，点上方「拉取 model 列表」从 provider 实时获取 model。也可以在搜索框直接输入 model 名后按回车（或选 \"Custom\"）使用未列出的 model。",
+    "en": "Fill in the endpoint URL and API key, then click “Fetch model list” above to load the models live from the provider. You can also type a model name in the search box and press Enter (or pick \"Custom\") to use a model that isn't listed."
+  },
+  "settings.provider.testOk": {
+    "zh": "OK · {detail}",
+    "en": "OK · {detail}"
+  },
+  "settings.provider.currentModel": {
+    "zh": "{model}（当前）",
+    "en": "{model} (current)"
+  },
+  "settings.provider.defaultModelLabel": {
+    "zh": "{model}（默认）",
+    "en": "{model} (default)"
+  },
+  "settings.provider.customOption": {
+    "zh": "Custom（自填 model）",
+    "en": "Custom (enter a model yourself)"
+  },
+  "settings.provider.preset.doubao.label": {
+    "zh": "Doubao（火山方舟）",
+    "en": "Doubao (Volcano Ark)"
+  },
+  "settings.provider.preset.custom.label": {
+    "zh": "Custom（任意 OpenAI 兼容 API）",
+    "en": "Custom (any OpenAI-compatible API)"
+  },
+  "settings.provider.preset.deepseek.hint": {
+    "zh": "国内首选 · 极致性价比",
+    "en": "Top pick in China · best value"
+  },
+  "settings.provider.preset.qwen.hint": {
+    "zh": "qwen-max / qwen-plus / qwen-coder — 阿里云",
+    "en": "qwen-max / qwen-plus / qwen-coder — Alibaba Cloud"
+  },
+  "settings.provider.preset.glm.hint": {
+    "zh": "glm-4-plus / glm-4-flash — 智谱 AI",
+    "en": "glm-4-plus / glm-4-flash — Zhipu AI"
+  },
+  "settings.provider.preset.moonshot.hint": {
+    "zh": "moonshot-v1 / kimi-k2 — 长上下文",
+    "en": "moonshot-v1 / kimi-k2 — long context"
+  },
+  "settings.provider.preset.doubao.hint": {
+    "zh": "豆包 — 字节跳动",
+    "en": "Doubao — ByteDance"
+  },
+  "settings.provider.preset.ollamaCloud.hint": {
+    "zh": "localhost:11434 — 本地离线",
+    "en": "localhost:11434 — local, offline"
+  },
+  "settings.provider.preset.ollamaLocal.hint": {
+    "zh": "localhost:11434 — 本地离线",
+    "en": "localhost:11434 — local, offline"
+  },
+  "settings.provider.preset.openrouter.hint": {
+    "zh": "统一接口访问 200+ 模型",
+    "en": "One API for 200+ models"
+  },
+  "settings.provider.preset.groq.hint": {
+    "zh": "LPU 极速推理 · 免费额度",
+    "en": "Ultra-fast LPU inference · free tier"
+  },
+  "settings.provider.preset.together.hint": {
+    "zh": "开源模型 API · 大免费额度",
+    "en": "Open-source model API · generous free tier"
+  },
+  "settings.provider.preset.fireworks.hint": {
+    "zh": "Fast 开源推理 · $1 free",
+    "en": "Fast open-source inference · $1 free"
+  },
+  "settings.provider.preset.perplexity.hint": {
+    "zh": "联网增强搜索 · 实时",
+    "en": "Web-grounded search · real time"
+  },
+  "settings.provider.preset.custom.hint": {
+    "zh": "自填 endpoint URL 和 model",
+    "en": "Enter the endpoint URL and model yourself"
+  },
+  "settings.skills.intro": {
+    "zh": "技能是从项目 ",
+    "en": "Skills are reusable instruction snippets discovered from"
+  },
+  "settings.skills.introAfter": {
+    "zh": " 目录中发现的复用指令片段。SkillsWatcher 每秒轮询一次并在变更时自动重载——使用此按钮可立即强制刷新。",
+    "en": "in your project. The SkillsWatcher polls every second and reloads on change — use this button to force an immediate refresh."
+  },
+  "settings.skills.reloadNow": {
+    "zh": "立即重载",
+    "en": "Reload now"
+  },
+  "settings.skills.countOne": {
+    "zh": "{n} 个技能",
+    "en": "{n} skill"
+  },
+  "settings.skills.countMany": {
+    "zh": "{n} 个技能",
+    "en": "{n} skills"
+  },
+  "settings.skills.noProject": {
+    "zh": "未选择项目",
+    "en": "No project selected"
+  },
+  "settings.skills.reloadFailed": {
+    "zh": "重载失败",
+    "en": "Reload failed"
+  },
+  "settings.about.description": {
+    "zh": "多智能体协作平台。Coder <-> Reviewer 循环、MCP、agents.md / skills、manifest、沙箱、语音、云端。",
+    "en": "Multi-agent collaboration platform. Coder <-> Reviewer loop, MCP, agents.md / skills, manifest, sandbox, voice, cloud."
+  },
+  "settings.about.model": {
+    "zh": "模型：{model}",
+    "en": "Model: {model}"
+  },
+  "settings.page.saved": {
+    "zh": "设置已保存",
+    "en": "Settings saved"
+  },
+  "settings.page.saveFailed": {
+    "zh": "保存失败",
+    "en": "Save failed"
+  },
+  "settings.page.tabCustom": {
+    "zh": "自定义模型",
+    "en": "Custom models"
+  },
+  "settings.page.tabAssign": {
+    "zh": "Agent 分配",
+    "en": "Agent assignment"
+  },
+  "settings.page.addCustomModel": {
+    "zh": "添加自定义模型",
+    "en": "Add custom model"
+  },
+  "settings.page.editCustomModel": {
+    "zh": "编辑自定义模型",
+    "en": "Edit custom model"
+  },
+  "settings.deepseek.intro": {
+    "zh": "配置 DeepSeek API Key。",
+    "en": "Configure the DeepSeek API key."
+  },
+  "settings.deepseek.apiKeyRequired": {
+    "zh": "请输入 API Key",
+    "en": "Please enter an API key"
+  },
+  "settings.deepseek.defaultModel": {
+    "zh": "默认模型",
+    "en": "Default model"
+  },
+  "settings.deepseek.refreshModels": {
+    "zh": "刷新模型列表",
+    "en": "Refresh model list"
+  },
+  "settings.customModel.intro": {
+    "zh": "添加 OpenAI 或 Anthropic-compatible 的 LLM 服务。",
+    "en": "Add an OpenAI- or Anthropic-compatible LLM service."
+  },
+  "settings.customModel.colApiUrl": {
+    "zh": "API URL",
+    "en": "API URL"
+  },
+  "settings.customModel.protocol": {
+    "zh": "协议",
+    "en": "Protocol"
+  },
+  "settings.customModel.protocolOpenai": {
+    "zh": "OpenAI 兼容",
+    "en": "OpenAI-compatible"
+  },
+  "settings.customModel.protocolAnthropic": {
+    "zh": "Anthropic 兼容",
+    "en": "Anthropic-compatible"
+  },
+  "settings.customModel.namePlaceholder": {
+    "zh": "例如: MiniMax",
+    "en": "e.g. MiniMax"
+  },
+  "settings.customModel.baseUrlLabel": {
+    "zh": "API Base URL",
+    "en": "API Base URL"
+  },
+  "settings.customModel.apiKeyPlaceholder": {
+    "zh": "如果需要认证",
+    "en": "if authentication is required"
+  },
+  "settings.customModel.modelIdLabel": {
+    "zh": "模型 ID",
+    "en": "Model ID"
+  },
+  "settings.customModel.modelAnthropicPlaceholder": {
+    "zh": "例如: MiniMax-Text-01",
+    "en": "e.g. MiniMax-Text-01"
+  },
+  "settings.customModel.modelOpenaiPlaceholder": {
+    "zh": "例如: gpt-4o, llama3.1",
+    "en": "e.g. gpt-4o, llama3.1"
+  },
+  "settings.customModel.fetchModels": {
+    "zh": "获取模型列表",
+    "en": "Fetch model list"
+  },
+  "settings.customModel.apiUrlRequired": {
+    "zh": "请先输入 API URL",
+    "en": "Please enter an API URL first"
+  },
+  "settings.customModel.fetched": {
+    "zh": "获取到 {n} 个模型",
+    "en": "Fetched {n} models"
+  },
+  "settings.customModel.noneFetched": {
+    "zh": "未获取到模型，可手动输入模型 ID",
+    "en": "No models returned — you can type the model ID manually"
+  },
+  "settings.customModel.fetchFailed": {
+    "zh": "获取模型列表失败，可手动输入模型 ID",
+    "en": "Failed to fetch the model list — you can type the model ID manually"
+  },
+  "settings.customModel.urlAndModelRequired": {
+    "zh": "请填写 API URL 和模型 ID",
+    "en": "Please fill in the API URL and model ID"
+  },
+  "settings.customModel.incomplete": {
+    "zh": "请填写完整信息",
+    "en": "Please fill in all required fields"
+  },
+  "settings.customModel.updated": {
+    "zh": "已更新并保存",
+    "en": "Updated and saved"
+  },
+  "settings.customModel.added": {
+    "zh": "已添加并保存",
+    "en": "Added and saved"
+  },
+  "settings.customModel.deleted": {
+    "zh": "已删除并保存",
+    "en": "Deleted and saved"
+  },
+  "settings.assign.role.coder": {
+    "zh": "编码者",
+    "en": "Coder"
+  },
+  "settings.assign.role.reviewer": {
+    "zh": "审查者",
+    "en": "Reviewer"
+  },
+  "settings.assign.role.coderDesc": {
+    "zh": "通用编码 Agent：读、写、运行命令、跑测试",
+    "en": "General-purpose coding agent: read, write, run commands, run tests"
+  },
+  "settings.assign.role.reviewerDesc": {
+    "zh": "只读审查 Agent：打分并给出可执行修复建议",
+    "en": "Read-only review agent: scores and suggests actionable fixes"
+  },
+  "settings.assign.colRole": {
+    "zh": "角色",
+    "en": "Role"
+  },
+  "settings.assign.colModel": {
+    "zh": "分配模型",
+    "en": "Assigned model"
+  },
+  "settings.assign.failed": {
+    "zh": "分配失败",
+    "en": "Assignment failed"
+  },
+  "settings.loop.title": {
+    "zh": "Loop 行为",
+    "en": "Loop Behavior"
+  },
+  "settings.loop.alert": {
+    "zh": "这些设置将在下次启动 Loop 时生效，不会改变正在运行的 Loop。",
+    "en": "These settings apply on the next loop start. They do not change a running loop."
+  },
+  "settings.loop.specialists": {
+    "zh": "专项审查者",
+    "en": "Specialist reviewers"
+  },
+  "settings.loop.specialist.security": {
+    "zh": "安全（OWASP）",
+    "en": "Security (OWASP)"
+  },
+  "settings.loop.specialist.perf": {
+    "zh": "性能",
+    "en": "Performance"
+  },
+  "settings.loop.specialist.design": {
+    "zh": "设计 / 架构",
+    "en": "Design / Architecture"
+  },
+  "settings.loop.specialist.test": {
+    "zh": "测试覆盖",
+    "en": "Test coverage"
+  },
+  "settings.loop.specialistsHelp": {
+    "zh": "每个专项审查者与主 Reviewer 并行运行，分数按权重平均。",
+    "en": "Each specialist runs in parallel with the main Reviewer. Scores are weighted-averaged."
+  },
+  "settings.loop.bestOfN": {
+    "zh": "每轮 Best-of-N coder 数量",
+    "en": "Best-of-N coders per round"
+  },
+  "settings.loop.bestOfNSingle": {
+    "zh": "单个 coder（默认）",
+    "en": "single coder (default)"
+  },
+  "settings.loop.bestOfNMany": {
+    "zh": "并行运行 {n} 个 coder，取评分最高的 diff",
+    "en": "runs {n} parallel coders, picks highest-scoring diff"
+  },
+  "settings.loop.save": {
+    "zh": "保存 Loop 配置",
+    "en": "Save loop config"
+  },
+  "settings.loop.saved": {
+    "zh": "Loop 配置已保存（下次启动 Loop 时生效）",
+    "en": "Loop config saved (applies on next loop start)"
+  },
+  "settings.loop.saveFailed": {
+    "zh": "保存 Loop 配置失败",
+    "en": "failed to save loop config"
+  },
+  "picker.folder.title": {
+    "zh": "添加文件夹工作区",
+    "en": "Add a folder workspace"
+  },
+  "picker.folder.enterPath": {
+    "zh": "请输入文件夹路径。",
+    "en": "Enter a folder path."
+  },
+  "picker.folder.added": {
+    "zh": "文件夹“{name}”已添加为项目。",
+    "en": "Folder \"{name}\" added as project."
+  },
+  "picker.folder.addFailed": {
+    "zh": "添加文件夹失败",
+    "en": "Failed to add folder"
+  },
+  "picker.folder.manualToggle": {
+    "zh": "或手动输入路径",
+    "en": "Or type a path manually"
+  },
+  "picker.folder.usePath": {
+    "zh": "使用该路径",
+    "en": "Use this path"
+  },
+  "picker.folder.recent": {
+    "zh": "最近：",
+    "en": "Recent:"
+  },
+  "picker.folder.recentTooltip": {
+    "zh": "选择最近的文件夹或浏览",
+    "en": "Pick a recent folder or browse"
+  },
+  "picker.folder.startPlaceholder": {
+    "zh": "选择一个文件夹开始…",
+    "en": "Pick a folder to start…"
+  },
+  "picker.folder.browseNew": {
+    "zh": "浏览新文件夹…",
+    "en": "Browse for a new folder…"
+  },
+  "picker.folder.switchProject": {
+    "zh": "切换项目",
+    "en": "Switch project"
+  },
+  "picker.folder.selectProject": {
+    "zh": "选择项目…",
+    "en": "Select a project…"
+  },
+  "picker.folder.addNew": {
+    "zh": "添加新文件夹…",
+    "en": "Add new folder…"
+  },
+  "picker.folder.addAriaLabel": {
+    "zh": "添加文件夹",
+    "en": "Add folder"
+  },
+  "agentsMd.button": {
+    "zh": "记忆",
+    "en": "Memory"
+  },
+  "agentsMd.buttonTooltip": {
+    "zh": "编辑 AGENTS.md（项目记忆——会注入每个智能体的 system prompt）",
+    "en": "Edit AGENTS.md (project memory — injected into every agent's system prompt)"
+  },
+  "agentsMd.source.project": {
+    "zh": "项目文件",
+    "en": "project file"
+  },
+  "agentsMd.source.global": {
+    "zh": "全局 ~/.kairos/AGENTS.md",
+    "en": "global ~/.kairos/AGENTS.md"
+  },
+  "agentsMd.source.fallback": {
+    "zh": "内置模板（未保存）",
+    "en": "built-in fallback (unsaved)"
+  },
+  "agentsMd.cleared": {
+    "zh": "AGENTS.md 已清空（恢复为内置模板）",
+    "en": "AGENTS.md cleared (reverted to built-in fallback)"
+  },
+  "agentsMd.saved": {
+    "zh": "AGENTS.md 已保存（{bytes} 字节）",
+    "en": "Saved AGENTS.md ({bytes} bytes)"
+  },
+  "agentsMd.templateLoadFailed": {
+    "zh": "加载模板失败",
+    "en": "failed to load template"
+  },
+  "agentsMd.loadFailed": {
+    "zh": "加载失败",
+    "en": "load failed"
+  },
+  "agentsMd.saveFailed": {
+    "zh": "保存失败",
+    "en": "save failed"
+  },
+  "agentsMd.size": {
+    "zh": "{chars} 字符 · {bytes} 字节",
+    "en": "{chars} chars · {bytes} bytes"
+  },
+  "skillSearch.empty": {
+    "zh": "没有匹配“{query}”的技能",
+    "en": "No skills match \"{query}\""
+  },
+  "skillSearch.priority": {
+    "zh": "优先级 {n}",
+    "en": "prio {n}"
+  },
+  "skillSearch.score": {
+    "zh": "评分 {n}",
+    "en": "score {n}"
+  },
+  "skillSearch.searchFailed": {
+    "zh": "搜索失败",
+    "en": "Search failed"
+  },
+  "settings.about": {
+    "zh": "关于",
+    "en": "About"
+  },
+  "settings.activeProvider": {
+    "zh": "当前服务商",
+    "en": "Active provider"
+  },
+  "settings.addressingStyle": {
+    "zh": "寻址方式",
+    "en": "Addressing style"
+  },
+  "settings.apiKey": {
+    "zh": "API key",
+    "en": "API key"
+  },
+  "settings.askBeforeInvokingMCPTools": {
+    "zh": "调用 MCP 工具前先询问",
+    "en": "Ask before invoking MCP tools"
+  },
+  "settings.autoPlayResponseAudio": {
+    "zh": "自动播放回复语音",
+    "en": "Auto-play response audio"
+  },
+  "settings.autoRecommended": {
+    "zh": "自动（推荐）",
+    "en": "Auto (recommended)"
+  },
+  "settings.claude35SonnetLatestClaude3Opus": {
+    "zh": "claude-3-5-sonnet-latest, claude-3-opus-…",
+    "en": "claude-3-5-sonnet-latest, claude-3-opus-…"
+  },
+  "settings.commonVoicesEnUSAriaNeuralZhCNXiaoxiaoNeuralJaJP": {
+    "zh": "常用音色：en-US-AriaNeural、zh-CN-XiaoxiaoNeural、ja-JP-NanamiNeural、de-DE-KatjaNeural",
+    "en": "Common voices: en-US-AriaNeural, zh-CN-XiaoxiaoNeural, ja-JP-NanamiNeural, de-DE-KatjaNeural"
+  },
+  "settings.customEndpointOptional": {
+    "zh": "自定义 endpoint（可选）",
+    "en": "Custom endpoint (optional)"
+  },
+  "settings.default": {
+    "zh": "默认",
+    "en": "Default"
+  },
+  "settings.defaultBucket": {
+    "zh": "默认 bucket",
+    "en": "Default bucket"
+  },
+  "settings.discardChanges": {
+    "zh": "放弃修改",
+    "en": "Discard changes"
+  },
+  "settings.docs": {
+    "zh": "文档 →",
+    "en": "Docs →"
+  },
+  "settings.eGEnUSAriaNeuralZhCNXiaoxiaoNeural": {
+    "zh": "例如：en-US-AriaNeural、zh-CN-XiaoxiaoNeural",
+    "en": "e.g. en-US-AriaNeural, zh-CN-XiaoxiaoNeural"
+  },
+  "settings.eGEnZhJa": {
+    "zh": "例如：en、zh、ja",
+    "en": "e.g. en, zh, ja"
+  },
+  "settings.endpointForMonitoringRequestCountLatencyAgentInv": {
+    "zh": "接口，可监控请求数、延迟、agent 调用次数与循环结果。",
+    "en": "endpoint for monitoring request count, latency, agent invocations, and loop outcomes."
+  },
+  "settings.endpointURL": {
+    "zh": "Endpoint URL",
+    "en": "Endpoint URL"
+  },
+  "settings.endpointURLAPIKeyModelProviderModelModelCustomMo": {
+    "zh": "填写 endpoint URL 和 API key 后，点上方「拉取 model 列表」从 provider 实时获取 model。也可以在搜索框直接输入 model 名后按回车（或选 \"Custom\"）使用未列出的 model。",
+    "en": "填写 endpoint URL 和 API key 后，点上方「拉取 model 列表」 从 provider 实时获取 model。也可以在搜索框直接输入 model 名 后按回车（或选 \"Custom\"）使用未列出的 model。"
+  },
+  "settings.fullURLOfTheAnthropicMessagesEndpointTheProbeHit": {
+    "zh": "Anthropic messages 接口的完整 URL。探测会原样请求该地址。base URL 自动推导 —— 只需设置一次 endpoint URL。",
+    "en": "Full URL of the Anthropic messages endpoint. The probe hits this URL as-is. The base URL is auto-derived — you only need to set the endpoint URL once."
+  },
+  "settings.fullURLOfTheChatCompletionsEndpointTheTestProbeH": {
+    "zh": "chat-completions 接口的完整 URL。测试探测会原样请求该地址。base URL（编排器真实调用聊天时使用）由它自动推导 —— 只需设置一次 endpoint URL。",
+    "en": "Full URL of the chat-completions endpoint. The test probe hits this URL as-is. The base URL (used by the orchestrator for real chat calls) is auto-derived from this — you only need to set the endpoint URL once."
+  },
+  "settings.getAPIKey": {
+    "zh": "获取 API key →",
+    "en": "Get API key →"
+  },
+  "settings.httpMinioLocal9000": {
+    "zh": "http://minio.local:9000",
+    "en": "http://minio.local:9000"
+  },
+  "settings.httpsApiAnthropicComV1Messages": {
+    "zh": "https://api.anthropic.com/v1/messages",
+    "en": "https://api.anthropic.com/v1/messages"
+  },
+  "settings.httpsApiOpenaiComV1ChatCompletions": {
+    "zh": "https://api.openai.com/v1/chat/completions",
+    "en": "https://api.openai.com/v1/chat/completions"
+  },
+  "settings.inYourProjectTheSkillsWatcherPollsEverySecondAnd": {
+    "zh": "（项目内）。SkillsWatcher 每秒轮询并在变化时重载 —— 用这个按钮可立即强制刷新。",
+    "en": "in your project. The SkillsWatcher polls every second and reloads on change — use this button to force an immediate refresh."
+  },
+  "settings.kairosCanAttachAnyMCPCompatibleServerBuiltInFile": {
+    "zh": "Kairos 可以接入任何兼容 MCP 的服务器。内置 filesystem 默认启用；添加自定义服务器的方式见",
+    "en": "Kairos can attach any MCP-compatible server. Built-in filesystem is enabled by default; add a custom one via"
+  },
+  "settings.kairosCode": {
+    "zh": "Kairos Code",
+    "en": "Kairos Code"
+  },
+  "settings.kairosExposesAPrometheusCompatible": {
+    "zh": "Kairos 提供兼容 Prometheus 的",
+    "en": "Kairos exposes a Prometheus-compatible"
+  },
+  "settings.kairosMcpYaml": {
+    "zh": ".kairos/mcp.yaml",
+    "en": ".kairos/mcp.yaml"
+  },
+  "settings.kairosSkills": {
+    "zh": ".kairos/skills/",
+    "en": ".kairos/skills/"
+  },
+  "settings.keysAreStoredInTheFrontendOnlyLocalStorageViaZus": {
+    "zh": "Key 只保存在前端（zustand persist 写入 localStorage）。后端看不到它们，除非你点击",
+    "en": "Keys are stored in the frontend only (localStorage via zustand persist). The backend never sees them unless you click"
+  },
+  "settings.label": {
+    "zh": "拉取",
+    "en": "拉取"
+  },
+  "settings.label2": {
+    "zh": "拉取",
+    "en": "拉取"
+  },
+  "settings.lastSaved": {
+    "zh": "上次保存",
+    "en": "Last saved"
+  },
+  "settings.leaveEmptyForAWSSetToYourMinIOR2B2URLOtherwise": {
+    "zh": "使用 AWS 时留空；否则填你的 MinIO/R2/B2 地址。",
+    "en": "Leave empty for AWS; set to your MinIO/R2/B2 URL otherwise."
+  },
+  "settings.metrics": {
+    "zh": "/metrics",
+    "en": "/metrics"
+  },
+  "settings.microsoftEdgeOnlineFreeHighQuality": {
+    "zh": "Microsoft Edge（在线、免费、音质好）",
+    "en": "Microsoft Edge (online, free, high quality)"
+  },
+  "settings.mockOfflineDeterministicPlaceholder": {
+    "zh": "Mock（离线、确定性占位）",
+    "en": "Mock (offline, deterministic placeholder)"
+  },
+  "settings.mockOfflineSilentPlaceholder": {
+    "zh": "Mock（离线、静音占位）",
+    "en": "Mock (offline, silent placeholder)"
+  },
+  "settings.mode": {
+    "zh": "模式",
+    "en": "Mode"
+  },
+  "settings.model": {
+    "zh": "模型：",
+    "en": "Model:"
+  },
+  "settings.model2": {
+    "zh": "模型：",
+    "en": "Model:"
+  },
+  "settings.model3": {
+    "zh": "模型：",
+    "en": "Model:"
+  },
+  "settings.modelProviderEndpointURL": {
+    "zh": "个 model。切换 provider 或修改 endpoint URL 后请重新拉取。",
+    "en": "个 model。 切换 provider 或修改 endpoint URL 后请重新拉取。"
+  },
+  "settings.multiAgentCollaborationPlatformCoderLtGtReviewer": {
+    "zh": "多 agent 协作平台。Coder ↔ Reviewer 循环、MCP、agents.md / skills、manifest、沙箱、语音、云端。",
+    "en": "Multi-agent collaboration platform. Coder &lt;-&gt; Reviewer loop, MCP, agents.md / skills, manifest, sandbox, voice, cloud."
+  },
+  "settings.ok": {
+    "zh": "OK ·",
+    "en": "OK ·"
+  },
+  "settings.openMetrics": {
+    "zh": "打开 /metrics",
+    "en": "Open /metrics"
+  },
+  "settings.pathStyleMinIOEtc": {
+    "zh": "路径式（MinIO 等）",
+    "en": "Path-style (MinIO etc.)"
+  },
+  "settings.pickTheLLMTheCoderAndReviewerAgentsUseBothProvid": {
+    "zh": "选择 Coder 和 Reviewer agent 使用的 LLM。两家服务商都支持自定义 base URL，因此可以把 Kairos 指向 OpenAI、Anthropic 或任何兼容代理（Azure、Together、vLLM、LiteLLM 等）。点击",
+    "en": "Pick the LLM the Coder and Reviewer agents use. Both providers accept a custom base URL so you can point Kairos at OpenAI, Anthropic, or any compatible proxy (Azure, Together, vLLM, LiteLLM, etc.). Click"
+  },
+  "settings.provider": {
+    "zh": "服务商",
+    "en": "Provider"
+  },
+  "settings.providerPreset": {
+    "zh": "服务商预设",
+    "en": "Provider Preset"
+  },
+  "settings.readOnly": {
+    "zh": "只读",
+    "en": "Read-only"
+  },
+  "settings.region": {
+    "zh": "区域",
+    "en": "Region"
+  },
+  "settings.reloadNow": {
+    "zh": "立即重载",
+    "en": "Reload now"
+  },
+  "settings.s3CompatibleObjectStorageWorksWithAWSS3MinIOClou": {
+    "zh": "兼容 S3 的对象存储。支持 AWS S3、MinIO、Cloudflare R2、Backblaze B2、Wasabi 等。凭据从服务端环境变量读取，不在此处保存。",
+    "en": "S3-compatible object storage. Works with AWS S3, MinIO, Cloudflare R2, Backblaze B2, Wasabi, etc. Credentials are read from the server environment, not stored here."
+  },
+  "settings.sandboxWorktree": {
+    "zh": "沙箱（worktree）",
+    "en": "Sandbox (worktree)"
+  },
+  "settings.save": {
+    "zh": "保存",
+    "en": "Save"
+  },
+  "settings.saveFailed": {
+    "zh": "保存失败：",
+    "en": "Save failed:"
+  },
+  "settings.saved": {
+    "zh": "已保存 ·",
+    "en": "Saved ·"
+  },
+  "settings.saving": {
+    "zh": "保存中…",
+    "en": "Saving…"
+  },
+  "settings.settings": {
+    "zh": "设置",
+    "en": "Settings"
+  },
+  "settings.showCounterInFooter": {
+    "zh": "在页脚显示计数",
+    "en": "Show counter in footer"
+  },
+  "settings.sk": {
+    "zh": "sk-…",
+    "en": "sk-…"
+  },
+  "settings.skAnt": {
+    "zh": "sk-ant-…",
+    "en": "sk-ant-…"
+  },
+  "settings.skillsAreReusableInstructionSnippetsDiscoveredFr": {
+    "zh": "技能是可复用的指令片段，来自",
+    "en": "Skills are reusable instruction snippets discovered from"
+  },
+  "settings.sttLanguage": {
+    "zh": "STT 语言",
+    "en": "STT language"
+  },
+  "settings.sttProvider": {
+    "zh": "STT 服务商",
+    "en": "STT provider"
+  },
+  "settings.testConnection": {
+    "zh": "测试连接",
+    "en": "Test connection"
+  },
+  "settings.testConnectionFailed": {
+    "zh": "测试连接失败",
+    "en": "Test connection failed"
+  },
+  "settings.theCoderSubModeControlsWhichToolsTheAgentCanCall": {
+    "zh": "Coder 子模式决定 agent 可以调用哪些工具。",
+    "en": "The Coder sub-mode controls which tools the agent can call."
+  },
+  "settings.toPersist": {
+    "zh": "即可保存。",
+    "en": "to persist."
+  },
+  "settings.toVerifyYourKeyURLThen": {
+    "zh": "校验你的 key 与 URL，然后",
+    "en": "to verify your key + URL, then"
+  },
+  "settings.ttsProvider": {
+    "zh": "TTS 服务商",
+    "en": "TTS provider"
+  },
+  "settings.ttsVoice": {
+    "zh": "TTS 音色",
+    "en": "TTS voice"
+  },
+  "settings.typeAModelNotInTheListEGMyFineTune7b": {
+    "zh": "输入不在列表中的模型名（例如 my-fine-tune-7b）",
+    "en": "type a model not in the list (e.g. my-fine-tune-7b)"
+  },
+  "settings.virtualHostedAWSDefault": {
+    "zh": "虚拟主机式（AWS 默认）",
+    "en": "Virtual-hosted (AWS default)"
+  },
+  "settings.voiceProvidersUsedWhenYouClickTheMicOrSendTextTh": {
+    "zh": "点击麦克风、或发送需要 agent 语音回复的文本时使用的语音服务商。",
+    "en": "Voice providers used when you click the mic or send text that the agent should speak back."
+  },
+  "settings.whisperRequiresFasterWhisper": {
+    "zh": "Whisper（需要 faster-whisper）",
+    "en": "Whisper (requires faster-whisper)"
+  },
+  "agentsMd.loadTemplateFailed": {
+    "zh": "加载模板失败",
+    "en": "failed to load template"
+  },
+  "folderPicker.enterPath": {
+    "zh": "请输入文件夹路径。",
+    "en": "Enter a folder path."
+  },
+  "settings.llmSettingsSaved": {
+    "zh": "LLM 设置已保存",
+    "en": "LLM settings saved"
+  },
+  "settings.needEndpointUrl": {
+    "zh": "请先填写 endpoint URL",
+    "en": "Fill in the endpoint URL first"
+  },
+  "settings.needApiKey": {
+    "zh": "请先填写 API key",
+    "en": "Fill in the API key first"
+  },
+  "settings.endpointAndKeyRequired": {
+    "zh": "Endpoint URL 和 API key 都必须填写。",
+    "en": "Endpoint URL and API key are both required."
+  },
+  "alertPanel.msg.costSpiked": {
+    "zh": "总成本激增 {delta}%（{baseline} → {current}）",
+    "en": "Total cost spiked {delta}% ({baseline} → {current})"
+  },
+  "alertPanel.msg.costUp": {
+    "zh": "总成本上涨 {delta}%（{baseline} → {current}）",
+    "en": "Total cost up {delta}% ({baseline} → {current})"
+  },
+  "alertPanel.msg.callSpike": {
+    "zh": "单次调用 p95 成本上涨 {delta}%（{baseline} → {current}）",
+    "en": "Per-call p95 cost up {delta}% ({baseline} → {current})"
+  },
+  "alertPanel.msg.callsGrowth": {
+    "zh": "LLM 调用次数增长 {delta}%（{baseline} → {current}）",
+    "en": "LLM call count grew {delta}% ({baseline} → {current})"
+  },
+  "alertPanel.kind.costSpike": {
+    "zh": "成本激增",
+    "en": "Cost spike"
+  },
+  "alertPanel.kind.callSpike": {
+    "zh": "单次调用成本激增",
+    "en": "Per-call cost spike"
+  },
+  "alertPanel.kind.callsGrowth": {
+    "zh": "调用量增长",
+    "en": "Call growth"
+  },
+  "alertPanel.kind.system": {
+    "zh": "系统",
+    "en": "System"
+  },
+  "alertPanel.metric.costUsd": {
+    "zh": "总成本",
+    "en": "Total cost"
+  },
+  "alertPanel.metric.perCall": {
+    "zh": "单次调用",
+    "en": "Per call"
+  },
+  "alertPanel.metric.nCalls": {
+    "zh": "调用次数",
+    "en": "Call count"
+  },
+  "alertPanel.metric.lifecycle": {
+    "zh": "生命周期",
+    "en": "Lifecycle"
+  },
+  "alertPanel.muted": {
+    "zh": "已静音",
+    "en": "muted"
+  },
+  "alertPanel.muteTooltip": {
+    "zh": "将 {key} 静音 1 小时",
+    "en": "Mute {key} for 1 hour"
+  },
+  "alertPanel.mutedToast": {
+    "zh": "已将 {key} 静音 {hours} 小时",
+    "en": "Muted {key} for {hours}h"
+  },
+  "cogsPanel.critCount": {
+    "zh": "{n} 严重",
+    "en": "{n} crit"
+  },
+  "settings.statusActive": {
+    "zh": "启用中",
+    "en": "active"
+  },
+  "settings.skillUnit": {
+    "zh": "技能",
+    "en": "skill"
+  },
+  "skillSearch.prioLabel": {
+    "zh": "优先级",
+    "en": "prio"
+  },
+  "skillSearch.scoreLabel": {
+    "zh": "分数",
+    "en": "score"
+  }
+}

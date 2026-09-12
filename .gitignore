@@ -28,3 +28,29 @@ data/
 
 # Secrets
 settings.json
+
+# --- repo hygiene: scratch, build output and unrelated tool state ---
+_dsh_extract/
+_dsh_pkg/
+build/
+.loop_tmp/
+.agn_tmp/
+.merkle-snapshot.json
+.kairos/
+logs/
+_api_test_workspace/
+project1/
+123/
+.codeartsdoer/
+
+# --- tool caches ---
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# --- frontend build output ---
+web/dist/
+web/node_modules/
+

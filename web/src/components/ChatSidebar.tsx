@@ -318,8 +318,15 @@ export const SidebarFooter: React.FC = () => {
   // buttons (padding 7px 10px, borderRadius 8, fontSize 13). This
   // keeps the footer feeling native to the sidebar instead of a
   // generic "settings" panel.
+  // One icon size and one grid for the whole footer: the old markup mixed
+  // 12/14px icons, 3- and 4-button rows (61-85px) and three alignment modes.
+  const FOOTER_ICON = { fontSize: 14 } as const;
+  const LABEL = {
+    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+  } as const;
+
+  // A destination: equal column, centred icon + label, hover wash.
   const baseBtn = {
-    flex: 1,
     padding: '7px 6px',
     borderRadius: 8,
     background: 'transparent',
@@ -330,9 +337,37 @@ export const SidebarFooter: React.FC = () => {
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
+    minWidth: 0,
     cursor: 'pointer',
     transition: 'background 0.12s, color 0.12s',
   } as const;
+
+  // Destinations live on a 3-column grid so every row shares the same column
+  // edges and no label can be squeezed onto a second line.
+  const gridRow = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+    gap: 4,
+  } as const;
+
+  // Utility bars (the Advanced disclosure and the theme switch) are a different
+  // class of control, so they get a hairline outline and left-aligned content
+  // instead of pretending to be destinations.
+  const barBtn = {
+    ...baseBtn,
+    justifyContent: 'flex-start',
+    paddingInlineStart: 10,
+    // The hairline border would otherwise add 2px and break the row rhythm
+    // (bars 33px tall next to 31px destinations) — compensate vertically.
+    paddingBlock: 6,
+    border: `1px solid ${tokens.border}`,
+    color: tokens.labelTertiary,
+  } as const;
+
+  const barHover = (on: boolean) => (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.background = on ? tokens.bgLay2 : 'transparent';
+    e.currentTarget.style.color = on ? tokens.labelSecondary : tokens.labelTertiary;
+  };
 
   // R38.8: navigation collapsed to three primary views. Chat / Today /
   // Tools / Loop / Trace / Projects / Dashboard still exist (and keep
@@ -351,11 +386,11 @@ export const SidebarFooter: React.FC = () => {
       data-testid={testId}
       onClick={onClick}
       style={baseBtn}
-      onMouseEnter={(e) => { e.currentTarget.style.background = tokens.bgLay1; }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = tokens.bgLay2; }}
       onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
     >
       {icon}
-      <span>{label}</span>
+      <span style={LABEL}>{label}</span>
     </button>
   );
 
@@ -368,95 +403,103 @@ export const SidebarFooter: React.FC = () => {
         paddingTop: 8,
         display: 'flex',
         flexDirection: 'column',
-        gap: 4,
+        gap: 6,
       }}
     >
       {/* ----- Primary views: the three things a user actually does ----- */}
-      <div style={{ display: 'flex', gap: 4 }}>
+      <div style={gridRow}>
         <Tooltip title={t('nav.run')} placement="top">
-          {navBtn('footer-run', <ThunderboltOutlined style={{ fontSize: 14 }} />,
+          {navBtn('footer-run', <ThunderboltOutlined style={FOOTER_ICON} />,
                   t('nav.run'), () => navigate('/run'))}
         </Tooltip>
         <Tooltip title={t('nav.history')} placement="top">
-          {navBtn('footer-history', <HistoryOutlined style={{ fontSize: 14 }} />,
+          {navBtn('footer-history', <HistoryOutlined style={FOOTER_ICON} />,
                   t('nav.history'), () => navigate('/history'))}
         </Tooltip>
         <Tooltip title={t('shell.sidebar.settingsTooltip')} placement="top">
-          {navBtn('footer-settings', <SettingOutlined style={{ fontSize: 14 }} />,
+          {navBtn('footer-settings', <SettingOutlined style={FOOTER_ICON} />,
                   t('common.settings'), openSettings)}
         </Tooltip>
       </div>
 
-      {/* ----- Advanced: everything else, collapsed by default ----- */}
-      <Tooltip title={t('nav.advancedHint')} placement="top">
-        <button
-          type="button"
-          data-testid="footer-advanced"
-          aria-expanded={advancedOpen}
-          onClick={() => setAdvancedOpen((v) => !v)}
-          style={{ ...baseBtn, justifyContent: 'flex-start', paddingInlineStart: 10 }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = tokens.bgLay1; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+      {/* ----- Utilities: bars, not destinations ----- */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <Tooltip title={t('nav.advancedHint')} placement="top">
+          <button
+            type="button"
+            data-testid="footer-advanced"
+            aria-expanded={advancedOpen}
+            onClick={() => setAdvancedOpen((v) => !v)}
+            style={barBtn}
+            onMouseEnter={barHover(true)}
+            onMouseLeave={barHover(false)}
+          >
+            {advancedOpen ? <UpOutlined style={FOOTER_ICON} />
+                          : <DownOutlined style={FOOTER_ICON} />}
+            <span style={{ ...LABEL, marginInlineStart: 2 }}>{t('nav.advanced')}</span>
+          </button>
+        </Tooltip>
+
+        {/* Same 3-column grid as the primary row: seven destinations fill
+            three tidy rows and every cell keeps the same width. */}
+        <div
+          data-testid="footer-advanced-group"
+          style={{
+            display: advancedOpen ? 'grid' : 'none',
+            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+            gap: 4,
+          }}
         >
-          {advancedOpen ? <UpOutlined style={{ fontSize: 12 }} />
-                        : <DownOutlined style={{ fontSize: 12 }} />}
-          <span style={{ marginInlineStart: 4 }}>{t('nav.advanced')}</span>
-        </button>
-      </Tooltip>
-      <div
-        data-testid="footer-advanced-group"
-        style={{
-          display: advancedOpen ? 'flex' : 'none',
-          flexDirection: 'column',
-          gap: 4,
-          paddingInlineStart: 6,
-        }}
-      >
-        <div style={{ display: 'flex', gap: 4 }}>
           <Tooltip title={t('shell.newChat.newChat')} placement="top">
-            {navBtn('footer-chat', <MessageOutlined style={{ fontSize: 14 }} />,
+            {navBtn('footer-chat', <MessageOutlined style={FOOTER_ICON} />,
                     t('shell.newChat.newChat'), () => navigate('/chat'))}
           </Tooltip>
           <Tooltip title={t('shell.sidebar.today')} placement="top">
-            {navBtn('footer-today', <AppstoreOutlined style={{ fontSize: 14 }} />,
+            {navBtn('footer-today', <AppstoreOutlined style={FOOTER_ICON} />,
                     t('shell.sidebar.today'), () => navigate('/today'))}
           </Tooltip>
           <Tooltip title={t('shell.sidebar.tools')} placement="top">
-            {navBtn('footer-tools', <ToolOutlined style={{ fontSize: 14 }} />,
+            {navBtn('footer-tools', <ToolOutlined style={FOOTER_ICON} />,
                     t('shell.sidebar.tools'), () => navigate('/tools'))}
           </Tooltip>
-        </div>
-        <div style={{ display: 'flex', gap: 4 }}>
           <Tooltip title={t('nav.loop')} placement="top">
-            {navBtn('footer-loop', <SyncOutlined style={{ fontSize: 14 }} />,
+            {navBtn('footer-loop', <SyncOutlined style={FOOTER_ICON} />,
                     t('nav.loop'), () => navigate('/loop'))}
           </Tooltip>
           <Tooltip title={t('nav.trace')} placement="top">
-            {navBtn('footer-trace', <BranchesOutlined style={{ fontSize: 14 }} />,
+            {navBtn('footer-trace', <BranchesOutlined style={FOOTER_ICON} />,
                     t('nav.trace'), () => navigate('/trace'))}
           </Tooltip>
           <Tooltip title={t('nav.projects')} placement="top">
-            {navBtn('footer-projects', <ProjectOutlined style={{ fontSize: 14 }} />,
+            {navBtn('footer-projects', <ProjectOutlined style={FOOTER_ICON} />,
                     t('nav.projects'), () => navigate('/projects'))}
           </Tooltip>
           <Tooltip title={t('nav.dashboard')} placement="top">
-            {navBtn('footer-dashboard', <DashboardOutlined style={{ fontSize: 14 }} />,
+            {navBtn('footer-dashboard', <DashboardOutlined style={FOOTER_ICON} />,
                     t('nav.dashboard'), () => navigate('/dashboard'))}
           </Tooltip>
         </div>
-      </div>
 
-      {/* ----- Theme toggle stays visible: it is a preference, not a destination ----- */}
-      <div style={{ display: 'flex', gap: 4 }}>
+        {/* A preference, not a destination — same bar treatment as Advanced. */}
         <Tooltip
-          title={t(mode === 'dark' ? 'shell.sidebar.switchToLight' : 'shell.sidebar.switchToDark')}
+          title={t(mode === 'dark' ? 'shell.sidebar.switchToLight'
+                                   : 'shell.sidebar.switchToDark')}
           placement="top"
         >
-          {navBtn('footer-theme',
-                  mode === 'dark' ? <SunOutlined style={{ fontSize: 14 }} />
-                                  : <MoonOutlined style={{ fontSize: 14 }} />,
-                  t(mode === 'dark' ? 'shell.sidebar.light' : 'shell.sidebar.dark'),
-                  toggle)}
+          <button
+            type="button"
+            data-testid="footer-theme"
+            onClick={toggle}
+            style={barBtn}
+            onMouseEnter={barHover(true)}
+            onMouseLeave={barHover(false)}
+          >
+            {mode === 'dark' ? <SunOutlined style={FOOTER_ICON} />
+                             : <MoonOutlined style={FOOTER_ICON} />}
+            <span style={{ ...LABEL, marginInlineStart: 2 }}>
+              {t(mode === 'dark' ? 'shell.sidebar.light' : 'shell.sidebar.dark')}
+            </span>
+          </button>
         </Tooltip>
       </div>
     </div>

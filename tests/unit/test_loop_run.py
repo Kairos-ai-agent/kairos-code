@@ -68,10 +68,16 @@ def _session(coder_responses: List[str], reviewer_responses: List[str],
         def __init__(self, pid):
             self.id = pid
             self.requirements = "build a thing"
+            # The loop reads the checkpoint workspace from project.work_dir; if
+            # it is missing the path collapses to the CWD and the loop commits
+            # this repository.
+            self.work_dir = _ws
+            self.workspace = _ws
 
     workspace = _Path(work_dir) if work_dir else _Path(
         tempfile.mkdtemp(prefix="kairos-loop-test-"))
     workspace.mkdir(parents=True, exist_ok=True)
+    _ws = str(workspace)
     session = rl.LoopSession(
         project=StubProject(project_id),
         message_bus=MessageBus(),

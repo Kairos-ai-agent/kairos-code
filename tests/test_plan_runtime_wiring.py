@@ -24,6 +24,16 @@ from kairos.loop.loop_runner import _plan_snapshot
 from kairos.tools.checkpoint import checkpoint_round
 
 
+@pytest.fixture(autouse=True)
+def _enable_checkpoints(monkeypatch):
+    """Opt back in to checkpointing.
+
+    tests/conftest.py sets KAIROS_NO_CHECKPOINTS=1 for the whole suite so that no
+    test can commit into a real repository. This module exercises the commit path
+    on purpose, against throwaway repositories under tmp_path.
+    """
+    monkeypatch.delenv("KAIROS_NO_CHECKPOINTS", raising=False)
+
 class _StubLLM:
     def __init__(self, response: LLMResponse):
         self._response = response

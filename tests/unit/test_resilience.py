@@ -13,6 +13,16 @@ import pytest
 
 # ---------------------------------------------------------------- ResilientProvider
 
+@pytest.fixture(autouse=True)
+def _enable_checkpoints(monkeypatch):
+    """Opt back in to checkpointing.
+
+    tests/conftest.py sets KAIROS_NO_CHECKPOINTS=1 for the whole suite so that no
+    test can commit into a real repository. This module exercises the commit path
+    on purpose, against throwaway repositories under tmp_path.
+    """
+    monkeypatch.delenv("KAIROS_NO_CHECKPOINTS", raising=False)
+
 class _FakeResponse:
     def __init__(self, content="ok", tool_calls=None):
         self.content = content

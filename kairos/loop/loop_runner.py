@@ -133,10 +133,16 @@ async def _run_coder_round(session, requirement, round_no, plan_mode=False, code
 def _auto_checkpoint(session, round_no, score, approved, summary):
     try:
         from kairos.tools.checkpoint import checkpoint_round
-        workspace = Path(getattr(session.project, "work_dir", None) or getattr(session.project, "workspace", ""))
-        if not workspace:
+        raw = (getattr(session.project, "work_dir", None)
+               or getattr(session.project, "workspace", ""))
+        # NOTE: test the raw value, not the Path. `Path("")` is `.` and a Path is
+        # always truthy, so the old `if not workspace: return None` guard never
+        # fired and a project with no workspace checkpointed the process CWD —
+        # i.e. this repository when the server (or the test suite) runs from the
+        # checkout.
+        if not raw or not str(raw).strip():
             return None
-        return checkpoint_round(Path(workspace), round_no, score, summary[:200], approved,
+        return checkpoint_round(Path(str(raw)), round_no, score, summary[:200], approved,
                                 plan=_plan_snapshot(session))
     except Exception:
         logger.debug("auto-checkpoint failed", exc_info=True)

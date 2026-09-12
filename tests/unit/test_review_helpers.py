@@ -8,6 +8,16 @@ import pytest
 
 # ---------------------------------------------------------------- mermaid
 
+@pytest.fixture(autouse=True)
+def _enable_checkpoints(monkeypatch):
+    """Opt back in to checkpointing.
+
+    tests/conftest.py sets KAIROS_NO_CHECKPOINTS=1 for the whole suite so that no
+    test can commit into a real repository. This module exercises the commit path
+    on purpose, against throwaway repositories under tmp_path.
+    """
+    monkeypatch.delenv("KAIROS_NO_CHECKPOINTS", raising=False)
+
 def test_plan_to_mermaid_empty():
     from kairos.review.mermaid import plan_to_mermaid
     assert "empty plan" in plan_to_mermaid("")
@@ -195,6 +205,17 @@ def test_checkpoint_on_non_git_workspace_returns_none(tmp_path: Path):
     sha = checkpoint_round(empty, 1, 80, "x", True)
     assert sha is None
 
+def _temp_workspace() -> str:
+    """A throwaway workspace for sessions that run the real loop.
+
+    LoopSession's project decides where the checkpoint commits; leaving it unset
+    makes the loop commit the process CWD (this checkout when pytest runs from
+    the repo root).
+    """
+    import tempfile
+    return tempfile.mkdtemp(prefix="kairos-review-test-")
+
+
 # ---------------------------------------------------------------- run_loop new gates
 
 def test_run_loop_uses_specialists_when_configured():
@@ -226,7 +247,8 @@ def test_run_loop_uses_specialists_when_configured():
     coder = StubAgent("wrote code")
 
     session = rl.LoopSession(
-        project=type("P", (), {"id": "p1", "requirements": "x"})(),
+        project=type("P", (), {"id": "p1", "requirements": "x",
+                               "work_dir": _temp_workspace()})(),
         message_bus=MessageBus(),
         coder=coder,
         reviewer=main,
@@ -290,7 +312,8 @@ def test_run_loop_best_of_n_runs_multiple_coders():
     coder = StubAgent()
     reviewer = StubAgent()
     session = rl.LoopSession(
-        project=type("P", (), {"id": "p1", "requirements": "x"})(),
+        project=type("P", (), {"id": "p1", "requirements": "x",
+                               "work_dir": _temp_workspace()})(),
         message_bus=MessageBus(),
         coder=coder,
         reviewer=reviewer,

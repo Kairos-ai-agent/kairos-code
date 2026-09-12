@@ -450,10 +450,9 @@ export const SidebarFooter: React.FC = () => {
             gap: 4,
           }}
         >
-          <Tooltip title={t('shell.newChat.newChat')} placement="top">
-            {navBtn('footer-chat', <MessageOutlined style={FOOTER_ICON} />,
-                    t('shell.newChat.newChat'), () => navigate('/chat'))}
-          </Tooltip>
+          {/* 「新建对话」is gone from here: it duplicated the NewChatButton at
+              the top of the sidebar (which also creates the project for you).
+              That leaves six entries, i.e. two tidy rows of three. */}
           <Tooltip title={t('shell.sidebar.today')} placement="top">
             {navBtn('footer-today', <AppstoreOutlined style={FOOTER_ICON} />,
                     t('shell.sidebar.today'), () => navigate('/today'))}

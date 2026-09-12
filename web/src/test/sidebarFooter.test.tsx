@@ -33,7 +33,7 @@ import { SidebarFooter } from '../components/ChatSidebar';
 
 const DESTINATIONS = [
   'footer-run', 'footer-history', 'footer-settings',
-  'footer-chat', 'footer-today', 'footer-tools', 'footer-loop',
+  'footer-today', 'footer-tools', 'footer-loop',
   'footer-trace', 'footer-projects', 'footer-dashboard',
 ];
 
@@ -63,6 +63,18 @@ describe('SidebarFooter layout', () => {
     expect(group.style.display).toBe('grid');
     fireEvent.click(screen.getByTestId('footer-advanced'));
     expect(group.style.display).toBe('none');
+  });
+
+  it('does not duplicate the new-chat action', () => {
+    // 「新建对话」used to sit here too, next to the NewChatButton at the top of
+    // the sidebar — the same action in two places. Its removal also leaves the
+    // group with six entries, i.e. two full rows of the 3-column grid.
+    renderFooter();
+    expect(screen.queryByTestId('footer-chat')).toBeNull();
+    fireEvent.click(screen.getByTestId('footer-advanced'));  // expand: hidden
+    // rows are pruned from the accessibility tree
+    const group = screen.getByTestId('footer-advanced-group');
+    expect(within(group).getAllByRole('button')).toHaveLength(6);
   });
 
   it('lays every destination row out on the same 3-column grid', () => {

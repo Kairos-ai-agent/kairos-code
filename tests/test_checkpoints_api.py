@@ -46,6 +46,18 @@ create_checkpoint = _checkpoints_routes.create_checkpoint
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _enable_checkpoints(monkeypatch):
+    """Opt back in to checkpointing.
+
+    tests/conftest.py sets KAIROS_NO_CHECKPOINTS=1 for the whole suite so that
+    no test can commit into a real repository. This file exercises the checkpoint
+    API on purpose, and every project here is a throwaway git repo under
+    tmp_path, so it re-enables the commit path locally.
+    """
+    monkeypatch.delenv("KAIROS_NO_CHECKPOINTS", raising=False)
+
+
 def _make_project(project_id: str, work_dir: Path) -> MagicMock:
     p = MagicMock()
     p.work_dir = str(work_dir)

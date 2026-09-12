@@ -1,7 +1,7 @@
 # Kairos Code 系统完整审查报告 v2
 
-> **审查范围**：`D:\software_bak\Kairos_code`（Kairos Code v0.1.0）  
-> **对照参考**：`D:\software_bak\MetaGPT-main\MetaGPT-main`、`D:\software_bak\grok_build\source`  
+> **审查范围**：`<repo>`（Kairos Code v0.1.0）  
+> **对照参考**：`<workspace>\MetaGPT-main\MetaGPT-main`、`<workspace>\grok_build\source`  
 > **审查时间**：2026-07-18（基于 v1 报告后系统已大量更新）  
 > **审查方法**：静态阅读 + **完整端到端 smoke test + mock 单测 + 真 LLM 跑通**  
 > **报告版本**：v2.0（覆盖 v1.0）

@@ -1,7 +1,7 @@
 # Kairos Code 系统完整审查报告
 
-> **审查范围**：`D:\software_bak\Kairos_code`（Kairos Code v0.1.0）  
-> **对照参考**：`D:\software_bak\MetaGPT-main\MetaGPT-main`、`D:\software_bak\grok_build\source`  
+> **审查范围**：`<repo>`（Kairos Code v0.1.0）  
+> **对照参考**：`<workspace>\MetaGPT-main\MetaGPT-main`、`<workspace>\grok_build\source`  
 > **审查时间**：2026-07-18  
 > **审查方法**：静态阅读 + 导入验证 + 跨文件调用链追踪  
 > **报告版本**：v1.0
@@ -50,7 +50,7 @@
 ### 1.1 目录结构
 
 ```
-D:\software_bak\Kairos_code\
+<repo>\
 ├── kairos/                       # 核心引擎（Python 异步）
 │   ├── main.py                   # uvicorn 入口
 │   ├── agents/
@@ -162,7 +162,7 @@ Upstream LLM API
 
 ### 2.2 Grok 集成度评估
 
-`D:\software_bak\grok_build\source` 是 **xAI Grok Code（Rust 写的 CLI/Agent）**，与 Python 框架 Kairos 技术栈不通。**不存在代码级集成的可能**。
+`<workspace>\grok_build\source` 是 **xAI Grok Code（Rust 写的 CLI/Agent）**，与 Python 框架 Kairos 技术栈不通。**不存在代码级集成的可能**。
 
 Kairos README 自称"整合了 MetaGPT 的多 Agent 协作框架和 Grok Build 的工具能力"——这里的"整合"只能理解为**借鉴设计模式**，不是 import 复用：
 

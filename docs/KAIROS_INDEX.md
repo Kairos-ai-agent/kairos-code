@@ -210,7 +210,7 @@ as a map when you come back to this codebase after a break.
 
 ```bash
 # Backend tests (full sweep)
-cd D:\software_bak\Kairos_code
+cd kairos-code
 python -m pytest -q -p no:cacheprovider \
   --deselect tests/test_perf.py::test_timed_async_records_sample \
   --deselect tests/test_bench_multi_agent.py::test_parallel_coder_speedup \
@@ -238,7 +238,7 @@ npx vitest run
 # → 6 passed
 
 # CLI: pre-commit hook
-cd D:\software_bak\Kairos_code
+cd kairos-code
 python -m kairos.hook run --fast
 # → 3 checks (skill-search, meta-eval, smoke) all pass
 

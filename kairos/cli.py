@@ -419,6 +419,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     if argv is None:
         argv = sys.argv[1:]
     # No-arg call → serve (legacy default)
+    if argv and argv[0] in ("--version", "-V", "version"):
+        from kairos import __version__
+
+        print(f"kairos-code {__version__}")
+        return 0
     if not argv or argv[0] not in ("serve", "exec", "gate", "demo", "-h", "--help"):
         # Bare command (or unknown) → legacy server mode
         return _serve_legacy()

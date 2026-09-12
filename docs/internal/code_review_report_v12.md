@@ -1,6 +1,6 @@
 # Kairos Code 系统完整审查报告 v12
 
-> **审查范围**：`D:\software_bak\Kairos_code`（Kairos Code v0.1.0）
+> **审查范围**：`<repo>`（Kairos Code v0.1.0）
 > **审查时间**：2026-07-18 16:20-16:30（v11 报告后我误报"无改动"，实际 16:19:54 用户改了 1 个文件）
 > **审查方法**：文件 mtime 复查 + `grep` 残留 + 端到端 smoke test
 > **报告版本**：v12.0（覆盖 v1.0 → v11.0）

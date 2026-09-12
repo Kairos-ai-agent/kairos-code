@@ -16,7 +16,18 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from kairos.tools.checkpoint import checkpoint_round
+
+
+@pytest.fixture(autouse=True)
+def _enable_checkpoints(monkeypatch):
+    """Opt back in: tests/conftest.py disables checkpoints suite-wide so no test
+    can commit into a real repository. These tests deliberately exercise the
+    commit path, and they only ever point it at throwaway repositories under
+    tmp_path."""
+    monkeypatch.delenv("KAIROS_NO_CHECKPOINTS", raising=False)
 
 
 def _run(args: list[str], cwd: Path) -> subprocess.CompletedProcess:

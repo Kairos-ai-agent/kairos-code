@@ -17,7 +17,12 @@ jobs:
   python:
     name: Python tests
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Measured: the full suite is ~3 min on a many-core dev box but 20-25 min on
+    # a 2-vCPU runner, because a large share of the 1843 tests spawn subprocesses
+    # (the demo CLI tests alone run the whole gate 10+ times). 25 minutes was not
+    # enough and the job was killed mid-suite. Raising the ceiling is the honest
+    # fix; sharding the suite is the next step if it keeps growing.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 

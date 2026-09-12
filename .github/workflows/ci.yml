@@ -79,6 +79,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # check_i18n.mjs parses the TSX sources with the TypeScript compiler, which
+      # it resolves out of web/node_modules — without this the gate dies with
+      # "Cannot find module 'typescript'" instead of reporting a real finding.
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
 
       - name: "Merge fragments (strict mode)"
         run: python scripts/merge_i18n.py --strict

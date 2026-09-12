@@ -54,3 +54,16 @@ __pycache__/
 web/dist/
 web/node_modules/
 
+# --- never again: third-party packages / archives the loop's auto-commit swept in ---
+# An early Kairos loop ran with the repo root as its work_dir and its checkpoint
+# commit picked up a 640 MB Codex archive (_codex56.rar) plus an extracted
+# third-party product dump (_leila_extract/). Both are gone from history now;
+# these rules keep them (and anything like them) out.
+_*_extract/
+_leila_extract/
+_extract_*.py
+_extract_*.mjs
+_check_extract.py
+*.rar
+*.7z
+*.iso

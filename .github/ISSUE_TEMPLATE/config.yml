@@ -1,11 +1,11 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security issue
-    url: https://github.com/OWNER/REPO/security/advisories/new
+    url: https://github.com/Kairos-ai-agent/kairos-code/security/advisories/new
     about: Please report vulnerabilities privately — never in a public issue.
   - name: Question / idea
-    url: https://github.com/OWNER/REPO/discussions
+    url: https://github.com/Kairos-ai-agent/kairos-code/discussions
     about: Ask anything, or float an idea before writing code.
   - name: Try the demo first
-    url: https://github.com/OWNER/REPO#-see-it-in-60-seconds
+    url: https://github.com/Kairos-ai-agent/kairos-code#-see-it-in-60-seconds
     about: "`kairos demo` runs the whole review gate with no API key — it answers a lot of questions."

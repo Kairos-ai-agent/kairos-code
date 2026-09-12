@@ -16,6 +16,7 @@ record of how the pipeline was built, what was tried, and what was rejected.
 If you are reading the repository to understand or use Kairos Code, read
 [`../README.md`](../README.md) first, then [`../docs/README.md`](../README.md).
 
-If you are the maintainer: these files can be dropped from a public release
-without losing anything the product depends on — nothing outside this directory
-imports or references them.
+These notes are **published on purpose**: they show how the pipeline was built,
+what was measured, and what was rejected along the way. Nothing outside this
+directory imports or references them, so they can be dropped without breaking
+anything — but they are part of the record, not clutter.

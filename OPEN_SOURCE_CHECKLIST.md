@@ -10,7 +10,7 @@ a command, not by inspection alone.
 
 | Item | Evidence |
 |---|---|
-| **No LICENSE file** while `pyproject.toml` claimed MIT | [`LICENSE`](LICENSE) (MIT) added; [NOTICE](NOTICE) covers the vendored third-party skills |
+| **No LICENSE file** (the repo was "all rights reserved" while `pyproject.toml` claimed a license) | [`LICENSE`](LICENSE) added — **AGPL-3.0-or-later**, chosen deliberately so a modified Kairos Code offered as a network service must publish its source; [NOTICE](NOTICE) covers the vendored third-party skills, which stay MIT (permissive, compatible with (A)GPL-3.0). Wheel metadata verified: `License-Expression: AGPL-3.0-or-later`, both files bundled under `dist-info/licenses/` |
 | **Two broken gitlinks** (`vendor/_oss/anthropic-skills`, `vendor/_oss/superpowers`) — empty dirs on clone, `git submodule update --init` failed with "no .gitmodules" | vendored as ordinary files (12 + 64 files), `git ls-files -s \| grep 160000` → 0 |
 | **Hardcoded personal paths** in shipped code (`E:/D_bak/...`, `C:\Users\user\...`) | `scripts/gen_languages.mjs` derives the repo root from `import.meta.url`; `build_exe_with_icon.py` uses `tempfile.gettempdir()`; `kairos/bench/real_eval.py` reads `KAIROS_BENCH_API_KEY(_FILE)`; `web/public/branding/_build_icons.py` takes argv/env; UI/copy and test text genericised. `git grep -lI "user\|D_bak"` on tracked files → only `docs/internal/` |
 | **`npm run build` failed** (3 TypeScript errors) — no production UI could be built at all, which also breaks the Docker image | `NewChatButton.tsx` now types the created project as `Project`, `chatStore.ts` merge is typed as `ChatStore` → `npx tsc --noEmit` clean, build passes |
@@ -60,13 +60,11 @@ a security section that points at `SECURITY.md` and `docs/SANDBOX_ISOLATION.md`.
    python scripts/prepare_github.py --owner <your-github-user> --repo <repo-name> --apply
    ```
 
-2. **Pick the license.** `MIT` is what `pyproject.toml` already declared and what
-   [`LICENSE`](LICENSE) contains. If you would rather stop a cloud vendor from
-   reselling this as a service, switch to `AGPL-3.0` — that is a deliberate
-   trade-off (adoption vs. protection), so it is your call, not the tooling's.
-3. **Re-read `docs/internal/`** (round reports, review iterations, draft
-   competitor charts). Nothing imports them; delete the directory if you do not
-   want them public.
+2. ~~Pick the license~~ — **decided: AGPL-3.0-or-later** (see `LICENSE`). The
+   trade-off (protection against a hosted fork vs. permissive adoption) was made
+   on purpose.
+3. ~~Review `docs/internal/`~~ — **decided: it stays public.** The round reports
+   and review iterations are part of the record; nothing imports them.
 4. **Run the gates**: `./scripts/ci_local.sh` (or at least `pytest tests -q`,
    `npx tsc --noEmit`, `npx vitest run`, `node scripts/check_i18n.mjs`).
 5. **Create the repo and push** — add it as `origin` first, because the history
@@ -75,9 +73,10 @@ a security section that points at `SECURITY.md` and `docs/SANDBOX_ISOLATION.md`.
 ## Known limitations of this pass
 
 - **The Docker image was not built** — there is no Docker on the machine this was
-  prepared on. `Dockerfile`/`docker-compose.yml` follow the real entry points
-  (`python -m kairos serve`, `KAIROS_DATA_DIR`, `web/dist` resolution) but the
-  first `docker compose up --build` is unverified.
+  prepared on, and the maintainer accepted that (`Dockerfile`/`docker-compose.yml`
+  follow the real entry points: `python -m kairos serve`, `KAIROS_DATA_DIR`, the
+  `web/dist` resolution, and the build hook that ships the UI). The first
+  `docker compose up --build` is still the real check.
 - **CI runs on `ubuntu-latest` but was only executed locally on Windows** (via
   `scripts/ci_local.sh`). Linux-only paths (Landlock, `os.fork`) are covered by
   tests that skip elsewhere; the first GitHub run is the real check.

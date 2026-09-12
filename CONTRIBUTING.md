@@ -86,4 +86,5 @@ Please don't open a public issue — see [SECURITY.md](SECURITY.md).
 ## License
 
 By contributing you agree that your work is licensed under the project's
-[MIT license](LICENSE).
+[AGPL-3.0-or-later license](LICENSE) — contributions come in under the same
+license.

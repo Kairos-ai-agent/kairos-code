@@ -7,7 +7,10 @@ name = "kairos-code"
 version = "0.1.0"
 description = "Self-hosted, model-agnostic multi-agent pipeline with enforced review gates and cost accounting"
 readme = "README.md"
-license = "MIT"
+# SPDX (PEP 639). AGPL-3.0-or-later: anyone who runs a modified Kairos Code
+# as a network service must offer the source.
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.11"
 authors = [{ name = "Kairos Code contributors" }]
 keywords = [
@@ -70,10 +73,10 @@ all = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/OWNER/REPO"
-Repository = "https://github.com/OWNER/REPO"
-Issues = "https://github.com/OWNER/REPO/issues"
-Changelog = "https://github.com/OWNER/REPO/blob/master/CHANGELOG.md"
+Homepage = "https://github.com/Kairos-ai-agent/kairos-code"
+Repository = "https://github.com/Kairos-ai-agent/kairos-code"
+Issues = "https://github.com/Kairos-ai-agent/kairos-code/issues"
+Changelog = "https://github.com/Kairos-ai-agent/kairos-code/blob/master/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["kairos", "api"]

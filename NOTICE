@@ -1,6 +1,9 @@
 # Third-party notices
 
-Kairos Code is MIT licensed (see [LICENSE](LICENSE)). It bundles or depends on
+Kairos Code is licensed under the GNU Affero General Public License v3.0 or
+later (see [LICENSE](LICENSE)). The third-party components below keep their
+own licenses; the vendored ones are permissive (MIT), which is compatible
+with (A)GPL-3.0. It bundles or depends on
 the following third-party work; the original license files are kept next to the
 sources under `vendor/`.
 

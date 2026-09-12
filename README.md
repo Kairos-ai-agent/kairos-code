@@ -6,8 +6,8 @@
 
 *You don't ship what the agent didn't pass.*
 
-[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![CI](https://github.com/Kairos-ai-agent/kairos-code/actions/workflows/ci.yml/badge.svg)](https://github.com/Kairos-ai-agent/kairos-code/actions/workflows/ci.yml)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![Node 20+](https://img.shields.io/badge/node-20%2B-339933.svg)](https://nodejs.org)
 [![UI languages: 63](https://img.shields.io/badge/UI%20languages-63-blueviolet.svg)](#internationalisation)
@@ -120,7 +120,7 @@ A badge for your PR description:
 ### From source (recommended today — 0.1 is alpha)
 
 ```bash
-git clone https://github.com/OWNER/REPO
+git clone https://github.com/Kairos-ai-agent/kairos-code
 cd REPO
 python -m venv .venv
 . .venv/bin/activate          # Windows: .venv\Scripts\activate
@@ -325,4 +325,7 @@ the dev setup, the four gates CI enforces, and how to add a language.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Third-party notices live in [NOTICE](NOTICE).
+AGPL-3.0-or-later — see [LICENSE](LICENSE). You may run, modify and self-host
+it, including commercially; if you offer a modified version to users over a
+network, you must offer them the source. Vendored third-party components keep
+their own (permissive) licenses — see [NOTICE](NOTICE).

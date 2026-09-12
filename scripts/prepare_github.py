@@ -23,6 +23,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "dist", "build",
              "__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache",
              "data", "workspace", "locales", "catalog"}
+# This script holds the literal placeholders in its own regexes — rewriting it
+# would break it (and it must stay re-runnable).
+SKIP_FILES = {Path(__file__).resolve()}
 TEXT_SUFFIXES = {".md", ".toml", ".yml", ".yaml", ".json", ".py", ".ts",
                  ".tsx", ".mjs", ".js", ".sh", ".bat", ".vbs", ".txt"}
 
@@ -38,6 +41,8 @@ def iter_files(root: Path):
         if not path.is_file():
             continue
         if any(part in SKIP_DIRS for part in path.parts):
+            continue
+        if path.resolve() in SKIP_FILES:
             continue
         if path.suffix.lower() not in TEXT_SUFFIXES:
             continue

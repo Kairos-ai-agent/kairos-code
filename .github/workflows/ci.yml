@@ -15,14 +15,19 @@ concurrency:
 
 jobs:
   python:
-    name: Python tests
+    name: Python tests (${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
-    # Measured: the full suite is ~3 min on a many-core dev box but 20-25 min on
-    # a 2-vCPU runner, because a large share of the 1843 tests spawn subprocesses
-    # (the demo CLI tests alone run the whole gate 10+ times). 25 minutes was not
-    # enough and the job was killed mid-suite. Raising the ceiling is the honest
-    # fix; sharding the suite is the next step if it keeps growing.
-    timeout-minutes: 45
+    # Measured: the full suite is ~3 min on a many-core dev box but 40+ on a
+    # 2-vCPU runner, because a large share of the 1867 tests spawn subprocesses
+    # (the demo CLI tests alone run the whole gate a dozen times). One job either
+    # burns the whole timeout or gets killed mid-suite, so the suite is split
+    # into three balanced shards (see scripts/split_tests.py --verify: every
+    # module exactly once, 1.00x balance).
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
 
@@ -37,12 +42,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Test suite
-        run: pytest tests -q
+      - name: "Run shard ${{ matrix.shard }} of 3"
+        # --timeout names a genuinely stuck test instead of letting it eat the
+        # job budget; --durations keeps the slow ones visible in the log.
+        run: |
+          FILES=$(python scripts/split_tests.py --shard ${{ matrix.shard }} --shards 3)
+          pytest $FILES -q --timeout=300 --durations=10
 
       - name: "Zero-key demo (the 60-second first run)"
         # Proves a fresh clone can show the whole gate/ledger story without any
-        # API key and without network access.
+        # API key and without network access. Runs once, not in all three shards.
+        if: matrix.shard == 1
         run: python -m kairos demo --json --quiet
 
   frontend:

@@ -37,7 +37,14 @@ a command, not by inspection alone.
 
 Packaging fixes in `pyproject.toml`: real `description`, `authors`, `keywords`,
 `classifiers`, `[project.urls]`, the `tui`/`metrics`/`mcp`/`all` extras, and
-`artifacts = ["web/dist"]` so a wheel install ships the UI as well as the API.
+`hatch_build.py` (a hatchling `custom` build hook) so a wheel install ships the
+UI as well as the API **when the frontend has been built** — and still installs
+cleanly when it has not. Measured, because the obvious options do not work:
+`artifacts = ["web/dist"]` adds nothing to the wheel (0 entries, whether at
+`[tool.hatch.build]` or on the wheel target), and a static `force-include`
+hard-fails a fresh clone with `Forced include not found: .../web/dist`. With the
+hook: 199 `web/dist` entries incl. `index.html` when built; a working
+backend-only wheel when not.
 
 The README was rewritten around what is actually different (enforced gate, cost
 ledger, eval harness, the shareable Gate Report) with the real `kairos demo`

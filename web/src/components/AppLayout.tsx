@@ -44,6 +44,7 @@ import { useThemeStore } from '../stores/themeStore';
 import { useChatStore } from '../stores/chatStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
+import { useT } from '../i18n';
 import { LAYOUT } from '../styles/theme';
 import api from '../api/client';
 import type { Project } from '../types';
@@ -85,6 +86,7 @@ const isProviderConfigured = (p: {
 };
 
 const AppLayout: React.FC = () => {
+  const t = useT();
   const navigate = useNavigate();
   const tokens = useThemeTokens();
   const mode = useThemeStore((s) => s.mode);
@@ -242,7 +244,7 @@ const AppLayout: React.FC = () => {
           type="text"
           icon={sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
           onClick={toggleSidebar}
-          aria-label="Toggle sidebar"
+          aria-label={t('shell.appLayout.toggleSidebar')}
           style={{ color: tokens.labelSecondary }}
         />
         <div
@@ -283,7 +285,7 @@ const AppLayout: React.FC = () => {
           trigger={null}
           style={{
             background: tokens.bgElevated,
-            borderRight: `1px solid ${tokens.border}`,
+            borderInlineEnd: `1px solid ${tokens.border}`,
             transition: 'width 0.18s ease',
             overflow: 'hidden',
           }}
@@ -326,14 +328,14 @@ const AppLayout: React.FC = () => {
               flexDirection: 'column', alignItems: 'center',
               paddingTop: 8,
             }}>
-              <Tooltip title="Show workbench" placement="left">
+              <Tooltip title={t('shell.appLayout.showWorkbench')} placement="left">
                 <Button
                   type="text"
                   icon={<AppstoreOutlined />}
                   onClick={toggleWorkbench}
                   data-testid="workbench-open-rail"
                   style={{ color: tokens.labelSecondary }}
-                  aria-label="Show workbench"
+                  aria-label={t('shell.appLayout.showWorkbench')}
                 />
               </Tooltip>
             </div>

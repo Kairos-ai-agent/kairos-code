@@ -30,6 +30,7 @@ import {
 
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
+import { useT } from '../i18n';
 import ChatThread from '../components/ChatThread';
 import ChatComposer, { ChatAttachment } from '../components/ChatComposer';
 import { classifyIntent } from '../utils/intent';
@@ -44,6 +45,7 @@ import type { Message, LoopSession, SessionRound } from '../types';
 
 const Chat: React.FC = () => {
   const tokens = useThemeTokens();
+  const t = useT();
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId?: string }>();
   const { message: msgApi } = AntdApp.useApp();
@@ -420,12 +422,12 @@ const Chat: React.FC = () => {
             || /\b(failed|FAIL)\b(?!\s+to\b)/i.test(trimmed)
           );
           if (isErr) {
-            msgApi.error('Task failed — see the chat for details');
+            msgApi.error(t('chat.page.taskFailed'));
           } else {
-            msgApi.success('Task done');
+            msgApi.success(t('chat.page.taskDone'));
           }
         } else if (topic === 'task.error') {
-          msgApi.error(`Task error: ${content.slice(0, 120)}`);
+          msgApi.error(t('chat.page.taskError', { detail: content.slice(0, 120) }));
         }
       }
 
@@ -478,7 +480,7 @@ const Chat: React.FC = () => {
     });
     const offState = onWebSocketState((s) => setWsState(s));
     return () => { offMsg(); offState(); };
-  }, [currentProject, sessionId, navigate,
+  }, [currentProject, sessionId, navigate, t,
      setCurrentMessages, appendMessage, setCurrentSessionId, setSessions,
      loadHistory]);
 
@@ -566,7 +568,7 @@ const Chat: React.FC = () => {
   //   - askState.pending always wins (answer the reviewer's question).
   const handleSubmit = async (text: string, attachments: ChatAttachment[] = []) => {
     if (!currentProject) {
-      msgApi.warning('Pick a project or folder first.');
+      msgApi.warning(t('chat.page.pickProjectFirst'));
       return;
     }
     setBusy(true);
@@ -677,7 +679,7 @@ const Chat: React.FC = () => {
       } else if (typeof e?.message === 'string' && e.message) {
         msg = e.message;
       } else {
-        msg = 'Failed to submit';
+        msg = t('chat.page.submitFailed');
       }
       if (status) {
         msg = `[${status}] ${msg}`;
@@ -694,7 +696,7 @@ const Chat: React.FC = () => {
       const isProjectMissing = /project not found/i.test(msg);
       const isNoCoder = /no coder/i.test(msg);
       if (isProjectMissing) {
-        msg += ' — pick a different project from the sidebar.';
+        msg += t('chat.page.hintProjectMissing');
       } else if (isNoCoder) {
         // Don't blanket-suggest Settings — the backend's 503
         // detail now includes the real attach_errors (mcp/worktree/
@@ -705,11 +707,11 @@ const Chat: React.FC = () => {
             && !/mcp[: ]/i.test(msg)
             && !/worktree[: ]/i.test(msg)
             && !/provider[: ]/i.test(msg)) {
-          msg += ' — open Settings → LLM Models and click Save.';
+          msg += t('chat.page.hintOpenSettings');
         }
       } else if (status === 503
           || /api[_ ]?key|provider|model|not configured|unauthorized|401/i.test(msg)) {
-        msg += ' — open Settings → LLM Models and click Save.';
+        msg += t('chat.page.hintOpenSettings');
       }
       msgApi.error(msg);
     } finally {
@@ -721,9 +723,9 @@ const Chat: React.FC = () => {
     if (!currentProject) return;
     try {
       await api.post(`/projects/${currentProject.id}/stop`);
-      msgApi.success('Loop stopped.');
+      msgApi.success(t('chat.page.loopStopped'));
     } catch (e: any) {
-      msgApi.error(e?.response?.data?.detail || 'Failed to stop');
+      msgApi.error(e?.response?.data?.detail || t('chat.page.stopFailed'));
     }
   };
 
@@ -748,19 +750,27 @@ const Chat: React.FC = () => {
         }}>
           {hasSession
             ? (loopState?.session_id
-                ? `Session ${loopState.session_id.slice(0, 8)}…`
-                : (sessionId ? `Session ${sessionId.slice(0, 8)}…` : 'New session'))
-            : (currentProject ? `Chat · ${currentProject.name}` : 'No project')}
+                ? t('chat.page.sessionTitle', { id: loopState.session_id.slice(0, 8) })
+                : (sessionId
+                    ? t('chat.page.sessionTitle', { id: sessionId.slice(0, 8) })
+                    : t('chat.page.newSession')))
+            : (currentProject
+                ? t('chat.page.chatWithProject', { name: currentProject.name })
+                : t('chat.page.noProject'))}
         </div>
         {isRunning && (
-          <Tag color="processing" icon={<ThunderboltOutlined />}>running</Tag>
+          <Tag color="processing" icon={<ThunderboltOutlined />}>{t('common.running')}</Tag>
         )}
         {loopState && loopState.round > 0 && (
           <Tag color={loopState.last_approve ? 'green' : 'orange'}>
-            R{loopState.round} · score {loopState.last_score}
+            {t('chat.page.roundScore', {
+              round: loopState.round, score: loopState.last_score,
+            })}
           </Tag>
         )}
-        <Tooltip title={wsState === 'open' ? 'WebSocket connected' : `WS ${wsState}`}>
+        <Tooltip title={wsState === 'open'
+          ? t('chat.page.wsConnected')
+          : t('chat.page.wsState', { state: wsState })}>
           <span style={{
             display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
             background: wsState === 'open' ? tokens.success
@@ -769,20 +779,20 @@ const Chat: React.FC = () => {
         </Tooltip>
         {isRunning ? (
           <Button danger icon={<StopOutlined />}
-                  onClick={stopLoop} size="small">Stop</Button>
+                  onClick={stopLoop} size="small">{t('common.stop')}</Button>
         ) : hasSession ? (
           <Button icon={<ReloadOutlined />}
                   onClick={() => currentProject && api.get(`/projects/${currentProject.id}/loop`).then((r) => setLoopState(r.data))}
-                  size="small">Refresh</Button>
+                  size="small">{t('common.refresh')}</Button>
         ) : null}
         {hasSession && currentProject && sessionId && (
-          <Tooltip title="View per-turn trace">
+          <Tooltip title={t('chat.page.traceTooltip')}>
             <Button
               icon={<BranchesOutlined />}
               onClick={() => navigate(`/trace/${currentProject.id}/${sessionId}`)}
               size="small"
             >
-              Trace
+              {t('chat.page.trace')}
             </Button>
           </Tooltip>
         )}
@@ -794,10 +804,10 @@ const Chat: React.FC = () => {
           messages={currentMessages}
           emptyHint={
             !currentProject
-              ? 'Pick a project, or add a folder above, to start chatting.'
+              ? t('chat.page.emptyNoProject')
               : isRunning
-                ? 'Loop is running — round output will appear here.'
-                : 'Type a task below; the Auto router picks the right mode.'
+                ? t('chat.page.emptyRunning')
+                : t('chat.page.emptyIdle')
           }
         />
       </div>
@@ -813,7 +823,7 @@ const Chat: React.FC = () => {
               await api.post(`/projects/${currentProject.id}/plan/approve`);
               setPlanState(null);
             } catch (e: any) {
-              msgApi.error(e?.response?.data?.detail || 'Failed to approve');
+              msgApi.error(e?.response?.data?.detail || t('chat.page.approveFailed'));
             }
           }}
           onReject={async () => {
@@ -822,7 +832,7 @@ const Chat: React.FC = () => {
               await api.post(`/projects/${currentProject.id}/plan/reject`);
               setPlanState(null);
             } catch (e: any) {
-              msgApi.error(e?.response?.data?.detail || 'Failed to reject');
+              msgApi.error(e?.response?.data?.detail || t('chat.page.rejectFailed'));
             }
           }}
         />
@@ -841,7 +851,7 @@ const Chat: React.FC = () => {
         onSubmit={handleSubmit}
         busy={busy}
         disabled={!showComposer}
-        disabledHint="Select a project or folder to start."
+        disabledHint={t('chat.page.disabledHint')}
       />
     </div>
   );
@@ -861,6 +871,7 @@ const PlanBanner: React.FC<{
   onReject: () => Promise<void> | void;
 }> = ({ text, round, onApprove, onReject }) => {
   const tokens = useThemeTokens();
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const wrap = async (fn: () => Promise<void> | void) => {
     setBusy(true);
@@ -868,9 +879,9 @@ const PlanBanner: React.FC<{
   };
   return (
     <div style={{
-      margin: '0 16px 8px', maxWidth: 768, marginLeft: 'auto', marginRight: 'auto',
+      margin: '0 16px 8px', maxWidth: 768, marginInlineStart: 'auto', marginInlineEnd: 'auto',
       background: tokens.bgLay1, border: `1px solid ${tokens.borderStrong}`,
-      borderLeft: `4px solid ${tokens.coderAccent}`,
+      borderInlineStart: `4px solid ${tokens.coderAccent}`,
       borderRadius: 12, padding: 14,
     }}>
       <div style={{
@@ -879,7 +890,7 @@ const PlanBanner: React.FC<{
       }}>
         <span style={{ fontWeight: 600, fontSize: 13,
                        color: tokens.labelPrimary }}>
-          📋 Plan ready · round {round}
+          {t('chat.page.planReady', { round })}
         </span>
       </div>
       <pre style={{
@@ -892,12 +903,12 @@ const PlanBanner: React.FC<{
       </pre>
       <div style={{ display: 'flex', gap: 8, marginTop: 10, justifyContent: 'flex-end' }}>
         <Button size="small" onClick={() => wrap(onReject)} loading={busy}>
-          Reject & stop
+          {t('chat.page.rejectAndStop')}
         </Button>
         <Button size="small" type="primary"
                 style={{ background: tokens.coderAccent, border: 'none' }}
                 onClick={() => wrap(onApprove)} loading={busy}>
-          Approve & continue
+          {t('chat.page.approveAndContinue')}
         </Button>
       </div>
     </div>
@@ -916,6 +927,7 @@ const AskBanner: React.FC<{
   onAnswered: () => void;
 }> = ({ question, context, round, onAnswered }) => {
   const tokens = useThemeTokens();
+  const t = useT();
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const submit = async () => {
@@ -937,16 +949,16 @@ const AskBanner: React.FC<{
   };
   return (
     <div style={{
-      margin: '0 16px 8px', maxWidth: 768, marginLeft: 'auto', marginRight: 'auto',
+      margin: '0 16px 8px', maxWidth: 768, marginInlineStart: 'auto', marginInlineEnd: 'auto',
       background: tokens.bgLay1, border: `1px solid ${tokens.borderStrong}`,
-      borderLeft: `4px solid ${tokens.reviewerAccent}`,
+      borderInlineStart: `4px solid ${tokens.reviewerAccent}`,
       borderRadius: 12, padding: 14,
     }}>
       <div style={{
         fontWeight: 600, fontSize: 13, color: tokens.labelPrimary,
         marginBottom: 6,
       }}>
-        ❓ Reviewer asks · round {round}
+        {t('chat.page.askHeader', { round })}
       </div>
       <div style={{ fontSize: 13, color: tokens.labelSecondary,
                     lineHeight: 1.5, marginBottom: 8 }}>
@@ -955,7 +967,7 @@ const AskBanner: React.FC<{
       {context && (
         <details style={{ marginBottom: 8, color: tokens.labelTertiary,
                           fontSize: 12 }}>
-          <summary style={{ cursor: 'pointer' }}>Show context</summary>
+          <summary style={{ cursor: 'pointer' }}>{t('chat.page.showContext')}</summary>
           <pre style={{ whiteSpace: 'pre-wrap', marginTop: 6,
                         fontFamily: 'inherit' }}>
             {context}
@@ -967,7 +979,7 @@ const AskBanner: React.FC<{
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
-          placeholder="Type your answer…"
+          placeholder={t('chat.page.answerPlaceholder')}
           style={{
             flex: 1, padding: '6px 10px', borderRadius: 8,
             border: `1px solid ${tokens.border}`,
@@ -977,7 +989,7 @@ const AskBanner: React.FC<{
           autoFocus
         />
         <Button type="primary" onClick={submit} loading={busy}
-                disabled={!text.trim()}>Answer</Button>
+                disabled={!text.trim()}>{t('chat.page.answer')}</Button>
       </div>
     </div>
   );

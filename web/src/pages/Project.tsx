@@ -8,6 +8,7 @@ import {
 } from '@ant-design/icons';
 import api from '../api/client';
 import { formatError } from '../utils/formatError';
+import { useT } from '../i18n';
 import { useAgentStore } from '../stores/agentStore';
 import type { Project, ProjectFile } from '../types';
 
@@ -23,6 +24,7 @@ const ProjectPage: React.FC = () => {
   const [form] = Form.useForm();
   const [startForm] = Form.useForm();
   const { setCurrentProject } = useAgentStore();
+  const t = useT();
 
   // Reference files state
   const [filesModalOpen, setFilesModalOpen] = useState(false);
@@ -37,7 +39,7 @@ const ProjectPage: React.FC = () => {
       const res = await api.get('/projects');
       setProjects(res.data.projects);
     } catch (e) {
-      message.error('Failed to load projects');
+      message.error(t('project.page.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -54,12 +56,12 @@ const ProjectPage: React.FC = () => {
   const handleCreate = async (values: any) => {
     try {
       await api.post('/projects', values);
-      message.success('Project created');
+      message.success(t('project.page.created'));
       setCreateModalOpen(false);
       form.resetFields();
       fetchProjects();
     } catch (e) {
-      message.error('Failed to create project');
+      message.error(t('project.page.createFailed'));
     }
   };
 
@@ -69,13 +71,13 @@ const ProjectPage: React.FC = () => {
       const res = await api.post(`/projects/${selectedProject.id}/start`, {
         requirement: values.requirement,
       });
-      message.success('Project started! Check the Collaboration tab.');
+      message.success(t('project.page.started'));
       setStartModalOpen(false);
       startForm.resetFields();
       setCurrentProject(selectedProject);
     } catch (e: any) {
-      const detail = formatError(e, 'Unknown error');
-      message.error(`Failed to start project: ${detail}`);
+      const detail = formatError(e, t('common.unknownError'));
+      message.error(t('project.page.startFailed', { detail }));
     }
   };
 
@@ -90,7 +92,7 @@ const ProjectPage: React.FC = () => {
       const res = await api.get(`/projects/${project.id}/files`);
       setFiles(res.data.files || []);
     } catch (e) {
-      message.error('Failed to load reference files');
+      message.error(t('project.files.loadFailed'));
     } finally {
       setFilesLoading(false);
     }
@@ -105,7 +107,7 @@ const ProjectPage: React.FC = () => {
   const handleFileUpload = async (file: File) => {
     if (!filesProject) return false;
     if (file.size > 5 * 1024 * 1024) {
-      message.error('File too large (max 5 MB)');
+      message.error(t('project.files.tooLarge'));
       return false;
     }
     setUploading(true);
@@ -125,15 +127,15 @@ const ProjectPage: React.FC = () => {
           else {
             try {
               const detail = JSON.parse(xhr.responseText)?.detail || xhr.statusText;
-              message.error(`Upload failed: ${detail}`);
-            } catch { message.error(`Upload failed: ${xhr.statusText}`); }
+              message.error(t('project.files.uploadFailed', { detail }));
+            } catch { message.error(t('project.files.uploadFailed', { detail: xhr.statusText })); }
             reject(new Error(xhr.statusText));
           }
         };
-        xhr.onerror = () => { message.error('Upload network error'); reject(new Error('network')); };
+        xhr.onerror = () => { message.error(t('common.networkError')); reject(new Error('network')); };
         xhr.send(formData);
       });
-      message.success(`Uploaded ${file.name}`);
+      message.success(t('project.files.uploaded', { name: file.name }));
       await fetchFiles(filesProject);
       // Refresh the project list so the "files" count chip updates.
       fetchProjects();
@@ -151,11 +153,11 @@ const ProjectPage: React.FC = () => {
     if (!filesProject) return;
     try {
       await api.delete(`/projects/${filesProject.id}/files/${file.id}`);
-      message.success('Removed');
+      message.success(t('project.files.removed'));
       await fetchFiles(filesProject);
       fetchProjects();
     } catch (e) {
-      message.error('Delete failed');
+      message.error(t('project.files.deleteFailed'));
     }
   };
 
@@ -190,41 +192,45 @@ const ProjectPage: React.FC = () => {
 
   const handleDelete = async (project: Project) => {
     Modal.confirm({
-      title: 'Delete Project',
-      content: `Are you sure you want to delete "${project.name}"?`,
-      okText: 'Delete',
+      title: t('project.page.deleteTitle'),
+      content: t('project.page.deleteConfirm', { name: project.name }),
+      okText: t('common.delete'),
       okType: 'danger',
       onOk: async () => {
         try {
           await api.delete(`/projects/${project.id}`);
-          message.success('Project deleted');
+          message.success(t('project.page.deleted'));
           fetchProjects();
         } catch (e) {
-          message.error('Failed to delete project');
+          message.error(t('project.page.deleteFailed'));
         }
       },
     });
   };
 
   const columns = [
-    { title: 'Name', dataIndex: 'name', key: 'name' },
-    { title: 'Description', dataIndex: 'description', key: 'description', ellipsis: true },
-    { title: 'Work Dir', dataIndex: 'work_dir', key: 'work_dir', ellipsis: true,
-      render: (v: string) => v || <Tag>default</Tag> },
+    { title: t('common.name'), dataIndex: 'name', key: 'name' },
+    { title: t('project.table.description'), dataIndex: 'description', key: 'description', ellipsis: true },
+    { title: t('project.table.workDir'), dataIndex: 'work_dir', key: 'work_dir', ellipsis: true,
+      render: (v: string) => v || <Tag>{t('project.table.default')}</Tag> },
     {
-      title: 'Status',
+      title: t('common.status'),
       dataIndex: 'status',
       key: 'status',
       render: (s: string) => {
-        const labels: Record<string, string> = { active: 'Ready', working: 'Running', done: 'Done' };
+        const labels: Record<string, string> = {
+          active: t('project.status.active'),
+          working: t('project.status.working'),
+          done: t('project.status.done'),
+        };
         const colors: Record<string, string> = { active: 'green', working: 'blue', done: 'default' };
         return <Tag color={colors[s] || 'default'}>{labels[s] || s}</Tag>;
       },
     },
-    { title: 'Agents', dataIndex: 'agent_count', key: 'agent_count' },
-    { title: 'Tasks', dataIndex: 'task_count', key: 'task_count' },
+    { title: t('common.agents'), dataIndex: 'agent_count', key: 'agent_count' },
+    { title: t('project.table.tasks'), dataIndex: 'task_count', key: 'task_count' },
     {
-      title: '参考资料',
+      title: t('project.table.files'),
       key: 'files',
       render: (_: any, record: Project) => {
         const n = record.files?.length ?? 0;
@@ -235,13 +241,13 @@ const ProjectPage: React.FC = () => {
             icon={<PaperClipOutlined />}
             onClick={() => openFilesModal(record)}
           >
-            {n > 0 ? `${n} 个文件` : '添加'}
+            {n > 0 ? t('project.table.fileCount', { n }) : t('common.add')}
           </Button>
         );
       },
     },
     {
-      title: 'Actions',
+      title: t('common.actions'),
       key: 'actions',
       render: (_: any, record: Project) => (
         <Space>
@@ -252,7 +258,7 @@ const ProjectPage: React.FC = () => {
               icon={<PauseCircleOutlined />}
               disabled
             >
-              Running
+              {t('common.running')}
             </Button>
           ) : (
             <Button
@@ -261,7 +267,7 @@ const ProjectPage: React.FC = () => {
               icon={<PlayCircleOutlined />}
               onClick={() => openStartModal(record)}
             >
-              Start
+              {t('common.start')}
             </Button>
           )}
           <Button
@@ -270,7 +276,7 @@ const ProjectPage: React.FC = () => {
             icon={<DeleteOutlined />}
             onClick={() => handleDelete(record)}
           >
-            Delete
+            {t('common.delete')}
           </Button>
         </Space>
       ),
@@ -280,9 +286,9 @@ const ProjectPage: React.FC = () => {
   return (
     <div>
       <Space style={{ marginBottom: 16 }}>
-        <Title level={3} style={{ margin: 0 }}>Projects</Title>
+        <Title level={3} style={{ margin: 0 }}>{t('common.projects')}</Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
-          New Project
+          {t('project.page.new')}
         </Button>
       </Space>
 
@@ -297,31 +303,31 @@ const ProjectPage: React.FC = () => {
 
       {/* Create Project Modal */}
       <Modal
-        title="Create New Project"
+        title={t('project.create.title')}
         open={createModalOpen}
         onCancel={() => setCreateModalOpen(false)}
         onOk={() => form.submit()}
       >
         <Form form={form} layout="vertical" onFinish={handleCreate}>
-          <Form.Item name="name" label="Project Name" rules={[{ required: true }]}>
-            <Input placeholder="e.g., E-commerce Platform" />
+          <Form.Item name="name" label={t('project.form.name')} rules={[{ required: true }]}>
+            <Input placeholder={t('project.form.namePlaceholder')} />
           </Form.Item>
-          <Form.Item name="description" label="Description" rules={[{ required: true }]}>
-            <TextArea rows={3} placeholder="Describe what you want to build..." />
+          <Form.Item name="description" label={t('project.form.description')} rules={[{ required: true }]}>
+            <TextArea rows={3} placeholder={t('project.form.descriptionPlaceholder')} />
           </Form.Item>
-          <Form.Item name="work_dir" label="Work Directory">
-            <Input placeholder="e.g., D:\projects\my-app (optional, leave empty for default)" />
+          <Form.Item name="work_dir" label={t('project.form.workDir')}>
+            <Input placeholder={t('project.form.workDirPlaceholder')} />
           </Form.Item>
         </Form>
       </Modal>
 
       {/* Start Project Modal */}
       <Modal
-        title={`Start Development: ${selectedProject?.name}`}
+        title={t('project.start.title', { name: selectedProject?.name ?? '' })}
         open={startModalOpen}
         onCancel={() => setStartModalOpen(false)}
         onOk={() => startForm.submit()}
-        okText="Start Development"
+        okText={t('project.start.ok')}
       >
         {selectedProject && (selectedProject.files?.length ?? 0) > 0 && (
           <div
@@ -331,17 +337,17 @@ const ProjectPage: React.FC = () => {
               borderRadius: 4, fontSize: 12,
             }}
           >
-            <FileTextOutlined style={{ color: '#52c41a', marginRight: 6 }} />
-            将自动注入 <strong>{selectedProject.files!.length}</strong> 个参考文件到 Coder 的 prompt:
+            <FileTextOutlined style={{ color: '#52c41a', marginInlineEnd: 6 }} />
+            {t('project.start.injectNote', { n: selectedProject.files!.length })}
             {selectedProject.files!.slice(0, 3).map(f => ` ${f.name}`).join(', ')}
             {selectedProject.files!.length > 3 && ` …+${selectedProject.files!.length - 3}`}
           </div>
         )}
         <Form form={startForm} layout="vertical" onFinish={handleStart}>
-          <Form.Item name="requirement" label="Requirements" rules={[{ required: true }]}>
+          <Form.Item name="requirement" label={t('project.start.requirements')} rules={[{ required: true }]}>
             <TextArea
               rows={6}
-              placeholder="Describe your requirements in detail. The Team Leader will analyze this and delegate tasks to the team."
+              placeholder={t('project.start.requirementsPlaceholder')}
               onChange={(e) => handleRequirementsChange(e.target.value)}
             />
           </Form.Item>
@@ -350,16 +356,14 @@ const ProjectPage: React.FC = () => {
 
       {/* Reference Files Modal */}
       <Modal
-        title={`参考资料: ${filesProject?.name || ''}`}
+        title={t('project.files.title', { name: filesProject?.name || '' })}
         open={filesModalOpen}
         onCancel={() => { setFilesModalOpen(false); setFilesProject(null); }}
         footer={null}
         width={680}
       >
         <Paragraph type="secondary" style={{ fontSize: 12 }}>
-          上传 PDF、markdown、txt、yaml 等任意格式。Loop 启动时,文件会作为
-          “参考资料” 段注入 Coder 的首轮 prompt(小文件全文,大文件摘要)。
-          最多 5 MB/文件,任意数量。
+          {t('project.files.help')}
         </Paragraph>
 
         <Upload.Dragger
@@ -370,8 +374,8 @@ const ProjectPage: React.FC = () => {
           disabled={uploading}
         >
           <p className="ant-upload-drag-icon"><InboxOutlined /></p>
-          <p className="ant-upload-text">点击或拖拽文件到这里上传</p>
-          <p className="ant-upload-hint">支持任意格式,单文件不超过 5 MB</p>
+          <p className="ant-upload-text">{t('project.files.dragText')}</p>
+          <p className="ant-upload-hint">{t('project.files.dragHint')}</p>
         </Upload.Dragger>
 
         {uploading && (
@@ -386,24 +390,24 @@ const ProjectPage: React.FC = () => {
           dataSource={files.map((f, i) => ({ ...f, key: f.id || i }))}
           loading={filesLoading}
           pagination={false}
-          locale={{ emptyText: '暂无参考文件' }}
+          locale={{ emptyText: t('project.files.empty') }}
           columns={[
-            { title: '名称', dataIndex: 'name',
+            { title: t('common.name'), dataIndex: 'name',
               render: (n: string, r: ProjectFile) => (
                 <Tooltip title={r.mime}>
-                  <span><FileTextOutlined style={{ marginRight: 6, color: '#1677ff' }} />{n}</span>
+                  <span><FileTextOutlined style={{ marginInlineEnd: 6, color: '#1677ff' }} />{n}</span>
                 </Tooltip>
               ),
             },
-            { title: '大小', dataIndex: 'size', width: 100,
+            { title: t('common.size'), dataIndex: 'size', width: 100,
               render: (s: number) => formatBytes(s) },
-            { title: '上传时间', dataIndex: 'uploaded_at', width: 160,
-              render: (t: number) => new Date(t * 1000).toLocaleString() },
-            { title: '操作', width: 80,
+            { title: t('project.files.uploadedAt'), dataIndex: 'uploaded_at', width: 160,
+              render: (ts: number) => new Date(ts * 1000).toLocaleString() },
+            { title: t('common.actions'), width: 80,
               render: (_: any, r: ProjectFile) => (
                 <Button size="small" danger type="link"
                   icon={<DeleteOutlined />} onClick={() => handleFileDelete(r)}>
-                  删除
+                  {t('common.delete')}
                 </Button>
               ),
             },

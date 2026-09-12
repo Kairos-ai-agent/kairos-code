@@ -30,6 +30,7 @@ import {
 import api from '../api/client';
 import { formatError } from '../utils/formatError';
 import { useThemeTokens } from '../hooks/useThemeTokens';
+import { useT } from '../i18n';
 
 interface FiredAlert {
   timestamp: number;
@@ -45,6 +46,24 @@ interface FiredAlert {
   status: 'sent' | 'failed' | 'skipped' | string;
   error: string;
 }
+
+const KIND_KEYS: Record<string, string> = {
+  cost_spike: 'alertPanel.kind.costSpike',
+  call_spike: 'alertPanel.kind.callSpike',
+  calls_growth: 'alertPanel.kind.callsGrowth',
+  system: 'alertPanel.kind.system',
+};
+const METRIC_KEYS: Record<string, string> = {
+  cost_usd: 'alertPanel.metric.costUsd',
+  per_call: 'alertPanel.metric.perCall',
+  n_calls: 'alertPanel.metric.nCalls',
+  lifecycle: 'alertPanel.metric.lifecycle',
+};
+const SEV_KEYS: Record<string, string> = {
+  critical: 'alertPanel.severity.critical',
+  warning: 'alertPanel.severity.warning',
+  info: 'alertPanel.severity.info',
+};
 
 interface AlertSummary {
   total: number;
@@ -78,6 +97,32 @@ function muteKey(a: FiredAlert): string {
 }
 
 const AlertPanel: React.FC = () => {
+  const t = useT();
+  /** Localised alert copy — rebuilt from the structured fields the backend
+   *  already sends, so stored English sentences are not shown in zh mode. */
+  const alertText = (a: FiredAlert): string => {
+    const money = (n: number) => `$${n.toFixed(a.metric === 'per_call' ? 6 : 4)}`;
+    const delta = a.delta_pct.toFixed(0);
+    if (a.kind === 'cost_spike') {
+      const key = a.severity === 'critical'
+        ? 'alertPanel.msg.costSpiked' : 'alertPanel.msg.costUp';
+      return t(key, { delta, baseline: money(a.baseline), current: money(a.current) });
+    }
+    if (a.kind === 'call_spike') {
+      return t('alertPanel.msg.callSpike', {
+        delta, baseline: money(a.baseline), current: money(a.current),
+      });
+    }
+    if (a.kind === 'calls_growth') {
+      return t('alertPanel.msg.callsGrowth', {
+        delta, baseline: String(Math.round(a.baseline)),
+        current: String(Math.round(a.current)),
+      });
+    }
+    return a.message;
+  };
+  const kindLabel = (k: string) => (KIND_KEYS[k] ? t(KIND_KEYS[k]) : k);
+  const metricLabel = (m: string) => (METRIC_KEYS[m] ? t(METRIC_KEYS[m]) : m);
   const tokens = useThemeTokens();
   const [entries, setEntries] = useState<FiredAlert[]>([]);
   const [summary, setSummary] = useState<AlertSummary | null>(null);
@@ -118,7 +163,9 @@ const AlertPanel: React.FC = () => {
       await api.post('/alerts/mute', { key, duration_s: durationS });
       // Update local state immediately
       setMutes((prev) => ({ ...prev, [key]: Date.now() / 1000 + durationS }));
-      antMessage.success(`Muted ${key} for ${durationS / 3600}h`);
+      antMessage.success(t('alertPanel.mutedToast', {
+        key, hours: durationS / 3600,
+      }));
     } catch (e: any) {
       antMessage.error(e?.response?.data?.detail || 'mute failed');
     }
@@ -128,8 +175,8 @@ const AlertPanel: React.FC = () => {
     return (
       <Card
         size="small"
-        title={<><AlertOutlined /> Alerts</>}
-        extra={<Button size="small" icon={<ReloadOutlined />} onClick={refresh}>Retry</Button>}
+        title={<><AlertOutlined /> {t('alertPanel.title')}</>}
+        extra={<Button size="small" icon={<ReloadOutlined />} onClick={refresh}>{t('common.retry')}</Button>}
         style={{ background: tokens.bgLay1, border: `1px solid ${tokens.border}` }}
       >
         <div style={{ color: '#cf1322', fontSize: 12 }}>{err}</div>
@@ -145,7 +192,7 @@ const AlertPanel: React.FC = () => {
   return (
     <Card
       size="small"
-      title={<><AlertOutlined /> Alerts</>}
+      title={<><AlertOutlined /> {t('alertPanel.title')}</>}
       extra={
         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {lastRefresh > 0 && (
@@ -154,7 +201,7 @@ const AlertPanel: React.FC = () => {
             </span>
           )}
           <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={refresh}>
-            Refresh
+            {t('common.refresh')}
           </Button>
         </span>
       }
@@ -165,7 +212,7 @@ const AlertPanel: React.FC = () => {
           <Row gutter={8} style={{ marginBottom: 12 }}>
             <Col span={8}>
               <Statistic
-                title={<span style={{ fontSize: 11 }}>Critical</span>}
+                title={<span style={{ fontSize: 11 }}>{t('alertPanel.severity.critical')}</span>}
                 value={summary.by_severity.critical}
                 valueStyle={{
                   color: summary.by_severity.critical > 0 ? '#cf1322' : undefined,
@@ -176,14 +223,14 @@ const AlertPanel: React.FC = () => {
             </Col>
             <Col span={8}>
               <Statistic
-                title={<span style={{ fontSize: 11 }}>Warning</span>}
+                title={<span style={{ fontSize: 11 }}>{t('alertPanel.severity.warning')}</span>}
                 value={summary.by_severity.warning}
                 valueStyle={{ color: summary.by_severity.warning > 0 ? '#d48806' : undefined, fontSize: 18 }}
               />
             </Col>
             <Col span={8}>
               <Statistic
-                title={<span style={{ fontSize: 11 }}>Info</span>}
+                title={<span style={{ fontSize: 11 }}>{t('alertPanel.severity.info')}</span>}
                 value={summary.by_severity.info}
                 valueStyle={{ fontSize: 18 }}
               />
@@ -193,14 +240,14 @@ const AlertPanel: React.FC = () => {
 
         {summary && summary.active_mutes > 0 && (
           <div style={{ fontSize: 11, color: tokens.labelTertiary, marginBottom: 8 }}>
-            <BellFilled /> {summary.active_mutes} active mute{summary.active_mutes === 1 ? '' : 's'}
+            <BellFilled /> {t('alertPanel.activeMutes', { n: summary.active_mutes })}
           </div>
         )}
 
         {entries.length === 0 ? (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="No alerts yet"
+            description={t('alertPanel.empty')}
             style={{ padding: 16 }}
           />
         ) : (
@@ -232,7 +279,10 @@ const AlertPanel: React.FC = () => {
                     {statusIcon(a.status)}
                   </Tooltip>
                   <Tag color={SEV_COLOR[a.severity] || 'default'} style={{ margin: 0 }}>
-                    {a.severity.toUpperCase()}
+                    {a.severity === 'critical' || a.severity === 'warning'
+                      || a.severity === 'info'
+                      ? t(SEV_KEYS[a.severity])
+                      : a.severity.toUpperCase()}
                   </Tag>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div
@@ -244,20 +294,20 @@ const AlertPanel: React.FC = () => {
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
                       }}
-                      title={a.message}
+                      title={alertText(a)}
                     >
-                      {a.message}
+                      {alertText(a)}
                     </div>
                     <div style={{ fontSize: 10, color: tokens.labelTertiary, marginTop: 2 }}>
-                      {a.kind} · {a.metric} · +{a.delta_pct.toFixed(0)}%
+                      {kindLabel(a.kind)} · {metricLabel(a.metric)} · +{a.delta_pct.toFixed(0)}%
                       {' · '}
                       {new Date(a.timestamp * 1000).toLocaleTimeString()}
                     </div>
                   </div>
                   {muted ? (
-                    <Tag color="default" style={{ margin: 0 }}>muted</Tag>
+                    <Tag color="default" style={{ margin: 0 }}>{t('alertPanel.muted')}</Tag>
                   ) : (
-                    <Tooltip title={`Mute ${muteKey(a)} for 1 hour`}>
+                    <Tooltip title={t('alertPanel.muteTooltip', { key: muteKey(a) })}>
                       <Button
                         size="small"
                         type="text"

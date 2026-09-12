@@ -35,6 +35,7 @@ import {
 import api from '../api/client';
 import { formatError } from '../utils/formatError';
 import { useThemeTokens } from '../hooks/useThemeTokens';
+import { useT } from '../i18n';
 
 const { Text } = Typography;
 
@@ -53,6 +54,7 @@ interface PageInfo {
 }
 
 const BrowserPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
+  const t = useT();
   const tokens = useThemeTokens();
   const [page, setPage] = useState<PageInfo>({
     url: '', title: '', viewport: { width: 1280, height: 800 },
@@ -121,11 +123,11 @@ const BrowserPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
     if (!autoRefresh) return;
     refreshPage();
     refreshShot();
-    const t = setInterval(() => {
+    const timer = setInterval(() => {
       refreshPage();
       refreshShot();
     }, REFRESH_MS);
-    return () => clearInterval(t);
+    return () => clearInterval(timer);
   }, [autoRefresh, refreshPage, refreshShot]);
 
   // Revoke object URLs on unmount
@@ -147,14 +149,14 @@ const BrowserPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
       // Force a fresh shot
       setTimeout(refreshShot, 300);
       if (r.data.error) {
-        msgApi.warning(`Navigated with error: ${r.data.error}`);
+        msgApi.warning(t('browser.panel.navigateWarning', { error: r.data.error }));
       }
     } catch (e: any) {
-      msgApi.error(e?.response?.data?.detail || 'navigate failed');
+      msgApi.error(e?.response?.data?.detail || t('browser.panel.navigateFailed'));
     } finally {
       setLoading(false);
     }
-  }, [apiBase, msgApi, refreshShot]);
+  }, [apiBase, msgApi, refreshShot, t]);
 
   // Click handler on the screenshot. Translates image-relative
   // coords back to viewport coords (1:1 in our default config,
@@ -175,12 +177,12 @@ const BrowserPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
       await api.post(`${apiBase}/click`, { x: vx, y: vy });
       // Click resets the type target — let the user re-focus
       // by typing or pressing Tab.
-      msgApi.success(`Clicked (${vx}, ${vy})`);
+      msgApi.success(t('browser.panel.clicked', { x: vx, y: vy }));
       setTimeout(refreshShot, 200);
     } catch (e: any) {
-      msgApi.error(e?.response?.data?.detail || 'click failed');
+      msgApi.error(e?.response?.data?.detail || t('browser.panel.clickFailed'));
     }
-  }, [clickMode, imgDims, apiBase, msgApi, refreshShot]);
+  }, [clickMode, imgDims, apiBase, msgApi, refreshShot, t]);
 
   // Type into the focused element
   const doType = useCallback(async (text: string) => {
@@ -189,9 +191,9 @@ const BrowserPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
       await api.post(`${apiBase}/type`, { text });
       setTimeout(refreshShot, 200);
     } catch (e: any) {
-      msgApi.error(e?.response?.data?.detail || 'type failed');
+      msgApi.error(e?.response?.data?.detail || t('browser.panel.typeFailed'));
     }
-  }, [apiBase, msgApi, refreshShot]);
+  }, [apiBase, msgApi, refreshShot, t]);
 
   // Press a key (Enter, Tab, Escape, etc.)
   const doPress = useCallback(async (key: string) => {
@@ -199,9 +201,9 @@ const BrowserPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
       await api.post(`${apiBase}/press`, { key });
       setTimeout(refreshShot, 200);
     } catch (e: any) {
-      msgApi.error(e?.response?.data?.detail || 'press failed');
+      msgApi.error(e?.response?.data?.detail || t('browser.panel.pressFailed'));
     }
-  }, [apiBase, msgApi, refreshShot]);
+  }, [apiBase, msgApi, refreshShot, t]);
 
   // Nav buttons
   const doBack = useCallback(async () => {
@@ -217,9 +219,9 @@ const BrowserPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
   }, [apiBase, refreshShot]);
   const doClose = useCallback(() => {
     Modal.confirm({
-      title: 'Close browser session?',
-      content: 'This will discard the cookies and local storage for this project. You can re-open it by navigating to a new URL.',
-      okText: 'Close',
+      title: t('browser.panel.closeConfirmTitle'),
+      content: t('browser.panel.closeConfirmContent'),
+      okText: t('common.close'),
       okType: 'danger',
       onOk: async () => {
         try {
@@ -227,13 +229,13 @@ const BrowserPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
           setScreenshot(null);
           setPage({ url: '', title: '', viewport: { width: 1280, height: 800 } });
           setUrlBar('');
-          msgApi.success('Browser closed');
+          msgApi.success(t('browser.panel.closed'));
         } catch (e: any) {
-          msgApi.error(e?.response?.data?.detail || 'close failed');
+          msgApi.error(e?.response?.data?.detail || t('browser.panel.closeFailed'));
         }
       },
     });
-  }, [apiBase, msgApi]);
+  }, [apiBase, msgApi, t]);
 
   // Run a JS expression (useful for the agent or for the user
   // to inspect the DOM)
@@ -246,9 +248,9 @@ const BrowserPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
                                                     { expression: evalExpr });
       setEvalResult(r.data.result);
     } catch (e: any) {
-      msgApi.error(e?.response?.data?.detail || 'evaluate failed');
+      msgApi.error(e?.response?.data?.detail || t('browser.panel.evaluateFailed'));
     }
-  }, [apiBase, evalExpr, msgApi]);
+  }, [apiBase, evalExpr, msgApi, t]);
 
   // Resize viewport
   const typeInputRef = useRef<any>(null);
@@ -269,9 +271,9 @@ const BrowserPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
       setImgDims({ w, h });
       setTimeout(refreshShot, 300);
     } catch (e: any) {
-      msgApi.error(e?.response?.data?.detail || 'viewport failed');
+      msgApi.error(e?.response?.data?.detail || t('browser.panel.viewportFailed'));
     }
-  }, [apiBase, msgApi, refreshShot]);
+  }, [apiBase, msgApi, refreshShot, t]);
 
   // Sub-tab: screenshot / console / evaluate
   const [subTab, setSubTab] = useState<'view' | 'console' | 'eval'>('view');
@@ -283,13 +285,13 @@ const BrowserPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
       {/* Address bar */}
       <div style={{ padding: 6, borderBottom: `1px solid ${tokens.border}` }}>
         <Space.Compact style={{ width: '100%' }}>
-          <Tooltip title="Back">
+          <Tooltip title={t('common.back')}>
             <Button size="small" icon={<ArrowLeftOutlined />} onClick={doBack} />
           </Tooltip>
-          <Tooltip title="Forward">
+          <Tooltip title={t('browser.panel.forward')}>
             <Button size="small" icon={<ArrowRightOutlined />} onClick={doForward} />
           </Tooltip>
-          <Tooltip title="Reload">
+          <Tooltip title={t('common.reload')}>
             <Button size="small" icon={<ReloadOutlined />} onClick={doReload}
                     loading={loading} />
           </Tooltip>
@@ -298,22 +300,22 @@ const BrowserPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
             value={urlBar}
             onChange={(e) => setUrlBar(e.target.value)}
             onPressEnter={() => doNavigate(urlBar)}
-            placeholder="https://example.com"
+            placeholder={t('browser.panel.urlPlaceholder')}
             prefix={<GlobalOutlined />}
             data-testid="browser-url"
           />
           <Button size="small" type="primary" onClick={() => doNavigate(urlBar)}>
-            Go
+            {t('browser.panel.go')}
           </Button>
         </Space.Compact>
         <div style={{ marginTop: 4, display: 'flex', alignItems: 'center',
                       justifyContent: 'space-between', gap: 4 }}>
           <Text type="secondary" style={{ fontSize: 11 }}
-                ellipsis={{ tooltip: page.title || '(no page)' }}>
-            {page.title || '(no page loaded)'}
+                ellipsis={{ tooltip: page.title || t('browser.panel.noPage') }}>
+            {page.title || t('browser.panel.noPageLoaded')}
           </Text>
           <Space size={2}>
-            <Tooltip title="Click mode (click on the screenshot)">
+            <Tooltip title={t('browser.panel.clickModeTooltip')}>
               <Switch size="small" checked={clickMode}
                       onChange={setClickMode}
                       checkedChildren={<AimOutlined />} />
@@ -326,11 +328,11 @@ const BrowserPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
                       { value: 'tablet', label: '768×1024' },
                       { value: 'phone', label: '375×667' },
                     ]} />
-            <Tooltip title="Auto-refresh every 1.5s">
+            <Tooltip title={t('browser.panel.autoRefreshTooltip')}>
               <Switch size="small" checked={autoRefresh}
                       onChange={setAutoRefresh} />
             </Tooltip>
-            <Tooltip title="Close browser session">
+            <Tooltip title={t('browser.panel.closeTooltip')}>
               <Button size="small" danger icon={<PoweroffOutlined />}
                       onClick={doClose} />
             </Tooltip>
@@ -341,11 +343,11 @@ const BrowserPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
       {/* Sub-tabs: View / Console / Evaluate */}
       <Tabs size="small" activeKey={subTab} onChange={(k) => setSubTab(k as any)}
             style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
-            tabBarStyle={{ marginBottom: 0, paddingLeft: 8 }}
+            tabBarStyle={{ marginBottom: 0, paddingInlineStart: 8 }}
             items={[
               {
                 key: 'view',
-                label: <span><CameraOutlined /> View</span>,
+                label: <span><CameraOutlined /> {t('browser.panel.tabView')}</span>,
                 children: (
                   <div style={{ height: '100%', overflow: 'auto',
                                 background: '#222', padding: 4,
@@ -355,7 +357,7 @@ const BrowserPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
                         <img
                           ref={imgRef}
                           src={screenshot}
-                          alt={page.title || 'browser screenshot'}
+                          alt={page.title || t('browser.panel.screenshotAlt')}
                           onClick={handleImageClick}
                           onLoad={(e) => {
                             const img = e.currentTarget;
@@ -388,9 +390,9 @@ const BrowserPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
                           image={Empty.PRESENTED_IMAGE_SIMPLE}
                           description={
                             <div>
-                              <div>No page loaded</div>
+                              <div>{t('browser.panel.emptyNoPage')}</div>
                               <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>
-                                Type a URL above and press Enter
+                                {t('browser.panel.emptyTypeUrl')}
                               </div>
                             </div>
                           }
@@ -402,11 +404,11 @@ const BrowserPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
               },
               {
                 key: 'console',
-                label: <span><ConsoleSqlOutlined /> Console</span>,
+                label: <span><ConsoleSqlOutlined /> {t('browser.panel.tabConsole')}</span>,
                 children: (
                   <div style={{ height: '100%', overflow: 'auto', padding: 4 }}>
                     {console.length === 0 ? (
-                      <Empty description="No console messages yet" />
+                      <Empty description={t('browser.panel.consoleEmpty')} />
                     ) : (
                       <List
                         size="small"
@@ -418,7 +420,7 @@ const BrowserPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
                               m.type === 'error' ? 'red' :
                               m.type === 'warning' ? 'orange' :
                               m.type === 'log' ? 'blue' : 'default'
-                            } style={{ marginRight: 4 }}>{m.type}</Tag>
+                            } style={{ marginInlineEnd: 4 }}>{m.type}</Tag>
                             <Text style={{ fontSize: 11, fontFamily: 'monospace' }}>
                               {m.text}
                             </Text>
@@ -426,31 +428,30 @@ const BrowserPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
                         )}
                       />
                     )}
-                    <div style={{ marginTop: 4, textAlign: 'right' }}>
+                    <div style={{ marginTop: 4, textAlign: 'end' }}>
                       <Button size="small" onClick={refreshConsole}
-                              icon={<ConsoleSqlOutlined />}>Refresh</Button>
+                              icon={<ConsoleSqlOutlined />}>{t('common.refresh')}</Button>
                     </div>
                   </div>
                 ),
               },
               {
                 key: 'eval',
-                label: <span><CodeOutlined /> JS</span>,
+                label: <span><CodeOutlined /> {t('browser.panel.tabJs')}</span>,
                 children: (
                   <div style={{ padding: 6 }}>
                     <Text type="secondary" style={{ fontSize: 11 }}>
-                      Run a JavaScript expression on the current page
-                      and inspect the result.
+                      {t('browser.panel.evalHint')}
                     </Text>
                     <Input.TextArea
                       rows={3}
                       value={evalExpr}
                       onChange={(e) => setEvalExpr(e.target.value)}
                       style={{ fontFamily: 'monospace', fontSize: 11, marginTop: 4 }}
-                      placeholder="document.title"
+                      placeholder={t('browser.panel.evalPlaceholder')}
                     />
                     <Button size="small" type="primary" onClick={doEval}
-                            style={{ marginTop: 4 }}>Run</Button>
+                            style={{ marginTop: 4 }}>{t('common.run')}</Button>
                     {evalResult !== null && (
                       <pre style={{
                         marginTop: 6, padding: 6,
@@ -476,7 +477,7 @@ const BrowserPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
           <Input
             size="small"
             ref={typeInputRef}
-            placeholder="Type text (focuses the element after a click)"
+            placeholder={t('browser.panel.typePlaceholder')}
             onPressEnter={(e) => {
               doType((e.target as HTMLInputElement).value);
               (e.target as HTMLInputElement).value = '';
@@ -484,14 +485,14 @@ const BrowserPanel: React.FC<{ projectId: string }> = ({ projectId }) => {
             data-testid="browser-type"
           />
           <Button size="small" icon={<EditOutlined />}
-                  onClick={() => doPress('Tab')}>Tab</Button>
+                  onClick={() => doPress('Tab')}>{t('browser.panel.keyTab')}</Button>
           <Button size="small" icon={<EditOutlined />}
                   onClick={() => doPress('Enter')}>↵</Button>
           <Button size="small" icon={<EditOutlined />}
-                  onClick={() => doPress('Escape')}>Esc</Button>
+                  onClick={() => doPress('Escape')}>{t('browser.panel.keyEsc')}</Button>
         </Space.Compact>
         <Text type="secondary" style={{ fontSize: 10, display: 'block', marginTop: 2 }}>
-          Click on the page first, then type. Cookies/login persist between visits.
+          {t('browser.panel.typeHint')}
         </Text>
       </div>
     </div>

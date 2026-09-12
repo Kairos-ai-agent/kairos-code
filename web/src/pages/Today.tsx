@@ -19,6 +19,7 @@ import {
 
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import { useChatStore } from '../stores/chatStore';
+import { useT } from '../i18n';
 import api from '../api/client';
 import type { LoopSession, Project } from '../types';
 import AlertPanel from '../components/AlertPanel';
@@ -27,6 +28,7 @@ import CogsPanel from '../components/CogsPanel';
 const Today: React.FC = () => {
   const tokens = useThemeTokens();
   const navigate = useNavigate();
+  const t = useT();
   const projects = useChatStore((s) => s.projects);
   const setCurrentProject = useChatStore((s) => s.setCurrentProject);
   const setSessions = useChatStore((s) => s.setSessions);
@@ -83,10 +85,10 @@ const Today: React.FC = () => {
     <div style={{ padding: '24px 16px', maxWidth: 960, margin: '0 auto' }}>
       <div style={{ marginBottom: 24 }}>
         <div style={{ fontSize: 22, fontWeight: 700, color: tokens.labelPrimary }}>
-          Today
+          {t('today.title')}
         </div>
         <div style={{ fontSize: 13, color: tokens.labelTertiary, marginTop: 4 }}>
-          A snapshot of your work across all projects.
+          {t('today.subtitle')}
         </div>
       </div>
 
@@ -100,14 +102,14 @@ const Today: React.FC = () => {
             <Col xs={24} sm={8}>
               <Card style={{ background: tokens.bgLay1,
                               border: `1px solid ${tokens.border}` }}>
-                <Statistic title="Projects" value={projects.length}
+                <Statistic title={t('common.projects')} value={projects.length}
                            prefix={<ProjectOutlined />} />
               </Card>
             </Col>
             <Col xs={24} sm={8}>
               <Card style={{ background: tokens.bgLay1,
                               border: `1px solid ${tokens.border}` }}>
-                <Statistic title="Total sessions"
+                <Statistic title={t('today.stat.totalSessions')}
                            value={aggregate.totalSessions}
                            prefix={<ThunderboltOutlined />} />
               </Card>
@@ -115,7 +117,7 @@ const Today: React.FC = () => {
             <Col xs={24} sm={8}>
               <Card style={{ background: tokens.bgLay1,
                               border: `1px solid ${tokens.border}` }}>
-                <Statistic title="Avg score"
+                <Statistic title={t('today.stat.avgScore')}
                            value={aggregate.avgScore}
                            prefix={<BarChartOutlined />}
                            suffix={aggregate.avgScore ? '/100' : '—'} />
@@ -123,7 +125,7 @@ const Today: React.FC = () => {
             </Col>
           </Row>
 
-          <Card title="Recent activity"
+          <Card title={t('today.recentActivity')}
                 style={{ background: tokens.bgLay1,
                          border: `1px solid ${tokens.border}` }}
                 styles={{ body: { padding: 0 } }}>
@@ -133,7 +135,7 @@ const Today: React.FC = () => {
                                                    color: tokens.labelTertiary }} />}
                 description={
                   <span style={{ color: tokens.labelTertiary, fontSize: 13 }}>
-                    No sessions yet — head to a project and start a loop.
+                    {t('today.empty')}
                   </span>
                 }
                 style={{ padding: 24 }}
@@ -155,20 +157,20 @@ const Today: React.FC = () => {
                       title={
                         <span style={{ color: tokens.labelPrimary }}>
                           {item.s.round_count === 0
-                            ? 'New session'
-                            : `Loop · ${item.s.round_count} round${item.s.round_count === 1 ? '' : 's'}`}
+                            ? t('today.newSession')
+                            : t('today.loopRounds', { n: item.s.round_count })}
                         </span>
                       }
                       description={
                         <span style={{ color: tokens.labelTertiary, fontSize: 12 }}>
-                          {item.projectName} · {fmtTime(item.s.last_activity)}
+                          {item.projectName} · {fmtTime(item.s.last_activity, t)}
                         </span>
                       }
                     />
                     {item.s.last_score > 0 && (
                       <Tag color={item.s.last_score >= 80 ? 'green'
                                    : item.s.last_score >= 50 ? 'orange' : 'red'}>
-                        score {item.s.last_score}
+                        {t('today.score', { score: item.s.last_score })}
                       </Tag>
                     )}
                   </List.Item>
@@ -179,7 +181,7 @@ const Today: React.FC = () => {
 
           <div style={{ marginTop: 16, textAlign: 'center' }}>
             <Button type="link" onClick={() => navigate('/chat')}>
-              Open the chat →
+              {t('today.openChat')}
             </Button>
           </div>
 
@@ -195,12 +197,19 @@ const Today: React.FC = () => {
   );
 };
 
-function fmtTime(ts: number): string {
+function fmtTime(
+  ts: number,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
   if (!ts) return '—';
   const d = new Date(ts * 1000);
   const now = new Date();
   const isToday = d.toDateString() === now.toDateString();
-  if (isToday) return `today ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  if (isToday) {
+    return t('today.time.today', {
+      time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    });
+  }
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 

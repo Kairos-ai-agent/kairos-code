@@ -13,6 +13,7 @@ import { LineChartOutlined, FireOutlined } from '@ant-design/icons';
 
 import api from '../api/client';
 import { formatError } from '../utils/formatError';
+import { useT } from '../i18n';
 
 interface RunPoint {
   timestamp: string;
@@ -51,6 +52,7 @@ interface CaseTrendPoint {
 }
 
 const TrendPanel: React.FC = () => {
+  const t = useT();
   const [trend, setTrend] = useState<TrendReport | null>(null);
   const [perCase, setPerCase] = useState<CaseTrendPoint[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -78,10 +80,10 @@ const TrendPanel: React.FC = () => {
   return (
     <Card
       size="small"
-      title={<><LineChartOutlined /> Trend</>}
+      title={<><LineChartOutlined /> {t('trendPanel.title')}</>}
       extra={
         <a onClick={refresh} style={{ fontSize: 11, cursor: 'pointer' }}>
-          refresh
+          {t('common.refresh')}
         </a>
       }
     >
@@ -91,14 +93,14 @@ const TrendPanel: React.FC = () => {
         <Tabs size="small" items={[
           {
             key: 'overview',
-            label: <span><LineChartOutlined /> Overview</span>,
+            label: <span><LineChartOutlined /> {t('trendPanel.tab.overview')}</span>,
             children: (
               <OverviewTab trend={trend} />
             ),
           },
           {
             key: 'per_case',
-            label: <span><FireOutlined /> Per-case</span>,
+            label: <span><FireOutlined /> {t('trendPanel.tab.perCase')}</span>,
             children: (
               <PerCaseTab cases={perCase} />
             ),
@@ -110,31 +112,32 @@ const TrendPanel: React.FC = () => {
 };
 
 const OverviewTab: React.FC<{ trend: TrendReport | null }> = ({ trend }) => {
+  const t = useT();
   if (!trend || trend.n_total === 0) {
     return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="No runs yet" />;
+                  description={t('trendPanel.empty')} />;
   }
   return (
     <div>
       <Row gutter={16} style={{ marginBottom: 12 }}>
         <Col span={6}>
-          <Statistic title="Runs" value={trend.n_total} />
+          <Statistic title={t('trendPanel.stat.runs')} value={trend.n_total} />
         </Col>
         <Col span={6}>
-          <Statistic title="Pass rate (avg)"
+          <Statistic title={t('trendPanel.stat.passRate')}
             value={trend.avg_pass_rate * 100}
             precision={0}
             suffix="%"
             valueStyle={{ color: trend.avg_pass_rate >= 0.5 ? '#3f8600' : '#cf1322' }} />
         </Col>
         <Col span={6}>
-          <Statistic title="Cost (avg)"
+          <Statistic title={t('trendPanel.stat.cost')}
             prefix="$"
             value={trend.avg_cost_usd}
             precision={4} />
         </Col>
         <Col span={6}>
-          <Statistic title="Cost trend"
+          <Statistic title={t('trendPanel.chart.cost')}
             value={trend.cost_first_to_last}
             precision={0}
             suffix="%"
@@ -148,11 +151,11 @@ const OverviewTab: React.FC<{ trend: TrendReport | null }> = ({ trend }) => {
         dataSource={trend.runs}
         columns={[
           {
-            title: 'Run', dataIndex: 'run_id', key: 'run_id',
+            title: t('trendPanel.col.run'), dataIndex: 'run_id', key: 'run_id',
             render: (id: string) => <code style={{ fontSize: 11 }}>{id}</code>,
           },
           {
-            title: 'Pass', dataIndex: 'pass_rate', key: 'pass_rate',
+            title: t('trendPanel.col.pass'), dataIndex: 'pass_rate', key: 'pass_rate',
             render: (v: number) => (
               <span style={{
                 color: v >= 0.5 ? '#3f8600' : '#cf1322',
@@ -162,12 +165,12 @@ const OverviewTab: React.FC<{ trend: TrendReport | null }> = ({ trend }) => {
               </span>
             ),
           },
-          { title: 'Cost', dataIndex: 'cost_usd', key: 'cost',
+          { title: t('trendPanel.col.cost'), dataIndex: 'cost_usd', key: 'cost',
             render: (v: number) => `$${v.toFixed(4)}` },
-          { title: 'p95 ms', dataIndex: 'p95_duration_ms', key: 'p95',
+          { title: t('trendPanel.col.p95'), dataIndex: 'p95_duration_ms', key: 'p95',
             render: (v: number) => <Tag color="blue">{v.toFixed(0)}</Tag> },
-          { title: 'Cases', dataIndex: 'cases', key: 'cases' },
-          { title: 'Tokens', dataIndex: 'tokens', key: 'tokens',
+          { title: t('trendPanel.col.cases'), dataIndex: 'cases', key: 'cases' },
+          { title: t('trendPanel.col.tokens'), dataIndex: 'tokens', key: 'tokens',
             render: (v: number) => v.toLocaleString() },
         ]}
       />
@@ -176,9 +179,10 @@ const OverviewTab: React.FC<{ trend: TrendReport | null }> = ({ trend }) => {
 };
 
 const PerCaseTab: React.FC<{ cases: CaseTrendPoint[] | null }> = ({ cases }) => {
+  const t = useT();
   if (!cases || cases.length === 0) {
     return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="No per-case data" />;
+                  description={t('trendPanel.emptyPerCase')} />;
   }
   const flaky = cases.filter((c) => c.flaky);
   const stable = cases.filter((c) => !c.flaky);
@@ -198,16 +202,16 @@ const PerCaseTab: React.FC<{ cases: CaseTrendPoint[] | null }> = ({ cases }) => 
         dataSource={cases}
         columns={[
           {
-            title: 'Case', dataIndex: 'case_name', key: 'case_name',
+            title: t('trendPanel.col.case'), dataIndex: 'case_name', key: 'case_name',
             render: (n: string, r: CaseTrendPoint) => (
               <span>
                 <code style={{ fontSize: 12 }}>{n}</code>{' '}
-                {r.flaky && <Tag color="orange" style={{ fontSize: 10 }}>flaky</Tag>}
+                {r.flaky && <Tag color="orange" style={{ fontSize: 10 }}>{t('trendPanel.flakyLabel')}</Tag>}
               </span>
             ),
           },
           {
-            title: 'Pass rate', dataIndex: 'pass_rate', key: 'pass_rate',
+            title: t('trendPanel.col.passRate'), dataIndex: 'pass_rate', key: 'pass_rate',
             render: (v: number, r: CaseTrendPoint) => (
               <span style={{
                 color: v >= 0.8 ? '#3f8600' : v >= 0.5 ? '#faad14' : '#cf1322',
@@ -218,7 +222,7 @@ const PerCaseTab: React.FC<{ cases: CaseTrendPoint[] | null }> = ({ cases }) => 
             ),
           },
           {
-            title: 'History', dataIndex: 'history', key: 'history',
+            title: t('trendPanel.col.history'), dataIndex: 'history', key: 'history',
             render: (history: boolean[]) => (
               <span style={{ fontFamily: 'monospace', fontSize: 11 }}>
                 {history.map((p, i) => (
@@ -232,7 +236,7 @@ const PerCaseTab: React.FC<{ cases: CaseTrendPoint[] | null }> = ({ cases }) => 
         ]}
       />
       <div style={{ marginTop: 8, fontSize: 11, color: '#999' }}>
-        Showing {cases.length} case(s) ({flaky.length} flaky, {stable.length} stable)
+        {t('trendPanel.footer', { cases: cases.length, flaky: flaky.length, stable: stable.length })}
       </div>
     </div>
   );

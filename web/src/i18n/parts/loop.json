@@ -1,0 +1,306 @@
+{
+  "loop.title": {
+    "zh": "循环审查",
+    "en": "Loop Review"
+  },
+  "loop.status.idle": {
+    "zh": "空闲",
+    "en": "Idle"
+  },
+  "loop.status.running": {
+    "zh": "第 {n} 轮运行中……",
+    "en": "Round {n} running..."
+  },
+  "loop.status.stoppedAt": {
+    "zh": "已停止 @ 第 {n} 轮",
+    "en": "Stopped @ R{n}"
+  },
+  "loop.tags.noBugs": {
+    "zh": "无缺陷",
+    "en": "no bugs"
+  },
+  "loop.tags.bugCount": {
+    "zh": "{n} 个缺陷",
+    "en": "{n} bug(s)"
+  },
+  "loop.tags.noProgress": {
+    "zh": "无进展 {n}/{max}",
+    "en": "no-progress {n}/{max}"
+  },
+  "loop.agentStatus.idle": {
+    "zh": "空闲",
+    "en": "Idle"
+  },
+  "loop.agentStatus.thinking": {
+    "zh": "思考中",
+    "en": "Thinking"
+  },
+  "loop.agentStatus.acting": {
+    "zh": "执行中",
+    "en": "Acting"
+  },
+  "loop.agentStatus.error": {
+    "zh": "错误",
+    "en": "Error"
+  },
+  "loop.role.coder": {
+    "zh": "编码者",
+    "en": "Coder"
+  },
+  "loop.role.reviewer": {
+    "zh": "审查者",
+    "en": "Reviewer"
+  },
+  "loop.plan.title": {
+    "zh": "编码者的计划 — 等待你批准",
+    "en": "Coder's Plan — waiting for your approval"
+  },
+  "loop.plan.approve": {
+    "zh": "批准",
+    "en": "Approve"
+  },
+  "loop.plan.reject": {
+    "zh": "驳回",
+    "en": "Reject"
+  },
+  "loop.plan.approved": {
+    "zh": "计划已批准 — 循环继续",
+    "en": "Plan approved — loop continues"
+  },
+  "loop.plan.rejected": {
+    "zh": "计划已驳回 — 循环将停止",
+    "en": "Plan rejected — loop will stop"
+  },
+  "loop.plan.approveFailed": {
+    "zh": "批准失败",
+    "en": "Failed to approve"
+  },
+  "loop.plan.rejectFailed": {
+    "zh": "驳回失败",
+    "en": "Failed to reject"
+  },
+  "loop.plan.empty": {
+    "zh": "（空计划）",
+    "en": "(empty plan)"
+  },
+  "loop.plan.viz": {
+    "zh": "计划",
+    "en": "Plan"
+  },
+  "loop.plan.tab.diagram": {
+    "zh": "图示",
+    "en": "Diagram"
+  },
+  "loop.requirement.placeholder": {
+    "zh": "描述要构建的内容……",
+    "en": "Describe what to build..."
+  },
+  "loop.start.button": {
+    "zh": "启动循环",
+    "en": "Start Loop"
+  },
+  "loop.start.needRequirement": {
+    "zh": "请选择项目并输入需求",
+    "en": "Pick a project and enter a requirement"
+  },
+  "loop.start.success": {
+    "zh": "循环已启动",
+    "en": "Loop started"
+  },
+  "loop.start.failed": {
+    "zh": "启动循环失败",
+    "en": "Failed to start loop"
+  },
+  "loop.stop.success": {
+    "zh": "已请求停止",
+    "en": "Stop requested"
+  },
+  "loop.stop.failed": {
+    "zh": "停止失败",
+    "en": "Failed to stop"
+  },
+  "loop.activity": {
+    "zh": "活动",
+    "en": "Activity"
+  },
+  "loop.activity.empty": {
+    "zh": "暂无活动。启动项目后即可开始。",
+    "en": "No activity yet. Start a project to begin."
+  },
+  "loop.live": {
+    "zh": "实时",
+    "en": "live"
+  },
+  "loop.precheck.failed": {
+    "zh": "预检查失败",
+    "en": "Pre-check failed"
+  },
+  "loop.precheck.fixable": {
+    "zh": "自动检测到 {n} 个可修复错误",
+    "en": "{n} auto-detected fixable error(s)"
+  },
+  "loop.stats.title": {
+    "zh": "统计",
+    "en": "Stats"
+  },
+  "loop.stats.tokens": {
+    "zh": "Token：{tokens} · 约 ${cost}",
+    "en": "Tokens: {tokens} · ~${cost}"
+  },
+  "loop.stats.counters": {
+    "zh": "基础设施失败连续次数：{streak} · 无进展：{noProgress}",
+    "en": "Infra streak: {streak} · No-progress: {noProgress}"
+  },
+  "loop.history.roundTooltip": {
+    "zh": "R{round}：{bugs} 个缺陷",
+    "en": "R{round}: {bugs} bug(s)"
+  },
+  "loop.history.passed": {
+    "zh": " · 已通过",
+    "en": " · passed"
+  },
+  "loop.diff.title": {
+    "zh": "差异",
+    "en": "Diff"
+  },
+  "loop.diff.empty": {
+    "zh": "（未加载差异）",
+    "en": "(no diff loaded)"
+  },
+  "loop.checkpoints.title": {
+    "zh": "检查点",
+    "en": "Checkpoints"
+  },
+  "loop.checkpoints.rollbackTooltip": {
+    "zh": "将工作区回滚到该轮次",
+    "en": "Roll back workspace to this round"
+  },
+  "loop.rollback.title": {
+    "zh": "回滚到该检查点？",
+    "en": "Roll back to checkpoint?"
+  },
+  "loop.rollback.content": {
+    "zh": "这会覆盖工作区中未提交的更改。",
+    "en": "This overwrites uncommitted changes in the workspace."
+  },
+  "loop.rollback.ok": {
+    "zh": "回滚",
+    "en": "Roll back"
+  },
+  "loop.rollback.success": {
+    "zh": "已回滚",
+    "en": "Rolled back"
+  },
+  "loop.rollback.failed": {
+    "zh": "回滚失败",
+    "en": "rollback failed"
+  },
+  "loop.revert.tooltip": {
+    "zh": "还原到 R{round}",
+    "en": "Revert to R{round}"
+  },
+  "loop.revert.title": {
+    "zh": "还原 {path}？",
+    "en": "Revert {path}?"
+  },
+  "loop.revert.content": {
+    "zh": "这会将文件恢复到检查点 {sha} 时的状态，其他文件不受影响。",
+    "en": "This restores the file to its state at checkpoint {sha}. Other files are not touched."
+  },
+  "loop.revert.ok": {
+    "zh": "还原文件",
+    "en": "Revert file"
+  },
+  "loop.revert.success": {
+    "zh": "已还原 {path}",
+    "en": "Reverted {path}"
+  },
+  "loop.revert.failed": {
+    "zh": "还原失败",
+    "en": "revert failed"
+  },
+  "loop.ask.title": {
+    "zh": "审查者提问",
+    "en": "Reviewer asks"
+  },
+  "loop.ask.send": {
+    "zh": "发送回答",
+    "en": "Send answer"
+  },
+  "loop.ask.ignore": {
+    "zh": "忽略",
+    "en": "Ignore"
+  },
+  "loop.ask.placeholder": {
+    "zh": "你的回答……",
+    "en": "Your answer..."
+  },
+  "loop.ask.answerSent": {
+    "zh": "回答已发送",
+    "en": "Answer sent"
+  },
+  "loop.ask.answerFailed": {
+    "zh": "回答失败",
+    "en": "answer failed"
+  },
+  "loop.review.title": {
+    "zh": "最新审查",
+    "en": "Latest Review"
+  },
+  "loop.review.empty": {
+    "zh": "暂无审查结果。",
+    "en": "No review yet."
+  },
+  "planHistory.diffAdd": {
+    "zh": "新增",
+    "en": "add"
+  },
+  "planHistory.diffRemove": {
+    "zh": "移除",
+    "en": "remove"
+  },
+  "planHistory.roundUnit": {
+    "zh": "轮",
+    "en": "round"
+  },
+  "planHistory.compactToggle": {
+    "zh": "精简",
+    "en": "compact"
+  },
+  "planHistory.todoUnit": {
+    "zh": "项待办",
+    "en": "todo"
+  },
+  "loop.project.status.active": {
+    "zh": "进行中",
+    "en": "active"
+  },
+  "loop.project.status.idle": {
+    "zh": "空闲",
+    "en": "idle"
+  },
+  "loop.project.status.running": {
+    "zh": "运行中",
+    "en": "running"
+  },
+  "loop.project.status.done": {
+    "zh": "已完成",
+    "en": "done"
+  },
+  "loop.project.status.completed": {
+    "zh": "已完成",
+    "en": "completed"
+  },
+  "loop.project.status.failed": {
+    "zh": "失败",
+    "en": "failed"
+  },
+  "loop.project.status.paused": {
+    "zh": "已暂停",
+    "en": "paused"
+  },
+  "loop.project.status.archived": {
+    "zh": "已归档",
+    "en": "archived"
+  }
+}

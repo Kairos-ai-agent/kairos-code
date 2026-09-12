@@ -3,6 +3,7 @@ import { Card, Row, Col, Statistic, Tag, List, Typography, Space } from 'antd';
 import { TeamOutlined, ProjectOutlined, MessageOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import api from '../api/client';
 import { useAgentStore } from '../stores/agentStore';
+import { useT } from '../i18n';
 import type { DashboardData, AgentState } from '../types';
 
 const { Title, Text } = Typography;
@@ -29,6 +30,7 @@ const Dashboard: React.FC = () => {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const { setAgents, setMessages } = useAgentStore();
+  const t = useT();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -48,13 +50,13 @@ const Dashboard: React.FC = () => {
 
   return (
     <div>
-      <Title level={3}>Dashboard</Title>
+      <Title level={3}>{t('dashboard.title')}</Title>
 
       <Row gutter={16} style={{ marginBottom: 24 }}>
         <Col span={6}>
           <Card>
             <Statistic
-              title="Projects"
+              title={t('common.projects')}
               value={data?.project_count ?? 0}
               prefix={<ProjectOutlined />}
             />
@@ -63,7 +65,7 @@ const Dashboard: React.FC = () => {
         <Col span={6}>
           <Card>
             <Statistic
-              title="Active Agents"
+              title={t('dashboard.stat.activeAgents')}
               value={data?.agent_count ?? 0}
               prefix={<TeamOutlined />}
             />
@@ -72,7 +74,7 @@ const Dashboard: React.FC = () => {
         <Col span={6}>
           <Card>
             <Statistic
-              title="Messages"
+              title={t('dashboard.stat.messages')}
               value={data?.recent_messages?.length ?? 0}
               prefix={<MessageOutlined />}
             />
@@ -81,8 +83,8 @@ const Dashboard: React.FC = () => {
         <Col span={6}>
           <Card>
             <Statistic
-              title="System Status"
-              value="Online"
+              title={t('dashboard.stat.systemStatus')}
+              value={t('dashboard.stat.online')}
               prefix={<ThunderboltOutlined />}
               valueStyle={{ color: '#52c41a' }}
             />
@@ -92,7 +94,7 @@ const Dashboard: React.FC = () => {
 
       <Row gutter={16}>
         <Col span={14}>
-          <Card title="Agent Team" loading={loading}>
+          <Card title={t('dashboard.agentTeam')} loading={loading}>
             <Row gutter={[12, 12]}>
               {(data?.agents ?? []).map((agent: AgentState) => (
                 <Col span={12} key={agent.agent_id}>
@@ -114,7 +116,7 @@ const Dashboard: React.FC = () => {
                       </Space>
                       {agent.current_task && (
                         <Text type="secondary" style={{ fontSize: 12 }}>
-                          Task: {agent.current_task}
+                          {t('dashboard.task', { task: agent.current_task })}
                         </Text>
                       )}
                     </Space>
@@ -125,7 +127,7 @@ const Dashboard: React.FC = () => {
           </Card>
         </Col>
         <Col span={10}>
-          <Card title="Recent Messages" loading={loading}>
+          <Card title={t('dashboard.recentMessages')} loading={loading}>
             <List
               size="small"
               dataSource={(data?.recent_messages ?? []).slice(-10).reverse()}

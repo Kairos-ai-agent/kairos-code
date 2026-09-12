@@ -27,9 +27,11 @@ import {
 import api from '../api/client';
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
+import { useT } from '../i18n';
 import FolderPicker from './FolderPicker';
 
 const NewChatButton: React.FC = () => {
+  const t = useT();
   const tokens = useThemeTokens();
   const navigate = useNavigate();
   const { message: msgApi } = AntdApp.useApp();
@@ -66,8 +68,8 @@ const NewChatButton: React.FC = () => {
           // rename the project to that (or a summary of it). The
           // directory name (work_dir) is still timestamped so two
           // back-to-back "New chat" clicks don't collide on disk.
-          name: 'Untitled',
-          description: 'Created by New chat button; rename after typing.',
+          name: t('shell.newChat.untitled'),
+          description: t('shell.newChat.defaultDescription'),
           work_dir: workDir,
         }
       );
@@ -92,8 +94,8 @@ const NewChatButton: React.FC = () => {
       }
     } catch (e: any) {
       console.error('[NewChatButton] create project failed:', e);
-      const detail = e?.response?.data?.detail || e?.message || 'failed';
-      msgApi.error(`Failed to start new chat: ${detail}`);
+      const detail = e?.response?.data?.detail || e?.message || t('common.failed');
+      msgApi.error(t('shell.newChat.failedToStart', { detail }));
     }
   };
 
@@ -109,7 +111,7 @@ const NewChatButton: React.FC = () => {
     {
       key: 'new_project',
       icon: <FolderOpenOutlined />,
-      label: 'Pick existing folder…',
+      label: t('shell.newChat.pickExistingFolder'),
       onClick: openFolder,
     },
   ];
@@ -126,14 +128,14 @@ const NewChatButton: React.FC = () => {
           border: 'none', fontWeight: 500,
         }}
       >
-        New chat
+        {t('shell.newChat.newChat')}
       </Button>
       <Dropdown
         menu={{ items: menuItems }}
         trigger={['click']}
         placement="bottomRight"
       >
-        <Tooltip title="More new-chat options">
+        <Tooltip title={t('shell.newChat.moreOptions')}>
           <Button
             type="primary"
             icon={<DownOutlined />}
@@ -142,7 +144,7 @@ const NewChatButton: React.FC = () => {
               border: 'none', flex: '0 0 auto',
               padding: '0 10px',
             }}
-            aria-label="New chat options"
+            aria-label={t('shell.newChat.options')}
           />
         </Tooltip>
       </Dropdown>

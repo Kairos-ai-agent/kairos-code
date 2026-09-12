@@ -1,0 +1,570 @@
+{
+  "costDashboard.title": {
+    "zh": "成本",
+    "en": "Cost"
+  },
+  "costDashboard.stat.totalSpend": {
+    "zh": "总花费",
+    "en": "Total spend"
+  },
+  "costDashboard.stat.llmCalls": {
+    "zh": "LLM 调用",
+    "en": "LLM calls"
+  },
+  "costDashboard.empty": {
+    "zh": "还没有 LLM 调用记录",
+    "en": "No LLM calls recorded yet"
+  },
+  "costDashboard.col.model": {
+    "zh": "模型",
+    "en": "Model"
+  },
+  "costDashboard.col.calls": {
+    "zh": "调用次数",
+    "en": "Calls"
+  },
+  "costDashboard.col.tokens": {
+    "zh": "Token 数",
+    "en": "Tokens"
+  },
+  "costDashboard.col.cost": {
+    "zh": "成本",
+    "en": "Cost"
+  },
+  "costDashboard.col.avgMs": {
+    "zh": "平均耗时(ms)",
+    "en": "Avg ms"
+  },
+  "costDashboard.recent.title": {
+    "zh": "最近调用",
+    "en": "Recent calls"
+  },
+  "evalPanel.title": {
+    "zh": "评测",
+    "en": "Eval"
+  },
+  "evalPanel.tabs.datasets": {
+    "zh": "数据集",
+    "en": "Datasets"
+  },
+  "evalPanel.datasets.dirPlaceholder": {
+    "zh": "目录（默认：data/datasets）",
+    "en": "Directory (default: data/datasets)"
+  },
+  "evalPanel.datasets.list": {
+    "zh": "列出",
+    "en": "List"
+  },
+  "evalPanel.datasets.empty": {
+    "zh": "还没有数据集。录制一次运行即可创建。",
+    "en": "No datasets yet. Record a run to create one."
+  },
+  "evalPanel.datasets.meta": {
+    "zh": "{cases} 个用例 · {size} KB · {time}",
+    "en": "{cases} case(s) · {size} KB · {time}"
+  },
+  "evalPanel.tabs.record": {
+    "zh": "录制",
+    "en": "Record"
+  },
+  "evalPanel.record.runJson": {
+    "zh": "运行结果 JSON 路径",
+    "en": "Run JSON path"
+  },
+  "evalPanel.record.runJsonPlaceholder": {
+    "zh": "results/run-12345.json",
+    "en": "results/run-12345.json"
+  },
+  "evalPanel.record.datasetPath": {
+    "zh": "数据集路径（.jsonl）",
+    "en": "Dataset path (.jsonl)"
+  },
+  "evalPanel.datasetPlaceholder": {
+    "zh": "data/datasets/smoke.jsonl",
+    "en": "data/datasets/smoke.jsonl"
+  },
+  "evalPanel.record.onlyPassed": {
+    "zh": "仅通过用例",
+    "en": "Only passed cases"
+  },
+  "evalPanel.record.submit": {
+    "zh": "录制",
+    "en": "Record"
+  },
+  "evalPanel.tabs.replay": {
+    "zh": "回放",
+    "en": "Replay"
+  },
+  "evalPanel.replay.datasetPath": {
+    "zh": "数据集路径",
+    "en": "Dataset path"
+  },
+  "evalPanel.replay.outPath": {
+    "zh": "输出路径（可选）",
+    "en": "Out path (optional)"
+  },
+  "evalPanel.replay.outPlaceholder": {
+    "zh": "（自动）",
+    "en": "(auto)"
+  },
+  "evalPanel.replay.submit": {
+    "zh": "回放",
+    "en": "Replay"
+  },
+  "evalPanel.tabs.derive": {
+    "zh": "派生",
+    "en": "Derive"
+  },
+  "evalPanel.derive.repoPath": {
+    "zh": "仓库路径",
+    "en": "Repo path"
+  },
+  "evalPanel.derive.outYaml": {
+    "zh": "输出 YAML 路径",
+    "en": "Out YAML path"
+  },
+  "evalPanel.derive.outPlaceholder": {
+    "zh": "（自动：data/derived.yaml）",
+    "en": "(auto: data/derived.yaml)"
+  },
+  "evalPanel.derive.commitLimit": {
+    "zh": "提交数量上限",
+    "en": "Commit limit"
+  },
+  "evalPanel.derive.submit": {
+    "zh": "派生",
+    "en": "Derive"
+  },
+  "trace.kind.sessionStart": {
+    "zh": "会话开始",
+    "en": "Session start"
+  },
+  "trace.kind.sessionEnd": {
+    "zh": "会话结束",
+    "en": "Session end"
+  },
+  "trace.kind.prompt": {
+    "zh": "提示词",
+    "en": "Prompt"
+  },
+  "trace.kind.completion": {
+    "zh": "生成",
+    "en": "Completion"
+  },
+  "trace.kind.toolCall": {
+    "zh": "工具调用",
+    "en": "Tool call"
+  },
+  "trace.kind.toolResult": {
+    "zh": "工具结果",
+    "en": "Tool result"
+  },
+  "trace.kind.summary": {
+    "zh": "摘要",
+    "en": "Summary"
+  },
+  "trace.kind.guardrail": {
+    "zh": "护栏",
+    "en": "Guardrail"
+  },
+  "trace.kind.error": {
+    "zh": "错误",
+    "en": "Error"
+  },
+  "trace.header.title": {
+    "zh": "追踪 · 会话",
+    "en": "Trace · session"
+  },
+  "trace.header.stats": {
+    "zh": "{events} 个事件 · {turns} 轮 · {tokens} tokens",
+    "en": "{events} events · {turns} turns · {tokens} tokens"
+  },
+  "trace.selectSession": {
+    "zh": "选择会话",
+    "en": "Select a session"
+  },
+  "trace.sessionOption": {
+    "zh": "会话 {id}…",
+    "en": "Session {id}…"
+  },
+  "trace.empty": {
+    "zh": "没有找到追踪数据。请选择至少跑过一轮的会话。",
+    "en": "No trace data found. Pick a session that has run at least one round."
+  },
+  "trace.stat.events": {
+    "zh": "事件",
+    "en": "Events"
+  },
+  "trace.stat.totalTokens": {
+    "zh": "总 Token",
+    "en": "Total tokens"
+  },
+  "trace.stat.toolCalls": {
+    "zh": "工具调用",
+    "en": "Tool calls"
+  },
+  "trace.stat.errors": {
+    "zh": "错误",
+    "en": "Errors"
+  },
+  "trace.filter.all": {
+    "zh": "全部",
+    "en": "All"
+  },
+  "trace.filter.turn": {
+    "zh": "轮次",
+    "en": "Turn"
+  },
+  "trace.col.events": {
+    "zh": "事件",
+    "en": "Events"
+  },
+  "trace.col.tools": {
+    "zh": "工具",
+    "en": "Tools"
+  },
+  "trace.col.tokens": {
+    "zh": "Token",
+    "en": "Tokens"
+  },
+  "trace.empty.events": {
+    "zh": "本轮没有事件",
+    "en": "No events in this turn"
+  },
+  "trace.empty.tools": {
+    "zh": "这条追踪里没有工具调用",
+    "en": "No tool calls in this trace"
+  },
+  "trace.token.prompt": {
+    "zh": "提示词 Token",
+    "en": "Prompt tokens"
+  },
+  "trace.token.completion": {
+    "zh": "生成 Token",
+    "en": "Completion tokens"
+  },
+  "trace.token.total": {
+    "zh": "总计",
+    "en": "Total"
+  },
+  "trace.summary.toolCalls": {
+    "zh": "{n} 次工具调用",
+    "en": "{n} tool call(s)"
+  },
+  "trace.summary.toolName": {
+    "zh": "工具",
+    "en": "tool"
+  },
+  "trace.tools.calls": {
+    "zh": "{n} 次调用",
+    "en": "{n} call(s)"
+  },
+  "trace.tools.ok": {
+    "zh": "{n} 次成功",
+    "en": "{n} ok"
+  },
+  "trace.tools.failed": {
+    "zh": "{n} 次失败",
+    "en": "{n} failed"
+  },
+  "agentsMd.title": {
+    "zh": "记忆",
+    "en": "Memory"
+  },
+  "agentsMd.editTitle": {
+    "zh": "编辑 AGENTS.md（项目记忆 —— 注入到每个 agent 的系统提示词）",
+    "en": "Edit AGENTS.md (project memory — injected into every agent's system prompt)"
+  },
+  "agentsMd.header": {
+    "zh": "项目记忆（AGENTS.md）",
+    "en": "Project Memory (AGENTS.md)"
+  },
+  "agentsMd.description": {
+    "zh": "每个 agent（Coder、Reviewer、security、perf、test、docs、design、refactor）都会读取该文件，并把它前置到系统提示词中。可以用它记录约定、工具选型和需要跨会话记住的反馈。项目级覆盖全局级，两者都覆盖内置默认值。每个作用域上限 4 KB。",
+    "en": "This file is read by every agent (Coder, Reviewer, security, perf, test, docs, design, refactor) and prepended to the agent's system prompt. Use it to record conventions, tooling choices, or recurring feedback that the agent should remember across sessions. Project overrides global, both override built-in fallback. 4 KB cap per scope."
+  },
+  "agentsMd.discard": {
+    "zh": "放弃修改",
+    "en": "Discard"
+  },
+  "agentsMd.insertTemplate": {
+    "zh": "插入模板",
+    "en": "Insert template"
+  },
+  "agentsMd.stats": {
+    "zh": "{chars} 个字符 · {bytes} 字节",
+    "en": "{chars} chars · {bytes} bytes"
+  },
+  "alertPanel.title": {
+    "zh": "告警",
+    "en": "Alerts"
+  },
+  "alertPanel.severity.critical": {
+    "zh": "严重",
+    "en": "Critical"
+  },
+  "alertPanel.severity.warning": {
+    "zh": "警告",
+    "en": "Warning"
+  },
+  "alertPanel.severity.info": {
+    "zh": "提示",
+    "en": "Info"
+  },
+  "alertPanel.activeMutes": {
+    "zh": "{n} 条静音生效",
+    "en": "{n} active mute(s)"
+  },
+  "alertPanel.empty": {
+    "zh": "还没有告警",
+    "en": "No alerts yet"
+  },
+  "cogsPanel.title": {
+    "zh": "成本 / 价值 (COGS)",
+    "en": "Cost / Value (COGS)"
+  },
+  "cogsPanel.tooltip": {
+    "zh": "R35：销货成本比率。汇总 cost.jsonl + 数据集 + 告警。",
+    "en": "R35: cost-of-goods-sold ratios. Combines cost.jsonl + datasets + alerts."
+  },
+  "cogsPanel.stat.totalSpend": {
+    "zh": "总花费",
+    "en": "Total spend"
+  },
+  "cogsPanel.stat.evalCases": {
+    "zh": "评测用例",
+    "en": "Eval cases"
+  },
+  "cogsPanel.stat.alertsFired": {
+    "zh": "触发告警",
+    "en": "Alerts fired"
+  },
+  "cogsPanel.ratio.costPerCase": {
+    "zh": "总成本 / 已记录评测用例数",
+    "en": "Total cost / total eval cases recorded"
+  },
+  "cogsPanel.metric.costPerCase": {
+    "zh": "$ / 用例",
+    "en": "$ / case"
+  },
+  "cogsPanel.ratio.costPerPass": {
+    "zh": "总成本 / 通过用例数",
+    "en": "Total cost / passing eval cases"
+  },
+  "cogsPanel.metric.costPerPass": {
+    "zh": "$ / 通过",
+    "en": "$ / passing"
+  },
+  "cogsPanel.ratio.costPerAlert": {
+    "zh": "总成本 / 触发告警数",
+    "en": "Total cost / number of fired alerts"
+  },
+  "cogsPanel.metric.costPerAlert": {
+    "zh": "$ / 告警",
+    "en": "$ / alert"
+  },
+  "cogsPanel.ratio.efficiency": {
+    "zh": "通过用例 / 总用例（0-100%）",
+    "en": "Passing / total eval cases (0-100%)"
+  },
+  "cogsPanel.metric.efficiency": {
+    "zh": "效率",
+    "en": "Efficiency"
+  },
+  "cogsPanel.ratio.approvalYield": {
+    "zh": "1 - 严重告警 / 总告警（越高 = 越少需要人工介入）",
+    "en": "1 - critical_alerts / total_alerts (higher = less human intervention needed)"
+  },
+  "cogsPanel.metric.approvalYield": {
+    "zh": "放行率",
+    "en": "Approval yield"
+  },
+  "cogsPanel.subtitle": {
+    "zh": "{calls} 次 LLM 调用 · {passed} 通过 / {failed} 失败 · {critical} 严重 / {total} 总计",
+    "en": "{calls} LLM calls · {passed} pass / {failed} fail · {critical} critical / {total} total"
+  },
+  "folderPicker.addTitle": {
+    "zh": "添加文件夹工作区",
+    "en": "Add a folder workspace"
+  },
+  "folderPicker.manualHint": {
+    "zh": "也可以直接输入路径",
+    "en": "Or type a path manually"
+  },
+  "folderPicker.usePath": {
+    "zh": "使用该路径",
+    "en": "Use this path"
+  },
+  "folderPicker.recent": {
+    "zh": "最近：",
+    "en": "Recent:"
+  },
+  "folderPicker.pickTitle": {
+    "zh": "选择最近文件夹或浏览",
+    "en": "Pick a recent folder or browse"
+  },
+  "folderPicker.pickPlaceholder": {
+    "zh": "选择一个文件夹开始…",
+    "en": "Pick a folder to start…"
+  },
+  "folderPicker.browse": {
+    "zh": "浏览新文件夹…",
+    "en": "Browse for a new folder…"
+  },
+  "folderPicker.switchTitle": {
+    "zh": "切换项目",
+    "en": "Switch project"
+  },
+  "folderPicker.selectPlaceholder": {
+    "zh": "选择项目…",
+    "en": "Select a project…"
+  },
+  "folderPicker.addNew": {
+    "zh": "添加新文件夹…",
+    "en": "Add new folder…"
+  },
+  "folderPicker.addAria": {
+    "zh": "添加文件夹",
+    "en": "Add folder"
+  },
+  "planHistory.empty": {
+    "zh": "还没有计划历史。",
+    "en": "No plan history yet."
+  },
+  "planHistory.expandTitle": {
+    "zh": "点击展开计划历史",
+    "en": "Click to expand plan history"
+  },
+  "planHistory.label": {
+    "zh": "计划历史：",
+    "en": "Plan history:"
+  },
+  "planHistory.title": {
+    "zh": "计划历史",
+    "en": "Plan history"
+  },
+  "planHistory.percentDone": {
+    "zh": "{p}% 完成",
+    "en": "{p}% done"
+  },
+  "planHistory.emptyRound": {
+    "zh": "本轮计划没有变化",
+    "en": "No plan changes this round"
+  },
+  "skillSearch.title": {
+    "zh": "技能检索",
+    "en": "Skill search"
+  },
+  "skillSearch.hotkey": {
+    "zh": "Ctrl+K",
+    "en": "Ctrl+K"
+  },
+  "skillSearch.placeholder": {
+    "zh": "搜索技能（例如 pytest、react、json）…",
+    "en": "Search skills (e.g. pytest, react, json)..."
+  },
+  "skillSearch.hint": {
+    "zh": "输入关键字检索技能库（FTS5 全文索引）。",
+    "en": "Type to search the skill library (FTS5-backed)."
+  },
+  "skillSearch.copyName": {
+    "zh": "复制名称",
+    "en": "Copy name"
+  },
+  "trendPanel.title": {
+    "zh": "趋势",
+    "en": "Trend"
+  },
+  "trendPanel.tab.overview": {
+    "zh": "总览",
+    "en": "Overview"
+  },
+  "trendPanel.tab.perCase": {
+    "zh": "按用例",
+    "en": "Per-case"
+  },
+  "trendPanel.empty": {
+    "zh": "还没有运行记录",
+    "en": "No runs yet"
+  },
+  "trendPanel.stat.runs": {
+    "zh": "运行次数",
+    "en": "Runs"
+  },
+  "trendPanel.stat.passRate": {
+    "zh": "通过率（平均）",
+    "en": "Pass rate (avg)"
+  },
+  "trendPanel.stat.cost": {
+    "zh": "成本（平均）",
+    "en": "Cost (avg)"
+  },
+  "trendPanel.chart.cost": {
+    "zh": "成本趋势",
+    "en": "Cost trend"
+  },
+  "trendPanel.col.run": {
+    "zh": "运行",
+    "en": "Run"
+  },
+  "trendPanel.col.pass": {
+    "zh": "通过",
+    "en": "Pass"
+  },
+  "trendPanel.col.cost": {
+    "zh": "成本",
+    "en": "Cost"
+  },
+  "trendPanel.col.p95": {
+    "zh": "p95 毫秒",
+    "en": "p95 ms"
+  },
+  "trendPanel.col.cases": {
+    "zh": "用例数",
+    "en": "Cases"
+  },
+  "trendPanel.col.tokens": {
+    "zh": "Token",
+    "en": "Tokens"
+  },
+  "trendPanel.col.case": {
+    "zh": "用例",
+    "en": "Case"
+  },
+  "trendPanel.col.passRate": {
+    "zh": "通过率",
+    "en": "Pass rate"
+  },
+  "trendPanel.col.history": {
+    "zh": "历史",
+    "en": "History"
+  },
+  "trendPanel.emptyPerCase": {
+    "zh": "没有按用例的数据",
+    "en": "No per-case data"
+  },
+  "trendPanel.footer": {
+    "zh": "显示 {cases} 个用例（{flaky} 不稳定，{stable} 稳定）",
+    "en": "Showing {cases} case(s) ({flaky} flaky, {stable} stable)"
+  },
+  "bench.workbench.sizeKb": {
+    "zh": "{size} KB",
+    "en": "{size} KB"
+  },
+  "costDashboard.msUnit": {
+    "zh": "毫秒",
+    "en": "ms"
+  },
+  "trendPanel.flakyLabel": {
+    "zh": "不稳定",
+    "en": "flaky"
+  },
+  "trace.msUnit": {
+    "zh": "毫秒",
+    "en": "ms"
+  },
+  "trace.turnUnit": {
+    "zh": "轮",
+    "en": "turn"
+  }
+}

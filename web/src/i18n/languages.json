@@ -1,0 +1,506 @@
+[
+  {
+    "antd": "ar_EG",
+    "value": "ar-EG",
+    "label": "العربية",
+    "english": "Arabic",
+    "dayjs": "ar",
+    "dir": "rtl"
+  },
+  {
+    "antd": "az_AZ",
+    "value": "az-AZ",
+    "label": "azərbaycan",
+    "english": "Azerbaijani",
+    "dayjs": "az",
+    "dir": "ltr"
+  },
+  {
+    "antd": "bg_BG",
+    "value": "bg-BG",
+    "label": "български",
+    "english": "Bulgarian",
+    "dayjs": "bg",
+    "dir": "ltr"
+  },
+  {
+    "antd": "bn_BD",
+    "value": "bn-BD",
+    "label": "বাংলা",
+    "english": "Bangla",
+    "dayjs": "bn-bd",
+    "dir": "ltr"
+  },
+  {
+    "antd": "by_BY",
+    "value": "by-BY",
+    "label": "by",
+    "english": "by",
+    "dayjs": "en",
+    "dir": "ltr"
+  },
+  {
+    "antd": "ca_ES",
+    "value": "ca-ES",
+    "label": "català",
+    "english": "Catalan",
+    "dayjs": "ca",
+    "dir": "ltr"
+  },
+  {
+    "antd": "cs_CZ",
+    "value": "cs-CZ",
+    "label": "čeština",
+    "english": "Czech",
+    "dayjs": "cs",
+    "dir": "ltr"
+  },
+  {
+    "antd": "da_DK",
+    "value": "da-DK",
+    "label": "dansk",
+    "english": "Danish",
+    "dayjs": "da",
+    "dir": "ltr"
+  },
+  {
+    "antd": "de_DE",
+    "value": "de-DE",
+    "label": "Deutsch",
+    "english": "German",
+    "dayjs": "de",
+    "dir": "ltr"
+  },
+  {
+    "antd": "el_GR",
+    "value": "el-GR",
+    "label": "Ελληνικά",
+    "english": "Greek",
+    "dayjs": "el",
+    "dir": "ltr"
+  },
+  {
+    "antd": "en_US",
+    "value": "en-US",
+    "label": "English",
+    "english": "English",
+    "dayjs": "en",
+    "dir": "ltr"
+  },
+  {
+    "antd": "es_ES",
+    "value": "es-ES",
+    "label": "español",
+    "english": "Spanish",
+    "dayjs": "es",
+    "dir": "ltr"
+  },
+  {
+    "antd": "et_EE",
+    "value": "et-EE",
+    "label": "eesti",
+    "english": "Estonian",
+    "dayjs": "et",
+    "dir": "ltr"
+  },
+  {
+    "antd": "eu_ES",
+    "value": "eu-ES",
+    "label": "euskara",
+    "english": "Basque",
+    "dayjs": "eu",
+    "dir": "ltr"
+  },
+  {
+    "antd": "fa_IR",
+    "value": "fa-IR",
+    "label": "فارسی",
+    "english": "Persian",
+    "dayjs": "fa",
+    "dir": "rtl"
+  },
+  {
+    "antd": "fi_FI",
+    "value": "fi-FI",
+    "label": "suomi",
+    "english": "Finnish",
+    "dayjs": "fi",
+    "dir": "ltr"
+  },
+  {
+    "antd": "fr_FR",
+    "value": "fr-FR",
+    "label": "français",
+    "english": "French",
+    "dayjs": "fr",
+    "dir": "ltr"
+  },
+  {
+    "antd": "ga_IE",
+    "value": "ga-IE",
+    "label": "Gaeilge",
+    "english": "Irish",
+    "dayjs": "ga",
+    "dir": "ltr"
+  },
+  {
+    "antd": "gl_ES",
+    "value": "gl-ES",
+    "label": "galego",
+    "english": "Galician",
+    "dayjs": "gl",
+    "dir": "ltr"
+  },
+  {
+    "antd": "he_IL",
+    "value": "he-IL",
+    "label": "עברית",
+    "english": "Hebrew",
+    "dayjs": "he",
+    "dir": "rtl"
+  },
+  {
+    "antd": "hi_IN",
+    "value": "hi-IN",
+    "label": "हिन्दी",
+    "english": "Hindi",
+    "dayjs": "hi",
+    "dir": "ltr"
+  },
+  {
+    "antd": "hr_HR",
+    "value": "hr-HR",
+    "label": "hrvatski",
+    "english": "Croatian",
+    "dayjs": "hr",
+    "dir": "ltr"
+  },
+  {
+    "antd": "hu_HU",
+    "value": "hu-HU",
+    "label": "magyar",
+    "english": "Hungarian",
+    "dayjs": "hu",
+    "dir": "ltr"
+  },
+  {
+    "antd": "hy_AM",
+    "value": "hy-AM",
+    "label": "հայերեն",
+    "english": "Armenian",
+    "dayjs": "hy-am",
+    "dir": "ltr"
+  },
+  {
+    "antd": "id_ID",
+    "value": "id-ID",
+    "label": "Indonesia",
+    "english": "Indonesian",
+    "dayjs": "id",
+    "dir": "ltr"
+  },
+  {
+    "antd": "is_IS",
+    "value": "is-IS",
+    "label": "íslenska",
+    "english": "Icelandic",
+    "dayjs": "is",
+    "dir": "ltr"
+  },
+  {
+    "antd": "it_IT",
+    "value": "it-IT",
+    "label": "italiano",
+    "english": "Italian",
+    "dayjs": "it",
+    "dir": "ltr"
+  },
+  {
+    "antd": "ja_JP",
+    "value": "ja-JP",
+    "label": "日本語",
+    "english": "Japanese",
+    "dayjs": "ja",
+    "dir": "ltr"
+  },
+  {
+    "antd": "ka_GE",
+    "value": "ka-GE",
+    "label": "ქართული",
+    "english": "Georgian",
+    "dayjs": "ka",
+    "dir": "ltr"
+  },
+  {
+    "antd": "kk_KZ",
+    "value": "kk-KZ",
+    "label": "қазақ тілі",
+    "english": "Kazakh",
+    "dayjs": "kk",
+    "dir": "ltr"
+  },
+  {
+    "antd": "km_KH",
+    "value": "km-KH",
+    "label": "ខ្មែរ",
+    "english": "Khmer",
+    "dayjs": "km",
+    "dir": "ltr"
+  },
+  {
+    "antd": "kmr_IQ",
+    "value": "kmr-IQ",
+    "label": "ku",
+    "english": "Kurdish",
+    "dayjs": "en",
+    "dir": "ltr"
+  },
+  {
+    "antd": "kn_IN",
+    "value": "kn-IN",
+    "label": "ಕನ್ನಡ",
+    "english": "Kannada",
+    "dayjs": "kn",
+    "dir": "ltr"
+  },
+  {
+    "antd": "ko_KR",
+    "value": "ko-KR",
+    "label": "한국어",
+    "english": "Korean",
+    "dayjs": "ko",
+    "dir": "ltr"
+  },
+  {
+    "antd": "ku_IQ",
+    "value": "ku-IQ",
+    "label": "ku",
+    "english": "Kurdish",
+    "dayjs": "ku",
+    "dir": "rtl"
+  },
+  {
+    "antd": "lt_LT",
+    "value": "lt-LT",
+    "label": "lietuvių",
+    "english": "Lithuanian",
+    "dayjs": "lt",
+    "dir": "ltr"
+  },
+  {
+    "antd": "lv_LV",
+    "value": "lv-LV",
+    "label": "latviešu",
+    "english": "Latvian",
+    "dayjs": "lv",
+    "dir": "ltr"
+  },
+  {
+    "antd": "mk_MK",
+    "value": "mk-MK",
+    "label": "македонски",
+    "english": "Macedonian",
+    "dayjs": "mk",
+    "dir": "ltr"
+  },
+  {
+    "antd": "ml_IN",
+    "value": "ml-IN",
+    "label": "മലയാളം",
+    "english": "Malayalam",
+    "dayjs": "ml",
+    "dir": "ltr"
+  },
+  {
+    "antd": "mn_MN",
+    "value": "mn-MN",
+    "label": "монгол",
+    "english": "Mongolian",
+    "dayjs": "mn",
+    "dir": "ltr"
+  },
+  {
+    "antd": "ms_MY",
+    "value": "ms-MY",
+    "label": "Melayu",
+    "english": "Malay",
+    "dayjs": "ms-my",
+    "dir": "ltr"
+  },
+  {
+    "antd": "my_MM",
+    "value": "my-MM",
+    "label": "မြန်မာ",
+    "english": "Burmese",
+    "dayjs": "my",
+    "dir": "ltr"
+  },
+  {
+    "antd": "nb_NO",
+    "value": "nb-NO",
+    "label": "norsk bokmål",
+    "english": "Norwegian Bokmål",
+    "dayjs": "nb",
+    "dir": "ltr"
+  },
+  {
+    "antd": "ne_NP",
+    "value": "ne-NP",
+    "label": "नेपाली",
+    "english": "Nepali",
+    "dayjs": "ne",
+    "dir": "ltr"
+  },
+  {
+    "antd": "nl_NL",
+    "value": "nl-NL",
+    "label": "Nederlands",
+    "english": "Dutch",
+    "dayjs": "nl",
+    "dir": "ltr"
+  },
+  {
+    "antd": "pl_PL",
+    "value": "pl-PL",
+    "label": "polski",
+    "english": "Polish",
+    "dayjs": "pl",
+    "dir": "ltr"
+  },
+  {
+    "antd": "pt_BR",
+    "value": "pt-BR",
+    "label": "português",
+    "english": "Portuguese",
+    "dayjs": "pt-br",
+    "dir": "ltr"
+  },
+  {
+    "antd": "ro_RO",
+    "value": "ro-RO",
+    "label": "română",
+    "english": "Romanian",
+    "dayjs": "ro",
+    "dir": "ltr"
+  },
+  {
+    "antd": "ru_RU",
+    "value": "ru-RU",
+    "label": "русский",
+    "english": "Russian",
+    "dayjs": "ru",
+    "dir": "ltr"
+  },
+  {
+    "antd": "si_LK",
+    "value": "si-LK",
+    "label": "සිංහල",
+    "english": "Sinhala",
+    "dayjs": "si",
+    "dir": "ltr"
+  },
+  {
+    "antd": "sk_SK",
+    "value": "sk-SK",
+    "label": "slovenčina",
+    "english": "Slovak",
+    "dayjs": "sk",
+    "dir": "ltr"
+  },
+  {
+    "antd": "sl_SI",
+    "value": "sl-SI",
+    "label": "slovenščina",
+    "english": "Slovenian",
+    "dayjs": "sl",
+    "dir": "ltr"
+  },
+  {
+    "antd": "sr_RS",
+    "value": "sr-RS",
+    "label": "српски",
+    "english": "Serbian",
+    "dayjs": "sr",
+    "dir": "ltr"
+  },
+  {
+    "antd": "sv_SE",
+    "value": "sv-SE",
+    "label": "svenska",
+    "english": "Swedish",
+    "dayjs": "sv",
+    "dir": "ltr"
+  },
+  {
+    "antd": "ta_IN",
+    "value": "ta-IN",
+    "label": "தமிழ்",
+    "english": "Tamil",
+    "dayjs": "ta",
+    "dir": "ltr"
+  },
+  {
+    "antd": "th_TH",
+    "value": "th-TH",
+    "label": "ไทย",
+    "english": "Thai",
+    "dayjs": "th",
+    "dir": "ltr"
+  },
+  {
+    "antd": "tk_TK",
+    "value": "tk-TK",
+    "label": "türkmen dili",
+    "english": "Turkmen",
+    "dayjs": "tk",
+    "dir": "ltr"
+  },
+  {
+    "antd": "tr_TR",
+    "value": "tr-TR",
+    "label": "Türkçe",
+    "english": "Turkish",
+    "dayjs": "tr",
+    "dir": "ltr"
+  },
+  {
+    "antd": "uk_UA",
+    "value": "uk-UA",
+    "label": "українська",
+    "english": "Ukrainian",
+    "dayjs": "uk",
+    "dir": "ltr"
+  },
+  {
+    "antd": "ur_PK",
+    "value": "ur-PK",
+    "label": "اردو",
+    "english": "Urdu",
+    "dayjs": "ur",
+    "dir": "rtl"
+  },
+  {
+    "antd": "uz_UZ",
+    "value": "uz-UZ",
+    "label": "o‘zbek",
+    "english": "Uzbek",
+    "dayjs": "uz",
+    "dir": "ltr"
+  },
+  {
+    "antd": "vi_VN",
+    "value": "vi-VN",
+    "label": "Tiếng Việt",
+    "english": "Vietnamese",
+    "dayjs": "vi",
+    "dir": "ltr"
+  },
+  {
+    "antd": "zh_CN",
+    "value": "zh-CN",
+    "label": "中文",
+    "english": "Chinese",
+    "dayjs": "zh-cn",
+    "dir": "ltr"
+  }
+]

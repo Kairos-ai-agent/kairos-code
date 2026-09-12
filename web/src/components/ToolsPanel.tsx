@@ -32,6 +32,7 @@ import api from '../api/client';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import { useChatStore } from '../stores/chatStore';
 import { formatError } from '../utils/formatError';
+import { useT } from '../i18n';
 
 const { Text, Title, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -43,6 +44,7 @@ interface Props {
 }
 
 const ToolsPanel: React.FC<Props> = ({ open, onClose, projectId }) => {
+  const t = useT();
   const tokens = useThemeTokens();
   const [tab, setTab] = useState('plan');
 
@@ -50,7 +52,7 @@ const ToolsPanel: React.FC<Props> = ({ open, onClose, projectId }) => {
     <Drawer
       open={open}
       onClose={onClose}
-      title="Tools (Tools)"
+      title={t('toolsPanel.toolsTools')}
       width={760}
       destroyOnHidden
     >
@@ -65,15 +67,15 @@ const ToolsPanel: React.FC<Props> = ({ open, onClose, projectId }) => {
           // user said the "borrowed from X" source labels (Claude
           // / the cloud task / the agent-gateway / etc) are noise — drop them, show
           // the feature only.
-          { key: 'plan', label: '📋 Plan', children:
+          { key: 'plan', label: t('toolsPanel.plan'), children:
             <PlanTab projectId={projectId} /> },
-          { key: 'memory', label: '🧠 Memory', children:
+          { key: 'memory', label: t('toolsPanel.memory'), children:
             <MemoryTab projectId={projectId} /> },
-          { key: 'im', label: '📨 IM', children:
+          { key: 'im', label: t('toolsPanel.im'), children:
             <IMTab /> },
-          { key: 'verify', label: '✅ Verify', children:
+          { key: 'verify', label: t('toolsPanel.verify'), children:
             <VerifyTab projectId={projectId} /> },
-          { key: 'advanced', label: '⚙️ Advanced', children:
+          { key: 'advanced', label: t('toolsPanel.advanced'), children:
             <AdvancedTab projectId={projectId} /> },
         ]}
       />
@@ -83,6 +85,7 @@ const ToolsPanel: React.FC<Props> = ({ open, onClose, projectId }) => {
 
 // ============= Plan Mode =============
 const PlanTab: React.FC<{ projectId: string }> = ({ projectId }) => {
+  const t = useT();
   const tokens = useThemeTokens();
   const [task, setTask] = useState('');
   const [generating, setGenerating] = useState(false);
@@ -100,13 +103,13 @@ const PlanTab: React.FC<{ projectId: string }> = ({ projectId }) => {
   useEffect(() => { if (projectId) load(); }, [projectId, load]);
 
   const generate = async () => {
-    if (!task.trim()) { msgApi.warning('enter a task'); return; }
+    if (!task.trim()) { msgApi.warning(t('toolsPanel.enterTask')); return; }
     setGenerating(true);
     try {
       const r = await api.post<any>(`/borrowed/${projectId}/plan/generate`,
         { task, project_context: '' });
       setPlan(r.data);
-      msgApi.success('Plan generated');
+      msgApi.success(t('toolsPanel.planGenerated'));
       load();
     } catch (e: any) {
       msgApi.error(e?.response?.data?.detail || 'failed');
@@ -128,19 +131,19 @@ const PlanTab: React.FC<{ projectId: string }> = ({ projectId }) => {
   return (
     <div style={{ padding: '8px 0' }}>
       {ctx}
-      <Title level={5}>Generate a plan before running a task</Title>
+      <Title level={5}>{t('toolsPanel.generateAPlanBeforeRunningATask')}</Title>
       <Paragraph type="secondary" style={{ fontSize: 12 }}>
-        LLM lays out a TODO. Approve to proceed, or reject to cancel.</Paragraph>
+        {t('toolsPanel.llmLaysOutATODOApproveToProceedOrRejectToCancel')}</Paragraph>
       <TextArea
         rows={3}
         value={task}
         onChange={e => setTask(e.target.value)}
-        placeholder="e.g. add user login with JWT auth"
+        placeholder={t('toolsPanel.eGAddUserLoginWithJWTAuth')}
       />
       <Button type="primary" icon={<ThunderboltOutlined />}
         loading={generating} onClick={generate} style={{ marginTop: 8 }}
         data-testid="plan-generate">
-        Generate plan
+        {t('toolsPanel.generatePlan')}
       </Button>
       {plan && (
         <Card size="small" style={{ marginTop: 12 }}
@@ -156,9 +159,9 @@ const PlanTab: React.FC<{ projectId: string }> = ({ projectId }) => {
           {plan.status === 'draft' && (
             <Space>
               <Button type="primary" onClick={() => decide(plan.id, 'approve')}
-                data-testid="plan-approve">Approve</Button>
+                data-testid="plan-approve">{t('toolsPanel.approve')}</Button>
               <Button danger onClick={() => decide(plan.id, 'reject')}
-                data-testid="plan-reject">Reject</Button>
+                data-testid="plan-reject">{t('toolsPanel.reject')}</Button>
             </Space>
           )}
         </Card>
@@ -166,7 +169,7 @@ const PlanTab: React.FC<{ projectId: string }> = ({ projectId }) => {
       {plans.length > 0 && (
         <>
           <Divider />
-          <Title level={5}>Recent plans</Title>
+          <Title level={5}>{t('toolsPanel.recentPlans')}</Title>
           <List size="small"
             dataSource={plans.slice(0, 5)}
             renderItem={(p: any) => (
@@ -186,6 +189,7 @@ const PlanTab: React.FC<{ projectId: string }> = ({ projectId }) => {
 
 // ============= Skills =============
 const SkillsTab: React.FC<{ projectId: string }> = ({ projectId }) => {
+  const t = useT();
   const tokens = useThemeTokens();
   const [skills, setSkills] = useState<any[]>([]);
   const [invoking, setInvoking] = useState<string | null>(null);
@@ -219,18 +223,16 @@ const SkillsTab: React.FC<{ projectId: string }> = ({ projectId }) => {
   return (
     <div style={{ padding: '8px 0' }}>
       {ctx}
-      <Title level={5}>Skills</Title>
+      <Title level={5}>{t('toolsPanel.skills')}</Title>
       <Paragraph type="secondary" style={{ fontSize: 12 }}>
-        27 skills installed (Anthropic + the community skill library + the MCP catalog).
-        Invoke one to load its instructions into the agent.
+        {t('toolsPanel.skillsInstalledNote')}
       </Paragraph>
       <Alert
         type="info" showIcon style={{ marginBottom: 12 }}
-        message="Tip: The agent auto-loads relevant skills each turn via
-          keyword matching. Manual invoke is for ad-hoc cases."
+        message={t('toolsPanel.skills.tip')}
       />
       <Input.Search
-        placeholder="search skills (e.g. test-driven-development, verification-before-completion)"
+        placeholder={t('toolsPanel.searchSkillsEGTestDrivenDevelopmentVerificationB')}
         onSearch={async (q) => {
           // Try to invoke any skill whose name matches the query
           if (q) {
@@ -260,6 +262,7 @@ const SkillsTab: React.FC<{ projectId: string }> = ({ projectId }) => {
 
 // ============= Hooks =============
 const HooksTab: React.FC<{ projectId: string }> = ({ projectId }) => {
+  const t = useT();
   const [hooks, setHooks] = useState<any[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [form] = Form.useForm();
@@ -277,7 +280,7 @@ const HooksTab: React.FC<{ projectId: string }> = ({ projectId }) => {
   const addHook = async (values: any) => {
     try {
       await api.post(`/borrowed/${projectId}/hooks`, values);
-      msgApi.success('Hook registered');
+      msgApi.success(t('toolsPanel.hookRegistered'));
       setShowAdd(false);
       form.resetFields();
       load();
@@ -289,15 +292,15 @@ const HooksTab: React.FC<{ projectId: string }> = ({ projectId }) => {
   return (
     <div style={{ padding: '8px 0' }}>
       {ctx}
-      <Title level={5}>Hooks</Title>
+      <Title level={5}>{t('toolsPanel.hooks')}</Title>
       <Paragraph type="secondary" style={{ fontSize: 12 }}>
-        Run a shell command when an event fires. Events:
-        <Tag>PreToolUse</Tag><Tag>PostToolUse</Tag>
-        <Tag>SessionStart</Tag><Tag>SessionEnd</Tag><Tag>Stop</Tag>
+        {t('toolsPanel.runAShellCommandWhenAnEventFiresEvents')}
+        <Tag>{t('toolsPanel.pretooluse')}</Tag><Tag>{t('toolsPanel.posttooluse')}</Tag>
+        <Tag>{t('toolsPanel.sessionstart')}</Tag><Tag>{t('toolsPanel.sessionend')}</Tag><Tag>{t('toolsPanel.stop')}</Tag>
       </Paragraph>
       <Button type="primary" icon={<PlusOutlined />}
         onClick={() => setShowAdd(true)} data-testid="hook-add">
-        Add hook
+        {t('toolsPanel.addHook')}
       </Button>
       <List size="small" style={{ marginTop: 12 }}
         dataSource={hooks}
@@ -312,27 +315,27 @@ const HooksTab: React.FC<{ projectId: string }> = ({ projectId }) => {
             </Space>
           </List.Item>
         )} />
-      <Modal title="Add hook" open={showAdd}
+      <Modal title={t('toolsPanel.addHook')} open={showAdd}
         onCancel={() => setShowAdd(false)}
         onOk={() => form.submit()}>
         <Form form={form} onFinish={addHook} layout="vertical">
-          <Form.Item name="event" label="Event" rules={[{required: true}]}>
+          <Form.Item name="event" label={t('toolsPanel.event')} rules={[{required: true}]}>
             <Select options={[
-              {value: 'PostToolUse', label: 'PostToolUse (after tool)'},
-              {value: 'PreToolUse', label: 'PreToolUse (before tool)'},
-              {value: 'SessionStart', label: 'SessionStart'},
-              {value: 'SessionEnd', label: 'SessionEnd'},
-              {value: 'Stop', label: 'Stop'},
+              {value: 'PostToolUse', label: t('toolsPanel.posttooluseAfterTool')},
+              {value: 'PreToolUse', label: t('toolsPanel.pretooluseBeforeTool')},
+              {value: 'SessionStart', label: t('toolsPanel.sessionstart')},
+              {value: 'SessionEnd', label: t('toolsPanel.sessionend')},
+              {value: 'Stop', label: t('toolsPanel.stop')},
             ]} />
           </Form.Item>
-          <Form.Item name="name" label="Hook name" rules={[{required: true}]}>
+          <Form.Item name="name" label={t('toolsPanel.hookName')} rules={[{required: true}]}>
             <Input placeholder="auto-lint" />
           </Form.Item>
-          <Form.Item name="command" label="Shell command" rules={[{required: true}]}>
-            <Input placeholder="black . 2>&1 || true" />
+          <Form.Item name="command" label={t('toolsPanel.shellCommand')} rules={[{required: true}]}>
+            <Input placeholder={t('toolsPanel.black21True')} />
           </Form.Item>
-          <Form.Item name="matcher" label="Matcher (optional)">
-            <Input placeholder="*.py or leave empty" />
+          <Form.Item name="matcher" label={t('toolsPanel.matcherOptional')}>
+            <Input placeholder={t('toolsPanel.pyOrLeaveEmpty')} />
           </Form.Item>
         </Form>
       </Modal>
@@ -342,6 +345,7 @@ const HooksTab: React.FC<{ projectId: string }> = ({ projectId }) => {
 
 // ============= Memory =============
 const MemoryTab: React.FC<{ projectId: string }> = () => {
+  const t = useT();
   const tokens = useThemeTokens();
   const [keys, setKeys] = useState<string[]>([]);
   const [query, setQuery] = useState('');
@@ -393,19 +397,18 @@ const MemoryTab: React.FC<{ projectId: string }> = () => {
   return (
     <div style={{ padding: '8px 0' }}>
       {ctx}
-      <Title level={5}>Memory</Title>
+      <Title level={5}>{t('toolsPanel.memory2')}</Title>
       <Paragraph type="secondary" style={{ fontSize: 12 }}>
-        Persistent project memory. The Coder auto-recalls relevant
-        entries into its system prompt on each turn.
+        {t('toolsPanel.persistentProjectMemoryTheCoderAutoRecallsReleva')}
       </Paragraph>
       <Space.Compact style={{ width: '100%' }}>
         <Input.Search
-          placeholder="recall (full-text search)" enterButton
+          placeholder={t('toolsPanel.recallFullTextSearch')} enterButton
           value={query} onChange={e => setQuery(e.target.value)}
           onSearch={search} data-testid="memory-search"
         />
         <Button icon={<PlusOutlined />} onClick={() => setShowAdd(true)}
-          data-testid="memory-add">Add</Button>
+          data-testid="memory-add">{t('toolsPanel.add')}</Button>
       </Space.Compact>
       {results.length > 0 && (
         <List size="small" style={{ marginTop: 12 }}
@@ -413,7 +416,7 @@ const MemoryTab: React.FC<{ projectId: string }> = () => {
           renderItem={(r: any) => (
             <List.Item actions={[
               <Button danger size="small"
-                onClick={() => forget(r.key)}>Forget</Button>
+                onClick={() => forget(r.key)}>{t('toolsPanel.forget')}</Button>
             ]}>
               <Text strong>{r.key}</Text>
               <div style={{ color: tokens.labelTertiary, fontSize: 12 }}>
@@ -424,21 +427,21 @@ const MemoryTab: React.FC<{ projectId: string }> = () => {
       )}
       {keys.length > 0 && results.length === 0 && (
         <Paragraph type="secondary" style={{ fontSize: 12, marginTop: 12 }}>
-          {keys.length} keys stored. Try searching above.
+          {t('toolsPanel.memory.storedHint', { n: keys.length })}
         </Paragraph>
       )}
-      <Modal title="Remember" open={showAdd}
+      <Modal title={t('toolsPanel.remember')} open={showAdd}
         onCancel={() => setShowAdd(false)}
         onOk={() => form.submit()}>
         <Form form={form} onFinish={remember} layout="vertical">
-          <Form.Item name="key" label="Key" rules={[{required: true}]}>
+          <Form.Item name="key" label={t('toolsPanel.key')} rules={[{required: true}]}>
             <Input placeholder="deployment-target" />
           </Form.Item>
-          <Form.Item name="value" label="Value" rules={[{required: true}]}>
-            <TextArea rows={3} placeholder="Production = k8s cluster prod-eu-1" />
+          <Form.Item name="value" label={t('toolsPanel.value')} rules={[{required: true}]}>
+            <TextArea rows={3} placeholder={t('toolsPanel.productionK8sClusterProdEu1')} />
           </Form.Item>
-          <Form.Item name="tags" label="Tags (comma-separated)">
-            <Input placeholder="infra, prod" />
+          <Form.Item name="tags" label={t('toolsPanel.tagsCommaSeparated')}>
+            <Input placeholder={t('toolsPanel.infraProd')} />
           </Form.Item>
         </Form>
       </Modal>
@@ -448,6 +451,7 @@ const MemoryTab: React.FC<{ projectId: string }> = () => {
 
 // ============= IM Platforms =============
 const IMTab: React.FC = () => {
+  const t = useT();
   const tokens = useThemeTokens();
   const [platforms, setPlatforms] = useState<string[]>([]);
   const [testText, setTestText] = useState('👋 Kairos test');
@@ -476,10 +480,9 @@ const IMTab: React.FC = () => {
   return (
     <div style={{ padding: '8px 0' }}>
       {ctx}
-      <Title level={5}>IM Platforms</Title>
+      <Title level={5}>{t('toolsPanel.imPlatforms')}</Title>
       <Paragraph type="secondary" style={{ fontSize: 12 }}>
-        Push agent events to your team chat. Configure webhook
-        URLs in api/app.py lifespan (feishu already wired).
+        {t('toolsPanel.pushAgentEventsToYourTeamChatConfigureWebhookURL')}
       </Paragraph>
       <Input value={testText} onChange={e => setTestText(e.target.value)}
         style={{ marginBottom: 12 }} />
@@ -489,7 +492,7 @@ const IMTab: React.FC = () => {
           <List.Item actions={[
             <Button size="small" icon={<SendOutlined />}
               loading={busy === p} onClick={() => test(p)}
-              data-testid={`im-test-${p}`}>Send test</Button>
+              data-testid={`im-test-${p}`}>{t('toolsPanel.sendTest')}</Button>
           ]}>
             <Space>
               <Tag>{p}</Tag>
@@ -516,6 +519,7 @@ const IMTab: React.FC = () => {
 
 // ============= Sandbox =============
 const SandboxTab: React.FC<{ projectId: string }> = ({ projectId }) => {
+  const t = useT();
   const [cmd, setCmd] = useState('rm -rf /tmp/test');
   const [level, setLevel] = useState('standard');
   const [result, setResult] = useState<any>(null);
@@ -536,21 +540,21 @@ const SandboxTab: React.FC<{ projectId: string }> = ({ projectId }) => {
   return (
     <div style={{ padding: '8px 0' }}>
       {ctx}
-      <Title level={5}>Sandbox</Title>
+      <Title level={5}>{t('toolsPanel.sandbox')}</Title>
       <Paragraph type="secondary" style={{ fontSize: 12 }}>
-        Dry-run check: would this command be blocked by the policy?
+        {t('toolsPanel.dryRunCheckWouldThisCommandBeBlockedByThePolicy')}
       </Paragraph>
       <Space.Compact style={{ width: '100%' }}>
         <Input value={cmd} onChange={e => setCmd(e.target.value)}
           style={{ width: '60%' }} data-testid="sandbox-cmd" />
         <Select value={level} onChange={setLevel} style={{ width: '20%' }}
           data-testid="sandbox-level" options={[
-            {value: 'off', label: 'Off'},
-            {value: 'standard', label: 'Standard'},
-            {value: 'strict', label: 'Strict'},
+            {value: 'off', label: t('toolsPanel.off')},
+            {value: 'standard', label: t('toolsPanel.standard')},
+            {value: 'strict', label: t('toolsPanel.strict')},
           ]} />
         <Button type="primary" onClick={check}
-          data-testid="sandbox-check">Check</Button>
+          data-testid="sandbox-check">{t('toolsPanel.check')}</Button>
       </Space.Compact>
       {result && (
         <Alert type={result.allowed ? 'success' : 'error'}
@@ -564,6 +568,7 @@ const SandboxTab: React.FC<{ projectId: string }> = ({ projectId }) => {
 
 // ============= Verify =============
 const VerifyTab: React.FC<{ projectId: string }> = ({ projectId }) => {
+  const t = useT();
   const [focus, setFocus] = useState('');
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -594,20 +599,19 @@ const VerifyTab: React.FC<{ projectId: string }> = ({ projectId }) => {
   return (
     <div style={{ padding: '8px 0' }}>
       {ctx}
-      <Title level={5}>Verify (run the Reviewer agent)</Title>
+      <Title level={5}>{t('toolsPanel.verifyRunTheReviewerAgent')}</Title>
       <Paragraph type="secondary" style={{ fontSize: 12 }}>
-        Manually re-run the Reviewer agent. Useful after editing
-        AGENTS.md or pulling upstream changes.
+        {t('toolsPanel.manuallyReRunTheReviewerAgentUsefulAfterEditingA')}
       </Paragraph>
       <Input value={focus} onChange={e => setFocus(e.target.value)}
-        placeholder="Optional focus (file path or 'all')"
+        placeholder={t('toolsPanel.optionalFocusFilePathOrAll')}
         style={{ marginBottom: 8 }} />
       <Space>
         <Button type="primary" icon={<CheckCircleOutlined />}
           loading={running} onClick={run}
-          data-testid="verify-run">Run reviewer</Button>
+          data-testid="verify-run">{t('toolsPanel.runReviewer')}</Button>
         <Button icon={<ExportOutlined />} onClick={exportTraj}
-          data-testid="trajectory-export">Export trajectory</Button>
+          data-testid="trajectory-export">{t('toolsPanel.exportTrajectory')}</Button>
       </Space>
       {result && (
         <Card size="small" style={{ marginTop: 12 }}
@@ -627,6 +631,7 @@ const VerifyTab: React.FC<{ projectId: string }> = ({ projectId }) => {
 // Advanced (Async + A2A + Compaction + Approval + Skills + Hooks + Sandbox).
 // R38.6.3: source-attribution stripped (the cloud task / the self-improving agent / Gemini etc).
 const AdvancedTab: React.FC<{ projectId: string }> = ({ projectId }) => {
+  const t = useT();
   const [msgApi, ctx] = message.useMessage();
   const [jobs, setJobs] = useState<any[]>([]);
   const [a2a, setA2a] = useState<any[]>([]);
@@ -655,7 +660,7 @@ const AdvancedTab: React.FC<{ projectId: string }> = ({ projectId }) => {
     try {
       await api.post('/borrowed/async/submit',
         { task, project_id: projectId });
-      msgApi.success('Async job submitted');
+      msgApi.success(t('toolsPanel.asyncJobSubmitted'));
       form.resetFields();
       load();
     } catch (e: any) { msgApi.error(e?.response?.data?.detail || 'failed'); }
@@ -681,7 +686,7 @@ const AdvancedTab: React.FC<{ projectId: string }> = ({ projectId }) => {
   const addA2a = async (values: any) => {
     try {
       await api.post('/borrowed/a2a/register', values);
-      msgApi.success('A2A agent registered');
+      msgApi.success(t('toolsPanel.a2aRegistered'));
       setShowA2a(false);
       form.resetFields();
       load();
@@ -691,14 +696,14 @@ const AdvancedTab: React.FC<{ projectId: string }> = ({ projectId }) => {
   return (
     <div style={{ padding: '8px 0' }}>
       {ctx}
-      <Title level={5}>Advanced</Title>
+      <Title level={5}>{t('toolsPanel.advanced2')}</Title>
 
-      <Card size="small" title="Approval mode"
+      <Card size="small" title={t('toolsPanel.approvalMode')}
             style={{ marginBottom: 12 }}>
         <Radio.Group value={approval} onChange={e => setMode(e.target.value)}>
-          <Radio.Button value="suggest">Suggest</Radio.Button>
-          <Radio.Button value="edit">Edit</Radio.Button>
-          <Radio.Button value="full-auto">Full-auto</Radio.Button>
+          <Radio.Button value="suggest">{t('toolsPanel.suggest')}</Radio.Button>
+          <Radio.Button value="edit">{t('toolsPanel.edit')}</Radio.Button>
+          <Radio.Button value="full-auto">{t('toolsPanel.fullAuto')}</Radio.Button>
         </Radio.Group>
         <Paragraph type="secondary" style={{ fontSize: 11, marginTop: 4 }}>
           {approval === 'suggest' && 'Every file write and shell command needs your OK.'}
@@ -707,16 +712,16 @@ const AdvancedTab: React.FC<{ projectId: string }> = ({ projectId }) => {
         </Paragraph>
       </Card>
 
-      <Card size="small" title="Async tasks"
+      <Card size="small" title={t('toolsPanel.asyncTasks')}
             style={{ marginBottom: 12 }}>
         <Form form={form} layout="inline"
           onFinish={submitJob}>
-          <Form.Item name="task" style={{ flex: 1, marginRight: 8 }}>
-            <Input placeholder="Task description (runs in background)" />
+          <Form.Item name="task" style={{ flex: 1, marginInlineEnd: 8 }}>
+            <Input placeholder={t('toolsPanel.taskDescriptionRunsInBackground')} />
           </Form.Item>
           <Form.Item>
             <Button type="primary" htmlType="submit"
-              icon={<SendOutlined />}>Submit</Button>
+              icon={<SendOutlined />}>{t('toolsPanel.submit')}</Button>
           </Form.Item>
         </Form>
         {jobs.length > 0 && (
@@ -736,11 +741,11 @@ const AdvancedTab: React.FC<{ projectId: string }> = ({ projectId }) => {
         )}
       </Card>
 
-      <Card size="small" title="A2A remote agents"
+      <Card size="small" title={t('toolsPanel.a2aRemoteAgents')}
             style={{ marginBottom: 12 }}>
         <Button size="small" icon={<PlusOutlined />}
           onClick={() => setShowA2a(true)} style={{ marginBottom: 8 }}>
-          Register agent
+          {t('toolsPanel.registerAgent')}
         </Button>
         {a2a.length > 0 && (
           <List size="small"
@@ -759,24 +764,24 @@ const AdvancedTab: React.FC<{ projectId: string }> = ({ projectId }) => {
               </List.Item>
             )} />
         )}
-        <Modal title="Register A2A agent" open={showA2a}
+        <Modal title={t('toolsPanel.registerA2AAgent')} open={showA2a}
           onCancel={() => setShowA2a(false)}
           onOk={() => form.submit()}>
           <Form form={form} onFinish={addA2a} layout="vertical">
-            <Form.Item name="name" label="Name" rules={[{required: true}]}>
+            <Form.Item name="name" label={t('toolsPanel.name')} rules={[{required: true}]}>
               <Input placeholder="remote-coder" />
             </Form.Item>
-            <Form.Item name="endpoint" label="Endpoint URL" rules={[{required: true}]}>
-              <Input placeholder="https://agent.example.com/a2a" />
+            <Form.Item name="endpoint" label={t('toolsPanel.endpointURL')} rules={[{required: true}]}>
+              <Input placeholder={t('toolsPanel.httpsAgentExampleComA2a')} />
             </Form.Item>
-            <Form.Item name="auth_token" label="Auth token (optional)">
+            <Form.Item name="auth_token" label={t('toolsPanel.authTokenOptional')}>
               <Input.Password />
             </Form.Item>
           </Form>
         </Modal>
       </Card>
 
-      <Card size="small" title="LSP check">
+      <Card size="small" title={t('toolsPanel.lspCheck')}>
         <LspInline projectId={projectId} />
       </Card>
     </div>
@@ -784,6 +789,7 @@ const AdvancedTab: React.FC<{ projectId: string }> = ({ projectId }) => {
 };
 
 const LspInline: React.FC<{ projectId: string }> = ({ projectId }) => {
+  const t = useT();
   const [file, setFile] = useState('');
   const [result, setResult] = useState<any>(null);
   const [busy, setBusy] = useState(false);
@@ -799,7 +805,7 @@ const LspInline: React.FC<{ projectId: string }> = ({ projectId }) => {
       if (r.data.diagnostics?.length) {
         msgApi.warning(`${r.data.diagnostics.length} issues`);
       } else {
-        msgApi.success('No issues');
+        msgApi.success(t('toolsPanel.noIssues'));
       }
     } catch (e: any) { msgApi.error(e?.response?.data?.detail || 'failed'); }
     finally { setBusy(false); }
@@ -810,9 +816,9 @@ const LspInline: React.FC<{ projectId: string }> = ({ projectId }) => {
       {ctx}
       <Space.Compact style={{ width: '100%' }}>
         <Input value={file} onChange={e => setFile(e.target.value)}
-          placeholder="relative file path (e.g. kairos/agents/base.py)" />
+          placeholder={t('toolsPanel.relativeFilePathEGKairosAgentsBasePy')} />
         <Button type="primary" loading={busy} onClick={check}
-          data-testid="lsp-check">Check</Button>
+          data-testid="lsp-check">{t('toolsPanel.check')}</Button>
       </Space.Compact>
       {result && (
         <div style={{ marginTop: 8 }}>

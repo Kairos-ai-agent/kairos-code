@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { tGlobal, useT } from '../i18n';
 
 // Lazily-loaded mermaid instance. We don't bundle mermaid (~600KB) —
 // instead we inject a CDN <script> on first use and resolve when its
@@ -11,7 +12,7 @@ let mermaidPromise: Promise<any> | null = null;
 
 function loadMermaidFromCdn(): Promise<any> {
   if (typeof window === 'undefined') {
-    return Promise.reject(new Error('mermaid requires a browser environment'));
+    return Promise.reject(new Error(tGlobal('mermaid.renderer.noBrowser')));
   }
   if ((window as any).mermaid) {
     return Promise.resolve((window as any).mermaid);
@@ -23,7 +24,7 @@ function loadMermaidFromCdn(): Promise<any> {
     const onReady = () => {
       const mermaid = (window as any).mermaid;
       if (!mermaid) {
-        reject(new Error('mermaid script loaded but global is missing'));
+        reject(new Error(tGlobal('mermaid.renderer.missingGlobal')));
         return;
       }
       mermaid.initialize({
@@ -44,7 +45,7 @@ function loadMermaidFromCdn(): Promise<any> {
     if (existing) {
       existing.addEventListener('load', onReady);
       existing.addEventListener('error', () =>
-        reject(new Error('mermaid CDN script failed to load')),
+        reject(new Error(tGlobal('mermaid.renderer.cdnFailed'))),
       );
       // If the script already finished before we attached, resolve now.
       if ((window as any).mermaid) onReady();
@@ -56,7 +57,7 @@ function loadMermaidFromCdn(): Promise<any> {
     script.dataset.mermaidLoader = '1';
     script.addEventListener('load', onReady);
     script.addEventListener('error', () =>
-      reject(new Error('mermaid CDN script failed to load')),
+      reject(new Error(tGlobal('mermaid.renderer.cdnFailed'))),
     );
     document.head.appendChild(script);
   });
@@ -75,6 +76,7 @@ interface Props {
 }
 
 const MermaidRenderer: React.FC<Props> = ({ source, id }) => {
+  const t = useT();
   const ref = useRef<HTMLDivElement>(null);
   const [svg, setSvg] = useState<string>('');
   const [error, setError] = useState<string>('');
@@ -93,7 +95,7 @@ const MermaidRenderer: React.FC<Props> = ({ source, id }) => {
         }
       } catch (e: any) {
         if (!cancelled) {
-          setError(e?.message || 'mermaid render failed');
+          setError(e?.message || tGlobal('mermaid.renderer.renderFailed'));
           setSvg('');
         }
       }
@@ -105,7 +107,7 @@ const MermaidRenderer: React.FC<Props> = ({ source, id }) => {
   if (error) {
     return (
       <div style={{ color: '#ff4d4f', fontSize: 11, padding: 8 }}>
-        Mermaid render error: {error}
+        {t('mermaid.renderer.renderError', { error })}
         <pre style={{ color: '#888', marginTop: 4 }}>{source}</pre>
       </div>
     );

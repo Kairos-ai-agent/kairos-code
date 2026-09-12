@@ -1,0 +1,678 @@
+{
+  "tools.page.title": {
+    "zh": "工具",
+    "en": "Tools"
+  },
+  "tools.page.subtitle": {
+    "zh": "用于增强核心 Coder / Reviewer 循环的可选子系统。",
+    "en": "Optional subsystems that augment the core Coder / Reviewer loop."
+  },
+  "tools.page.teamsTitle": {
+    "zh": "智能体团队",
+    "en": "Agent Teams"
+  },
+  "tools.page.teamsDescription": {
+    "zh": "在共享任务板上并行派发 Coder 智能体。",
+    "en": "Dispatch parallel Coder agents across a shared task board."
+  },
+  "tools.page.statusPerProject": {
+    "zh": "按项目",
+    "en": "per-project"
+  },
+  "tools.page.cloudTitle": {
+    "zh": "云端委派",
+    "en": "Cloud Delegation"
+  },
+  "tools.page.cloudDescription": {
+    "zh": "把任务交给远程执行器（cloud-task CLI、虚拟机或容器）。",
+    "en": "Hand off tasks to a remote runner (the cloud-task CLI, VM, container)."
+  },
+  "tools.page.voiceTitle": {
+    "zh": "语音模式",
+    "en": "Voice Mode"
+  },
+  "tools.page.voiceDescription": {
+    "zh": "STT（whisper）+ TTS 提供商，离线时回退到 mock。",
+    "en": "STT (whisper) + TTS providers, with mock fallback for offline."
+  },
+  "tools.page.computerTitle": {
+    "zh": "计算机操作",
+    "en": "Computer Use"
+  },
+  "tools.page.computerDescription": {
+    "zh": "桌面自动化：截图、鼠标、键盘（Windows ctypes）。",
+    "en": "Desktop automation: screenshot, mouse, keyboard (Windows ctypes)."
+  },
+  "tools.page.statusSafetyRequired": {
+    "zh": "需安全确认",
+    "en": "safety-required"
+  },
+  "tools.page.backToTools": {
+    "zh": "返回工具",
+    "en": "Back to tools"
+  },
+  "tools.page.needProjectAndTasks": {
+    "zh": "请先选择项目并输入任务列表。",
+    "en": "Pick a project and type a task list."
+  },
+  "tools.page.teamCreated": {
+    "zh": "团队 {team} 已创建，包含 {count} 个任务。",
+    "en": "Team {team} created with {count} tasks."
+  },
+  "tools.page.createTeamFailed": {
+    "zh": "创建团队失败",
+    "en": "Failed to create team"
+  },
+  "tools.page.teamsAlert": {
+    "zh": "下方输入框中的每一行都会成为一个并行派发的团队任务。",
+    "en": "Each line in the box below becomes one team task dispatched in parallel."
+  },
+  "tools.page.teamsTasksLabel": {
+    "zh": "任务（每行一个）",
+    "en": "Tasks (one per line)"
+  },
+  "tools.page.teamsTasksPlaceholder": {
+    "zh": "重构 user_service.py\n为计费模块添加单元测试\n更新 API 文档",
+    "en": "Refactor user_service.py\nAdd unit tests for billing\nUpdate API docs"
+  },
+  "tools.page.maxWorkersLabel": {
+    "zh": "最大工作进程数",
+    "en": "Max workers"
+  },
+  "tools.page.createTeam": {
+    "zh": "创建团队并派发",
+    "en": "Create team & dispatch"
+  },
+  "tools.page.needProject": {
+    "zh": "请先选择项目。",
+    "en": "Pick a project first."
+  },
+  "tools.page.cloudSubmitted": {
+    "zh": "任务已提交到云端执行器。",
+    "en": "Task submitted to cloud runner."
+  },
+  "tools.page.noCloudDelegator": {
+    "zh": "未配置云端委派器。请在服务端环境变量中设置 KAIROS_CLOUD_URL 以启用。",
+    "en": "No cloud delegator configured. Set KAIROS_CLOUD_URL in the server env to enable."
+  },
+  "tools.page.delegateFailed": {
+    "zh": "委派失败",
+    "en": "Failed to delegate"
+  },
+  "tools.page.cloudAlert": {
+    "zh": "云端委派需要服务端设置 KAIROS_CLOUD_URL。未设置时该接口会返回 503 —— 这是预期行为。",
+    "en": "Cloud delegation requires KAIROS_CLOUD_URL set on the server. Without it, the endpoint returns 503 — that's expected."
+  },
+  "tools.page.runnerUrlLabel": {
+    "zh": "远程执行器 URL（仅供参考）",
+    "en": "Remote runner URL (informational)"
+  },
+  "tools.page.runnerUrlPlaceholder": {
+    "zh": "https://runners.example.com",
+    "en": "https://runners.example.com"
+  },
+  "tools.page.taskDescriptionLabel": {
+    "zh": "任务描述",
+    "en": "Task description"
+  },
+  "tools.page.cloudTaskPlaceholder": {
+    "zh": "重构计费模块",
+    "en": "Refactor the billing module"
+  },
+  "tools.page.submitToCloud": {
+    "zh": "提交到云端",
+    "en": "Submit to cloud"
+  },
+  "tools.page.voiceAlert": {
+    "zh": "语音模式将 STT + TTS 接入聊天输入框。默认随包提供 mock 提供商；真实的 whisper / piper 可通过 Python 导入接入。",
+    "en": "Voice mode wires STT + TTS into the chat composer. The mock providers ship by default; real whisper / piper are pluggable via Python import."
+  },
+  "tools.page.sttTitle": {
+    "zh": "STT（语音 → 文本）",
+    "en": "STT (speech → text)"
+  },
+  "tools.page.sttDefault": {
+    "zh": "默认：**MockSTTProvider**（返回 SHA-256 指纹作为占位）。",
+    "en": "Default: **MockSTTProvider** (returns SHA-256 fingerprint as a placeholder)."
+  },
+  "tools.page.sttProduction": {
+    "zh": "生产：**WhisperSTTProvider**（使用 **faster-whisper** 或 **openai-whisper** 作为回退）。",
+    "en": "Production: **WhisperSTTProvider** (uses **faster-whisper** or **openai-whisper** fallback)."
+  },
+  "tools.page.ttsTitle": {
+    "zh": "TTS（文本 → 语音）",
+    "en": "TTS (text → speech)"
+  },
+  "tools.page.ttsDefault": {
+    "zh": "默认：**MockTTSProvider**（返回 0.1 秒静音 WAV）。",
+    "en": "Default: **MockTTSProvider** (returns a 0.1s silent WAV)."
+  },
+  "tools.page.ttsProduction": {
+    "zh": "生产：可插拔 —— Piper、ElevenLabs、OpenAI TTS、Azure Speech 等。",
+    "en": "Production: pluggable — Piper, ElevenLabs, OpenAI TTS, Azure Speech, etc."
+  },
+  "tools.page.voiceFooter": {
+    "zh": "通过在服务端 **VoiceSession(...)** 中设置提供商来配置语音模式。聊天输入框的「模式」下拉框届时可提供语音输入入口。",
+    "en": "Configure voice mode by setting the providers in **VoiceSession(...)** on the server. The chat composer's \"Mode\" select can then expose a voice-input affordance."
+  },
+  "tools.page.computerAlert": {
+    "zh": "计算机操作会向宿主桌面发送真实的鼠标 / 键盘事件。默认使用 mock 后端；只有在用 dry_run=True 测试过之后，才应启用 auto_confirm。",
+    "en": "Computer use sends real mouse / keyboard events to the host desktop. The mock backend is the default; only enable auto_confirm after you've tested with dry_run=True."
+  },
+  "tools.page.mockBackend": {
+    "zh": "Mock 后端",
+    "en": "Mock backend"
+  },
+  "tools.page.platformBackend": {
+    "zh": "平台后端",
+    "en": "Platform backend"
+  },
+  "tools.page.autoConfirm": {
+    "zh": "自动确认",
+    "en": "Auto-confirm"
+  },
+  "tools.page.allowInputActions": {
+    "zh": "允许免确认执行输入操作（点击 / 输入 / 按键）",
+    "en": "Allow input actions (click / type / key press) without per-action confirmation"
+  },
+  "tools.page.computerRealBackendAlert": {
+    "zh": "真实后端仅支持 Windows。其他平台会回退到 mock。ctypes 实现见 kairos.computer_use。",
+    "en": "Real backend is Windows-only. Other platforms fall back to the mock. See kairos.computer_use for the ctypes implementation."
+  },
+  "browser.panel.navigateWarning": {
+    "zh": "导航时出现错误：{error}",
+    "en": "Navigated with error: {error}"
+  },
+  "browser.panel.navigateFailed": {
+    "zh": "导航失败",
+    "en": "navigate failed"
+  },
+  "browser.panel.clicked": {
+    "zh": "已点击（{x}, {y}）",
+    "en": "Clicked ({x}, {y})"
+  },
+  "browser.panel.clickFailed": {
+    "zh": "点击失败",
+    "en": "click failed"
+  },
+  "browser.panel.typeFailed": {
+    "zh": "输入失败",
+    "en": "type failed"
+  },
+  "browser.panel.pressFailed": {
+    "zh": "按键失败",
+    "en": "press failed"
+  },
+  "browser.panel.closeConfirmTitle": {
+    "zh": "关闭浏览器会话？",
+    "en": "Close browser session?"
+  },
+  "browser.panel.closeConfirmContent": {
+    "zh": "这将丢弃该项目的 cookies 和本地存储。你可以通过导航到新 URL 重新打开。",
+    "en": "This will discard the cookies and local storage for this project. You can re-open it by navigating to a new URL."
+  },
+  "browser.panel.closed": {
+    "zh": "浏览器已关闭",
+    "en": "Browser closed"
+  },
+  "browser.panel.closeFailed": {
+    "zh": "关闭失败",
+    "en": "close failed"
+  },
+  "browser.panel.evaluateFailed": {
+    "zh": "求值失败",
+    "en": "evaluate failed"
+  },
+  "browser.panel.viewportFailed": {
+    "zh": "调整视口失败",
+    "en": "viewport failed"
+  },
+  "browser.panel.forward": {
+    "zh": "前进",
+    "en": "Forward"
+  },
+  "browser.panel.urlPlaceholder": {
+    "zh": "https://example.com",
+    "en": "https://example.com"
+  },
+  "browser.panel.go": {
+    "zh": "前往",
+    "en": "Go"
+  },
+  "browser.panel.noPage": {
+    "zh": "（无页面）",
+    "en": "(no page)"
+  },
+  "browser.panel.noPageLoaded": {
+    "zh": "（未加载页面）",
+    "en": "(no page loaded)"
+  },
+  "browser.panel.clickModeTooltip": {
+    "zh": "点击模式（在截图上点击）",
+    "en": "Click mode (click on the screenshot)"
+  },
+  "browser.panel.autoRefreshTooltip": {
+    "zh": "每 1.5 秒自动刷新",
+    "en": "Auto-refresh every 1.5s"
+  },
+  "browser.panel.closeTooltip": {
+    "zh": "关闭浏览器会话",
+    "en": "Close browser session"
+  },
+  "browser.panel.tabView": {
+    "zh": "视图",
+    "en": "View"
+  },
+  "browser.panel.screenshotAlt": {
+    "zh": "浏览器截图",
+    "en": "browser screenshot"
+  },
+  "browser.panel.emptyNoPage": {
+    "zh": "未加载页面",
+    "en": "No page loaded"
+  },
+  "browser.panel.emptyTypeUrl": {
+    "zh": "在上方输入 URL 并按回车",
+    "en": "Type a URL above and press Enter"
+  },
+  "browser.panel.tabConsole": {
+    "zh": "控制台",
+    "en": "Console"
+  },
+  "browser.panel.consoleEmpty": {
+    "zh": "暂无控制台消息",
+    "en": "No console messages yet"
+  },
+  "browser.panel.tabJs": {
+    "zh": "JS",
+    "en": "JS"
+  },
+  "browser.panel.evalHint": {
+    "zh": "在当前页面上运行 JavaScript 表达式并查看结果。",
+    "en": "Run a JavaScript expression on the current page and inspect the result."
+  },
+  "browser.panel.evalPlaceholder": {
+    "zh": "document.title",
+    "en": "document.title"
+  },
+  "browser.panel.typePlaceholder": {
+    "zh": "输入文本（点击后会聚焦该元素）",
+    "en": "Type text (focuses the element after a click)"
+  },
+  "browser.panel.keyTab": {
+    "zh": "Tab",
+    "en": "Tab"
+  },
+  "browser.panel.keyEsc": {
+    "zh": "Esc",
+    "en": "Esc"
+  },
+  "browser.panel.typeHint": {
+    "zh": "请先点击页面，然后再输入。Cookies/登录状态在多次访问间保留。",
+    "en": "Click on the page first, then type. Cookies/login persist between visits."
+  },
+  "browse.panel.rootsFailed": {
+    "zh": "加载文件夹起始位置失败。",
+    "en": "Failed to load folder roots."
+  },
+  "browse.panel.listFailed": {
+    "zh": "列出目录失败。",
+    "en": "Failed to list directory."
+  },
+  "browse.panel.loadingRoots": {
+    "zh": "正在加载起始位置…",
+    "en": "Loading starting points…"
+  },
+  "browse.panel.noRootsTitle": {
+    "zh": "没有可用的起始位置",
+    "en": "No starting points available"
+  },
+  "browse.panel.noRootsDescription": {
+    "zh": "后端无法枚举任何起始位置（主目录、工作区、驱动器）。在 Windows 上驱动器通过 Win32 API 列出；在 POSIX 上默认是主目录。",
+    "en": "The backend could not enumerate any roots (home, workspace, drives). On Windows, drives are listed via the Win32 API; on POSIX, the home dir is the default."
+  },
+  "browse.panel.pickFolder": {
+    "zh": "选择文件夹",
+    "en": "Pick a folder"
+  },
+  "browse.panel.up": {
+    "zh": "↑ 上一级",
+    "en": "↑ Up"
+  },
+  "browse.panel.emptyNoSubfolders": {
+    "zh": "没有子文件夹",
+    "en": "No subfolders"
+  },
+  "browse.panel.useThisFolder": {
+    "zh": "使用此文件夹",
+    "en": "Use this folder"
+  },
+  "toolsPanel.toolsTools": {
+    "zh": "工具",
+    "en": "Tools (Tools)"
+  },
+  "toolsPanel.plan": {
+    "zh": "📋 计划",
+    "en": "📋 Plan"
+  },
+  "toolsPanel.memory": {
+    "zh": "🧠 记忆",
+    "en": "🧠 Memory"
+  },
+  "toolsPanel.im": {
+    "zh": "📨 消息",
+    "en": "📨 IM"
+  },
+  "toolsPanel.verify": {
+    "zh": "✅ 校验",
+    "en": "✅ Verify"
+  },
+  "toolsPanel.advanced": {
+    "zh": "⚙️ 高级",
+    "en": "⚙️ Advanced"
+  },
+  "toolsPanel.generateAPlanBeforeRunningATask": {
+    "zh": "先制定计划，再执行任务",
+    "en": "Generate a plan before running a task"
+  },
+  "toolsPanel.llmLaysOutATODOApproveToProceedOrRejectToCancel": {
+    "zh": "由 LLM 拆解出待办清单。批准后继续，驳回则取消。",
+    "en": "LLM lays out a TODO. Approve to proceed, or reject to cancel."
+  },
+  "toolsPanel.eGAddUserLoginWithJWTAuth": {
+    "zh": "例如：用 JWT 认证实现用户登录",
+    "en": "e.g. add user login with JWT auth"
+  },
+  "toolsPanel.generatePlan": {
+    "zh": "生成计划",
+    "en": "Generate plan"
+  },
+  "toolsPanel.approve": {
+    "zh": "批准",
+    "en": "Approve"
+  },
+  "toolsPanel.reject": {
+    "zh": "驳回",
+    "en": "Reject"
+  },
+  "toolsPanel.recentPlans": {
+    "zh": "最近的计划",
+    "en": "Recent plans"
+  },
+  "toolsPanel.skills": {
+    "zh": "技能",
+    "en": "Skills"
+  },
+  "toolsPanel.searchSkillsEGTestDrivenDevelopmentVerificationB": {
+    "zh": "搜索技能（例如 test-driven-development、verification-before-completion）",
+    "en": "search skills (e.g. test-driven-development, verification-before-completion)"
+  },
+  "toolsPanel.hooks": {
+    "zh": "钩子",
+    "en": "Hooks"
+  },
+  "toolsPanel.runAShellCommandWhenAnEventFiresEvents": {
+    "zh": "事件触发时执行 shell 命令。可用事件：",
+    "en": "Run a shell command when an event fires. Events:"
+  },
+  "toolsPanel.pretooluse": {
+    "zh": "PreToolUse",
+    "en": "PreToolUse"
+  },
+  "toolsPanel.posttooluse": {
+    "zh": "PostToolUse",
+    "en": "PostToolUse"
+  },
+  "toolsPanel.sessionstart": {
+    "zh": "SessionStart",
+    "en": "SessionStart"
+  },
+  "toolsPanel.sessionend": {
+    "zh": "SessionEnd",
+    "en": "SessionEnd"
+  },
+  "toolsPanel.stop": {
+    "zh": "Stop",
+    "en": "Stop"
+  },
+  "toolsPanel.addHook": {
+    "zh": "添加钩子",
+    "en": "Add hook"
+  },
+  "toolsPanel.event": {
+    "zh": "事件",
+    "en": "Event"
+  },
+  "toolsPanel.posttooluseAfterTool": {
+    "zh": "PostToolUse（工具执行后）",
+    "en": "PostToolUse (after tool)"
+  },
+  "toolsPanel.pretooluseBeforeTool": {
+    "zh": "PreToolUse（工具执行前）",
+    "en": "PreToolUse (before tool)"
+  },
+  "toolsPanel.hookName": {
+    "zh": "钩子名称",
+    "en": "Hook name"
+  },
+  "toolsPanel.shellCommand": {
+    "zh": "Shell 命令",
+    "en": "Shell command"
+  },
+  "toolsPanel.black21True": {
+    "zh": "black . 2>&1 || true",
+    "en": "black . 2>&1 || true"
+  },
+  "toolsPanel.matcherOptional": {
+    "zh": "匹配规则（可选）",
+    "en": "Matcher (optional)"
+  },
+  "toolsPanel.pyOrLeaveEmpty": {
+    "zh": "*.py 或留空",
+    "en": "*.py or leave empty"
+  },
+  "toolsPanel.memory2": {
+    "zh": "记忆",
+    "en": "Memory"
+  },
+  "toolsPanel.persistentProjectMemoryTheCoderAutoRecallsReleva": {
+    "zh": "持久化的项目记忆。Coder 每轮会自动把相关条目召回进系统提示词。",
+    "en": "Persistent project memory. The Coder auto-recalls relevant entries into its system prompt on each turn."
+  },
+  "toolsPanel.recallFullTextSearch": {
+    "zh": "recall（全文检索）",
+    "en": "recall (full-text search)"
+  },
+  "toolsPanel.add": {
+    "zh": "添加",
+    "en": "Add"
+  },
+  "toolsPanel.forget": {
+    "zh": "遗忘",
+    "en": "Forget"
+  },
+  "toolsPanel.remember": {
+    "zh": "记住",
+    "en": "Remember"
+  },
+  "toolsPanel.key": {
+    "zh": "键",
+    "en": "Key"
+  },
+  "toolsPanel.value": {
+    "zh": "值",
+    "en": "Value"
+  },
+  "toolsPanel.productionK8sClusterProdEu1": {
+    "zh": "生产环境 = k8s 集群 prod-eu-1",
+    "en": "Production = k8s cluster prod-eu-1"
+  },
+  "toolsPanel.tagsCommaSeparated": {
+    "zh": "标签（逗号分隔）",
+    "en": "Tags (comma-separated)"
+  },
+  "toolsPanel.infraProd": {
+    "zh": "infra, prod",
+    "en": "infra, prod"
+  },
+  "toolsPanel.imPlatforms": {
+    "zh": "IM 平台",
+    "en": "IM Platforms"
+  },
+  "toolsPanel.pushAgentEventsToYourTeamChatConfigureWebhookURL": {
+    "zh": "把 agent 事件推送到团队聊天。webhook URL 在 api/app.py 的 lifespan 中配置（飞书已接通）。",
+    "en": "Push agent events to your team chat. Configure webhook URLs in api/app.py lifespan (feishu already wired)."
+  },
+  "toolsPanel.sendTest": {
+    "zh": "发送测试",
+    "en": "Send test"
+  },
+  "toolsPanel.sandbox": {
+    "zh": "沙箱",
+    "en": "Sandbox"
+  },
+  "toolsPanel.dryRunCheckWouldThisCommandBeBlockedByThePolicy": {
+    "zh": "预演检查：这条命令会被策略拦截吗？",
+    "en": "Dry-run check: would this command be blocked by the policy?"
+  },
+  "toolsPanel.off": {
+    "zh": "关闭",
+    "en": "Off"
+  },
+  "toolsPanel.standard": {
+    "zh": "标准",
+    "en": "Standard"
+  },
+  "toolsPanel.strict": {
+    "zh": "严格",
+    "en": "Strict"
+  },
+  "toolsPanel.check": {
+    "zh": "检查",
+    "en": "Check"
+  },
+  "toolsPanel.verifyRunTheReviewerAgent": {
+    "zh": "校验（运行 Reviewer agent）",
+    "en": "Verify (run the Reviewer agent)"
+  },
+  "toolsPanel.manuallyReRunTheReviewerAgentUsefulAfterEditingA": {
+    "zh": "手动重跑 Reviewer agent。适用于修改过 AGENTS.md 或拉取了上游变更之后。",
+    "en": "Manually re-run the Reviewer agent. Useful after editing AGENTS.md or pulling upstream changes."
+  },
+  "toolsPanel.optionalFocusFilePathOrAll": {
+    "zh": "可选关注范围（文件路径或 'all'）",
+    "en": "Optional focus (file path or 'all')"
+  },
+  "toolsPanel.runReviewer": {
+    "zh": "运行 Reviewer",
+    "en": "Run reviewer"
+  },
+  "toolsPanel.exportTrajectory": {
+    "zh": "导出执行轨迹",
+    "en": "Export trajectory"
+  },
+  "toolsPanel.advanced2": {
+    "zh": "高级",
+    "en": "Advanced"
+  },
+  "toolsPanel.approvalMode": {
+    "zh": "审批模式",
+    "en": "Approval mode"
+  },
+  "toolsPanel.suggest": {
+    "zh": "建议",
+    "en": "Suggest"
+  },
+  "toolsPanel.edit": {
+    "zh": "编辑",
+    "en": "Edit"
+  },
+  "toolsPanel.fullAuto": {
+    "zh": "全自动",
+    "en": "Full-auto"
+  },
+  "toolsPanel.asyncTasks": {
+    "zh": "异步任务",
+    "en": "Async tasks"
+  },
+  "toolsPanel.taskDescriptionRunsInBackground": {
+    "zh": "任务描述（后台运行）",
+    "en": "Task description (runs in background)"
+  },
+  "toolsPanel.submit": {
+    "zh": "提交",
+    "en": "Submit"
+  },
+  "toolsPanel.a2aRemoteAgents": {
+    "zh": "A2A 远程 agent",
+    "en": "A2A remote agents"
+  },
+  "toolsPanel.registerAgent": {
+    "zh": "注册 agent",
+    "en": "Register agent"
+  },
+  "toolsPanel.registerA2AAgent": {
+    "zh": "注册 A2A agent",
+    "en": "Register A2A agent"
+  },
+  "toolsPanel.name": {
+    "zh": "名称",
+    "en": "Name"
+  },
+  "toolsPanel.endpointURL": {
+    "zh": "Endpoint URL",
+    "en": "Endpoint URL"
+  },
+  "toolsPanel.httpsAgentExampleComA2a": {
+    "zh": "https://agent.example.com/a2a",
+    "en": "https://agent.example.com/a2a"
+  },
+  "toolsPanel.authTokenOptional": {
+    "zh": "鉴权 token（可选）",
+    "en": "Auth token (optional)"
+  },
+  "toolsPanel.lspCheck": {
+    "zh": "LSP 检查",
+    "en": "LSP check"
+  },
+  "toolsPanel.relativeFilePathEGKairosAgentsBasePy": {
+    "zh": "相对文件路径（例如 kairos/agents/base.py）",
+    "en": "relative file path (e.g. kairos/agents/base.py)"
+  },
+  "toolsPanel.skills.tip": {
+    "zh": "提示：agent 每轮会根据关键词自动加载相关技能。手动调用仅用于临时场景。",
+    "en": "Tip: The agent auto-loads relevant skills each turn via keyword matching. Manual invoke is for ad-hoc cases."
+  },
+  "toolsPanel.memory.storedHint": {
+    "zh": "已存 {n} 个键。可在上方搜索。",
+    "en": "{n} keys stored. Try searching above."
+  },
+  "toolsPanel.enterTask": {
+    "zh": "请输入任务",
+    "en": "enter a task"
+  },
+  "toolsPanel.planGenerated": {
+    "zh": "计划已生成",
+    "en": "Plan generated"
+  },
+  "toolsPanel.hookRegistered": {
+    "zh": "钩子已注册",
+    "en": "Hook registered"
+  },
+  "toolsPanel.asyncJobSubmitted": {
+    "zh": "异步任务已提交",
+    "en": "Async job submitted"
+  },
+  "toolsPanel.a2aRegistered": {
+    "zh": "A2A agent 已注册",
+    "en": "A2A agent registered"
+  },
+  "toolsPanel.noIssues": {
+    "zh": "无问题",
+    "en": "No issues"
+  },
+  "toolsPanel.skillsInstalledNote": {
+    "zh": "已安装 27 个技能（Anthropic + 社区技能库 + MCP 目录）。调用某个技能即可把它的说明加载进 agent。",
+    "en": "27 skills installed (Anthropic + the community skill library + the MCP catalog). Invoke one to load its instructions into the agent."
+  }
+}

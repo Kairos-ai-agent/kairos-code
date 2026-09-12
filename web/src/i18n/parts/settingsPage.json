@@ -1,0 +1,5 @@
+{
+  "settingsPage.deepseek.keyPlaceholder": { "zh": "sk-...", "en": "sk-..." },
+  "settingsPage.saveAll": { "zh": "保存所有设置", "en": "Save all settings" },
+  "settingsPage.assign.intro": { "zh": "为不同角色分配模型。", "en": "Assign a model to each role." }
+}

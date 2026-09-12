@@ -23,6 +23,7 @@ import {
 
 import api from '../api/client';
 import { formatError } from '../utils/formatError';
+import { useT } from '../i18n';
 
 interface DatasetEntry {
   name: string;
@@ -50,6 +51,7 @@ interface ReplayResult {
 }
 
 const EvalPanel: React.FC = () => {
+  const t = useT();
   const [datasets, setDatasets] = useState<DatasetEntry[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -140,10 +142,10 @@ const EvalPanel: React.FC = () => {
   return (
     <Card
       size="small"
-      title={<><DatabaseOutlined /> Eval</>}
+      title={<><DatabaseOutlined /> {t('evalPanel.title')}</>}
       extra={
         <Button size="small" icon={<ReloadOutlined />} onClick={refresh}>
-          Refresh
+          {t('common.refresh')}
         </Button>
       }
     >
@@ -157,23 +159,23 @@ const EvalPanel: React.FC = () => {
         items={[
           {
             key: 'datasets',
-            label: <span><DatabaseOutlined /> Datasets</span>,
+            label: <span><DatabaseOutlined /> {t('evalPanel.tabs.datasets')}</span>,
             children: (
               <div>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                   <Input
                     size="small"
-                    placeholder="Directory (default: data/datasets)"
+                    placeholder={t('evalPanel.datasets.dirPlaceholder')}
                     value={dsDir}
                     onChange={(e) => setDsDir(e.target.value)}
                     onPressEnter={refresh}
                   />
-                  <Button size="small" onClick={refresh}>List</Button>
+                  <Button size="small" onClick={refresh}>{t('evalPanel.datasets.list')}</Button>
                 </div>
                 {datasets.length === 0 ? (
                   <Empty
                     image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description="No datasets yet. Record a run to create one."
+                    description={t('evalPanel.datasets.empty')}
                   />
                 ) : (
                   <List
@@ -187,9 +189,11 @@ const EvalPanel: React.FC = () => {
                           }
                           description={
                             <span style={{ fontSize: 11 }}>
-                              {d.count} case{d.count === 1 ? '' : 's'} ·{' '}
-                              {(d.size_bytes / 1024).toFixed(1)} KB ·{' '}
-                              {new Date(d.mtime * 1000).toLocaleString()}
+                              {t('evalPanel.datasets.meta', {
+                                cases: d.count,
+                                size: (d.size_bytes / 1024).toFixed(1),
+                                time: new Date(d.mtime * 1000).toLocaleString(),
+                              })}
                             </span>
                           }
                         />
@@ -203,21 +207,21 @@ const EvalPanel: React.FC = () => {
           },
           {
             key: 'record',
-            label: <span><FileAddOutlined /> Record</span>,
+            label: <span><FileAddOutlined /> {t('evalPanel.tabs.record')}</span>,
             children: (
               <Form layout="vertical" size="small" onFinish={handleRecord}>
-                <Form.Item name="run_path" label="Run JSON path" rules={[{ required: true }]}>
-                  <Input placeholder="results/run-12345.json" />
+                <Form.Item name="run_path" label={t('evalPanel.record.runJson')} rules={[{ required: true }]}>
+                  <Input placeholder={t('evalPanel.record.runJsonPlaceholder')} />
                 </Form.Item>
-                <Form.Item name="dataset_path" label="Dataset path (.jsonl)"
+                <Form.Item name="dataset_path" label={t('evalPanel.record.datasetPath')}
                            rules={[{ required: true }]}>
-                  <Input placeholder="data/datasets/smoke.jsonl" />
+                  <Input placeholder={t('evalPanel.datasetPlaceholder')} />
                 </Form.Item>
-                <Form.Item name="only_passed" label="Only passed cases" valuePropName="checked" initialValue={true}>
+                <Form.Item name="only_passed" label={t('evalPanel.record.onlyPassed')} valuePropName="checked" initialValue={true}>
                   <input type="checkbox" />
                 </Form.Item>
                 <Button type="primary" htmlType="submit" loading={busy === 'record'}>
-                  Record
+                  {t('evalPanel.record.submit')}
                 </Button>
                 {recordResult && (
                   <Alert
@@ -230,17 +234,17 @@ const EvalPanel: React.FC = () => {
           },
           {
             key: 'replay',
-            label: <span><PlayCircleOutlined /> Replay</span>,
+            label: <span><PlayCircleOutlined /> {t('evalPanel.tabs.replay')}</span>,
             children: (
               <Form layout="vertical" size="small" onFinish={handleReplay}>
-                <Form.Item name="dataset_path" label="Dataset path" rules={[{ required: true }]}>
-                  <Input placeholder="data/datasets/smoke.jsonl" />
+                <Form.Item name="dataset_path" label={t('evalPanel.replay.datasetPath')} rules={[{ required: true }]}>
+                  <Input placeholder={t('evalPanel.datasetPlaceholder')} />
                 </Form.Item>
-                <Form.Item name="out_path" label="Out path (optional)">
-                  <Input placeholder="(auto)" />
+                <Form.Item name="out_path" label={t('evalPanel.replay.outPath')}>
+                  <Input placeholder={t('evalPanel.replay.outPlaceholder')} />
                 </Form.Item>
                 <Button type="primary" htmlType="submit" loading={busy === 'replay'}>
-                  Replay
+                  {t('evalPanel.replay.submit')}
                 </Button>
                 {replayResult && (
                   <Alert
@@ -253,20 +257,20 @@ const EvalPanel: React.FC = () => {
           },
           {
             key: 'derive',
-            label: <span><BranchesOutlined /> Derive</span>,
+            label: <span><BranchesOutlined /> {t('evalPanel.tabs.derive')}</span>,
             children: (
               <Form layout="vertical" size="small" onFinish={handleDerive}>
-                <Form.Item name="repo_path" label="Repo path" initialValue=".">
+                <Form.Item name="repo_path" label={t('evalPanel.derive.repoPath')} initialValue=".">
                   <Input placeholder="." />
                 </Form.Item>
-                <Form.Item name="out_path" label="Out YAML path">
-                  <Input placeholder="(auto: data/derived.yaml)" />
+                <Form.Item name="out_path" label={t('evalPanel.derive.outYaml')}>
+                  <Input placeholder={t('evalPanel.derive.outPlaceholder')} />
                 </Form.Item>
-                <Form.Item name="limit" label="Commit limit" initialValue={50}>
+                <Form.Item name="limit" label={t('evalPanel.derive.commitLimit')} initialValue={50}>
                   <Input type="number" min={1} max={1000} />
                 </Form.Item>
                 <Button type="primary" htmlType="submit" loading={busy === 'derive'}>
-                  Derive
+                  {t('evalPanel.derive.submit')}
                 </Button>
                 {deriveResult && (
                   <Alert

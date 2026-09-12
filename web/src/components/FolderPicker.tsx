@@ -47,6 +47,7 @@ import api from '../api/client';
 import { formatError } from '../utils/formatError';
 import type { Project } from '../types';
 import BrowsePanel from './BrowsePanel';
+import { useT } from '../i18n';
 
 const RECENT_KEY = 'kairos:recent-folders';
 const MAX_RECENT = 5;
@@ -86,6 +87,7 @@ interface FolderPickerProps {
 const FolderPicker: React.FC<FolderPickerProps> = ({
   open: openProp, onClose,
 }) => {
+  const t = useT();
   const tokens = useThemeTokens();
   const { message: msgApi } = AntdApp.useApp();
   const projects = useChatStore((s) => s.projects);
@@ -126,7 +128,7 @@ const FolderPicker: React.FC<FolderPickerProps> = ({
 
   const selectFolder = async (path: string, _name: string) => {
     if (!path.trim()) {
-      msgApi.warning('Enter a folder path.');
+      msgApi.warning(t('folderPicker.enterPath'));
       return;
     }
     setBusy(true);
@@ -169,7 +171,7 @@ const FolderPicker: React.FC<FolderPickerProps> = ({
   if (isControlled) {
     return (
       <Modal
-        title="Add a folder workspace"
+        title={t('folderPicker.addTitle')}
         open={manualOpen}
         onCancel={closeModal}
         footer={null}
@@ -193,7 +195,7 @@ const FolderPicker: React.FC<FolderPickerProps> = ({
             key: 'manual',
             label: (
               <span style={{ fontSize: 12, color: tokens.labelSecondary }}>
-                <EditOutlined /> Or type a path manually
+                <EditOutlined /> {t('folderPicker.manualHint')}
               </span>
             ),
             children: (
@@ -219,15 +221,15 @@ const FolderPicker: React.FC<FolderPickerProps> = ({
                   onClick={() => selectFolder(manualPath, basename(manualPath))}
                   block
                 >
-                  Use this path
+                  {t('folderPicker.usePath')}
                 </Button>
                 {recent.length > 0 && (
                   <div style={{ marginTop: 8, fontSize: 12,
                                 color: tokens.labelTertiary }}>
-                    Recent:
+                    {t('folderPicker.recent')}
                     {recent.slice(0, 5).map((p) => (
                       <a key={p}
-                         style={{ marginLeft: 8, color: tokens.coderAccent,
+                         style={{ marginInlineStart: 8, color: tokens.coderAccent,
                                   cursor: 'pointer' }}
                          onClick={() => setManualPath(p)}>
                         {basename(p)}
@@ -249,10 +251,10 @@ const FolderPicker: React.FC<FolderPickerProps> = ({
       {showRecents ? (
         // Standalone + recents + no projects: keep the recents Select
         // (it's useful on a fresh install).
-        <Tooltip title="Pick a recent folder or browse">
+        <Tooltip title={t('folderPicker.pickTitle')}>
           <Select
             value={undefined}
-            placeholder="Pick a folder to start…"
+            placeholder={t('folderPicker.pickPlaceholder')}
             style={{ minWidth: 180 }}
             onChange={(value) => {
               if (!value) return;
@@ -275,7 +277,7 @@ const FolderPicker: React.FC<FolderPickerProps> = ({
               })),
               { value: '__add__', label: (
                   <span style={{ color: tokens.coderAccent }}>
-                    <PlusOutlined /> Browse for a new folder…
+                    <PlusOutlined /> {t('folderPicker.browse')}
                   </span>
                 ) },
             ]}
@@ -284,11 +286,11 @@ const FolderPicker: React.FC<FolderPickerProps> = ({
       ) : projects.length > 0 ? (
         // Standalone + projects exist: project switcher. This is the
         // R37→R38 canonical "composer" affordance.
-        <Tooltip title="Switch project">
+        <Tooltip title={t('folderPicker.switchTitle')}>
           <Select
             data-testid="composer-project-switcher"
             value={currentProject?.id}
-            placeholder="Select a project…"
+            placeholder={t('folderPicker.selectPlaceholder')}
             style={{ minWidth: 180, maxWidth: 280 }}
             onChange={(id) => {
               const p = projects.find((x) => x.id === id);
@@ -314,7 +316,7 @@ const FolderPicker: React.FC<FolderPickerProps> = ({
               { value: '__divider__', label: <Divider style={{ margin: '4px 0' }} />, disabled: true },
               { value: '__add__', label: (
                   <span style={{ color: tokens.coderAccent }}>
-                    <PlusOutlined /> Add new folder…
+                    <PlusOutlined /> {t('folderPicker.addNew')}
                   </span>
                 ) },
             ]}
@@ -328,7 +330,7 @@ const FolderPicker: React.FC<FolderPickerProps> = ({
       ) : (
         // Standalone + no projects + no recents: discrete icon button.
         // No "Folder" text — that was the duplicate.
-        <Tooltip title="Add a folder workspace">
+        <Tooltip title={t('folderPicker.addTitle')}>
           <Button
             data-testid="composer-add-folder"
             icon={<FolderOpenOutlined />}
@@ -336,13 +338,13 @@ const FolderPicker: React.FC<FolderPickerProps> = ({
             type="text"
             size="small"
             style={{ color: tokens.labelSecondary }}
-            aria-label="Add folder"
+            aria-label={t('folderPicker.addAria')}
           />
         </Tooltip>
       )}
 
       <Modal
-        title="Add a folder workspace"
+        title={t('folderPicker.addTitle')}
         open={manualOpen}
         onCancel={closeModal}
         footer={null}
@@ -366,7 +368,7 @@ const FolderPicker: React.FC<FolderPickerProps> = ({
             key: 'manual',
             label: (
               <span style={{ fontSize: 12, color: tokens.labelSecondary }}>
-                <EditOutlined /> Or type a path manually
+                <EditOutlined /> {t('folderPicker.manualHint')}
               </span>
             ),
             children: (
@@ -392,15 +394,15 @@ const FolderPicker: React.FC<FolderPickerProps> = ({
                   onClick={() => selectFolder(manualPath, basename(manualPath))}
                   block
                 >
-                  Use this path
+                  {t('folderPicker.usePath')}
                 </Button>
                 {recent.length > 0 && (
                   <div style={{ marginTop: 8, fontSize: 12,
                                 color: tokens.labelTertiary }}>
-                    Recent:
+                    {t('folderPicker.recent')}
                     {recent.slice(0, 5).map((p) => (
                       <a key={p}
-                         style={{ marginLeft: 8, color: tokens.coderAccent,
+                         style={{ marginInlineStart: 8, color: tokens.coderAccent,
                                   cursor: 'pointer' }}
                          onClick={() => setManualPath(p)}>
                         {basename(p)}

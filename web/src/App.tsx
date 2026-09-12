@@ -11,6 +11,8 @@
  */
 import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import Run from './pages/Run';
+import History from './pages/History';
 
 import AppLayout from './components/AppLayout';
 import Chat from './pages/Chat';
@@ -26,7 +28,12 @@ const App: React.FC = () => {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route path="/" element={<Navigate to="/chat" replace />} />
+        // Three primary views: Run (business output), History (receipts) and
+        // Settings (a drawer). Everything else lives under "Advanced" in
+        // the sidebar but keeps its own route.
+        <Route path="/" element={<Navigate to="/run" replace />} />
+        <Route path="/run" element={<Run />} />
+        <Route path="/history" element={<History />} />
         <Route path="/chat" element={<Chat />} />
         <Route path="/chat/:sessionId" element={<Chat />} />
         <Route path="/today" element={<Today />} />

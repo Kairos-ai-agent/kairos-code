@@ -2,11 +2,18 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { ConfigProvider } from 'antd';
+import { App, ConfigProvider } from 'antd';
 
 import ChatComposer from '../components/ChatComposer';
 import { useChatStore } from '../stores/chatStore';
 import api from '../api/client';
+
+// ChatComposer talks to AntdApp.useApp(); without an <App> ancestor that
+// object has no .error() and rejected uploads surface as unhandled
+// rejections in the test run.
+const Wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <ConfigProvider><App>{children}</App></ConfigProvider>
+);
 
 vi.mock('../api/client', () => ({
   default: { post: vi.fn(), delete: vi.fn() },
@@ -35,7 +42,7 @@ describe('ChatComposer (Auto mode)', () => {
 
   it('does NOT show Loop/Plan/Ask mode selector', () => {
     render(<ChatComposer onSubmit={vi.fn()} />,
-           { wrapper: ConfigProvider });
+           { wrapper: Wrapper });
     // The old mode selector used the labels "Loop" / "Plan" / "Ask"
     // — none of them should appear now that the mode is hidden.
     expect(screen.queryByText('Loop')).not.toBeInTheDocument();
@@ -45,7 +52,7 @@ describe('ChatComposer (Auto mode)', () => {
 
   it('shows the Auto-routing hint in the placeholder', () => {
     render(<ChatComposer onSubmit={vi.fn()} />,
-           { wrapper: ConfigProvider });
+           { wrapper: Wrapper });
     const ta = screen.getByPlaceholderText(PLACEHOLDER);
     expect(ta).toBeInTheDocument();
   });
@@ -53,7 +60,7 @@ describe('ChatComposer (Auto mode)', () => {
   it('calls onSubmit with the trimmed text when Send is clicked', () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     render(<ChatComposer onSubmit={onSubmit} />,
-           { wrapper: ConfigProvider });
+           { wrapper: Wrapper });
     const ta = screen.getByPlaceholderText(PLACEHOLDER);
     fireEvent.change(ta, { target: { value: '  hello world  ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
@@ -64,7 +71,7 @@ describe('ChatComposer (Auto mode)', () => {
   it('Enter in the textarea submits (no shift)', () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     render(<ChatComposer onSubmit={onSubmit} />,
-           { wrapper: ConfigProvider });
+           { wrapper: Wrapper });
     const ta = screen.getByPlaceholderText(PLACEHOLDER);
     fireEvent.change(ta, { target: { value: 'go' } });
     fireEvent.keyDown(ta, { key: 'Enter', shiftKey: false });
@@ -74,7 +81,7 @@ describe('ChatComposer (Auto mode)', () => {
   it('Shift+Enter inserts a newline (does NOT submit)', () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     render(<ChatComposer onSubmit={onSubmit} />,
-           { wrapper: ConfigProvider });
+           { wrapper: Wrapper });
     const ta = screen.getByPlaceholderText(PLACEHOLDER);
     fireEvent.change(ta, { target: { value: 'go' } });
     fireEvent.keyDown(ta, { key: 'Enter', shiftKey: true });
@@ -83,7 +90,7 @@ describe('ChatComposer (Auto mode)', () => {
 
   it('send button is disabled when text is empty', () => {
     render(<ChatComposer onSubmit={vi.fn()} />,
-           { wrapper: ConfigProvider });
+           { wrapper: Wrapper });
     const btn = screen.getByRole('button', { name: 'Send' });
     expect(btn).toBeDisabled();
   });
@@ -91,7 +98,7 @@ describe('ChatComposer (Auto mode)', () => {
   it('disables the textarea when `disabled` is true', () => {
     render(<ChatComposer onSubmit={vi.fn()} disabled
                        disabledHint="Pick a folder first" />,
-           { wrapper: ConfigProvider });
+           { wrapper: Wrapper });
     const ta = screen.getByPlaceholderText(/Pick a folder first/i);
     expect(ta).toBeDisabled();
   });
@@ -102,7 +109,7 @@ describe('ChatComposer (Auto mode)', () => {
 
   it('attach button is disabled until a project is selected', () => {
     render(<ChatComposer onSubmit={vi.fn()} />,
-           { wrapper: ConfigProvider });
+           { wrapper: Wrapper });
     expect(screen.getByTestId('composer-attach')).toBeDisabled();
   });
 
@@ -118,7 +125,7 @@ describe('ChatComposer (Auto mode)', () => {
     });
     const onSubmit = vi.fn().mockResolvedValue(undefined);
 
-    render(<ChatComposer onSubmit={onSubmit} />, { wrapper: ConfigProvider });
+    render(<ChatComposer onSubmit={onSubmit} />, { wrapper: Wrapper });
 
     const attach = screen.getByTestId('composer-attach');
     expect(attach).not.toBeDisabled();
@@ -161,7 +168,7 @@ describe('ChatComposer (Auto mode)', () => {
     });
     mockedApi.delete.mockResolvedValue({ data: { status: 'deleted' } });
 
-    render(<ChatComposer onSubmit={vi.fn()} />, { wrapper: ConfigProvider });
+    render(<ChatComposer onSubmit={vi.fn()} />, { wrapper: Wrapper });
     fireEvent.change(screen.getByTestId('composer-file-input'),
                      { target: { files: [new File(['x'], 'img.png')] } });
 
@@ -183,7 +190,7 @@ describe('ChatComposer (Auto mode)', () => {
       response: { data: { detail: 'foo.bin is too large (max 50 MB)' } },
     });
 
-    render(<ChatComposer onSubmit={vi.fn()} />, { wrapper: ConfigProvider });
+    render(<ChatComposer onSubmit={vi.fn()} />, { wrapper: Wrapper });
     fireEvent.change(screen.getByTestId('composer-file-input'),
                      { target: { files: [new File(['x'], 'foo.bin')] } });
 

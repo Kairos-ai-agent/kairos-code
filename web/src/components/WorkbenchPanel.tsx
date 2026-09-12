@@ -38,6 +38,7 @@ import {
 } from '@ant-design/icons';
 
 import api from '../api/client';
+import { useT } from '../i18n';
 import { formatError } from '../utils/formatError';
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
@@ -123,6 +124,7 @@ interface WorkbenchPanelProps {
 
 const WorkbenchPanel: React.FC<WorkbenchPanelProps> = () => {
   const tokens = useThemeTokens();
+  const t = useT();
   const currentProject = useChatStore((s) => s.currentProject);
   const workbenchOpen = useChatStore((s) => s.workbenchOpen);
   const toggleWorkbench = useChatStore((s) => s.toggleWorkbench);
@@ -134,7 +136,7 @@ const WorkbenchPanel: React.FC<WorkbenchPanelProps> = () => {
       <div style={{ padding: 16 }}>
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="Select a project to see the workbench"
+          description={t('bench.workbench.selectProject')}
         />
       </div>
     );
@@ -146,7 +148,7 @@ const WorkbenchPanel: React.FC<WorkbenchPanelProps> = () => {
       style={{
         display: 'flex', flexDirection: 'column',
         height: '100%', background: tokens.bgElevated,
-        borderLeft: `1px solid ${tokens.border}`,
+        borderInlineStart: `1px solid ${tokens.border}`,
       }}
     >
       <div style={{
@@ -157,17 +159,17 @@ const WorkbenchPanel: React.FC<WorkbenchPanelProps> = () => {
         {/* Toggle button goes to the LEFT of the "Workbench" title
             (show/hide the whole right panel — the topbar button was
             merged here). Hidden state = the 44px icon rail. */}
-        <Tooltip title={workbenchOpen ? 'Hide workbench' : 'Show workbench'}>
+        <Tooltip title={workbenchOpen ? t('bench.workbench.hide') : t('bench.workbench.show')}>
           <Button
             size="small" type={workbenchOpen ? 'primary' : 'text'}
             icon={<AppstoreOutlined />}
             onClick={toggleWorkbench}
             data-testid="workbench-toggle"
-            aria-label="Toggle workbench"
+            aria-label={t('bench.workbench.toggle')}
             style={{ color: tokens.labelSecondary }}
           />
         </Tooltip>
-        <span style={{ fontWeight: 600 }}>Workbench</span>
+        <span style={{ fontWeight: 600 }}>{t('bench.workbench.title')}</span>
         <div style={{ flex: 1 }} />
         <AgentsMdEditor />
       </div>
@@ -176,7 +178,7 @@ const WorkbenchPanel: React.FC<WorkbenchPanelProps> = () => {
             onChange={setActiveTab}
             size="small"
             style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
-            tabBarStyle={{ marginBottom: 0, paddingLeft: 8 }}
+            tabBarStyle={{ marginBottom: 0, paddingInlineStart: 8 }}
             items={[
               // R38.6.3: collapsed 5 tabs → 1. Changes / Tasks /
               // Deliverables / Browser are power-user details
@@ -190,14 +192,14 @@ const WorkbenchPanel: React.FC<WorkbenchPanelProps> = () => {
                     display: 'inline-flex', alignItems: 'center',
                     gap: 4,
                   }}>
-                    <FolderOutlined /> Files
+                    <FolderOutlined /> {t('common.files')}
                     {/* R38.6.4: open-folder button next to the Files
                         tab. Clicking calls the backend which spawns
                         the OS file manager. The button sits inline
                         with the tab label so it visually pairs with
                         "Files" instead of floating at the far right
                         of the tab bar. */}
-                    <Tooltip title="Open the project folder in your file manager">
+                    <Tooltip title={t('bench.workbench.openFolderHint')}>
                       <Button
                         size="small" type="text"
                         icon={<FolderOpenOutlined />}
@@ -209,16 +211,16 @@ const WorkbenchPanel: React.FC<WorkbenchPanelProps> = () => {
                             .catch((err) => {
                               const detail = err?.response?.data?.detail
                                              || err?.message
-                                             || 'failed to open folder';
+                                             || t('bench.workbench.openFolderFailed');
                               message.error(detail);
                             });
                         }}
                         style={{
-                          marginLeft: 4, padding: '0 4px',
+                          marginInlineStart: 4, padding: '0 4px',
                           color: tokens.labelSecondary,
                         }}
                       >
-                        Open folder
+                        {t('bench.workbench.openFolder')}
                       </Button>
                     </Tooltip>
                   </span>
@@ -243,6 +245,7 @@ export default WorkbenchPanel;
 
 const CheckpointBar: React.FC<{ projectId: string }> = ({ projectId }) => {
   const tokens = useThemeTokens();
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [msgApi, contextHolder] = message.useMessage();
   const doSnapshot = useCallback(async () => {
@@ -252,20 +255,22 @@ const CheckpointBar: React.FC<{ projectId: string }> = ({ projectId }) => {
         `/workbench/checkpoint?project_id=${projectId}`,
         {},
       );
-      msgApi.success(
-        `Snapshot ${r.data.snapshot_id}: ${r.data.path_count} files (${r.data.size_bytes} bytes)`,
-      );
+      msgApi.success(t('bench.workbench.snapshotDone', {
+        id: r.data.snapshot_id,
+        count: r.data.path_count,
+        bytes: r.data.size_bytes,
+      }));
     } catch (e: any) {
-      msgApi.error(e?.response?.data?.detail || 'checkpoint failed');
+      msgApi.error(e?.response?.data?.detail || t('bench.workbench.checkpointFailed'));
     } finally {
       setBusy(false);
     }
   }, [projectId, msgApi]);
   const doRestore = useCallback(() => {
     Modal.confirm({
-      title: 'Restore all files from latest checkpoint?',
-      content: 'This will overwrite any files the agent has changed since the last snapshot.',
-      okText: 'Restore',
+      title: t('bench.workbench.restoreTitle'),
+      content: t('bench.workbench.restoreContent'),
+      okText: t('bench.workbench.restore'),
       okType: 'danger',
       onOk: async () => {
         setBusy(true);
@@ -274,9 +279,9 @@ const CheckpointBar: React.FC<{ projectId: string }> = ({ projectId }) => {
             `/workbench/restore?project_id=${projectId}`,
             { path: 'all' },
           );
-          msgApi.success(`Restored ${r.data.restored} files from checkpoint.`);
+          msgApi.success(t('bench.workbench.restoreDone', { n: r.data.restored }));
         } catch (e: any) {
-          msgApi.error(e?.response?.data?.detail || 'restore failed');
+          msgApi.error(e?.response?.data?.detail || t('bench.workbench.restoreFailed'));
         } finally {
           setBusy(false);
         }
@@ -297,7 +302,7 @@ const CheckpointBar: React.FC<{ projectId: string }> = ({ projectId }) => {
           loading={busy}
           data-testid="workbench-snapshot-btn"
         >
-          Snapshot now
+          {t('bench.workbench.snapshotNow')}
         </Button>
         <Button
           size="small" icon={<RollbackOutlined />}
@@ -305,7 +310,7 @@ const CheckpointBar: React.FC<{ projectId: string }> = ({ projectId }) => {
           disabled={busy}
           data-testid="workbench-restore-btn"
         >
-          Restore all
+          {t('bench.workbench.restoreAll')}
         </Button>
       </div>
     </>
@@ -318,6 +323,7 @@ const CheckpointBar: React.FC<{ projectId: string }> = ({ projectId }) => {
 
 const FilesTab: React.FC<{ projectId: string }> = ({ projectId }) => {
   const tokens = useThemeTokens();
+  const t = useT();
   const [tree, setTree] = useState<TreeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -332,7 +338,7 @@ const FilesTab: React.FC<{ projectId: string }> = ({ projectId }) => {
       });
       setTree(r.data);
     } catch (e: any) {
-      setError(formatError(e, 'failed to load tree'));
+      setError(formatError(e, t('bench.workbench.loadTreeFailed')));
     } finally {
       setLoading(false);
     }
@@ -368,13 +374,13 @@ const FilesTab: React.FC<{ projectId: string }> = ({ projectId }) => {
       <div style={{ padding: 24 }}>
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="No files yet — pick a folder to start"
+          description={t('bench.workbench.noFiles')}
         />
         <Button
           size="small" type="link" onClick={reload}
           style={{ marginTop: 8 }}
         >
-          Reload
+          {t('common.reload')}
         </Button>
       </div>
     );
@@ -387,7 +393,7 @@ const FilesTab: React.FC<{ projectId: string }> = ({ projectId }) => {
     >
       <div style={{ padding: '4px 12px', fontSize: 11,
                     color: tokens.labelTertiary }}>
-        {tree.entries.length} entries · click a file to view diff
+        {t('bench.workbench.entriesHint', { n: tree.entries.length })}
       </div>
       <Tree
         treeData={treeData}
@@ -411,7 +417,7 @@ const FilesTab: React.FC<{ projectId: string }> = ({ projectId }) => {
                 color={node.status === 'added' ? 'green'
                        : node.status === 'modified' ? 'orange'
                        : node.status === 'deleted' ? 'red' : 'default'}
-                style={{ marginLeft: 4, fontSize: 10, lineHeight: '14px',
+                style={{ marginInlineStart: 4, fontSize: 10, lineHeight: '14px',
                          padding: '0 4px' }}
               >
                 {node.status === 'added' ? 'A'
@@ -474,6 +480,7 @@ const FilePreview: React.FC<{ projectId: string; path: string; onClose: () => vo
   projectId, path, onClose,
 }) => {
   const tokens = useThemeTokens();
+  const t = useT();
   const [content, setContent] = useState<FileContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -482,7 +489,7 @@ const FilePreview: React.FC<{ projectId: string; path: string; onClose: () => vo
     setLoading(true);
     api.get<FileContent>(`/workbench/file`, { params: { project_id: projectId, path } })
       .then((r) => { if (!cancelled) setContent(r.data); })
-      .catch((e) => { if (!cancelled) setError(e?.response?.data?.detail || 'read failed'); })
+      .catch((e) => { if (!cancelled) setError(e?.response?.data?.detail || t('bench.workbench.fileReadFailed')); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [projectId, path]);
@@ -510,7 +517,7 @@ const FilePreview: React.FC<{ projectId: string; path: string; onClose: () => vo
           }}
         >
           {content.is_binary
-            ? `[binary file, ${content.size} bytes — preview disabled]`
+            ? t('bench.workbench.binaryPreview', { size: content.size })
             : content.content}
         </pre>
       )}
@@ -524,6 +531,7 @@ const FilePreview: React.FC<{ projectId: string; path: string; onClose: () => vo
 
 const ChangesTab: React.FC<{ projectId: string }> = ({ projectId }) => {
   const tokens = useThemeTokens();
+  const t = useT();
   const [items, setItems] = useState<DeliverableItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
@@ -543,7 +551,7 @@ const ChangesTab: React.FC<{ projectId: string }> = ({ projectId }) => {
         (d) => d.status !== 'unchanged',
       ));
     } catch (e: any) {
-      setError(e?.response?.data?.detail || 'failed to load changes');
+      setError(e?.response?.data?.detail || t('bench.workbench.loadChangesFailed'));
     } finally {
       setLoading(false);
     }
@@ -569,7 +577,7 @@ const ChangesTab: React.FC<{ projectId: string }> = ({ projectId }) => {
     setDiffLoading(true);
     api.get<FileDiff>(`/workbench/diff`, { params: { project_id: projectId, path: selected } })
       .then((r) => { if (!cancelled) setDiff(r.data); })
-      .catch((e) => { if (!cancelled) setError(e?.response?.data?.detail || 'diff failed'); })
+      .catch((e) => { if (!cancelled) setError(e?.response?.data?.detail || t('bench.workbench.diffFailed')); })
       .finally(() => { if (!cancelled) setDiffLoading(false); });
     return () => { cancelled = true; };
   }, [projectId, selected]);
@@ -584,14 +592,14 @@ const ChangesTab: React.FC<{ projectId: string }> = ({ projectId }) => {
                        style={{ margin: 8 }} />}
       <div style={{ padding: '4px 12px', fontSize: 11,
                     color: tokens.labelTertiary, borderBottom: `1px solid ${tokens.border}` }}>
-        {items.length} changed files since the last checkpoint
+        {t('bench.workbench.changedCount', { n: items.length })}
       </div>
       <div style={{ flex: 1, overflow: 'auto' }}>
         {loading ? <Spin style={{ display: 'block', margin: 24 }} /> :
          items.length === 0 ? (
            <Empty
              image={Empty.PRESENTED_IMAGE_SIMPLE}
-             description="No changes — agent hasn't modified any files yet"
+             description={t('bench.workbench.noChanges')}
              style={{ marginTop: 32 }}
            />
          ) : (
@@ -621,10 +629,10 @@ const ChangesTab: React.FC<{ projectId: string }> = ({ projectId }) => {
                          color={d.status === 'added' ? 'green'
                                 : d.status === 'modified' ? 'orange'
                                 : 'red'}
-                         style={{ marginLeft: 6, fontSize: 10, lineHeight: '14px',
+                         style={{ marginInlineStart: 6, fontSize: 10, lineHeight: '14px',
                                   padding: '0 4px' }}
                        >
-                         {d.status}
+                         {t(`bench.workbench.status.${d.status}`)}
                        </Tag>
                      </span>
                    }
@@ -664,7 +672,7 @@ const ChangesTab: React.FC<{ projectId: string }> = ({ projectId }) => {
                      : tokens.labelPrimary,
               }}
             >
-              {diff.diff || '(no textual diff)'}
+              {diff.diff || t('bench.workbench.noDiff')}
             </pre>
           )}
         </div>
@@ -679,6 +687,7 @@ const ChangesTab: React.FC<{ projectId: string }> = ({ projectId }) => {
 
 const TasksTab: React.FC<{ projectId: string }> = ({ projectId }) => {
   const tokens = useThemeTokens();
+  const t = useT();
   const [resp, setResp] = useState<TasksResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -692,7 +701,7 @@ const TasksTab: React.FC<{ projectId: string }> = ({ projectId }) => {
       );
       setResp(r.data);
     } catch (e: any) {
-      setError(e?.response?.data?.detail || 'failed to load tasks');
+      setError(e?.response?.data?.detail || t('bench.workbench.loadTasksFailed'));
     } finally {
       setLoading(false);
     }
@@ -715,13 +724,13 @@ const TasksTab: React.FC<{ projectId: string }> = ({ projectId }) => {
       {resp && (
         <div style={{ marginBottom: 8, display: 'flex', gap: 12, fontSize: 11,
                       color: tokens.labelTertiary }}>
-          <span>Round: <b>{resp.round}</b></span>
-          <span>Score: <b>{resp.score}</b></span>
+          <span>{t('bench.workbench.round')} <b>{resp.round}</b></span>
+          <span>{t('bench.workbench.score')} <b>{resp.score}</b></span>
           <span>{resp.running
-            ? <Tag color="processing" icon={<LoadingOutlined />}>running</Tag>
+            ? <Tag color="processing" icon={<LoadingOutlined />}>{t('common.running')}</Tag>
             : resp.last_approve
-              ? <Tag color="success">approved</Tag>
-              : <Tag>idle</Tag>
+              ? <Tag color="success">{t('bench.workbench.approved')}</Tag>
+              : <Tag>{t('bench.workbench.idle')}</Tag>
           }</span>
         </div>
       )}
@@ -731,18 +740,18 @@ const TasksTab: React.FC<{ projectId: string }> = ({ projectId }) => {
        resp && resp.tasks.length === 0 ? (
          <Empty
            image={Empty.PRESENTED_IMAGE_SIMPLE}
-           description="No tasks yet — start a loop to see progress"
+           description={t('bench.workbench.noTasks')}
            style={{ marginTop: 24 }}
          />
        ) : (
          <List
            size="small"
            dataSource={resp?.tasks || []}
-           renderItem={(t) => {
-             const icon = t.status === 'done' ? <CheckCircleOutlined style={{ color: 'green' }} />
-               : t.status === 'in_progress' ? <LoadingOutlined style={{ color: tokens.coderAccent }} />
-               : t.status === 'rejected' ? <RollbackOutlined style={{ color: 'orange' }} />
-               : t.status === 'failed' ? <RollbackOutlined style={{ color: 'red' }} />
+           renderItem={(task) => {
+             const icon = task.status === 'done' ? <CheckCircleOutlined style={{ color: 'green' }} />
+               : task.status === 'in_progress' ? <LoadingOutlined style={{ color: tokens.coderAccent }} />
+               : task.status === 'rejected' ? <RollbackOutlined style={{ color: 'orange' }} />
+               : task.status === 'failed' ? <RollbackOutlined style={{ color: 'red' }} />
                : <span style={{ display: 'inline-block', width: 14, height: 14,
                                  borderRadius: '50%', border: `1px solid ${tokens.labelTertiary}` }} />;
              return (
@@ -751,12 +760,12 @@ const TasksTab: React.FC<{ projectId: string }> = ({ projectId }) => {
                    {icon}
                    <span style={{
                      fontSize: 13,
-                     textDecoration: t.status === 'done' ? 'line-through' : 'none',
-                     color: t.status === 'pending' ? tokens.labelTertiary
-                           : t.status === 'failed' ? 'red'
+                     textDecoration: task.status === 'done' ? 'line-through' : 'none',
+                     color: task.status === 'pending' ? tokens.labelTertiary
+                           : task.status === 'failed' ? 'red'
                            : tokens.labelPrimary,
                    }}>
-                     {t.title}
+                     {task.title}
                    </span>
                  </Space>
                </List.Item>
@@ -774,6 +783,7 @@ const TasksTab: React.FC<{ projectId: string }> = ({ projectId }) => {
 
 const DeliverablesTab: React.FC<{ projectId: string }> = ({ projectId }) => {
   const tokens = useThemeTokens();
+  const t = useT();
   const [items, setItems] = useState<DeliverableItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -787,7 +797,7 @@ const DeliverablesTab: React.FC<{ projectId: string }> = ({ projectId }) => {
       );
       setItems(r.data.deliverables || []);
     } catch (e: any) {
-      setError(e?.response?.data?.detail || 'failed to load deliverables');
+      setError(e?.response?.data?.detail || t('bench.workbench.loadDeliverablesFailed'));
     } finally {
       setLoading(false);
     }
@@ -811,8 +821,7 @@ const DeliverablesTab: React.FC<{ projectId: string }> = ({ projectId }) => {
       style={{ flex: 1, overflow: 'auto', padding: '8px 12px' }}
     >
       <div style={{ marginBottom: 8, fontSize: 11, color: tokens.labelTertiary }}>
-        Files the agent has created or modified — click a name to view
-        its content.
+        {t('bench.workbench.deliverablesHint')}
       </div>
       {error && <Alert type="error" message={error} showIcon
                        style={{ marginBottom: 8 }} />}
@@ -820,7 +829,7 @@ const DeliverablesTab: React.FC<{ projectId: string }> = ({ projectId }) => {
        items.length === 0 ? (
          <Empty
            image={Empty.PRESENTED_IMAGE_SIMPLE}
-           description="No deliverables yet — take a snapshot to start tracking"
+           description={t('bench.workbench.noDeliverables')}
            style={{ marginTop: 24 }}
          />
        ) : (
@@ -842,14 +851,14 @@ const DeliverablesTab: React.FC<{ projectId: string }> = ({ projectId }) => {
                        color={d.status === 'added' ? 'green'
                               : d.status === 'modified' ? 'orange'
                               : d.status === 'deleted' ? 'red' : 'default'}
-                       style={{ marginLeft: 4, fontSize: 10, lineHeight: '14px',
+                       style={{ marginInlineStart: 4, fontSize: 10, lineHeight: '14px',
                                 padding: '0 4px' }}
                      >
-                       {d.status}
+                       {t(`bench.workbench.status.${d.status}`)}
                      </Tag>
-                     <span style={{ marginLeft: 6, fontSize: 11,
+                     <span style={{ marginInlineStart: 6, fontSize: 11,
                                     color: tokens.labelTertiary }}>
-                       {(d.size / 1024).toFixed(1)} KB
+                       {t('bench.workbench.sizeKb', { size: (d.size / 1024).toFixed(1) })}
                      </span>
                    </span>
                  }

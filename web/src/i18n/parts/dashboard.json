@@ -1,0 +1,10 @@
+{
+  "dashboard.title": { "zh": "仪表盘", "en": "Dashboard" },
+  "dashboard.stat.activeAgents": { "zh": "活跃 Agent", "en": "Active Agents" },
+  "dashboard.stat.messages": { "zh": "消息", "en": "Messages" },
+  "dashboard.stat.systemStatus": { "zh": "系统状态", "en": "System Status" },
+  "dashboard.stat.online": { "zh": "在线", "en": "Online" },
+  "dashboard.agentTeam": { "zh": "Agent 团队", "en": "Agent Team" },
+  "dashboard.recentMessages": { "zh": "最近消息", "en": "Recent Messages" },
+  "dashboard.task": { "zh": "任务：{task}", "en": "Task: {task}" }
+}

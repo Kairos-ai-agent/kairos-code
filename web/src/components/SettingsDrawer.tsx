@@ -14,7 +14,9 @@ import {
   ReloadOutlined,
   CheckCircleFilled,
   CloseCircleFilled,
+  GlobalOutlined,
 } from '@ant-design/icons';
+import { LANGS, tGlobal, useI18n, useT } from '../i18n';
 import { useSettingsStore, CoderMode, TtsProvider, SttProvider, LlmProvider } from '../stores/settingsStore';
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
@@ -33,12 +35,12 @@ interface Props {
 // Used by the save-status indicator at the top of the drawer.
 function agoLabel(deltaMs: number): string {
   const s = Math.floor(deltaMs / 1000);
-  if (s < 5) return 'just now';
-  if (s < 60) return `${s}s ago`;
+  if (s < 5) return tGlobal('settings.drawer.agoJustNow');
+  if (s < 60) return tGlobal('settings.drawer.agoSeconds', { n: s });
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
+  if (m < 60) return tGlobal('settings.drawer.agoMinutes', { n: m });
   const h = Math.floor(m / 60);
-  return `${h}h ago`;
+  return tGlobal('settings.drawer.agoHours', { n: h });
 }
 
 // Strip the last path segment from a URL. Used to derive the
@@ -77,20 +79,21 @@ function deriveBaseUrl(endpointUrl: string): string {
 // ---------------------------------------------------------------------------
 
 const CoderModePanel: React.FC = () => {
+  const t = useT();
   const tokens = useThemeTokens();
   const mode = useSettingsStore((s) => s.coderMode);
   const setMode = useSettingsStore((s) => s.setCoderMode);
 
   const MODES: { value: CoderMode; label: string; desc: string }[] = [
-    { value: 'default', label: 'Default', desc: 'All tools available; can edit files, run shell, commit.' },
-    { value: 'read_only', label: 'Read-only', desc: 'List/read/search only. No file edits, no shell.' },
-    { value: 'sandbox', label: 'Sandbox (worktree)', desc: 'Writes are isolated in a git worktree; you review before merging.' },
+    { value: 'default', label: t('settings.default'), desc: 'All tools available; can edit files, run shell, commit.' },
+    { value: 'read_only', label: t('settings.readOnly'), desc: 'List/read/search only. No file edits, no shell.' },
+    { value: 'sandbox', label: t('settings.sandboxWorktree'), desc: 'Writes are isolated in a git worktree; you review before merging.' },
   ];
 
   return (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
       <Text style={{ color: tokens.labelSecondary }}>
-        The Coder sub-mode controls which tools the agent can call.
+        {t('settings.theCoderSubModeControlsWhichToolsTheAgentCanCall')}
       </Text>
       <div>
         {MODES.map((m) => {
@@ -112,7 +115,7 @@ const CoderModePanel: React.FC = () => {
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <strong style={{ color: tokens.labelPrimary }}>{m.label}</strong>
-                {selected && <Tag color="blue">active</Tag>}
+                {selected && <Tag color="blue">{t('settings.statusActive')}</Tag>}
               </div>
               <div style={{ color: tokens.labelSecondary, fontSize: 12, marginTop: 4 }}>
                 {m.desc}
@@ -130,6 +133,7 @@ const CoderModePanel: React.FC = () => {
 // ---------------------------------------------------------------------------
 
 const VoicePanel: React.FC = () => {
+  const t = useT();
   const tokens = useThemeTokens();
   const voice = useSettingsStore((s) => s.voice);
   const setVoice = useSettingsStore((s) => s.setVoice);
@@ -137,57 +141,55 @@ const VoicePanel: React.FC = () => {
   return (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
       <Text style={{ color: tokens.labelSecondary }}>
-        Voice providers used when you click the mic or send text that
-        the agent should speak back.
+        {t('settings.voiceProvidersUsedWhenYouClickTheMicOrSendTextTh')}
       </Text>
       <div>
-        <Text style={{ color: tokens.labelPrimary }}>TTS provider</Text>
+        <Text style={{ color: tokens.labelPrimary }}>{t('settings.ttsProvider')}</Text>
         <Select
           style={{ width: '100%', marginTop: 4 }}
           value={voice.ttsProvider}
           onChange={(v: TtsProvider) => setVoice({ ttsProvider: v })}
           options={[
-            { value: 'edge', label: 'Microsoft Edge (online, free, high quality)' },
-            { value: 'mock', label: 'Mock (offline, silent placeholder)' },
+            { value: 'edge', label: t('settings.microsoftEdgeOnlineFreeHighQuality') },
+            { value: 'mock', label: t('settings.mockOfflineSilentPlaceholder') },
           ]}
         />
       </div>
       <div>
-        <Text style={{ color: tokens.labelPrimary }}>TTS voice</Text>
+        <Text style={{ color: tokens.labelPrimary }}>{t('settings.ttsVoice')}</Text>
         <Input
           style={{ marginTop: 4 }}
           value={voice.ttsVoice}
           onChange={(e) => setVoice({ ttsVoice: e.target.value })}
-          placeholder="e.g. en-US-AriaNeural, zh-CN-XiaoxiaoNeural"
+          placeholder={t('settings.eGEnUSAriaNeuralZhCNXiaoxiaoNeural')}
         />
         <Text style={{ color: tokens.labelTertiary, fontSize: 11 }}>
-          Common voices: en-US-AriaNeural, zh-CN-XiaoxiaoNeural,
-          ja-JP-NanamiNeural, de-DE-KatjaNeural
+          {t('settings.commonVoicesEnUSAriaNeuralZhCNXiaoxiaoNeuralJaJP')}
         </Text>
       </div>
       <div>
-        <Text style={{ color: tokens.labelPrimary }}>STT provider</Text>
+        <Text style={{ color: tokens.labelPrimary }}>{t('settings.sttProvider')}</Text>
         <Select
           style={{ width: '100%', marginTop: 4 }}
           value={voice.sttProvider}
           onChange={(v: SttProvider) => setVoice({ sttProvider: v })}
           options={[
-            { value: 'mock', label: 'Mock (offline, deterministic placeholder)' },
-            { value: 'whisper', label: 'Whisper (requires faster-whisper)' },
+            { value: 'mock', label: t('settings.mockOfflineDeterministicPlaceholder') },
+            { value: 'whisper', label: t('settings.whisperRequiresFasterWhisper') },
           ]}
         />
       </div>
       <div>
-        <Text style={{ color: tokens.labelPrimary }}>STT language</Text>
+        <Text style={{ color: tokens.labelPrimary }}>{t('settings.sttLanguage')}</Text>
         <Input
           style={{ marginTop: 4 }}
           value={voice.sttLanguage}
           onChange={(e) => setVoice({ sttLanguage: e.target.value })}
-          placeholder="e.g. en, zh, ja"
+          placeholder={t('settings.eGEnZhJa')}
         />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text style={{ color: tokens.labelPrimary }}>Auto-play response audio</Text>
+        <Text style={{ color: tokens.labelPrimary }}>{t('settings.autoPlayResponseAudio')}</Text>
         <Switch
           checked={voice.autoPlay}
           onChange={(checked) => setVoice({ autoPlay: checked })}
@@ -202,6 +204,7 @@ const VoicePanel: React.FC = () => {
 // ---------------------------------------------------------------------------
 
 const McpPanel: React.FC = () => {
+  const t = useT();
   const tokens = useThemeTokens();
   const mcp = useSettingsStore((s) => s.mcp);
   const setMcp = useSettingsStore((s) => s.setMcp);
@@ -215,9 +218,8 @@ const McpPanel: React.FC = () => {
   return (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
       <Text style={{ color: tokens.labelSecondary }}>
-        Kairos can attach any MCP-compatible server. Built-in
-        filesystem is enabled by default; add a custom one via
-        <code> .kairos/mcp.yaml</code>.
+        {t('settings.kairosCanAttachAnyMCPCompatibleServerBuiltInFile')}
+        <code> {t('settings.kairosMcpYaml')}</code>.
       </Text>
       <div>
         {KNOWN_SERVERS.map((s) => {
@@ -254,7 +256,7 @@ const McpPanel: React.FC = () => {
       </div>
       <Divider style={{ margin: '8px 0' }} />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text style={{ color: tokens.labelPrimary }}>Ask before invoking MCP tools</Text>
+        <Text style={{ color: tokens.labelPrimary }}>{t('settings.askBeforeInvokingMCPTools')}</Text>
         <Switch
           checked={mcp.permissionPrompt}
           onChange={(checked) => setMcp({ permissionPrompt: checked })}
@@ -269,6 +271,7 @@ const McpPanel: React.FC = () => {
 // ---------------------------------------------------------------------------
 
 const CloudPanel: React.FC = () => {
+  const t = useT();
   const tokens = useThemeTokens();
   const cloud = useSettingsStore((s) => s.cloud);
   const setCloud = useSettingsStore((s) => s.setCloud);
@@ -276,12 +279,10 @@ const CloudPanel: React.FC = () => {
   return (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
       <Text style={{ color: tokens.labelSecondary }}>
-        S3-compatible object storage. Works with AWS S3, MinIO,
-        Cloudflare R2, Backblaze B2, Wasabi, etc. Credentials are
-        read from the server environment, not stored here.
+        {t('settings.s3CompatibleObjectStorageWorksWithAWSS3MinIOClou')}
       </Text>
       <div>
-        <Text style={{ color: tokens.labelPrimary }}>Default bucket</Text>
+        <Text style={{ color: tokens.labelPrimary }}>{t('settings.defaultBucket')}</Text>
         <Input
           style={{ marginTop: 4 }}
           value={cloud.s3Bucket}
@@ -290,7 +291,7 @@ const CloudPanel: React.FC = () => {
         />
       </div>
       <div>
-        <Text style={{ color: tokens.labelPrimary }}>Region</Text>
+        <Text style={{ color: tokens.labelPrimary }}>{t('settings.region')}</Text>
         <Input
           style={{ marginTop: 4 }}
           value={cloud.s3Region}
@@ -299,27 +300,27 @@ const CloudPanel: React.FC = () => {
         />
       </div>
       <div>
-        <Text style={{ color: tokens.labelPrimary }}>Custom endpoint (optional)</Text>
+        <Text style={{ color: tokens.labelPrimary }}>{t('settings.customEndpointOptional')}</Text>
         <Input
           style={{ marginTop: 4 }}
           value={cloud.s3Endpoint}
           onChange={(e) => setCloud({ s3Endpoint: e.target.value })}
-          placeholder="http://minio.local:9000"
+          placeholder={t('settings.httpMinioLocal9000')}
         />
         <Text style={{ color: tokens.labelTertiary, fontSize: 11 }}>
-          Leave empty for AWS; set to your MinIO/R2/B2 URL otherwise.
+          {t('settings.leaveEmptyForAWSSetToYourMinIOR2B2URLOtherwise')}
         </Text>
       </div>
       <div>
-        <Text style={{ color: tokens.labelPrimary }}>Addressing style</Text>
+        <Text style={{ color: tokens.labelPrimary }}>{t('settings.addressingStyle')}</Text>
         <Select
           style={{ width: '100%', marginTop: 4 }}
           value={cloud.addressingStyle}
           onChange={(v) => setCloud({ addressingStyle: v })}
           options={[
-            { value: 'auto', label: 'Auto (recommended)' },
-            { value: 'virtual', label: 'Virtual-hosted (AWS default)' },
-            { value: 'path', label: 'Path-style (MinIO etc.)' },
+            { value: 'auto', label: t('settings.autoRecommended') },
+            { value: 'virtual', label: t('settings.virtualHostedAWSDefault') },
+            { value: 'path', label: t('settings.pathStyleMinIOEtc') },
           ]}
         />
       </div>
@@ -332,6 +333,7 @@ const CloudPanel: React.FC = () => {
 // ---------------------------------------------------------------------------
 
 const MetricsPanel: React.FC = () => {
+  const t = useT();
   const tokens = useThemeTokens();
   const metrics = useSettingsStore((s) => s.metrics);
   const setMetrics = useSettingsStore((s) => s.setMetrics);
@@ -339,12 +341,11 @@ const MetricsPanel: React.FC = () => {
   return (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
       <Text style={{ color: tokens.labelSecondary }}>
-        Kairos exposes a Prometheus-compatible <code>/metrics</code>
-        endpoint for monitoring request count, latency, agent
-        invocations, and loop outcomes.
+        {t('settings.kairosExposesAPrometheusCompatible')} <code>{t('settings.metrics')}</code>
+        {t('settings.endpointForMonitoringRequestCountLatencyAgentInv')}
       </Text>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text style={{ color: tokens.labelPrimary }}>Show counter in footer</Text>
+        <Text style={{ color: tokens.labelPrimary }}>{t('settings.showCounterInFooter')}</Text>
         <Switch
           checked={metrics.showInFooter}
           onChange={(checked) => setMetrics({ showInFooter: checked })}
@@ -354,7 +355,7 @@ const MetricsPanel: React.FC = () => {
         type="default"
         onClick={() => window.open('/metrics', '_blank')}
       >
-        Open /metrics
+        {t('settings.openMetrics')}
       </Button>
     </Space>
   );
@@ -362,15 +363,16 @@ const MetricsPanel: React.FC = () => {
 
 
 // ---------------------------------------------------------------------------
-// Provider panel (Round 37 — focused on OpenAI and Anthropic custom URLs)
+// {t('settings.provider')} panel (Round 37 — focused on OpenAI and Anthropic custom URLs)
 // ---------------------------------------------------------------------------
 
 const ProviderPanel: React.FC = () => {
+  const t = useT();
   const tokens = useThemeTokens();
   const provider = useSettingsStore((s) => s.provider);
   const setProvider = useSettingsStore((s) => s.setProvider);
 
-  // R38.6: explicit Save button (the user asked for it). The
+  // R38.6: explicit {t('settings.save')} button (the user asked for it). The
   // previous design auto-saved on every keystroke with a 400ms
   // debounce — which is unreliable (the user could close the
   // drawer before the timer fired, losing the change). Now the
@@ -416,10 +418,10 @@ const ProviderPanel: React.FC = () => {
                       { voice, mcp, cloud, metrics, provider });
       setSavedSnapshot(JSON.stringify(provider));
       setLastSaved(Date.now());
-      msgApi.success('LLM settings saved');
+      msgApi.success(t('settings.llmSettingsSaved'));
     } catch (e: any) {
       const detail = formatError(e, 'request failed');
-      msgApi.error(`Save failed: ${detail}`);
+      msgApi.error(`{t('settings.saveFailed')} ${detail}`);
     } finally {
       setSaving(false);
     }
@@ -434,14 +436,10 @@ const ProviderPanel: React.FC = () => {
   return (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
       <Text style={{ color: tokens.labelSecondary }}>
-        Pick the LLM the Coder and Reviewer agents use. Both providers
-        accept a custom base URL so you can point Kairos at OpenAI,
-        Anthropic, or any compatible proxy (Azure, Together, vLLM,
-        LiteLLM, etc.). Click <strong>Test connection</strong> to
-        verify your key + URL, then <strong>Save</strong> to persist.
+        {t('settings.pickTheLLMTheCoderAndReviewerAgentsUseBothProvid')} <strong>{t('settings.testConnection')}</strong> {t('settings.toVerifyYourKeyURLThen')} <strong>{t('settings.save')}</strong> {t('settings.toPersist')}
       </Text>
       <div>
-        <Text style={{ color: tokens.labelPrimary }}>Active provider</Text>
+        <Text style={{ color: tokens.labelPrimary }}>{t('settings.activeProvider')}</Text>
         <Select
           style={{ width: '100%', marginTop: 4 }}
           value={provider.active}
@@ -465,9 +463,7 @@ const ProviderPanel: React.FC = () => {
       )}
       <div style={{ fontSize: 11, color: tokens.labelTertiary,
                     borderTop: `1px solid ${tokens.border}`, paddingTop: 8 }}>
-        Keys are stored in the frontend only (localStorage via
-        zustand persist). The backend never sees them unless you
-        click <em>Test connection</em>.
+        {t('settings.keysAreStoredInTheFrontendOnlyLocalStorageViaZus')} <em>{t('settings.testConnection')}</em>.
       </div>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
@@ -489,12 +485,12 @@ const ProviderPanel: React.FC = () => {
             onClick={reset}
             disabled={saving}
           >
-            Discard changes
+            {t('settings.discardChanges')}
           </Button>
         )}
         {!isDirty && lastSaved && (
           <span style={{ fontSize: 11, color: tokens.labelTertiary }}>
-            Last saved {agoLabel(Date.now() - lastSaved)}
+            {t('settings.lastSaved')} {agoLabel(Date.now() - lastSaved)}
           </span>
         )}
       </div>
@@ -516,6 +512,7 @@ const OpenAICompatForm: React.FC<{
     model: string;
   }>) => void;
 }> = ({ value, onChange }) => {
+  const t = useT();
   const tokens = useThemeTokens();
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<null | { ok: boolean; detail: string }>(null);
@@ -536,7 +533,7 @@ const OpenAICompatForm: React.FC<{
   const test = async () => {
     if (!value.endpointUrl.trim() || !value.apiKey.trim()) {
       setTestResult({ ok: false,
-        detail: 'Endpoint URL and API key are both required.' });
+        detail: t('settings.endpointAndKeyRequired') });
       return;
     }
     setTesting(true);
@@ -588,7 +585,7 @@ const OpenAICompatForm: React.FC<{
     }
   };
 
-  // R38.6 §28.2: dynamic model list. The Model Select is
+  // R38.6 §28.2: dynamic model list. The {t('settings.model')} Select is
   // populated from a live API call (`POST /api/config/models/
   // custom/fetch`) — the user picks a preset (or types a
   // custom URL), then clicks "拉取 model 列表" to get the
@@ -650,11 +647,11 @@ const OpenAICompatForm: React.FC<{
 
   const fetchModels = useCallback(async () => {
     if (!fetchBaseUrl) {
-      setModelFetchError('请先填写 endpoint URL');
+      setModelFetchError(t('settings.needEndpointUrl'));
       return;
     }
     if (!value.apiKey.trim()) {
-      setModelFetchError('请先填写 API key');
+      setModelFetchError(t('settings.needApiKey'));
       return;
     }
     setFetchingModels(true);
@@ -739,7 +736,7 @@ const OpenAICompatForm: React.FC<{
 
   return (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
-      {/* R38.6 §28: Provider Preset dropdown. One click fills
+      {/* R38.6 §28: {t('settings.providerPreset')} dropdown. One click fills
           the endpoint URL and default model for DeepSeek / Qwen
           / GLM / Moonshot / Ollama / OpenRouter / OpenAI. The
           user can still override either field manually after.
@@ -753,7 +750,7 @@ const OpenAICompatForm: React.FC<{
       <div>
         <Text style={{ color: tokens.labelPrimary,
                         display: 'block', marginBottom: 6 }}>
-          Provider Preset
+          {t('settings.providerPreset')}
         </Text>
         <Select
           data-testid="llm-preset-select"
@@ -769,7 +766,7 @@ const OpenAICompatForm: React.FC<{
             // directly below the closed box (so the user
             // sees it without opening the dropdown), and
             // (2) in the dropdown row (via optionRender).
-            label: p.label,
+            label: t(p.label),
           }))}
           // R38.6 §28.3: explicit `labelRender` to GUARANTEE
           // the closed box shows just the string. AntD 5.22
@@ -787,12 +784,12 @@ const OpenAICompatForm: React.FC<{
             if (!p) return option.label;
             return (
               <div style={{ padding: '2px 0' }}>
-                <div style={{ fontWeight: 500 }}>{p.label}</div>
+                <div style={{ fontWeight: 500 }}>{t(p.label)}</div>
                 {p.hint && (
                   <div style={{ fontSize: 11,
                                  color: tokens.labelTertiary,
                                  marginTop: 2 }}>
-                    {p.hint}
+                    {t(p.hint)}
                   </div>
                 )}
               </div>
@@ -807,7 +804,7 @@ const OpenAICompatForm: React.FC<{
         {preset.hint && presetId !== 'custom' && (
           <div style={{ marginTop: 4, fontSize: 11,
                          color: tokens.labelTertiary }}>
-            {preset.hint}
+            {t(preset.hint)}
           </div>
         )}
         {(() => {
@@ -819,15 +816,15 @@ const OpenAICompatForm: React.FC<{
                            color: tokens.labelTertiary }}>
               {p.signupUrl && (
                 <a href={p.signupUrl} target="_blank" rel="noreferrer"
-                   style={{ marginRight: 8 }}>Get API key →</a>
+                   style={{ marginInlineEnd: 8 }}>{t('settings.getAPIKey')}</a>
               )}
-              <a href={p.docsUrl} target="_blank" rel="noreferrer">Docs →</a>
+              <a href={p.docsUrl} target="_blank" rel="noreferrer">{t('settings.docs')}</a>
             </div>
           );
         })()}
       </div>
       <div>
-        <Text style={{ color: tokens.labelPrimary }}>Endpoint URL</Text>
+        <Text style={{ color: tokens.labelPrimary }}>{t('settings.endpointURL')}</Text>
         <Input
           style={{ marginTop: 4 }}
           value={value.endpointUrl}
@@ -841,28 +838,25 @@ const OpenAICompatForm: React.FC<{
               baseUrl: deriveBaseUrl(e.target.value),
             });
           }}
-          placeholder="https://api.openai.com/v1/chat/completions"
+          placeholder={t('settings.httpsApiOpenaiComV1ChatCompletions')}
         />
         <Text style={{ color: tokens.labelTertiary, fontSize: 11 }}>
-          Full URL of the chat-completions endpoint. The test probe
-          hits this URL as-is. The base URL (used by the orchestrator
-          for real chat calls) is auto-derived from this — you only
-          need to set the endpoint URL once.
+          {t('settings.fullURLOfTheChatCompletionsEndpointTheTestProbeH')}
         </Text>
       </div>
       <div>
-        <Text style={{ color: tokens.labelPrimary }}>API key</Text>
+        <Text style={{ color: tokens.labelPrimary }}>{t('settings.apiKey')}</Text>
         <Input.Password
           style={{ marginTop: 4 }}
           value={value.apiKey}
           onChange={(e) => onChange({ apiKey: e.target.value })}
-          placeholder="sk-…"
+          placeholder={t('settings.sk')}
         />
       </div>
       <div>
         <div style={{ display: 'flex', alignItems: 'center',
                       justifyContent: 'space-between', marginBottom: 6 }}>
-          <Text style={{ color: tokens.labelPrimary }}>Model</Text>
+          <Text style={{ color: tokens.labelPrimary }}>{t('settings.model')}</Text>
           <Button
             size="small"
             type="link"
@@ -917,7 +911,7 @@ const OpenAICompatForm: React.FC<{
             style={{ marginTop: 6 }}
             value={value.model}
             onChange={(e) => onChange({ model: e.target.value })}
-            placeholder="type a model not in the list (e.g. my-fine-tune-7b)"
+            placeholder={t('settings.typeAModelNotInTheListEGMyFineTune7b')}
           />
         )}
         {modelFetchError && (
@@ -925,23 +919,20 @@ const OpenAICompatForm: React.FC<{
             type="warning"
             showIcon
             style={{ marginTop: 6 }}
-            message="拉取 model 列表失败"
+            message={t('settings.model')}
             description={modelFetchError}
           />
         )}
         {!modelFetchError && lastFetchedKey && (
           <Text style={{ color: tokens.labelTertiary, fontSize: 11,
                           display: 'block', marginTop: 4 }}>
-            已从 {fetchBaseUrl} 拉取 {fetchedModels.length} 个 model。
-            切换 provider 或修改 endpoint URL 后请重新拉取。
+            {t('settings.label')} {fetchBaseUrl} {t('settings.label')} {fetchedModels.length} {t('settings.modelProviderEndpointURL')}
           </Text>
         )}
         {!modelFetchError && !lastFetchedKey && (
           <Text style={{ color: tokens.labelTertiary, fontSize: 11,
                           display: 'block', marginTop: 4 }}>
-            填写 endpoint URL 和 API key 后，点上方「拉取 model 列表」
-            从 provider 实时获取 model。也可以在搜索框直接输入 model 名
-            后按回车（或选 "Custom"）使用未列出的 model。
+            {t('settings.endpointURLAPIKeyModelProviderModelModelCustomMo')}
           </Text>
         )}
       </div>
@@ -952,13 +943,13 @@ const OpenAICompatForm: React.FC<{
           loading={testing}
           disabled={testing}
         >
-          Test connection
+          {t('settings.testConnection')}
         </Button>
         {testResult && (
           testResult.ok ? (
             <Tag color="green" data-testid="openai-test-result"
                  style={{ maxWidth: '100%', wordBreak: 'break-word' }}>
-              OK · {testResult.detail}
+              {t('settings.ok')} {testResult.detail}
             </Tag>
           ) : (
             // R38.6: render errors as a multi-line Alert so the user
@@ -968,7 +959,7 @@ const OpenAICompatForm: React.FC<{
             <Alert
               type="error"
               data-testid="openai-test-result"
-              message="Test connection failed"
+              message={t('settings.testConnectionFailed')}
               description={testResult.detail}
               style={{ flex: 1, minWidth: 0 }}
               showIcon
@@ -994,6 +985,7 @@ const AnthropicCompatForm: React.FC<{
     model: string;
   }>) => void;
 }> = ({ value, onChange }) => {
+  const t = useT();
   const tokens = useThemeTokens();
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<null | { ok: boolean; detail: string }>(null);
@@ -1044,7 +1036,7 @@ const AnthropicCompatForm: React.FC<{
   return (
     <Space direction="vertical" size={10} style={{ width: '100%' }}>
       <div>
-        <Text style={{ color: tokens.labelPrimary }}>Endpoint URL</Text>
+        <Text style={{ color: tokens.labelPrimary }}>{t('settings.endpointURL')}</Text>
         <Input
           style={{ marginTop: 4 }}
           value={value.endpointUrl}
@@ -1057,30 +1049,28 @@ const AnthropicCompatForm: React.FC<{
               baseUrl: deriveBaseUrl(e.target.value),
             });
           }}
-          placeholder="https://api.anthropic.com/v1/messages"
+          placeholder={t('settings.httpsApiAnthropicComV1Messages')}
         />
         <Text style={{ color: tokens.labelTertiary, fontSize: 11 }}>
-          Full URL of the Anthropic messages endpoint. The probe
-          hits this URL as-is. The base URL is auto-derived — you
-          only need to set the endpoint URL once.
+          {t('settings.fullURLOfTheAnthropicMessagesEndpointTheProbeHit')}
         </Text>
       </div>
       <div>
-        <Text style={{ color: tokens.labelPrimary }}>API key</Text>
+        <Text style={{ color: tokens.labelPrimary }}>{t('settings.apiKey')}</Text>
         <Input.Password
           style={{ marginTop: 4 }}
           value={value.apiKey}
           onChange={(e) => onChange({ apiKey: e.target.value })}
-          placeholder="sk-ant-…"
+          placeholder={t('settings.skAnt')}
         />
       </div>
       <div>
-        <Text style={{ color: tokens.labelPrimary }}>Model</Text>
+        <Text style={{ color: tokens.labelPrimary }}>{t('settings.model2')}</Text>
         <Input
           style={{ marginTop: 4 }}
           value={value.model}
           onChange={(e) => onChange({ model: e.target.value })}
-          placeholder="claude-3-5-sonnet-latest, claude-3-opus-…"
+          placeholder={t('settings.claude35SonnetLatestClaude3Opus')}
         />
       </div>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
@@ -1090,13 +1080,13 @@ const AnthropicCompatForm: React.FC<{
           loading={testing}
           disabled={testing}
         >
-          Test connection
+          {t('settings.testConnection')}
         </Button>
         {testResult && (
           testResult.ok ? (
             <Tag color="green" data-testid="anthropic-test-result"
                  style={{ maxWidth: '100%', wordBreak: 'break-word' }}>
-              OK · {testResult.detail}
+              {t('settings.ok')} {testResult.detail}
             </Tag>
           ) : (
             // R38.6: render errors as a multi-line Alert so the user
@@ -1104,7 +1094,7 @@ const AnthropicCompatForm: React.FC<{
             <Alert
               type="error"
               data-testid="anthropic-test-result"
-              message="Test connection failed"
+              message={t('settings.testConnectionFailed')}
               description={testResult.detail}
               style={{ flex: 1, minWidth: 0 }}
               showIcon
@@ -1121,6 +1111,7 @@ const AnthropicCompatForm: React.FC<{
 // ---------------------------------------------------------------------------
 
 const SkillsPanel: React.FC<{ projectId: string | null }> = ({ projectId }) => {
+  const t = useT();
   const tokens = useThemeTokens();
   const [busy, setBusy] = useState(false);
   const [skills, setSkills] = useState<string[]>([]);
@@ -1157,10 +1148,8 @@ const SkillsPanel: React.FC<{ projectId: string | null }> = ({ projectId }) => {
   return (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
       <Text style={{ color: tokens.labelSecondary }}>
-        Skills are reusable instruction snippets discovered from
-        <code> .kairos/skills/</code> in your project. The
-        SkillsWatcher polls every second and reloads on change —
-        use this button to force an immediate refresh.
+        {t('settings.skillsAreReusableInstructionSnippetsDiscoveredFr')}
+        <code> {t('settings.kairosSkills')}</code> {t('settings.inYourProjectTheSkillsWatcherPollsEverySecondAnd')}
       </Text>
       <Space>
         <Button
@@ -1169,10 +1158,10 @@ const SkillsPanel: React.FC<{ projectId: string | null }> = ({ projectId }) => {
           onClick={refresh}
           disabled={!projectId}
         >
-          Reload now
+          {t('settings.reloadNow')}
         </Button>
         {count !== null && (
-          <Tag color="blue">{count} skill{count === 1 ? '' : 's'}</Tag>
+          <Tag color="blue">{count} {t('settings.skillUnit')}{count === 1 ? '' : 's'}</Tag>
         )}
       </Space>
       {err && <Text type="danger" style={{ fontSize: 12 }}>{err}</Text>}
@@ -1197,7 +1186,7 @@ const SkillsPanel: React.FC<{ projectId: string | null }> = ({ projectId }) => {
                 fontFamily: 'ui-monospace, SFMono-Regular, monospace',
               }}
             >
-              <ThunderboltOutlined style={{ marginRight: 6, color: tokens.brand }} />
+              <ThunderboltOutlined style={{ marginInlineEnd: 6, color: tokens.brand }} />
               {name}
             </div>
           ))}
@@ -1208,13 +1197,14 @@ const SkillsPanel: React.FC<{ projectId: string | null }> = ({ projectId }) => {
 };
 
 // ---------------------------------------------------------------------------
-// Section: About
+// Section: {t('settings.about')}
 // ---------------------------------------------------------------------------
 
 const AboutPanel: React.FC = () => {
+  const t = useT();
   const tokens = useThemeTokens();
   // Show the model the Coder is ACTUALLY running. This panel used to render a
-  // hardcoded literal ("Model: MiniMax M3") that had nothing to do with the
+  // hardcoded literal ("拉取 MiniMax M3") that had nothing to do with the
   // configured provider — misleading, and it ignored role_mappings.
   const [model, setModel] = useState('');
   useEffect(() => {
@@ -1246,16 +1236,15 @@ const AboutPanel: React.FC = () => {
                     objectFit: 'cover' }}
         />
         <Title level={4} style={{ color: tokens.labelPrimary, margin: 0 }}>
-          Kairos Code
+          {t('settings.kairosCode')}
         </Title>
       </Space>
       <Text style={{ color: tokens.labelSecondary }}>
-        Multi-agent collaboration platform. Coder &lt;-&gt; Reviewer loop,
-        MCP, agents.md / skills, manifest, sandbox, voice, cloud.
+        {t('settings.multiAgentCollaborationPlatformCoderLtGtReviewer')}
       </Text>
       {model ? (
         <Text style={{ color: tokens.labelTertiary, fontSize: 12 }}>
-          Model: {model}
+          {t('settings.model3')} {model}
         </Text>
       ) : null}
     </Space>
@@ -1268,6 +1257,8 @@ const AboutPanel: React.FC = () => {
 
 export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
   const tokens = useThemeTokens();
+  const { t, lang, setLang } = useI18n();
+  const { message: msgApi } = AntdApp.useApp();
   // Default must be one of the Tabs item keys below ('provider' | 'mode' |
   // 'about'). It used to be 'coder' — a leftover from the pre-R38.6.3 8-tab
   // layout — which matched no item, so Ant Design rendered NO panel at all and
@@ -1435,8 +1426,8 @@ export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
     <Drawer
       title={
         <span>
-          <SettingOutlined style={{ marginRight: 8 }} />
-          Settings
+          <SettingOutlined style={{ marginInlineEnd: 8 }} />
+          {t('settings.settings')}
         </span>
       }
       placement="right"
@@ -1458,22 +1449,52 @@ export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
         }}
       >
         {saveStatus?.state === 'saving' && (
-          <><Spin size="small" /> Saving…</>
+          <><Spin size="small" /> {t('settings.saving')}</>
         )}
         {saveStatus?.state === 'saved' && (
           <>
             <CheckCircleFilled style={{ color: tokens.success }} />
-            Saved · {agoLabel(Date.now() - saveStatus.at)}
+            {t('settings.saved')} {agoLabel(Date.now() - saveStatus.at)}
           </>
         )}
         {saveStatus?.state === 'error' && (
           <>
             <CloseCircleFilled style={{ color: tokens.danger }} />
             <span style={{ color: tokens.danger }}>
-              Save failed: {saveStatus.detail}
+              {t('settings.saveFailed')} {saveStatus.detail}
             </span>
           </>
         )}
+      </div>
+      {/* Language / 语言 — a chrome-level preference, so it sits above
+          the tabs and is reachable from every tab. Switching re-renders
+          the whole tree (AntD locale included) immediately. */}
+      <div
+        data-testid="settings-language-row"
+        style={{
+          padding: '10px 16px',
+          display: 'flex', alignItems: 'center', gap: 8,
+          borderBottom: `1px solid ${tokens.border}`,
+        }}
+      >
+        <GlobalOutlined style={{ color: tokens.labelSecondary }} />
+        <span style={{ fontSize: 13, color: tokens.labelSecondary }}>
+          {t('language.label')}
+        </span>
+        <Select
+          size="small"
+          showSearch
+          optionFilterProp="label"
+          value={lang}
+          onChange={(v) => {
+            setLang(v);
+            const picked = LANGS.find((l) => l.value === v);
+            msgApi.success(t('language.switched', { lang: picked?.label ?? v }));
+          }}
+          options={LANGS.map((l) => ({ value: l.value, label: l.label }))}
+          style={{ marginInlineStart: 'auto', width: 150 }}
+          data-testid="settings-language-select"
+        />
       </div>
       <Tabs
         activeKey={tab}
@@ -1489,17 +1510,17 @@ export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
           // and (rarely) reset / inspect.
           {
             key: 'provider',
-            label: <span><RobotOutlined /> Provider</span>,
+            label: <span><RobotOutlined /> {t('settings.provider')}</span>,
             children: <ProviderPanel />,
           },
           {
             key: 'mode',
-            label: <span><CodeOutlined /> Mode</span>,
+            label: <span><CodeOutlined /> {t('settings.mode')}</span>,
             children: <CoderModePanel />,
           },
           {
             key: 'about',
-            label: <span><InfoCircleOutlined /> About</span>,
+            label: <span><InfoCircleOutlined /> {t('settings.about')}</span>,
             children: <AboutPanel />,
           },
         ]}

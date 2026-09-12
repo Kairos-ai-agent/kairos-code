@@ -44,12 +44,14 @@ import {
   UpOutlined, ProjectOutlined, DeleteOutlined,
   AppstoreOutlined, ToolOutlined, SettingOutlined,
   SunOutlined, MoonOutlined,
+  HistoryOutlined, DashboardOutlined, BranchesOutlined, SyncOutlined,
 } from '@ant-design/icons';
 
 import { useChatStore } from '../stores/chatStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
+import { useT, type TFunc } from '../i18n';
 import api from '../api/client';
 import { formatError } from '../utils/formatError';
 import NewChatButton from './NewChatButton';
@@ -58,6 +60,7 @@ import type { LoopSession, Project } from '../types';
 const DEFAULT_PROJECT_LIMIT = 10;
 
 const ChatSidebar: React.FC = () => {
+  const t = useT();
   const tokens = useThemeTokens();
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId?: string }>();
@@ -106,7 +109,7 @@ const ChatSidebar: React.FC = () => {
     : sortedProjects.slice(0, DEFAULT_PROJECT_LIMIT);
   const hiddenCount = sortedProjects.length - visibleProjects.length;
 
-  const grouped = useMemo(() => groupByDate(sessions), [sessions]);
+  const grouped = useMemo(() => groupByDate(sessions, t), [sessions, t]);
 
   const selectSession = (sid: string) => {
     setCurrentSessionId(sid);
@@ -138,9 +141,9 @@ const ChatSidebar: React.FC = () => {
         setCurrentProject(next[0] || null);
         if (next[0]) navigate('/chat');
       }
-      msgApi.success(`Deleted "${p.name || p.id}"`);
+      msgApi.success(t('shell.sidebar.projectDeleted', { name: p.name || p.id }));
     } catch (e: any) {
-      const detail = e?.response?.data?.detail || 'Failed to delete project';
+      const detail = e?.response?.data?.detail || t('shell.sidebar.deleteFailed');
       msgApi.error(detail);
     }
   };
@@ -167,7 +170,7 @@ const ChatSidebar: React.FC = () => {
                 fontSize: 11, fontWeight: 600, color: tokens.labelTertiary,
                 letterSpacing: '0.04em', textTransform: 'uppercase',
               }}>
-                Projects
+                {t('common.projects')}
               </span>
               <span style={{
                 fontSize: 11, color: tokens.labelTertiary,
@@ -192,7 +195,7 @@ const ChatSidebar: React.FC = () => {
                 style={{ color: tokens.labelTertiary, fontSize: 12,
                           height: 28, marginTop: 2 }}
               >
-                Show all ({sortedProjects.length})
+                {t('shell.sidebar.showAll', { n: sortedProjects.length })}
               </Button>
             )}
             {projectsExpanded && sortedProjects.length > DEFAULT_PROJECT_LIMIT && (
@@ -203,7 +206,7 @@ const ChatSidebar: React.FC = () => {
                 style={{ color: tokens.labelTertiary, fontSize: 12,
                           height: 28, marginTop: 2 }}
               >
-                Show less
+                {t('shell.sidebar.showLess')}
               </Button>
             )}
           </div>
@@ -222,7 +225,7 @@ const ChatSidebar: React.FC = () => {
                 fontSize: 11, fontWeight: 600, color: tokens.labelTertiary,
                 letterSpacing: '0.04em', textTransform: 'uppercase',
               }}>
-                Sessions
+                {t('shell.sidebar.sessions')}
               </span>
               {sessions.length > 0 && (
                 <span style={{ fontSize: 11, color: tokens.labelTertiary }}>
@@ -243,7 +246,7 @@ const ChatSidebar: React.FC = () => {
                 styles={{ image: { height: 32 } }}
                 description={
                   <span style={{ color: tokens.labelTertiary, fontSize: 12 }}>
-                    No sessions yet — start a new loop below.
+                    {t('shell.sidebar.noSessions')}
                   </span>
                 }
                 style={{ marginTop: 12 }}
@@ -277,7 +280,7 @@ const ChatSidebar: React.FC = () => {
             styles={{ image: { height: 40 } }}
             description={
               <span style={{ color: tokens.labelTertiary, fontSize: 12 }}>
-                Add a folder from the top bar to start your first project.
+                {t('shell.sidebar.addFolderToStart')}
               </span>
             }
             style={{ marginTop: 32 }}
@@ -304,6 +307,7 @@ const ChatSidebar: React.FC = () => {
 // Exported so the vitest tests can mount it in isolation. Production
 // code uses it via ChatSidebar's render tree.
 export const SidebarFooter: React.FC = () => {
+  const t = useT();
   const tokens = useThemeTokens();
   const navigate = useNavigate();
   const mode = useThemeStore((s) => s.mode);
@@ -330,6 +334,31 @@ export const SidebarFooter: React.FC = () => {
     transition: 'background 0.12s, color 0.12s',
   } as const;
 
+  // R38.8: navigation collapsed to three primary views. Chat / Today /
+  // Tools / Loop / Trace / Projects / Dashboard still exist (and keep
+  // their routes) but live behind one "Advanced" toggle, so a new user
+  // is not asked to choose between eight peer destinations on day one.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  const navBtn = (
+    testId: string,
+    icon: React.ReactNode,
+    label: string,
+    onClick: () => void,
+  ) => (
+    <button
+      type="button"
+      data-testid={testId}
+      onClick={onClick}
+      style={baseBtn}
+      onMouseEnter={(e) => { e.currentTarget.style.background = tokens.bgLay1; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+
   return (
     <div
       data-testid="sidebar-footer"
@@ -342,63 +371,92 @@ export const SidebarFooter: React.FC = () => {
         gap: 4,
       }}
     >
+      {/* ----- Primary views: the three things a user actually does ----- */}
       <div style={{ display: 'flex', gap: 4 }}>
-        <Tooltip title="Today" placement="top">
-          <button
-            type="button"
-            data-testid="footer-today"
-            onClick={() => navigate('/today')}
-            style={baseBtn}
-            onMouseEnter={(e) => { e.currentTarget.style.background = tokens.bgLay1; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-          >
-            <AppstoreOutlined style={{ fontSize: 14 }} />
-            <span>Today</span>
-          </button>
+        <Tooltip title={t('nav.run')} placement="top">
+          {navBtn('footer-run', <ThunderboltOutlined style={{ fontSize: 14 }} />,
+                  t('nav.run'), () => navigate('/run'))}
         </Tooltip>
-        <Tooltip title="Tools" placement="top">
-          <button
-            type="button"
-            data-testid="footer-tools"
-            onClick={() => navigate('/tools')}
-            style={baseBtn}
-            onMouseEnter={(e) => { e.currentTarget.style.background = tokens.bgLay1; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-          >
-            <ToolOutlined style={{ fontSize: 14 }} />
-            <span>Tools</span>
-          </button>
+        <Tooltip title={t('nav.history')} placement="top">
+          {navBtn('footer-history', <HistoryOutlined style={{ fontSize: 14 }} />,
+                  t('nav.history'), () => navigate('/history'))}
+        </Tooltip>
+        <Tooltip title={t('shell.sidebar.settingsTooltip')} placement="top">
+          {navBtn('footer-settings', <SettingOutlined style={{ fontSize: 14 }} />,
+                  t('common.settings'), openSettings)}
         </Tooltip>
       </div>
+
+      {/* ----- Advanced: everything else, collapsed by default ----- */}
+      <Tooltip title={t('nav.advancedHint')} placement="top">
+        <button
+          type="button"
+          data-testid="footer-advanced"
+          aria-expanded={advancedOpen}
+          onClick={() => setAdvancedOpen((v) => !v)}
+          style={{ ...baseBtn, justifyContent: 'flex-start', paddingInlineStart: 10 }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = tokens.bgLay1; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+        >
+          {advancedOpen ? <UpOutlined style={{ fontSize: 12 }} />
+                        : <DownOutlined style={{ fontSize: 12 }} />}
+          <span style={{ marginInlineStart: 4 }}>{t('nav.advanced')}</span>
+        </button>
+      </Tooltip>
+      <div
+        data-testid="footer-advanced-group"
+        style={{
+          display: advancedOpen ? 'flex' : 'none',
+          flexDirection: 'column',
+          gap: 4,
+          paddingInlineStart: 6,
+        }}
+      >
+        <div style={{ display: 'flex', gap: 4 }}>
+          <Tooltip title={t('shell.sidebar.newChat')} placement="top">
+            {navBtn('footer-chat', <MessageOutlined style={{ fontSize: 14 }} />,
+                    t('shell.sidebar.newChat'), () => navigate('/chat'))}
+          </Tooltip>
+          <Tooltip title={t('shell.sidebar.today')} placement="top">
+            {navBtn('footer-today', <AppstoreOutlined style={{ fontSize: 14 }} />,
+                    t('shell.sidebar.today'), () => navigate('/today'))}
+          </Tooltip>
+          <Tooltip title={t('shell.sidebar.tools')} placement="top">
+            {navBtn('footer-tools', <ToolOutlined style={{ fontSize: 14 }} />,
+                    t('shell.sidebar.tools'), () => navigate('/tools'))}
+          </Tooltip>
+        </div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <Tooltip title={t('nav.loop')} placement="top">
+            {navBtn('footer-loop', <SyncOutlined style={{ fontSize: 14 }} />,
+                    t('nav.loop'), () => navigate('/loop'))}
+          </Tooltip>
+          <Tooltip title={t('nav.trace')} placement="top">
+            {navBtn('footer-trace', <BranchesOutlined style={{ fontSize: 14 }} />,
+                    t('nav.trace'), () => navigate('/trace'))}
+          </Tooltip>
+          <Tooltip title={t('nav.projects')} placement="top">
+            {navBtn('footer-projects', <ProjectOutlined style={{ fontSize: 14 }} />,
+                    t('nav.projects'), () => navigate('/projects'))}
+          </Tooltip>
+          <Tooltip title={t('nav.dashboard')} placement="top">
+            {navBtn('footer-dashboard', <DashboardOutlined style={{ fontSize: 14 }} />,
+                    t('nav.dashboard'), () => navigate('/dashboard'))}
+          </Tooltip>
+        </div>
+      </div>
+
+      {/* ----- Theme toggle stays visible: it is a preference, not a destination ----- */}
       <div style={{ display: 'flex', gap: 4 }}>
-        <Tooltip title="Settings (LLM, voice, MCP, ...)" placement="top">
-          <button
-            type="button"
-            data-testid="footer-settings"
-            onClick={openSettings}
-            style={baseBtn}
-            onMouseEnter={(e) => { e.currentTarget.style.background = tokens.bgLay1; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-          >
-            <SettingOutlined style={{ fontSize: 14 }} />
-            <span>Settings</span>
-          </button>
-        </Tooltip>
         <Tooltip
-          title={mode === 'dark' ? 'Switch to light' : 'Switch to dark'}
+          title={t(mode === 'dark' ? 'shell.sidebar.switchToLight' : 'shell.sidebar.switchToDark')}
           placement="top"
         >
-          <button
-            type="button"
-            data-testid="footer-theme"
-            onClick={toggle}
-            style={baseBtn}
-            onMouseEnter={(e) => { e.currentTarget.style.background = tokens.bgLay1; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-          >
-            {mode === 'dark' ? <SunOutlined style={{ fontSize: 14 }} /> : <MoonOutlined style={{ fontSize: 14 }} />}
-            <span>{mode === 'dark' ? 'Light' : 'Dark'}</span>
-          </button>
+          {navBtn('footer-theme',
+                  mode === 'dark' ? <SunOutlined style={{ fontSize: 14 }} />
+                                  : <MoonOutlined style={{ fontSize: 14 }} />,
+                  t(mode === 'dark' ? 'shell.sidebar.light' : 'shell.sidebar.dark'),
+                  toggle)}
         </Tooltip>
       </div>
     </div>
@@ -411,6 +469,7 @@ const ProjectRow: React.FC<{
   onClick: () => void;
   onDelete: () => void;
 }> = ({ project, active, onClick, onDelete }) => {
+  const t = useT();
   const tokens = useThemeTokens();
   const [hover, setHover] = useState(false);
   // stopPropagation so clicking the delete icon doesn't also
@@ -467,11 +526,11 @@ const ProjectRow: React.FC<{
             Uses Popconfirm so the user gets one extra click before
             the project is gone. */}
         <Popconfirm
-          title={`Delete "${project.name || project.id}"?`}
-          description="This removes the project and all its sessions."
-          okText="Delete"
+          title={t('shell.sidebar.deleteProjectTitle', { name: project.name || project.id })}
+          description={t('shell.sidebar.deleteProjectDescription')}
+          okText={t('common.delete')}
           okType="danger"
-          cancelText="Cancel"
+          cancelText={t('common.cancel')}
           onConfirm={(e) => { stop(e); onDelete(); }}
           onCancel={stop}
         >
@@ -481,7 +540,7 @@ const ProjectRow: React.FC<{
             icon={<DeleteOutlined />}
             onClick={stop}
             data-testid={`project-delete-${project.id}`}
-            aria-label={`Delete project ${project.name || project.id}`}
+            aria-label={t('shell.sidebar.deleteProjectAria', { name: project.name || project.id })}
             style={{
               color: tokens.labelTertiary,
               opacity: hover || active ? 1 : 0,
@@ -502,13 +561,18 @@ const SessionRow: React.FC<{
   active: boolean;
   onClick: () => void;
 }> = ({ session, active, onClick }) => {
+  const t = useT();
   const tokens = useThemeTokens();
   const title = useMemo(() => {
     if (!session.round_count) {
-      return session.running ? 'Starting…' : 'Empty session';
+      return session.running
+        ? t('shell.sidebar.sessionStarting')
+        : t('shell.sidebar.sessionEmpty');
     }
-    return `Loop · ${session.round_count} round${session.round_count === 1 ? '' : 's'}`;
-  }, [session]);
+    return session.round_count === 1
+      ? t('shell.sidebar.sessionLoopRound', { n: session.round_count })
+      : t('shell.sidebar.sessionLoopRounds', { n: session.round_count });
+  }, [session, t]);
 
   return (
     <div
@@ -553,7 +617,7 @@ const SessionRow: React.FC<{
             whiteSpace: 'nowrap', overflow: 'hidden',
             textOverflow: 'ellipsis',
           }}>
-            {`R${session.last_round} · score ${session.last_score}`}
+            {t('shell.sidebar.roundScore', { round: session.last_round, score: session.last_score })}
           </div>
         )}
       </div>
@@ -563,23 +627,34 @@ const SessionRow: React.FC<{
 
 interface Group { label: string; items: LoopSession[]; }
 
-function groupByDate(sessions: LoopSession[]): Group[] {
+/**
+ * Date buckets in display order. `id` is an internal, never-rendered
+ * key; `labelKey` is resolved through `t` so the group headers follow
+ * the UI language (buckets must not carry display text).
+ */
+const DATE_BUCKETS: { id: string; labelKey: string }[] = [
+  { id: 'today', labelKey: 'shell.sidebar.today' },
+  { id: 'yesterday', labelKey: 'shell.sidebar.groupYesterday' },
+  { id: 'last7', labelKey: 'shell.sidebar.groupPrevious7Days' },
+  { id: 'older', labelKey: 'shell.sidebar.groupOlder' },
+];
+
+function groupByDate(sessions: LoopSession[], t: TFunc): Group[] {
   const now = Date.now() / 1000;
   const oneDay = 24 * 3600;
   const buckets: Record<string, LoopSession[]> = {
-    'Today': [], 'Yesterday': [], 'Previous 7 days': [], 'Older': [],
+    today: [], yesterday: [], last7: [], older: [],
   };
   for (const s of sessions) {
     const age = now - (s.last_activity || s.started_at || 0);
-    if (age < oneDay) buckets['Today'].push(s);
-    else if (age < 2 * oneDay) buckets['Yesterday'].push(s);
-    else if (age < 7 * oneDay) buckets['Previous 7 days'].push(s);
-    else buckets['Older'].push(s);
+    if (age < oneDay) buckets.today.push(s);
+    else if (age < 2 * oneDay) buckets.yesterday.push(s);
+    else if (age < 7 * oneDay) buckets.last7.push(s);
+    else buckets.older.push(s);
   }
-  const order = ['Today', 'Yesterday', 'Previous 7 days', 'Older'];
-  return order
-    .filter((k) => buckets[k].length > 0)
-    .map((k) => ({ label: k, items: buckets[k] }));
+  return DATE_BUCKETS
+    .filter((b) => buckets[b.id].length > 0)
+    .map((b) => ({ label: t(b.labelKey), items: buckets[b.id] }));
 }
 
 export default ChatSidebar;

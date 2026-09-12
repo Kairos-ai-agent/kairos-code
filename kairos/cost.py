@@ -103,6 +103,49 @@ def total_cost() -> float:
         return sum(e.cost_usd for e in _BUFFER)
 
 
+def record_entry(
+    model: str,
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+    cost_usd: float = 0.0,
+    *,
+    provider: str = "unknown",
+    duration_ms: int = 0,
+    call_id: str = "",
+) -> CostEntry:
+    """Record one LLM call in the ledger (buffer + JSONL).
+
+    The litellm path had a callback; providers that do not go through litellm
+    (local models, the scripted provider used by ``kairos demo``) had no way to
+    appear in the cost dashboard at all, so their calls were invisible. This is
+    that entry point: pass the real numbers when you have them, or 0.0 when the
+    call genuinely costs nothing (e.g. a local model).
+    """
+    entry = CostEntry(
+        timestamp=time.time(),
+        model=str(model),
+        provider=str(provider),
+        prompt_tokens=int(prompt_tokens or 0),
+        completion_tokens=int(completion_tokens or 0),
+        cost_usd=float(cost_usd or 0.0),
+        duration_ms=int(duration_ms or 0),
+        call_id=str(call_id or ""),
+    )
+    with _LOCK:
+        _BUFFER.append(entry)
+    try:
+        path = _get_log_path()
+        if path is not None:
+            global _LOG_FH
+            if _LOG_FH is None:
+                _LOG_FH = open(path, "a", encoding="utf-8")
+            _LOG_FH.write(json.dumps(asdict(entry)) + "\n")
+            _LOG_FH.flush()
+    except Exception as exc:  # never break a call because the ledger failed
+        logger.debug("cost log write failed: %s", exc)
+    return entry
+
+
 def litellm_cost_callback(
     kwargs: Dict[str, Any],
     completion_response: Any,

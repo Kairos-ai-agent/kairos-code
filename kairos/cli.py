@@ -24,6 +24,12 @@ Designed to be CI-friendly:
     kairos exec --persist "Refactor ..."    # leave the project around
                                              # so you can inspect it
 
+    kairos gate report --project my-app --out gate.html
+        # the receipt for a loop: rounds, scores, verdicts, cost
+
+    kairos demo
+        # watch the gate work end-to-end — no API key, no network
+
 This module deliberately uses only the standard library (argparse
 + asyncio) so the CLI works in any environment where the package
 is installed. The agent core (Orchestrator, MessageBus) is reused
@@ -125,6 +131,75 @@ def build_parser() -> argparse.ArgumentParser:
         help="Skip removing the work_dir on success. (Always kept on "
              "failure so you can inspect what went wrong.)",
     )
+
+    # ---- gate (Gate Report: the receipt for a loop) ---------------------
+    p_gate = sub.add_parser(
+        "gate",
+        help="Gate Report — who reviewed, what it scored, how many rounds "
+             "were rejected, what it cost.",
+    )
+    gate_sub = p_gate.add_subparsers(dest="gate_command")
+    p_gate_report = gate_sub.add_parser(
+        "report", help="Generate a Gate Report for one project.",
+    )
+    p_gate_report.add_argument(
+        "--project", required=True, help="Project id, id prefix or name.",
+    )
+    p_gate_report.add_argument(
+        "--out", default="gate-report",
+        help="Output path (extension optional; default gate-report.html).",
+    )
+    p_gate_report.add_argument(
+        "--format", choices=["html", "md", "json"], default="html",
+        help="html = one self-contained file (default); md = paste into a "
+             "PR; json = stable keys for CI.",
+    )
+    p_gate_report.add_argument(
+        "--lang", choices=["en", "zh"], default="en",
+        help="Report language (the HTML also carries an in-place toggle).",
+    )
+    p_gate_report.add_argument(
+        "--session", default=None, help="Restrict to one loop session.",
+    )
+    p_gate_report.add_argument(
+        "--db", default=None,
+        help="SQLite path (default: the app's data dir).",
+    )
+    p_gate_report.add_argument("--quiet", action="store_true")
+
+    # ---- demo (see the gate with no API key) ----------------------------
+    p_demo = sub.add_parser(
+        "demo",
+        help="Run the review gate end-to-end with a scripted model — no API "
+             "key, no network, about a minute.",
+    )
+    p_demo.add_argument(
+        "--out", default=None,
+        help="Where to build the demo workspace (default: a temp dir that is "
+             "cleaned up; the Gate Report is copied to the current directory).",
+    )
+    p_demo.add_argument(
+        "--keep", action="store_true",
+        help="Keep the temporary workspace (default: cleaned up).",
+    )
+    p_demo.add_argument(
+        "--open", action="store_true", dest="open_report",
+        help="Open the Gate Report in the browser when done.",
+    )
+    p_demo.add_argument(
+        "--format", choices=["html", "md", "json"], default="html",
+        help="Gate Report format (default: html).",
+    )
+    p_demo.add_argument("--lang", choices=["en", "zh"], default="en")
+    p_demo.add_argument(
+        "--timeout", type=float, default=90.0,
+        help="Wall-clock cap for the loop (default: 90s).",
+    )
+    p_demo.add_argument(
+        "--json", action="store_true", dest="json_output",
+        help="Emit a single JSON document on stdout.",
+    )
+    p_demo.add_argument("--quiet", "-q", action="store_true")
 
     return parser
 
@@ -344,7 +419,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if argv is None:
         argv = sys.argv[1:]
     # No-arg call → serve (legacy default)
-    if not argv or argv[0] not in ("serve", "exec", "-h", "--help"):
+    if not argv or argv[0] not in ("serve", "exec", "gate", "demo", "-h", "--help"):
         # Bare command (or unknown) → legacy server mode
         return _serve_legacy()
 
@@ -366,7 +441,48 @@ def main(argv: Optional[List[str]] = None) -> int:
         except KeyboardInterrupt:
             print("\n[kairos] interrupted", file=sys.stderr)
             return 130  # POSIX SIGINT
+    if args.command == "gate":
+        return _run_gate(args)
+    if args.command == "demo":
+        return _run_demo(args)
     return EXIT_BAD_INPUT
+
+
+def _run_demo(args: argparse.Namespace) -> int:
+    """Dispatch `kairos demo` to :mod:`kairos.demo`."""
+    from kairos import demo as demo_mod
+    return demo_mod.main([
+        "--lang", args.lang,
+        "--format", args.format,
+        "--timeout", str(args.timeout),
+        *(["--out", args.out] if args.out else []),
+        *(["--keep"] if args.keep else []),
+        *(["--open"] if args.open_report else []),
+        *(["--json"] if args.json_output else []),
+        *(["--quiet"] if args.quiet else []),
+    ])
+
+
+def _run_gate(args: argparse.Namespace) -> int:
+    """Dispatch ``kairos gate <subcommand>`` to :mod:`kairos.gate_report`.
+
+    The report module owns its own argument parser (so it also works as
+    ``python -m kairos.gate_report``); we translate the parsed namespace
+    into that parser's argv instead of duplicating the logic here.
+    """
+    from kairos import gate_report as gate_mod
+    if getattr(args, "gate_command", None) != "report":
+        gate_mod.build_parser().print_help()
+        return EXIT_BAD_INPUT
+    argv = ["report", "--project", args.project, "--out", args.out,
+            "--format", args.format, "--lang", args.lang]
+    if args.session:
+        argv += ["--session", args.session]
+    if args.db:
+        argv += ["--db", args.db]
+    if args.quiet:
+        argv += ["--quiet"]
+    return gate_mod.main(argv)
 
 
 def _serve_legacy(host: Optional[str] = None, port: Optional[int] = None) -> int:

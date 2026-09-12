@@ -20,6 +20,7 @@ import SkillSearchPalette from '../components/SkillSearchPalette';
 import api, { revertFile } from '../api/client';
 import { useAgentStore } from '../stores/agentStore';
 import { onWebSocketMessage, onWebSocketState } from '../api/client';
+import { useT } from '../i18n';
 import type { AgentState, Message } from '../types';
 
 const { Title, Text } = Typography;
@@ -104,11 +105,33 @@ const severityColor: Record<string, string> = {
   SUGGESTION: 'green',
 };
 
+/** Agent status values coming from the store → i18n keys. */
+const agentStatusKeys: Record<string, string> = {
+  idle: 'loop.agentStatus.idle',
+  thinking: 'loop.agentStatus.thinking',
+  acting: 'loop.agentStatus.acting',
+  error: 'loop.agentStatus.error',
+};
+
+// Project status arrives from the backend as a plain string; map the known
+// values so the tag is localised, and fall back to the raw value otherwise.
+const projectStatusKeys: Record<string, string> = {
+  active: 'loop.project.status.active',
+  idle: 'loop.project.status.idle',
+  running: 'loop.project.status.running',
+  done: 'loop.project.status.done',
+  completed: 'loop.project.status.completed',
+  failed: 'loop.project.status.failed',
+  paused: 'loop.project.status.paused',
+  archived: 'loop.project.status.archived',
+};
+
 const Loop: React.FC = () => {
   const agents = useAgentStore((s) => s.agents);
   const messages = useAgentStore((s) => s.messages);
   const setAgents = useAgentStore((s) => s.setAgents);
   const setMessages = useAgentStore((s) => s.setMessages);
+  const t = useT();
   const [projects, setProjects] = useState<any[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [requirement, setRequirement] = useState('');
@@ -191,9 +214,9 @@ const Loop: React.FC = () => {
       await api.post(`/projects/${selectedProject}/ask/answer`,
         { answer: askAnswer });
       setAskAnswer('');
-      message.success('Answer sent');
+      message.success(t('loop.ask.answerSent'));
     } catch (e: any) {
-      message.error(e?.message || 'answer failed');
+      message.error(e?.message || t('loop.ask.answerFailed'));
     }
   }, [selectedProject, askAnswer]);
 
@@ -201,16 +224,16 @@ const Loop: React.FC = () => {
   const revertOneFile = useCallback(async (sha: string, path: string) => {
     if (!selectedProject) return;
     Modal.confirm({
-      title: `Revert ${path}?`,
-      content: `This restores the file to its state at checkpoint ${sha.slice(0, 8)}. Other files are not touched.`,
-      okText: 'Revert file',
+      title: t('loop.revert.title', { path }),
+      content: t('loop.revert.content', { sha: sha.slice(0, 8) }),
+      okText: t('loop.revert.ok'),
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
           await revertFile(selectedProject, sha, path);
-          message.success(`Reverted ${path}`);
+          message.success(t('loop.revert.success', { path }));
         } catch (e: any) {
-          message.error(e?.message || 'revert failed');
+          message.error(e?.message || t('loop.revert.failed'));
         }
       },
     });
@@ -218,16 +241,16 @@ const Loop: React.FC = () => {
   const rollbackTo = useCallback(async (sha: string) => {
     if (!selectedProject) return;
     Modal.confirm({
-      title: 'Roll back to checkpoint?',
-      content: 'This overwrites uncommitted changes in the workspace.',
-      okText: 'Roll back',
+      title: t('loop.rollback.title'),
+      content: t('loop.rollback.content'),
+      okText: t('loop.rollback.ok'),
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
           await api.post(`/projects/${selectedProject}/checkpoint`, { sha });
-          message.success('Rolled back');
+          message.success(t('loop.rollback.success'));
         } catch (e: any) {
-          message.error(e?.message || 'rollback failed');
+          message.error(e?.message || t('loop.rollback.failed'));
         }
       },
     });
@@ -275,7 +298,7 @@ const Loop: React.FC = () => {
         const m = data.message;
         if (m?.topic === 'loop.precheck_failed') {
           setPrecheckHint({
-            summary: m.content || 'Pre-check failed',
+            summary: m.content || t('loop.precheck.failed'),
             fixes: [],
             ts: Date.now(),
           });
@@ -283,7 +306,7 @@ const Loop: React.FC = () => {
           let fixes: any[] = [];
           try { fixes = JSON.parse(m.content || '[]'); } catch { fixes = []; }
           setPrecheckHint({
-            summary: fixes.length + ' auto-detected fixable error(s)',
+            summary: t('loop.precheck.fixable', { n: fixes.length }),
             fixes,
             ts: Date.now(),
           });
@@ -316,15 +339,15 @@ const Loop: React.FC = () => {
 
   const handleStart = async () => {
     if (!selectedProject || !requirement.trim()) {
-      message.warning('Pick a project and enter a requirement');
+      message.warning(t('loop.start.needRequirement'));
       return;
     }
     setStarting(true);
     try {
       await api.post(`/projects/${selectedProject}/start`, { requirement });
-      message.success('Loop started');
+      message.success(t('loop.start.success'));
     } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Failed to start loop');
+      message.error(e?.response?.data?.detail || t('loop.start.failed'));
     } finally {
       setStarting(false);
     }
@@ -335,9 +358,9 @@ const Loop: React.FC = () => {
     setStopping(true);
     try {
       await api.post(`/projects/${selectedProject}/stop`);
-      message.success('Stop requested');
+      message.success(t('loop.stop.success'));
     } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Failed to stop');
+      message.error(e?.response?.data?.detail || t('loop.stop.failed'));
     } finally {
       setStopping(false);
     }
@@ -347,9 +370,9 @@ const Loop: React.FC = () => {
     if (!selectedProject) return;
     try {
       await api.post(`/projects/${selectedProject}/plan/approve`);
-      message.success('Plan approved — loop continues');
+      message.success(t('loop.plan.approved'));
     } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Failed to approve');
+      message.error(e?.response?.data?.detail || t('loop.plan.approveFailed'));
     }
   };
 
@@ -357,9 +380,9 @@ const Loop: React.FC = () => {
     if (!selectedProject) return;
     try {
       await api.post(`/projects/${selectedProject}/plan/reject`);
-      message.warning('Plan rejected — loop will stop');
+      message.warning(t('loop.plan.rejected'));
     } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Failed to reject');
+      message.error(e?.response?.data?.detail || t('loop.plan.rejectFailed'));
     }
   };
 
@@ -371,19 +394,21 @@ const Loop: React.FC = () => {
     <div style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
       <SkillSearchPalette />
       <Space style={{ marginBottom: 12 }}>
-        <Title level={3} style={{ margin: 0 }}>Loop Review</Title>
+        <Title level={3} style={{ margin: 0 }}>{t('loop.title')}</Title>
         <Tag color={loop?.running ? 'processing' : 'default'}>
-          {loop?.running ? `Round ${loop.round} running...` : (loop ? `Stopped @ R${loop.round}` : 'Idle')}
+          {loop?.running
+            ? t('loop.status.running', { n: loop.round })
+            : (loop ? t('loop.status.stoppedAt', { n: loop.round }) : t('loop.status.idle'))}
         </Tag>
         {loop && (
           <Tag color={loop.last_approve ? 'green' : 'orange'}>
             {loop.last_approve
-              ? 'no bugs'
-              : `${lastRound?.issues ?? lastIssues.length} bug(s)`}
+              ? t('loop.tags.noBugs')
+              : t('loop.tags.bugCount', { n: lastRound?.issues ?? lastIssues.length })}
           </Tag>
         )}
         {loop && loop.no_progress_count > 0 && (
-          <Tag color="red">no-progress {loop.no_progress_count}/{3}</Tag>
+          <Tag color="red">{t('loop.tags.noProgress', { n: loop.no_progress_count, max: 3 })}</Tag>
         )}
       </Space>
 
@@ -395,16 +420,16 @@ const Loop: React.FC = () => {
           title={
             <Space>
               <FileTextOutlined style={{ color: '#faad14' }} />
-              <Text strong>Coder's Plan — waiting for your approval</Text>
+              <Text strong>{t('loop.plan.title')}</Text>
             </Space>
           }
           extra={
             <Space>
               <Button danger icon={<CloseCircleOutlined />} onClick={handleRejectPlan}>
-                Reject
+                {t('loop.plan.reject')}
               </Button>
               <Button type="primary" icon={<CheckOutlined />} onClick={handleApprovePlan}>
-                Approve
+                {t('loop.plan.approve')}
               </Button>
             </Space>
           }
@@ -414,14 +439,14 @@ const Loop: React.FC = () => {
             margin: 0, fontSize: 12, whiteSpace: 'pre-wrap',
             fontFamily: 'monospace', color: '#d9d9d9',
           }}>
-            {plan.text || '(empty plan)'}
+            {plan.text || t('loop.plan.empty')}
           </pre>
         </Card>
       )}
 
       <Row gutter={12} style={{ marginBottom: 12 }}>
         <Col span={6}>
-          <Card title="Projects" size="small" bodyStyle={{ padding: 4, maxHeight: 200, overflow: 'auto' }}>
+          <Card title={t('common.projects')} size="small" bodyStyle={{ padding: 4, maxHeight: 200, overflow: 'auto' }}>
             <List
               size="small"
               dataSource={projects}
@@ -436,7 +461,10 @@ const Loop: React.FC = () => {
                 >
                   <Space direction="vertical" size={0}>
                     <Text strong style={{ fontSize: 13 }}>{p.name}</Text>
-                    <Tag style={{ fontSize: 10, margin: 0 }}>{p.status}</Tag>
+                    <Tag style={{ fontSize: 10, margin: 0 }}>
+                      {projectStatusKeys[p.status]
+                        ? t(projectStatusKeys[p.status]) : p.status}
+                    </Tag>
                   </Space>
                 </List.Item>
               )}
@@ -444,15 +472,15 @@ const Loop: React.FC = () => {
           </Card>
         </Col>
         <Col span={9}>
-          <Card title="Coder" size="small">
+          <Card title={t('loop.role.coder')} size="small">
             <Space direction="vertical" size={4} style={{ width: '100%' }}>
               <Space>
                 <Badge dot color={statusColors[coder?.status || 'idle'] || '#d9d9d9'}>
                   <Avatar style={{ background: '#1f1f1f' }}>{roleAvatars.coder}</Avatar>
                 </Badge>
-                <Text strong>{coder?.name || 'Coder'}</Text>
+                <Text strong>{coder?.name || t('loop.role.coder')}</Text>
                 <Tag color={coder?.status === 'idle' ? 'default' : 'processing'}>
-                  {coder?.status || 'idle'}
+                  {t(agentStatusKeys[coder?.status || 'idle'] || 'common.unknown')}
                 </Tag>
                 {coder?.current_turn && coder?.total_turns ? (
                   <Tag color="cyan">{coder.current_turn}/{coder.total_turns}</Tag>
@@ -478,15 +506,15 @@ const Loop: React.FC = () => {
           </Card>
         </Col>
         <Col span={9}>
-          <Card title="Reviewer" size="small">
+          <Card title={t('loop.role.reviewer')} size="small">
             <Space direction="vertical" size={4} style={{ width: '100%' }}>
               <Space>
                 <Badge dot color={statusColors[reviewer?.status || 'idle'] || '#d9d9d9'}>
                   <Avatar style={{ background: '#1f1f1f' }}>{roleAvatars.reviewer}</Avatar>
                 </Badge>
-                <Text strong>{reviewer?.name || 'Reviewer'}</Text>
+                <Text strong>{reviewer?.name || t('loop.role.reviewer')}</Text>
                 <Tag color={reviewer?.status === 'idle' ? 'default' : 'processing'}>
-                  {reviewer?.status || 'idle'}
+                  {t(agentStatusKeys[reviewer?.status || 'idle'] || 'common.unknown')}
                 </Tag>
                 {reviewer?.current_tool ? (
                   <Tag color="geekblue">{reviewer.current_tool}</Tag>
@@ -510,7 +538,7 @@ const Loop: React.FC = () => {
               message={precheckHint.summary}
               description={
                 precheckHint.fixes.length > 0 ? (
-                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
+                  <ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 12 }}>
                   {precheckHint.fixes.map((f, idx) => (
                     <li key={idx}>
                       <Text code style={{ fontSize: 11 }}>{f.kind}</Text>
@@ -527,8 +555,8 @@ const Loop: React.FC = () => {
           <Card
             title={
               <Space>
-                <span>Activity</span>
-                {loop?.running ? <Tag color="processing">live</Tag> : null}
+                <span>{t('loop.activity')}</span>
+                {loop?.running ? <Tag color="processing">{t('loop.live')}</Tag> : null}
               </Space>
             }
             size="small"
@@ -539,7 +567,7 @@ const Loop: React.FC = () => {
               {messages.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 0', color: '#666' }}>
                   <RobotOutlined style={{ fontSize: 36, marginBottom: 8 }} />
-                  <div style={{ fontSize: 13 }}>No activity yet. Start a project to begin.</div>
+                  <div style={{ fontSize: 13 }}>{t('loop.activity.empty')}</div>
                 </div>
               ) : (
                 messages.map((msg, i) => {
@@ -583,18 +611,18 @@ const Loop: React.FC = () => {
               <TextArea
                 value={requirement}
                 onChange={(e) => setRequirement(e.target.value)}
-                placeholder="Describe what to build..."
+                placeholder={t('loop.requirement.placeholder')}
                 autoSize={{ minRows: 1, maxRows: 3 }}
                 disabled={loop?.running}
                 onPressEnter={(e) => { if (!e.shiftKey && !loop?.running) { e.preventDefault(); handleStart(); } }}
               />
               {loop?.running ? (
                 <Button danger icon={<StopOutlined />} onClick={handleStop} loading={stopping}>
-                  Stop
+                  {t('common.stop')}
                 </Button>
               ) : (
                 <Button type="primary" icon={<PlayCircleOutlined />} onClick={handleStart} loading={starting}>
-                  Start Loop
+                  {t('loop.start.button')}
                 </Button>
               )}
             </Space.Compact>
@@ -606,16 +634,20 @@ const Loop: React.FC = () => {
 
           {/* Bug chart + cost */}
           {stats && (
-            <Card title={<><BarChartOutlined /> Stats</>} size="small"
+            <Card title={<><BarChartOutlined /> {t('loop.stats.title')}</>} size="small"
                   bodyStyle={{ padding: 8 }}>
               <Space direction="vertical" size={4} style={{ width: '100%' }}>
                 <div style={{ fontSize: 11, color: '#aaa' }}>
-                  Tokens: {stats.total_tokens_used.toLocaleString()} ·
-                  ~${stats.approximate_cost_usd.toFixed(4)}
+                  {t('loop.stats.tokens', {
+                    tokens: stats.total_tokens_used.toLocaleString(),
+                    cost: stats.approximate_cost_usd.toFixed(4),
+                  })}
                 </div>
                 <div style={{ fontSize: 11, color: '#aaa' }}>
-                  Infra streak: {stats.infra_failure_streak} ·
-                  No-progress: {stats.no_progress_count}
+                  {t('loop.stats.counters', {
+                    streak: stats.infra_failure_streak,
+                    noProgress: stats.no_progress_count,
+                  })}
                 </div>
                 {stats.rounds.length > 0 && (
                   <div style={{
@@ -624,7 +656,8 @@ const Loop: React.FC = () => {
                   }}>
                     {stats.rounds.map((r) => (
                       <Tooltip key={r.round}
-                               title={'R' + r.round + ': ' + r.issues + ' bug(s)' + (r.approve ? ' · passed' : '')}>
+                               title={t('loop.history.roundTooltip', { round: r.round, bugs: r.issues })
+                                 + (r.approve ? t('loop.history.passed') : '')}>
                         <div style={{
                           flex: 1,
                           height: Math.max(4, r.score) + '%',
@@ -642,19 +675,19 @@ const Loop: React.FC = () => {
 
           {/* Plan visualization */}
           {planViz && planViz.mermaid && (
-            <Card title={<><BranchesOutlined /> Plan</>} size="small"
+            <Card title={<><BranchesOutlined /> {t('loop.plan.viz')}</>} size="small"
                   bodyStyle={{ padding: 8 }}>
               <Tabs size="small" items={[
                 {
                   key: 'graph',
-                  label: 'Diagram',
+                  label: t('loop.plan.tab.diagram'),
                   children: (
                     <MermaidRenderer source={planViz.mermaid} />
                   ),
                 },
                 {
                   key: 'tree',
-                  label: 'Files',
+                  label: t('common.files'),
                   children: (
                     <>
                     {diffFiles.length > 0 && (
@@ -665,7 +698,7 @@ const Loop: React.FC = () => {
                       <span style={{ color: '#52c41a' }}>+{f.added}</span>
                       <span style={{ color: '#ff4d4f' }}>-{f.removed}</span>
                       {checkpoints.length > 0 && (
-                        <Tooltip title={`Revert to R${checkpoints[0].round}`}>
+                        <Tooltip title={t('loop.revert.tooltip', { round: checkpoints[0].round })}>
                           <Button size='small' type='text' danger icon={<UndoOutlined />}
                             onClick={() => revertOneFile(checkpoints[0].sha, f.path)} />
                         </Tooltip>
@@ -721,7 +754,7 @@ const Loop: React.FC = () => {
 
           {/* Diff viewer */}
           {checkpoints.length >= 2 && (
-            <Card title="Diff" size="small" bodyStyle={{ padding: 8 }}>
+            <Card title={t('loop.diff.title')} size="small" bodyStyle={{ padding: 8 }}>
               <Space size={4} style={{ marginBottom: 6 }}>
                 <Select size="small" style={{ width: 80 }}
                         value={diffFromRound}
@@ -745,7 +778,7 @@ const Loop: React.FC = () => {
                       <span style={{ color: '#52c41a' }}>+{f.added}</span>
                       <span style={{ color: '#ff4d4f' }}>-{f.removed}</span>
                       {checkpoints.length > 0 && (
-                        <Tooltip title={`Revert to R${checkpoints[0].round}`}>
+                        <Tooltip title={t('loop.revert.tooltip', { round: checkpoints[0].round })}>
                           <Button size='small' type='text' danger icon={<UndoOutlined />}
                             onClick={() => revertOneFile(checkpoints[0].sha, f.path)} />
                         </Tooltip>
@@ -758,19 +791,19 @@ const Loop: React.FC = () => {
                 fontSize: 10, background: '#1a1a1a', padding: 6,
                 borderRadius: 4, maxHeight: 220, overflow: 'auto',
                 color: '#d9d9d9', whiteSpace: 'pre-wrap',
-              }}>{diffPatch || '(no diff loaded)'}</pre>
+              }}>{diffPatch || t('loop.diff.empty')}</pre>
             </Card>
           )}
 
           {/* Checkpoint rollback */}
           {checkpoints.length > 0 && (
-            <Card title="Checkpoints" size="small"
+            <Card title={t('loop.checkpoints.title')} size="small"
                   bodyStyle={{ padding: 8, maxHeight: 180, overflow: 'auto' }}>
               <List size="small" dataSource={checkpoints}
                     renderItem={(cp) => (
                 <List.Item style={{ padding: '4px 0' }}
                   actions={[
-                    <Tooltip key="rb" title="Roll back workspace to this round">
+                    <Tooltip key="rb" title={t('loop.checkpoints.rollbackTooltip')}>
                       <Button size="small" danger icon={<UndoOutlined />}
                               onClick={() => rollbackTo(cp.sha)} />
                     </Tooltip>,
@@ -792,12 +825,12 @@ const Loop: React.FC = () => {
 
         {/* Ask-human modal */}
         <Modal
-          title={<><QuestionCircleOutlined /> Reviewer asks</>}
+          title={<><QuestionCircleOutlined /> {t('loop.ask.title')}</>}
           open={!!(ask && ask.pending)}
           onCancel={() => setAsk(null)}
           onOk={submitAskAnswer}
-          okText="Send answer"
-          cancelText="Ignore"
+          okText={t('loop.ask.send')}
+          cancelText={t('loop.ask.ignore')}
         >
           <Space direction="vertical" style={{ width: '100%' }}>
             <Text strong>{ask ? ask.question : ''}</Text>
@@ -809,7 +842,7 @@ const Loop: React.FC = () => {
             <TextArea
               value={askAnswer}
               onChange={(e) => setAskAnswer(e.target.value)}
-              placeholder="Your answer..."
+              placeholder={t('loop.ask.placeholder')}
               autoSize={{ minRows: 2, maxRows: 6 }}
             />
           </Space>
@@ -817,10 +850,10 @@ const Loop: React.FC = () => {
 
         {/* Right: latest review */}
         <div style={{ width: 360, flexShrink: 0 }}>
-          <Card title="Latest Review" size="small" style={{ height: '100%', overflow: 'auto' }}
+          <Card title={t('loop.review.title')} size="small" style={{ height: '100%', overflow: 'auto' }}
             bodyStyle={{ padding: 8 }}>
             {lastIssues.length === 0 && !lastSummary ? (
-              <Text type="secondary">No review yet.</Text>
+              <Text type="secondary">{t('loop.review.empty')}</Text>
             ) : (
               <Space direction="vertical" size={8} style={{ width: '100%' }}>
                 {lastSummary && (
@@ -831,7 +864,7 @@ const Loop: React.FC = () => {
                 {lastIssues.map((it, idx) => (
                   <div key={idx} style={{
                     padding: 8, background: '#1a1a1a', borderRadius: 4,
-                    borderLeft: `3px solid ${
+                    borderInlineStart: `3px solid ${
                       it.severity === 'CRITICAL' ? '#ff4d4f'
                       : it.severity === 'MAJOR' ? '#faad14'
                       : it.severity === 'MINOR' ? '#1677ff' : '#52c41a'

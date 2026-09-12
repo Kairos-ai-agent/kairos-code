@@ -26,6 +26,7 @@ import {
 } from '@ant-design/icons';
 
 import { useThemeTokens } from '../hooks/useThemeTokens';
+import { useT } from '../i18n';
 import type { Message } from '../types';
 
 interface TodoItem {
@@ -57,14 +58,15 @@ function statusIcon(status: TodoItem['status']) {
   return <MinusCircleOutlined style={{ color: '#bfbfbf' }} />;
 }
 
-function statusText(status: TodoItem['status']) {
-  if (status === 'completed') return 'completed';
-  if (status === 'in_progress') return 'in progress';
-  return 'pending';
+function statusKey(status: TodoItem['status']): string {
+  if (status === 'completed') return 'plan.status.completed';
+  if (status === 'in_progress') return 'plan.status.inProgress';
+  return 'plan.status.pending';
 }
 
 const PlanPanel: React.FC<Props> = ({ messages }) => {
   const tokens = useThemeTokens();
+  const t = useT();
   // The most-recent plan.updated event wins.
   const plan = useMemo<Plan | null>(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -88,26 +90,26 @@ const PlanPanel: React.FC<Props> = ({ messages }) => {
           fontSize: 12,
         }}
       >
-        <ThunderboltOutlined style={{ marginRight: 6, color: tokens.brand }} />
-        No plan yet — the Coder will emit one when it starts.
+        <ThunderboltOutlined style={{ marginInlineEnd: 6, color: tokens.brand }} />
+        {t('plan.empty')}
       </div>
     );
   }
 
-  const completed = plan.todos.filter((t) => t.status === 'completed').length;
+  const completed = plan.todos.filter((item) => item.status === 'completed').length;
   const total = plan.todos.length;
   const pct = total === 0 ? 0 : Math.round((completed / total) * 100);
-  const current = plan.todos.find((t) => t.status === 'in_progress');
+  const current = plan.todos.find((item) => item.status === 'in_progress');
 
   if (compact) {
     return (
-      <Tooltip title="Click to expand the plan">
+      <Tooltip title={t('plan.expandTooltip')}>
         <Tag
           color="blue"
           onClick={() => setCompact(false)}
           style={{ cursor: 'pointer', userSelect: 'none' }}
         >
-          <ThunderboltOutlined /> Plan: {completed}/{total}
+          <ThunderboltOutlined /> {t('plan.progress', { done: completed, total })}
           {current ? ` — ${current.activeForm || current.content}` : ''}
         </Tag>
       </Tooltip>
@@ -135,9 +137,9 @@ const PlanPanel: React.FC<Props> = ({ messages }) => {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <ThunderboltOutlined style={{ color: tokens.brand }} />
           <span style={{ fontWeight: 600, color: tokens.labelPrimary }}>
-            Plan
+            {t('loop.plan.viz')}
           </span>
-          <Tag color="blue" style={{ marginLeft: 4 }}>
+          <Tag color="blue" style={{ marginInlineStart: 4 }}>
             {completed}/{total}
           </Tag>
         </div>
@@ -150,7 +152,7 @@ const PlanPanel: React.FC<Props> = ({ messages }) => {
             userSelect: 'none',
           }}
         >
-          compact
+          {t('plan.compact')}
         </a>
       </div>
       <Progress
@@ -166,34 +168,34 @@ const PlanPanel: React.FC<Props> = ({ messages }) => {
           margin: '8px 0 0 0',
         }}
       >
-        {plan.todos.map((t, idx) => {
-          const isCurrent = t.status === 'in_progress';
-          const display = isCurrent && t.activeForm ? t.activeForm : t.content;
+        {plan.todos.map((item, idx) => {
+          const isCurrent = item.status === 'in_progress';
+          const display = isCurrent && item.activeForm ? item.activeForm : item.content;
           return (
             <li
-              key={`${t.content}-${idx}`}
+              key={`${item.content}-${idx}`}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6,
                 padding: '3px 0',
-                color: t.status === 'completed'
+                color: item.status === 'completed'
                   ? tokens.labelSecondary
                   : tokens.labelPrimary,
-                textDecoration: t.status === 'completed' ? 'line-through' : 'none',
-                opacity: t.status === 'completed' ? 0.7 : 1,
+                textDecoration: item.status === 'completed' ? 'line-through' : 'none',
+                opacity: item.status === 'completed' ? 0.7 : 1,
                 animation: isCurrent ? 'pulse 1.5s ease-in-out infinite' : undefined,
               }}
             >
-              {statusIcon(t.status)}
+              {statusIcon(item.status)}
               <span style={{ flex: 1 }}>{display}</span>
               {isCurrent && (
-                <Tag color="processing" style={{ marginLeft: 'auto', fontSize: 10 }}>
-                  working
+                <Tag color="processing" style={{ marginInlineStart: 'auto', fontSize: 10 }}>
+                  {t('plan.working')}
                 </Tag>
               )}
-              <Tooltip title={statusText(t.status)}>
-                <span style={{ display: 'none' }}>{t.status}</span>
+              <Tooltip title={t(statusKey(item.status))}>
+                <span style={{ display: 'none' }}>{item.status}</span>
               </Tooltip>
             </li>
           );

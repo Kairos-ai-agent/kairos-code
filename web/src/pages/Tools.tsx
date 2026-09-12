@@ -31,30 +31,43 @@ import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import api from '../api/client';
 import { formatError } from '../utils/formatError';
+import { useT } from '../i18n';
 
 type Tool = 'teams' | 'cloud' | 'voice' | 'computer';
 
-const TOOLS: { key: Tool; title: string; icon: React.ReactNode;
-              description: string; route: string; status: string }[] = [
-  { key: 'teams', title: 'Agent Teams',
+const TOOLS: { key: Tool; titleKey: string; icon: React.ReactNode;
+              descriptionKey: string; route: string; statusKey: string }[] = [
+  { key: 'teams', titleKey: 'tools.page.teamsTitle',
     icon: <TeamOutlined style={{ fontSize: 28 }} />,
-    description: 'Dispatch parallel Coder agents across a shared task board.',
-    route: 'teams', status: 'per-project' },
-  { key: 'cloud', title: 'Cloud Delegation',
+    descriptionKey: 'tools.page.teamsDescription',
+    route: 'teams', statusKey: 'tools.page.statusPerProject' },
+  { key: 'cloud', titleKey: 'tools.page.cloudTitle',
     icon: <CloudOutlined style={{ fontSize: 28 }} />,
-    description: 'Hand off tasks to a remote runner (the cloud-task CLI, VM, container).',
-    route: 'cloud', status: 'optional' },
-  { key: 'voice', title: 'Voice Mode',
+    descriptionKey: 'tools.page.cloudDescription',
+    route: 'cloud', statusKey: 'common.optional' },
+  { key: 'voice', titleKey: 'tools.page.voiceTitle',
     icon: <AudioOutlined style={{ fontSize: 28 }} />,
-    description: 'STT (whisper) + TTS providers, with mock fallback for offline.',
-    route: 'voice', status: 'optional' },
-  { key: 'computer', title: 'Computer Use',
+    descriptionKey: 'tools.page.voiceDescription',
+    route: 'voice', statusKey: 'common.optional' },
+  { key: 'computer', titleKey: 'tools.page.computerTitle',
     icon: <DesktopOutlined style={{ fontSize: 28 }} />,
-    description: 'Desktop automation: screenshot, mouse, keyboard (Windows ctypes).',
-    route: 'computer', status: 'safety-required' },
+    descriptionKey: 'tools.page.computerDescription',
+    route: 'computer', statusKey: 'tools.page.statusSafetyRequired' },
 ];
 
+/**
+ * Render the `**...**` spans of a translated string as <code> blocks, so a
+ * translator can move the provider / class names around inside the sentence
+ * without touching JSX.
+ */
+const withCode = (text: string): React.ReactNode =>
+  text.split(/(\*\*[^*]+\*\*)/).map((part, i) =>
+    (part.startsWith('**') && part.endsWith('**')
+      ? <code key={i}>{part.slice(2, -2)}</code>
+      : <React.Fragment key={i}>{part}</React.Fragment>));
+
 const Tools: React.FC = () => {
+  const t = useT();
   const tokens = useThemeTokens();
   const navigate = useNavigate();
   const { tool } = useParams<{ tool?: string }>();
@@ -72,19 +85,19 @@ const Tools: React.FC = () => {
     <div style={{ padding: '24px 16px', maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ marginBottom: 24 }}>
         <div style={{ fontSize: 22, fontWeight: 700, color: tokens.labelPrimary }}>
-          Tools
+          {t('tools.page.title')}
         </div>
         <div style={{ fontSize: 13, color: tokens.labelTertiary, marginTop: 4 }}>
-          Optional subsystems that augment the core Coder / Reviewer loop.
+          {t('tools.page.subtitle')}
         </div>
       </div>
 
       <Row gutter={[16, 16]}>
-        {TOOLS.map((t) => (
-          <Col xs={24} sm={12} lg={6} key={t.key}>
+        {TOOLS.map((item) => (
+          <Col xs={24} sm={12} lg={6} key={item.key}>
             <Card
               hoverable
-              onClick={() => navigate(`/tools/${t.route}`)}
+              onClick={() => navigate(`/tools/${item.route}`)}
               style={{
                 background: tokens.bgLay1,
                 border: `1px solid ${tokens.border}`,
@@ -94,18 +107,18 @@ const Tools: React.FC = () => {
               styles={{ body: { padding: 20 } }}
             >
               <div style={{ color: tokens.labelPrimary, marginBottom: 12 }}>
-                {t.icon}
+                {item.icon}
               </div>
               <div style={{ fontWeight: 600, fontSize: 15,
                             color: tokens.labelPrimary, marginBottom: 6 }}>
-                {t.title}
+                {t(item.titleKey)}
               </div>
               <div style={{ fontSize: 12, color: tokens.labelTertiary,
                             lineHeight: 1.5, minHeight: 50 }}>
-                {t.description}
+                {t(item.descriptionKey)}
               </div>
               <div style={{ marginTop: 12 }}>
-                <Tag>{t.status}</Tag>
+                <Tag>{t(item.statusKey)}</Tag>
               </div>
             </Card>
           </Col>
@@ -124,22 +137,23 @@ const ToolDetail: React.FC<{
   currentProject: ReturnType<typeof useChatStore.getState>['currentProject'];
   notify: ReturnType<typeof AntdApp.useApp>['message'];
 }> = ({ tool, onBack, currentProject, notify }) => {
+  const t = useT();
   const tokens = useThemeTokens();
-  const meta = TOOLS.find((t) => t.key === tool)!;
+  const meta = TOOLS.find((item) => item.key === tool)!;
   return (
     <div style={{ padding: '20px 24px', maxWidth: 960, margin: '0 auto' }}>
       <Button type="text" icon={<ArrowLeftOutlined />}
               onClick={onBack} style={{ marginBottom: 16 }}>
-        Back to tools
+        {t('tools.page.backToTools')}
       </Button>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16,
                     marginBottom: 16 }}>
         <div style={{ color: tokens.labelPrimary }}>{meta.icon}</div>
         <div>
           <div style={{ fontSize: 20, fontWeight: 600,
-                        color: tokens.labelPrimary }}>{meta.title}</div>
+                        color: tokens.labelPrimary }}>{t(meta.titleKey)}</div>
           <div style={{ fontSize: 13, color: tokens.labelTertiary }}>
-            {meta.description}
+            {t(meta.descriptionKey)}
           </div>
         </div>
       </div>
@@ -155,6 +169,7 @@ const ToolDetail: React.FC<{
 const TeamsPanel: React.FC<{
   currentProject: any; notify: any;
 }> = ({ currentProject, notify }) => {
+  const t = useT();
   const tokens = useThemeTokens();
   const [sessions, setSessions] = useState<{ team_id: string; project_id: string }[]>([]);
   const [loading, setLoading] = useState(false);
@@ -177,7 +192,7 @@ const TeamsPanel: React.FC<{
 
   const create = async () => {
     if (!projectId || !taskInput.trim()) {
-      notify.warning('Pick a project and type a task list.');
+      notify.warning(t('tools.page.needProjectAndTasks'));
       return;
     }
     const lines = taskInput.split('\n').map((s) => s.trim()).filter(Boolean);
@@ -187,31 +202,32 @@ const TeamsPanel: React.FC<{
         descriptions: lines, max_workers: maxWorkers,
         merge_strategy: 'fast_forward',
       });
-      notify.success(`Team ${r.data.team_id} created with ${r.data.task_count} tasks.`);
+      notify.success(t('tools.page.teamCreated',
+        { team: r.data.team_id, count: r.data.task_count }));
       setTaskInput('');
     } catch (e: any) {
-      notify.error(e?.response?.data?.detail || 'Failed to create team');
+      notify.error(e?.response?.data?.detail || t('tools.page.createTeamFailed'));
     } finally { setBusy(false); }
   };
 
   return (
     <Card style={{ background: tokens.bgLay1, border: `1px solid ${tokens.border}` }}>
       <Alert type="info" showIcon style={{ marginBottom: 16 }}
-             message="Each line in the box below becomes one team task dispatched in parallel." />
+             message={t('tools.page.teamsAlert')} />
       <Form layout="vertical">
-        <Form.Item label="Tasks (one per line)">
+        <Form.Item label={t('tools.page.teamsTasksLabel')}>
           <Input.TextArea rows={6} value={taskInput}
             onChange={(e) => setTaskInput(e.target.value)}
-            placeholder={'Refactor user_service.py\nAdd unit tests for billing\nUpdate API docs'}
+            placeholder={t('tools.page.teamsTasksPlaceholder')}
             disabled={!projectId} />
         </Form.Item>
-        <Form.Item label="Max workers">
+        <Form.Item label={t('tools.page.maxWorkersLabel')}>
           <Select value={maxWorkers} onChange={setMaxWorkers}
                   options={[1, 2, 3, 4, 5].map((n) => ({ value: n, label: String(n) }))} />
         </Form.Item>
         <Button type="primary" loading={busy} disabled={!projectId} onClick={create}
                 style={{ background: tokens.labelPrimary, border: 'none' }}>
-          Create team & dispatch
+          {t('tools.page.createTeam')}
         </Button>
       </Form>
     </Card>
@@ -222,6 +238,7 @@ const TeamsPanel: React.FC<{
 const CloudPanel: React.FC<{
   currentProject: any; notify: any;
 }> = ({ currentProject, notify }) => {
+  const t = useT();
   const tokens = useThemeTokens();
   const [task, setTask] = useState('');
   const [delegateUrl, setDelegateUrl] = useState('');
@@ -229,7 +246,7 @@ const CloudPanel: React.FC<{
 
   const delegate = async () => {
     if (!currentProject) {
-      notify.warning('Pick a project first.');
+      notify.warning(t('tools.page.needProject'));
       return;
     }
     setBusy(true);
@@ -240,15 +257,15 @@ const CloudPanel: React.FC<{
         description: task,
         work_dir: currentProject.work_dir || '',
       });
-      notify.success('Task submitted to cloud runner.');
+      notify.success(t('tools.page.cloudSubmitted'));
     } catch (e: any) {
       // 503 = no delegator configured; that's expected unless
       // KAIROS_CLOUD_URL is set in the env. Surface as a soft error.
       const detail = e?.response?.data?.detail;
       if (e?.response?.status === 503) {
-        notify.warning('No cloud delegator configured. Set KAIROS_CLOUD_URL in the server env to enable.');
+        notify.warning(t('tools.page.noCloudDelegator'));
       } else {
-        notify.error(detail || 'Failed to delegate');
+        notify.error(detail || t('tools.page.delegateFailed'));
       }
     } finally { setBusy(false); }
   };
@@ -256,19 +273,19 @@ const CloudPanel: React.FC<{
   return (
     <Card style={{ background: tokens.bgLay1, border: `1px solid ${tokens.border}` }}>
       <Alert type="warning" showIcon style={{ marginBottom: 16 }}
-             message="Cloud delegation requires KAIROS_CLOUD_URL set on the server. Without it, the endpoint returns 503 — that's expected." />
+             message={t('tools.page.cloudAlert')} />
       <Form layout="vertical">
-        <Form.Item label="Remote runner URL (informational)">
+        <Form.Item label={t('tools.page.runnerUrlLabel')}>
           <Input value={delegateUrl} onChange={(e) => setDelegateUrl(e.target.value)}
-                 placeholder="https://runners.example.com" />
+                 placeholder={t('tools.page.runnerUrlPlaceholder')} />
         </Form.Item>
-        <Form.Item label="Task description">
+        <Form.Item label={t('tools.page.taskDescriptionLabel')}>
           <Input.TextArea rows={4} value={task} onChange={(e) => setTask(e.target.value)}
-                          placeholder="Refactor the billing module" />
+                          placeholder={t('tools.page.cloudTaskPlaceholder')} />
         </Form.Item>
         <Button type="primary" loading={busy} disabled={!currentProject} onClick={delegate}
                 style={{ background: tokens.labelPrimary, border: 'none' }}>
-          Submit to cloud
+          {t('tools.page.submitToCloud')}
         </Button>
       </Form>
     </Card>
@@ -277,29 +294,28 @@ const CloudPanel: React.FC<{
 
 // ---- Voice ----
 const VoicePanel: React.FC<{ notify: any }> = ({ notify }) => {
+  const t = useT();
   const tokens = useThemeTokens();
   return (
     <Card style={{ background: tokens.bgLay1, border: `1px solid ${tokens.border}` }}>
       <Alert type="info" showIcon style={{ marginBottom: 16 }}
-             message="Voice mode wires STT + TTS into the chat composer. The mock providers ship by default; real whisper / piper are pluggable via Python import." />
+             message={t('tools.page.voiceAlert')} />
       <Row gutter={16}>
         <Col span={12}>
-          <Card size="small" title="STT (speech → text)" type="inner">
-            <p>Default: <code>MockSTTProvider</code> (returns SHA-256 fingerprint as a placeholder).</p>
-            <p>Production: <code>WhisperSTTProvider</code> (uses <code>faster-whisper</code> or <code>openai-whisper</code> fallback).</p>
+          <Card size="small" title={t('tools.page.sttTitle')} type="inner">
+            <p>{withCode(t('tools.page.sttDefault'))}</p>
+            <p>{withCode(t('tools.page.sttProduction'))}</p>
           </Card>
         </Col>
         <Col span={12}>
-          <Card size="small" title="TTS (text → speech)" type="inner">
-            <p>Default: <code>MockTTSProvider</code> (returns a 0.1s silent WAV).</p>
-            <p>Production: pluggable — Piper, ElevenLabs, OpenAI TTS, Azure Speech, etc.</p>
+          <Card size="small" title={t('tools.page.ttsTitle')} type="inner">
+            <p>{withCode(t('tools.page.ttsDefault'))}</p>
+            <p>{withCode(t('tools.page.ttsProduction'))}</p>
           </Card>
         </Col>
       </Row>
       <div style={{ marginTop: 16, fontSize: 12, color: tokens.labelTertiary }}>
-        Configure voice mode by setting the providers in <code>VoiceSession(...)
-        </code> on the server. The chat composer's "Mode" select can then expose a
-        voice-input affordance.
+        {withCode(t('tools.page.voiceFooter'))}
       </div>
     </Card>
   );
@@ -307,25 +323,26 @@ const VoicePanel: React.FC<{ notify: any }> = ({ notify }) => {
 
 // ---- Computer use ----
 const ComputerPanel: React.FC<{ notify: any }> = ({ notify }) => {
+  const t = useT();
   const tokens = useThemeTokens();
   const [confirm, setConfirm] = useState(false);
   return (
     <Card style={{ background: tokens.bgLay1, border: `1px solid ${tokens.border}` }}>
       <Alert type="error" showIcon style={{ marginBottom: 16 }}
-             message="Computer use sends real mouse / keyboard events to the host desktop. The mock backend is the default; only enable auto_confirm after you've tested with dry_run=True." />
+             message={t('tools.page.computerAlert')} />
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col span={8}>
-          <Statistic title="Mock backend"
+          <Statistic title={t('tools.page.mockBackend')}
                      valueStyle={{ color: tokens.success, fontSize: 18 }} />
         </Col>
         <Col span={8}>
-          <Statistic title="Platform backend"
-                     value={navigator?.platform || 'unknown'}
+          <Statistic title={t('tools.page.platformBackend')}
+                     value={navigator?.platform || t('common.unknown')}
                      valueStyle={{ color: tokens.labelSecondary, fontSize: 14 }} />
         </Col>
         <Col span={8}>
-          <Statistic title="Auto-confirm"
-                     value={confirm ? 'on' : 'off'}
+          <Statistic title={t('tools.page.autoConfirm')}
+                     value={confirm ? t('common.on') : t('common.off')}
                      valueStyle={{ color: confirm ? tokens.danger : tokens.success,
                                     fontSize: 18 }} />
         </Col>
@@ -333,11 +350,11 @@ const ComputerPanel: React.FC<{ notify: any }> = ({ notify }) => {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <Switch checked={confirm} onChange={setConfirm} />
         <span style={{ color: tokens.labelSecondary, fontSize: 13 }}>
-          Allow input actions (click / type / key press) without per-action confirmation
+          {t('tools.page.allowInputActions')}
         </span>
       </div>
       <Alert type="info" showIcon style={{ marginTop: 16 }}
-             message="Real backend is Windows-only. Other platforms fall back to the mock. See kairos.computer_use for the ctypes implementation." />
+             message={t('tools.page.computerRealBackendAlert')} />
     </Card>
   );
 };

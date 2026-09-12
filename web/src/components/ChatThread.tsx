@@ -24,6 +24,7 @@ import {
 } from '@ant-design/icons';
 
 import { useThemeTokens } from '../hooks/useThemeTokens';
+import { useT } from '../i18n';
 import type { Message } from '../types';
 
 interface Props {
@@ -35,6 +36,7 @@ interface Props {
 
 const ChatThread: React.FC<Props> = ({ messages, emptyHint, showRawToggle = false }) => {
   const tokens = useThemeTokens();
+  const t = useT();
   const [view, setView] = useState<'pretty' | 'raw'>('pretty');
   const containerRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
@@ -89,8 +91,8 @@ const ChatThread: React.FC<Props> = ({ messages, emptyHint, showRawToggle = fals
             size="small"
             value={view}
             onChange={(v) => setView(v as 'pretty' | 'raw')}
-            options={[{ label: 'Pretty', value: 'pretty' },
-                       { label: 'Raw', value: 'raw' }]}
+            options={[{ label: t('chat.thread.viewPretty'), value: 'pretty' },
+                       { label: t('chat.thread.viewRaw'), value: 'raw' }]}
           />
         </div>
       )}
@@ -112,7 +114,7 @@ const ChatThread: React.FC<Props> = ({ messages, emptyHint, showRawToggle = fals
                                                 color: tokens.labelTertiary }} />}
                 description={
                   <span style={{ color: tokens.labelTertiary }}>
-                    {emptyHint || 'Send a message to start the loop.'}
+                    {emptyHint || t('chat.thread.empty')}
                   </span>
                 }
               />
@@ -213,6 +215,7 @@ function splitThinking(text: string): { thinking: string; body: string } {
 // or topic meta line — chat should feel like chat.
 const AssistantBubble: React.FC<{ message: Message }> = ({ message }) => {
   const tokens = useThemeTokens();
+  const t = useT();
   const { thinking, body } = splitThinking(stringifyContent(message.content));
   return (
     <div style={{
@@ -247,7 +250,7 @@ const AssistantBubble: React.FC<{ message: Message }> = ({ message }) => {
               cursor: 'pointer', fontSize: 11,
               color: tokens.labelTertiary, userSelect: 'none',
             }}>
-              💭 思考过程（点击展开）
+              💭 {t('chat.thread.thinking')}
             </summary>
             <div style={{
               fontSize: 12, color: tokens.labelSecondary,
@@ -272,6 +275,7 @@ const AssistantBubble: React.FC<{ message: Message }> = ({ message }) => {
 
 const ReviewerBubble: React.FC<{ message: Message }> = ({ message }) => {
   const tokens = useThemeTokens();
+  const t = useT();
   const content = stringifyContent(message.content);
   // Try to extract a score / verdict from the metadata if present.
   const meta = message.metadata || {};
@@ -280,7 +284,7 @@ const ReviewerBubble: React.FC<{ message: Message }> = ({ message }) => {
   return (
     <RoleBubble
       icon={<AuditOutlined />}
-      roleLabel="Reviewer"
+      roleLabel={t('chat.thread.roleReviewer')}
       accent={tokens.reviewerAccent}
       content={content}
       meta={message.topic}
@@ -290,12 +294,12 @@ const ReviewerBubble: React.FC<{ message: Message }> = ({ message }) => {
                         flexWrap: 'wrap' }}>
             {score !== null && (
               <Tag color={score >= 80 ? 'green' : score >= 50 ? 'orange' : 'red'}>
-                Score {score}
+                {t('chat.thread.score', { n: score })}
               </Tag>
             )}
             {approve !== null && (
               <Tag color={approve ? 'green' : 'red'}>
-                {approve ? 'Approved' : 'Changes requested'}
+                {approve ? t('chat.thread.approved') : t('chat.thread.changesRequested')}
               </Tag>
             )}
           </div>
@@ -307,12 +311,13 @@ const ReviewerBubble: React.FC<{ message: Message }> = ({ message }) => {
 
 const ToolBubble: React.FC<{ message: Message }> = ({ message }) => {
   const tokens = useThemeTokens();
+  const t = useT();
   const meta = message.metadata || {};
   const tool = meta.tool || meta.name || 'tool';
   return (
     <RoleBubble
       icon={<ToolOutlined />}
-      roleLabel={`tool · ${tool}`}
+      roleLabel={t('chat.thread.toolLabel', { tool: String(tool) })}
       accent={tokens.labelTertiary}
       content={stringifyContent(message.content)}
       meta={message.topic}

@@ -14,6 +14,7 @@ import { SearchOutlined, ThunderboltOutlined, CopyOutlined } from '@ant-design/i
 
 import api from '../api/client';
 import { formatError } from '../utils/formatError';
+import { useT } from '../i18n';
 
 interface SearchResult {
   name: string;
@@ -31,6 +32,7 @@ export const openSkillSearchPalette = () => {
 };
 
 const SkillSearchPalette: React.FC = () => {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -96,9 +98,9 @@ const SkillSearchPalette: React.FC = () => {
       width={640}
       title={
         <span>
-          <ThunderboltOutlined /> Skill search
-          <span style={{ marginLeft: 8, fontSize: 11, color: '#999' }}>
-            Ctrl+K
+          <ThunderboltOutlined /> {t('skillSearch.title')}
+          <span style={{ marginInlineStart: 8, fontSize: 11, color: '#999' }}>
+            {t('skillSearch.hotkey')}
           </span>
         </span>
       }
@@ -107,7 +109,7 @@ const SkillSearchPalette: React.FC = () => {
       <Input
         size="large"
         prefix={<SearchOutlined />}
-        placeholder="Search skills (e.g. pytest, react, json)..."
+        placeholder={t('skillSearch.placeholder')}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         autoFocus
@@ -123,7 +125,7 @@ const SkillSearchPalette: React.FC = () => {
         )}
         {!loading && !err && !query && (
           <div style={{ color: '#999', fontSize: 12, padding: 12 }}>
-            Type to search the skill library (FTS5-backed).
+            {t('skillSearch.hint')}
           </div>
         )}
         {results.length > 0 && (
@@ -135,7 +137,7 @@ const SkillSearchPalette: React.FC = () => {
                 style={{ cursor: 'pointer' }}
                 onClick={() => copyName(r.name)}
                 actions={[
-                  <Tooltip title="Copy name" key="copy">
+                  <Tooltip title={t('skillSearch.copyName')} key="copy">
                     <CopyOutlined onClick={() => copyName(r.name)} />
                   </Tooltip>,
                 ]}
@@ -145,11 +147,11 @@ const SkillSearchPalette: React.FC = () => {
                     <span>
                       <code style={{ fontSize: 13 }}>{r.name}</code>{' '}
                       <Tag color="blue" style={{ fontSize: 10 }}>
-                        prio {r.priority?.toFixed(2) ?? '?'}
+                        {t('skillSearch.prioLabel')} {r.priority?.toFixed(2) ?? '?'}
                       </Tag>
                       {r.score > 0 && (
                         <Tag style={{ fontSize: 10 }}>
-                          score {r.score.toFixed(2)}
+                          {t('skillSearch.scoreLabel')} {r.score.toFixed(2)}
                         </Tag>
                       )}
                     </span>

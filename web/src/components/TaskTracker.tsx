@@ -33,6 +33,7 @@ import api, { onWebSocketMessage } from '../api/client';
 import { formatError } from '../utils/formatError';
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
+import { useT } from '../i18n';
 
 const { Text } = Typography;
 
@@ -64,19 +65,20 @@ interface TasksResponse {
 }
 
 const STATUS_META: Record<string, {
-  color: string; icon: React.ReactNode; label: string;
+  color: string; icon: React.ReactNode; labelKey: string;
 }> = {
-  done: { color: 'green', icon: <CheckCircleOutlined />, label: 'Done' },
-  in_progress: { color: 'blue', icon: <LoadingOutlined spin />, label: 'Running' },
-  pending: { color: 'default', icon: <ClockCircleOutlined />, label: 'Pending' },
+  done: { color: 'green', icon: <CheckCircleOutlined />, labelKey: 'common.done' },
+  in_progress: { color: 'blue', icon: <LoadingOutlined spin />, labelKey: 'common.running' },
+  pending: { color: 'default', icon: <ClockCircleOutlined />, labelKey: 'common.pending' },
   // R38.6.6: a round that finished but did not pass review. It is
   // complete as a unit of work, so it is not "failed" — but it is
   // certainly not "done" either.
-  rejected: { color: 'orange', icon: <CloseCircleOutlined />, label: 'Rejected' },
-  failed: { color: 'red', icon: <CloseCircleOutlined />, label: 'Failed' },
+  rejected: { color: 'orange', icon: <CloseCircleOutlined />, labelKey: 'shell.taskTracker.rejected' },
+  failed: { color: 'red', icon: <CloseCircleOutlined />, labelKey: 'common.failed' },
 };
 
 const TaskTracker: React.FC = () => {
+  const t = useT();
   const tokens = useThemeTokens();
   const currentProject = useChatStore((s) => s.currentProject);
   const currentSessionId = useChatStore((s) => s.currentSessionId);
@@ -104,11 +106,11 @@ const TaskTracker: React.FC = () => {
       });
       setResp(r.data);
     } catch (e: any) {
-      setError(formatError(e, 'failed to load tasks'));
+      setError(formatError(e, t('shell.taskTracker.loadFailed')));
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [currentProject, currentSessionId]);
+  }, [currentProject, currentSessionId, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -139,8 +141,8 @@ const TaskTracker: React.FC = () => {
       done: 0, in_progress: 0, pending: 0, rejected: 0, failed: 0, other: 0,
     };
     const tasks = resp?.tasks || [];
-    for (const t of tasks) {
-      const k = STATUS_META[t.status] ? t.status : 'other';
+    for (const task of tasks) {
+      const k = STATUS_META[task.status] ? task.status : 'other';
       out[k] = (out[k] || 0) + 1;
     }
     return out;
@@ -166,10 +168,10 @@ const TaskTracker: React.FC = () => {
       }}>
         <AimOutlined style={{ color: tokens.labelPrimary, fontSize: 13 }} />
         <Text strong style={{ fontSize: 12, color: tokens.labelPrimary }}>
-          Task tracker
+          {t('shell.taskTracker.title')}
         </Text>
         <div style={{ flex: 1 }} />
-        <Tooltip title="Refresh">
+        <Tooltip title={t('common.refresh')}>
           <Button
             size="small" type="text" icon={<ReloadOutlined />}
             onClick={() => load()} loading={loading} disabled={!currentProject} />
@@ -179,7 +181,7 @@ const TaskTracker: React.FC = () => {
       {!currentProject ? (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="Pick a project to track tasks"
+          description={t('shell.taskTracker.pickProject')}
           style={{ marginTop: 8, marginBottom: 8, flex: 1 }}
         />
       ) : (
@@ -211,33 +213,33 @@ const TaskTracker: React.FC = () => {
             }}>
               {(stats.done || 0) > 0 && (
                 <Tag color="green" style={{ margin: 0, fontSize: 11 }}>
-                  ✓ {stats.done} done
+                  {t('shell.taskTracker.doneCount', { n: stats.done })}
                 </Tag>
               )}
               {(stats.in_progress || 0) > 0 && (
                 <Tag color="blue" style={{ margin: 0, fontSize: 11 }}>
-                  ⟳ {stats.in_progress} running
+                  {t('shell.taskTracker.runningCount', { n: stats.in_progress })}
                 </Tag>
               )}
               {(stats.pending || 0) > 0 && (
                 <Tag style={{ margin: 0, fontSize: 11 }}>
-                  ○ {stats.pending} pending
+                  {t('shell.taskTracker.pendingCount', { n: stats.pending })}
                 </Tag>
               )}
               {(stats.rejected || 0) > 0 && (
                 <Tag color="orange" style={{ margin: 0, fontSize: 11 }}>
-                  ↻ {stats.rejected} rejected
+                  {t('shell.taskTracker.rejectedCount', { n: stats.rejected })}
                 </Tag>
               )}
               {(stats.failed || 0) > 0 && (
                 <Tag color="red" style={{ margin: 0, fontSize: 11 }}>
-                  ✗ {stats.failed} failed
+                  {t('shell.taskTracker.failedCount', { n: stats.failed })}
                 </Tag>
               )}
-              <Text type="secondary" style={{ fontSize: 10, marginLeft: 'auto' }}>
+              <Text type="secondary" style={{ fontSize: 10, marginInlineStart: 'auto' }}>
                 {completed}/{total}
-                {resp?.source === 'rounds' ? ' · rounds'
-                  : resp?.source === 'plan' ? ' · plan' : ''}
+                {resp?.source === 'rounds' ? t('shell.taskTracker.sourceRounds')
+                  : resp?.source === 'plan' ? t('shell.taskTracker.sourcePlan') : ''}
               </Text>
             </div>
           </div>
@@ -254,29 +256,29 @@ const TaskTracker: React.FC = () => {
             ) : total === 0 ? (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="No tasks yet"
+                description={t('shell.taskTracker.noTasks')}
                 style={{ marginTop: 8, marginBottom: 8 }}
               />
             ) : (
               <List
                 size="small"
                 dataSource={resp?.tasks || []}
-                renderItem={(t) => {
-                  const meta = STATUS_META[t.status]
+                renderItem={(item) => {
+                  const meta = STATUS_META[item.status]
                                || { color: 'default',
                                     icon: <ClockCircleOutlined />,
-                                    label: t.status };
+                                    labelKey: item.status };
                   // R38.6.6: the backend sends the per-item reason
                   // (score / issue / error) so a finished item can say
                   // WHY it did not pass.
-                  const detail = t.detail || t.details || '';
+                  const detail = item.detail || item.details || '';
                   return (
                     <List.Item
-                      data-testid={`task-item-${t.id}`}
+                      data-testid={`task-item-${item.id}`}
                       style={{
                         padding: '4px 8px',
                         borderBottom: `1px solid ${tokens.border}`,
-                        background: t.status === 'in_progress'
+                        background: item.status === 'in_progress'
                                     ? tokens.bgLay2 : 'transparent',
                       }}
                     >
@@ -289,11 +291,11 @@ const TaskTracker: React.FC = () => {
                             fontSize: 12,
                             color: tokens.labelPrimary,
                             display: 'block',
-                            textDecoration: t.status === 'done'
+                            textDecoration: item.status === 'done'
                                           ? 'line-through' : 'none',
-                            opacity: t.status === 'done' ? 0.7 : 1,
+                            opacity: item.status === 'done' ? 0.7 : 1,
                           }}>
-                            {t.title || t.id}
+                            {item.title || item.id}
                           </Text>
                           <div style={{
                             display: 'flex', gap: 4, marginTop: 2,
@@ -302,11 +304,11 @@ const TaskTracker: React.FC = () => {
                               margin: 0, fontSize: 10, padding: '0 4px',
                               lineHeight: '14px',
                             }}>
-                              {meta.label}
+                              {t(meta.labelKey)}
                             </Tag>
-                            {t.round != null && (
+                            {item.round != null && (
                               <Text type="secondary" style={{ fontSize: 10 }}>
-                                R{t.round}
+                                R{item.round}
                               </Text>
                             )}
                           </div>

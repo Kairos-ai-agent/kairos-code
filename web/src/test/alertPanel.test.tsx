@@ -164,11 +164,17 @@ describe('AlertPanel', () => {
     render(<AlertPanel />);
     await waitFor(() => {
       // Severity tags
-      expect(screen.getByText('CRITICAL')).toBeTruthy();
-      expect(screen.getByText('WARNING')).toBeTruthy();
+      // severity tag is localised now (en-US in tests -> 'Critical')
+      // 'Critical' now appears twice in en-US: the summary stat title and
+      // the entry's severity tag (both come from alertPanel.severity.*)
+      expect(screen.getAllByText(/^critical$/i).length).toBeGreaterThan(1);
+      expect(screen.getAllByText(/^warning$/i).length).toBeGreaterThan(1);
       // The kind label appears (lowercase in the meta line)
-      expect(screen.getByText(/cost_spike/)).toBeTruthy();
-      expect(screen.getByText(/call_spike/)).toBeTruthy();
+      // kind/metric labels are localised too
+      // 'Cost spike' shows both as the kind label in the metadata line and
+      // inside the rebuilt sentence (Total cost spiked …%) for this sample.
+      expect(screen.getAllByText(/cost spike/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/per-call cost spike/i).length).toBeGreaterThan(0);
     });
   });
 

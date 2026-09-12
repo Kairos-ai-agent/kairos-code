@@ -33,6 +33,7 @@ import { FolderOpenOutlined, RightOutlined, HomeOutlined } from '@ant-design/ico
 import api from '../api/client';
 import { formatError } from '../utils/formatError';
 import { useThemeTokens } from '../hooks/useThemeTokens';
+import { useT } from '../i18n';
 
 export interface FsEntry {
   name: string;
@@ -55,6 +56,7 @@ function basename(p: string): string {
 }
 
 const BrowsePanel: React.FC<BrowsePanelProps> = ({ onSelect, disabled }) => {
+  const t = useT();
   const tokens = useThemeTokens();
   const [roots, setRoots] = useState<FsEntry[]>([]);
   const [current, setCurrent] = useState<string>('');
@@ -76,12 +78,12 @@ const BrowsePanel: React.FC<BrowsePanelProps> = ({ onSelect, disabled }) => {
       }
     }).catch((e: any) => {
       if (cancelled) return;
-      setError(formatError(e, 'Failed to load folder roots.'));
+      setError(formatError(e, t('browse.panel.rootsFailed')));
     }).finally(() => {
       if (!cancelled) setLoadingRoots(false);
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [t]);
 
   // ----- Load entries whenever the current path changes -----
   useEffect(() => {
@@ -96,14 +98,14 @@ const BrowsePanel: React.FC<BrowsePanelProps> = ({ onSelect, disabled }) => {
       })
       .catch((e: any) => {
         if (cancelled) return;
-        setError(formatError(e, 'Failed to list directory.'));
+        setError(formatError(e, t('browse.panel.listFailed')));
         setEntries([]);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [current]);
+  }, [current, t]);
 
   // ----- Breadcrumb segments -----
   // Split on both / and \. On Windows ``C:\Users\me\projects`` →
@@ -158,24 +160,24 @@ const BrowsePanel: React.FC<BrowsePanelProps> = ({ onSelect, disabled }) => {
     <div>
       {loadingRoots ? (
         <div style={{ textAlign: 'center', padding: 24 }}>
-          <Spin tip="Loading starting points…" />
+          <Spin tip={t('browse.panel.loadingRoots')} />
         </div>
       ) : roots.length === 0 ? (
         <Alert
           type="warning"
           showIcon
-          message="No starting points available"
-          description="The backend could not enumerate any roots (home, workspace, drives). On Windows, drives are listed via the Win32 API; on POSIX, the home dir is the default."
+          message={t('browse.panel.noRootsTitle')}
+          description={t('browse.panel.noRootsDescription')}
         />
       ) : (
         <>
           {/* ----- Roots row (R38.6 §25.1) -----
-             User reported "只能选择C盘吗？切换不了其他盘符" — the
-             Jump-to links at the bottom were too easy to miss
-             and the breadcrumb alone only works WITHIN a root.
-             Switching from C:\Users\user to D:\ requires a
-             dedicated switcher. We render the roots as a row of
-             pills at the TOP, always visible, with the active
+             User reported only the C drive being pickable and no way
+             to switch drives — the Jump-to links at the bottom were
+             too easy to miss and the breadcrumb alone only works
+             WITHIN a root. Switching from C:\Users\user to D:\
+             requires a dedicated switcher. We render the roots as a
+             row of pills at the TOP, always visible, with the active
              one highlighted. */}
           <div
             data-testid="browse-roots-row"
@@ -218,9 +220,9 @@ const BrowsePanel: React.FC<BrowsePanelProps> = ({ onSelect, disabled }) => {
             color: tokens.labelSecondary,
             flexWrap: 'wrap',
           }}>
-            <HomeOutlined style={{ marginRight: 4 }} />
+            <HomeOutlined style={{ marginInlineEnd: 4 }} />
             {segments.length === 0 ? (
-              <span>Pick a folder</span>
+              <span>{t('browse.panel.pickFolder')}</span>
             ) : (
               <Breadcrumb
                 style={{ fontSize: 12 }}
@@ -247,20 +249,20 @@ const BrowsePanel: React.FC<BrowsePanelProps> = ({ onSelect, disabled }) => {
               <Button
                 type="link" size="small"
                 onClick={goUp}
-                style={{ marginLeft: 'auto', padding: 0 }}
+                style={{ marginInlineStart: 'auto', padding: 0 }}
               >
-                ↑ Up
+                {t('browse.panel.up')}
               </Button>
             )}
           </div>
 
           {/* ----- Directory list ----- */}
-          <Spin spinning={loading} tip="Loading…">
+          <Spin spinning={loading} tip={t('common.loading')}>
             {error ? (
               <Alert type="error" showIcon message={error} />
             ) : entries.length === 0 ? (
               <Empty
-                description="No subfolders"
+                description={t('browse.panel.emptyNoSubfolders')}
                 styles={{ image: { height: 40 } }}
                 style={{ padding: '12px 0' }}
               />
@@ -326,7 +328,7 @@ const BrowsePanel: React.FC<BrowsePanelProps> = ({ onSelect, disabled }) => {
               disabled={!current || disabled}
               onClick={() => onSelect(current, basename(current))}
             >
-              Use this folder
+              {t('browse.panel.useThisFolder')}
             </Button>
           </div>
         </>

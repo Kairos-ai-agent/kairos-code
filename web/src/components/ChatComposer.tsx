@@ -42,6 +42,7 @@ import { useChatStore } from '../stores/chatStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { classifyIntent } from '../utils/intent';
 import FolderPicker from './FolderPicker';
+import { useT } from '../i18n';
 
 /** One uploaded chat attachment (shape returned by the upload endpoint). */
 export interface ChatAttachment {
@@ -81,6 +82,7 @@ const ChatComposer: React.FC<Props> = ({
   value, onChange, onSubmit, placeholder, busy, disabled, disabledHint,
 }) => {
   const tokens = useThemeTokens();
+  const t = useT();
   const { message: msgApi } = AntdApp.useApp();
   const [text, setText] = useState(value || '');
   const taRef = useRef<HTMLTextAreaElement | null>(null);
@@ -130,7 +132,7 @@ const ChatComposer: React.FC<Props> = ({
     const files = Array.from(list || []);
     if (files.length === 0) return;
     if (!projectId) {
-      msgApi.warning('先选一个项目或文件夹，再上传附件。');
+      msgApi.warning(t('chat.composer.needProject'));
       return;
     }
     const form = new FormData();
@@ -144,7 +146,7 @@ const ChatComposer: React.FC<Props> = ({
     } catch (e: any) {
       const detail = e?.response?.data?.detail;
       msgApi.error(typeof detail === 'string' && detail.trim()
-        ? detail : '附件上传失败，请重试。');
+        ? detail : t('chat.composer.uploadFailed'));
     } finally {
       setUploading((n) => Math.max(0, n - files.length));
     }
@@ -184,8 +186,8 @@ const ChatComposer: React.FC<Props> = ({
   // Yellow = task (loop), brand color = chat (single-turn).
   const sendColor = isTask ? tokens.warning : tokens.labelPrimary;
   const sendTitle = isTask
-    ? 'Send as task (full Coder ↔ Reviewer loop)'
-    : 'Send as chat (single-turn reply)';
+    ? t('chat.composer.sendAsTask')
+    : t('chat.composer.sendAsChat');
 
   return (
     <div style={{
@@ -249,7 +251,7 @@ const ChatComposer: React.FC<Props> = ({
                 </span>
                 <CloseOutlined
                   data-testid="composer-attachment-remove"
-                  aria-label={`Remove ${a.name}`}
+                  aria-label={t('chat.composer.removeAttachment', { name: a.name })}
                   onClick={() => removeAttachment(a)}
                   style={{ fontSize: 10, cursor: 'pointer', flexShrink: 0 }}
                 />
@@ -263,7 +265,7 @@ const ChatComposer: React.FC<Props> = ({
                 fontSize: 12,
               }}>
                 <LoadingOutlined style={{ fontSize: 12 }} />
-                上传中… ({uploading})
+                {t('chat.composer.uploading', { n: uploading })}
               </span>
             )}
           </div>
@@ -300,9 +302,8 @@ const ChatComposer: React.FC<Props> = ({
           rows={1}
           disabled={disabled || busy}
           placeholder={disabled
-            ? (disabledHint || 'Pick a project or folder to start chatting')
-            : (placeholder || 'Type a message — the agent will route to '
-               + 'chat (single reply) or task (full loop) automatically.')}
+            ? (disabledHint || t('chat.composer.disabledPlaceholder'))
+            : (placeholder || t('chat.composer.placeholder'))}
           style={{
             width: '100%', border: 'none', outline: 'none',
             background: 'transparent', color: tokens.labelPrimary,
@@ -331,8 +332,8 @@ const ChatComposer: React.FC<Props> = ({
               will route to. No toggle — the heuristic decides. */}
           <Tooltip
             title={isTask
-              ? 'Auto-classified as task — full Coder ↔ Reviewer loop'
-              : 'Auto-classified as chat — single-turn reply'}
+              ? t('chat.composer.intentTaskTip')
+              : t('chat.composer.intentChatTip')}
             placement="top"
           >
             <span
@@ -351,14 +352,14 @@ const ChatComposer: React.FC<Props> = ({
               {isTask
                 ? <ThunderboltOutlined style={{ fontSize: 12 }} />
                 : <MessageOutlined style={{ fontSize: 12 }} />}
-              <span>{isTask ? 'Task' : 'Chat'}</span>
+              <span>{isTask ? t('chat.composer.intentTask') : t('chat.composer.intentChat')}</span>
             </span>
           </Tooltip>
           <div style={{ flex: 1 }} />
           <Tooltip
             title={projectId
-              ? 'Attach files — any format. Saved to the project and readable by the Coder.'
-              : 'Pick a project or folder first'}
+              ? t('chat.composer.attachHint')
+              : t('chat.composer.attachDisabled')}
           >
             <Button
               type="text"
@@ -367,7 +368,7 @@ const ChatComposer: React.FC<Props> = ({
               onClick={() => fileInputRef.current?.click()}
               style={{ color: tokens.labelTertiary }}
               data-testid="composer-attach"
-              aria-label="Attach file"
+              aria-label={t('chat.composer.attach')}
             />
           </Tooltip>
           <Tooltip title={sendTitle}>
@@ -384,7 +385,7 @@ const ChatComposer: React.FC<Props> = ({
                 border: 'none',
               }}
               data-testid="composer-send"
-              aria-label="Send"
+              aria-label={t('chat.composer.send')}
             />
           </Tooltip>
           {/* R38: model ID chip on the rightmost of the action row.
@@ -394,8 +395,10 @@ const ChatComposer: React.FC<Props> = ({
           <Tooltip
             title={
               <span>
-                Using <b>{activeProvider === 'openai' ? 'OpenAI' : 'Anthropic'}</b>{' '}
-                · <b>{currentModel}</b> — click to change in Settings.
+                {t('chat.composer.modelTipPrefix')}{' '}
+                <b>{activeProvider === 'openai' ? 'OpenAI' : 'Anthropic'}</b>{' '}
+                · <b>{currentModel}</b>{' '}
+                {t('chat.composer.modelTipSuffix')}
               </span>
             }
             placement="top"
@@ -441,7 +444,7 @@ const ChatComposer: React.FC<Props> = ({
         fontSize: 11, color: tokens.labelTertiary,
         textAlign: 'center',
       }}>
-        Enter to send · Shift+Enter for newline · 📎 拖拽 / 粘贴 / 点回形针上传任意格式文件
+        {t('chat.composer.footerHint')}
       </div>
     </div>
   );

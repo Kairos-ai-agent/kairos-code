@@ -130,7 +130,7 @@ describe('CogsPanel', () => {
     });
     render(<CogsPanel />);
     await waitFor(() => {
-      expect(screen.queryByText('crit')).toBeNull();
+      expect(screen.queryByText(/crit|严重/i)).toBeNull();
     });
   });
 

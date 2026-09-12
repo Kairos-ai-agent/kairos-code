@@ -1,0 +1,13 @@
+{
+  "today.title": { "zh": "今天", "en": "Today" },
+  "today.subtitle": { "zh": "全部项目的工作快照。", "en": "A snapshot of your work across all projects." },
+  "today.stat.totalSessions": { "zh": "总会话数", "en": "Total sessions" },
+  "today.stat.avgScore": { "zh": "平均分", "en": "Avg score" },
+  "today.recentActivity": { "zh": "近期活动", "en": "Recent activity" },
+  "today.empty": { "zh": "还没有会话 — 进入一个项目并启动 Loop。", "en": "No sessions yet — head to a project and start a loop." },
+  "today.newSession": { "zh": "新会话", "en": "New session" },
+  "today.loopRounds": { "zh": "Loop · {n} 轮", "en": "Loop · {n} round(s)" },
+  "today.score": { "zh": "评分 {score}", "en": "score {score}" },
+  "today.openChat": { "zh": "打开对话 →", "en": "Open the chat →" },
+  "today.time.today": { "zh": "今天 {time}", "en": "today {time}" }
+}

@@ -28,6 +28,7 @@ import {
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import api from '../api/client';
+import { useT, tGlobal } from '../i18n';
 
 type EventKind = 'session_start' | 'session_end' | 'prompt'
   | 'completion' | 'tool_call' | 'tool_result'
@@ -56,29 +57,30 @@ interface TraceData {
   events: TraceEvent[];
 }
 
-const KIND_META: Record<EventKind, { color: string; label: string;
+const KIND_META: Record<EventKind, { color: string; labelKey: string;
                                        icon: React.ReactNode }> = {
-  session_start: { color: 'blue', label: 'Session start',
+  session_start: { color: 'blue', labelKey: 'trace.kind.sessionStart',
                    icon: <MessageOutlined /> },
-  session_end:   { color: 'blue', label: 'Session end',
+  session_end:   { color: 'blue', labelKey: 'trace.kind.sessionEnd',
                    icon: <MessageOutlined /> },
-  prompt:        { color: 'cyan', label: 'Prompt', icon: <MessageOutlined /> },
-  completion:    { color: 'purple', label: 'Completion',
+  prompt:        { color: 'cyan', labelKey: 'trace.kind.prompt', icon: <MessageOutlined /> },
+  completion:    { color: 'purple', labelKey: 'trace.kind.completion',
                    icon: <MessageOutlined /> },
-  tool_call:     { color: 'orange', label: 'Tool call',
+  tool_call:     { color: 'orange', labelKey: 'trace.kind.toolCall',
                    icon: <ToolOutlined /> },
-  tool_result:   { color: 'default', label: 'Tool result',
+  tool_result:   { color: 'default', labelKey: 'trace.kind.toolResult',
                    icon: <ToolOutlined /> },
-  summary:       { color: 'gold', label: 'Summary',
+  summary:       { color: 'gold', labelKey: 'trace.kind.summary',
                    icon: <BulbOutlined /> },
-  guardrail:     { color: 'magenta', label: 'Guardrail',
+  guardrail:     { color: 'magenta', labelKey: 'trace.kind.guardrail',
                    icon: <WarningOutlined /> },
-  error:         { color: 'red', label: 'Error',
+  error:         { color: 'red', labelKey: 'trace.kind.error',
                    icon: <CloseCircleOutlined /> },
 };
 
 const Trace: React.FC = () => {
   const tokens = useThemeTokens();
+  const t = useT();
   const navigate = useNavigate();
   const { projectId, sessionId } = useParams<{ projectId?: string;
                                                 sessionId?: string }>();
@@ -169,16 +171,18 @@ const Trace: React.FC = () => {
                     marginBottom: 16 }}>
         <Button type="text" icon={<ArrowLeftOutlined />}
                 onClick={() => navigate('/chat')}>
-          Back
+          {t('common.back')}
         </Button>
         <div>
           <div style={{ fontSize: 18, fontWeight: 600, color: tokens.labelPrimary }}>
-            Trace · session {(sessionId || '').slice(0, 12)}…
+            {t('trace.header.title')} {(sessionId || '').slice(0, 12)}…
           </div>
           {trace && (
             <div style={{ fontSize: 12, color: tokens.labelTertiary }}>
-              {trace.event_count} events · {trace.turn_count} turns ·
-              {' '}{trace.tokens.total_tokens} tokens
+              {t('trace.header.stats', {
+                events: trace.event_count, turns: trace.turn_count,
+                tokens: trace.tokens.total_tokens,
+              })}
             </div>
           )}
         </div>
@@ -187,11 +191,11 @@ const Trace: React.FC = () => {
           <Select
             value={sessionId}
             onChange={(v) => navigate(`/trace/${projectId}/${v}`)}
-            placeholder="Select a session"
+            placeholder={t('trace.selectSession')}
             style={{ minWidth: 220 }}
             options={sessions.map((s) => ({
               value: s.session_id,
-              label: `Session ${s.session_id.slice(0, 8)}…`,
+              label: t('trace.sessionOption', { id: s.session_id.slice(0, 8) }),
             }))}
           />
         </Space>
@@ -208,7 +212,7 @@ const Trace: React.FC = () => {
           image={<ToolOutlined style={{ fontSize: 40, color: tokens.labelTertiary }} />}
           description={
             <span style={{ color: tokens.labelTertiary }}>
-              No trace data found. Pick a session that has run at least one round.
+              {t('trace.empty')}
             </span>
           }
         />
@@ -221,26 +225,26 @@ const Trace: React.FC = () => {
             <Col xs={12} sm={6}>
               <Card size="small" style={{ background: tokens.bgLay1,
                                           border: `1px solid ${tokens.border}` }}>
-                <Statistic title="Events" value={trace.event_count} />
+                <Statistic title={t('trace.stat.events')} value={trace.event_count} />
               </Card>
             </Col>
             <Col xs={12} sm={6}>
               <Card size="small" style={{ background: tokens.bgLay1,
                                           border: `1px solid ${tokens.border}` }}>
-                <Statistic title="Total tokens" value={trace.tokens.total_tokens} />
+                <Statistic title={t('trace.stat.totalTokens')} value={trace.tokens.total_tokens} />
               </Card>
             </Col>
             <Col xs={12} sm={6}>
               <Card size="small" style={{ background: tokens.bgLay1,
                                           border: `1px solid ${tokens.border}` }}>
-                <Statistic title="Tool calls"
+                <Statistic title={t('trace.stat.toolCalls')}
                            value={trace.events.filter((e) => e.kind === 'tool_call').length} />
               </Card>
             </Col>
             <Col xs={12} sm={6}>
               <Card size="small" style={{ background: tokens.bgLay1,
                                           border: `1px solid ${tokens.border}` }}>
-                <Statistic title="Errors"
+                <Statistic title={t('trace.stat.errors')}
                            value={trace.events.filter((e) => e.kind === 'error').length}
                            valueStyle={{ color: trace.events.some((e) => e.kind === 'error')
                                                   ? tokens.danger : undefined }} />
@@ -257,13 +261,13 @@ const Trace: React.FC = () => {
           }}>
             <Button size="small" type={selectedTurn === 0 ? 'primary' : 'default'}
                     onClick={() => setSelectedTurn(0)}>
-              All
+              {t('trace.filter.all')}
             </Button>
-            {turns.map((t) => (
-              <Button key={t} size="small"
-                      type={selectedTurn === t ? 'primary' : 'default'}
-                      onClick={() => setSelectedTurn(t)}>
-                Turn {t}
+            {turns.map((turn) => (
+              <Button key={turn} size="small"
+                      type={selectedTurn === turn ? 'primary' : 'default'}
+                      onClick={() => setSelectedTurn(turn)}>
+                {t('trace.filter.turn')} {turn}
               </Button>
             ))}
           </div>
@@ -276,9 +280,9 @@ const Trace: React.FC = () => {
               value={view}
               onChange={(v) => setView(v as any)}
               options={[
-                { label: 'Events', value: 'events' },
-                { label: 'Tools', value: 'tools' },
-                { label: 'Tokens', value: 'tokens' },
+                { label: t('trace.col.events'), value: 'events' },
+                { label: t('trace.col.tools'), value: 'tools' },
+                { label: t('trace.col.tokens'), value: 'tokens' },
               ]}
             />
           </div>
@@ -286,7 +290,7 @@ const Trace: React.FC = () => {
           {view === 'events' && (
             <div>
               {events.length === 0 ? (
-                <Empty description="No events in this turn" />
+                <Empty description={t('trace.empty.events')} />
               ) : events.map((e, i) => (
                 <EventCard key={i} event={e} />
               ))}
@@ -298,27 +302,27 @@ const Trace: React.FC = () => {
                                         border: `1px solid ${tokens.border}` }}
                   styles={{ body: { padding: 0 } }}>
               {toolStats.length === 0 ? (
-                <Empty description="No tool calls in this trace" />
-              ) : toolStats.map((t) => (
-                <div key={t.name} style={{
+                <Empty description={t('trace.empty.tools')} />
+              ) : toolStats.map((tool) => (
+                <div key={tool.name} style={{
                   display: 'flex', alignItems: 'center', gap: 12,
                   padding: '10px 16px',
                   borderBottom: `1px solid ${tokens.border}`,
                 }}>
-                  <Tag color="orange">{t.name}</Tag>
+                  <Tag color="orange">{tool.name}</Tag>
                   <span style={{ color: tokens.labelSecondary, fontSize: 13 }}>
-                    {t.calls} call{t.calls === 1 ? '' : 's'}
+                    {t('trace.tools.calls', { n: tool.calls })}
                   </span>
                   <span style={{ color: tokens.success, fontSize: 13 }}>
-                    {t.success} ok
+                    {t('trace.tools.ok', { n: tool.success })}
                   </span>
-                  {t.failed > 0 && (
+                  {tool.failed > 0 && (
                     <span style={{ color: tokens.danger, fontSize: 13 }}>
-                      {t.failed} failed
+                      {t('trace.tools.failed', { n: tool.failed })}
                     </span>
                   )}
                   <span style={{ color: tokens.labelTertiary, fontSize: 13 }}>
-                    {t.duration_ms}ms
+                    {tool.duration_ms}{t('trace.msUnit')}
                   </span>
                 </div>
               ))}
@@ -330,15 +334,15 @@ const Trace: React.FC = () => {
                                         border: `1px solid ${tokens.border}` }}>
               <Row gutter={16}>
                 <Col span={8}>
-                  <Statistic title="Prompt tokens"
+                  <Statistic title={t('trace.token.prompt')}
                              value={trace.tokens.prompt_tokens} />
                 </Col>
                 <Col span={8}>
-                  <Statistic title="Completion tokens"
+                  <Statistic title={t('trace.token.completion')}
                              value={trace.tokens.completion_tokens} />
                 </Col>
                 <Col span={8}>
-                  <Statistic title="Total"
+                  <Statistic title={t('trace.token.total')}
                              value={trace.tokens.total_tokens} />
                 </Col>
               </Row>
@@ -352,6 +356,7 @@ const Trace: React.FC = () => {
 
 const EventCard: React.FC<{ event: TraceEvent }> = ({ event }) => {
   const tokens = useThemeTokens();
+  const t = useT();
   const meta = KIND_META[event.kind] || KIND_META.prompt;
   const [open, setOpen] = useState(false);
   const summary = renderSummary(event);
@@ -370,11 +375,11 @@ const EventCard: React.FC<{ event: TraceEvent }> = ({ event }) => {
         }}
       >
         <Tag color={meta.color} style={{ margin: 0 }}>
-          {meta.icon} {meta.label}
+          {meta.icon} {t(meta.labelKey)}
         </Tag>
         {event.turn > 0 && (
           <span style={{ fontSize: 11, color: tokens.labelTertiary }}>
-            turn {event.turn}
+            {t('trace.turnUnit')} {event.turn}
           </span>
         )}
         <span style={{
@@ -418,12 +423,12 @@ function renderSummary(e: TraceEvent): string {
     case 'completion': {
       const c = (p.content || '').toString();
       const tools = Array.isArray(p.tool_calls) ? p.tool_calls : [];
-      return `${c.slice(0, 160)}${tools.length ? ` [${tools.length} tool call${tools.length === 1 ? '' : 's'}]` : ''}`;
+      return `${c.slice(0, 160)}${tools.length ? ` [${tGlobal('trace.summary.toolCalls', { n: tools.length })}]` : ''}`;
     }
     case 'tool_call':
-      return `${p.name || 'tool'}(${JSON.stringify(p.args || {}).slice(0, 120)})`;
+      return `${p.name || tGlobal('trace.summary.toolName')}(${JSON.stringify(p.args || {}).slice(0, 120)})`;
     case 'tool_result':
-      return `${p.name || 'tool'} → ${(p.output || '').toString().slice(0, 160)}`;
+      return `${p.name || tGlobal('trace.summary.toolName')} → ${(p.output || '').toString().slice(0, 160)}`;
     case 'summary':
       return (p.summary || '').toString().slice(0, 200);
     case 'guardrail':

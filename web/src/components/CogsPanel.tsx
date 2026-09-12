@@ -27,6 +27,7 @@ import {
 import api from '../api/client';
 import { formatError } from '../utils/formatError';
 import { useThemeTokens } from '../hooks/useThemeTokens';
+import { useT } from '../i18n';
 
 interface CogsResponse {
   total_cost_usd: number;
@@ -56,6 +57,7 @@ function fmtPercent(v: number | null): string {
 }
 
 const CogsPanel: React.FC = () => {
+  const t = useT();
   const tokens = useThemeTokens();
   const [data, setData] = useState<CogsResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -86,10 +88,10 @@ const CogsPanel: React.FC = () => {
     return (
       <Card
         size="small"
-        title={<><DollarOutlined /> Cost / Value (COGS)</>}
+        title={<><DollarOutlined /> {t('cogsPanel.title')}</>}
         extra={
           <Button size="small" icon={<ReloadOutlined />} onClick={refresh}>
-            Retry
+            {t('common.retry')}
           </Button>
         }
         style={{ background: tokens.bgLay1, border: `1px solid ${tokens.border}` }}
@@ -101,7 +103,7 @@ const CogsPanel: React.FC = () => {
 
   if (!data) {
     return (
-      <Card size="small" title={<><DollarOutlined /> Cost / Value (COGS)</>}>
+      <Card size="small" title={<><DollarOutlined /> {t('cogsPanel.title')}</>}>
         <Spin />
       </Card>
     );
@@ -114,9 +116,9 @@ const CogsPanel: React.FC = () => {
       size="small"
       title={
         <span>
-          <DollarOutlined /> Cost / Value (COGS)
-          <Tooltip title="R35: cost-of-goods-sold ratios. Combines cost.jsonl + datasets + alerts.">
-            <InfoCircleOutlined style={{ marginLeft: 6, opacity: 0.4 }} />
+          <DollarOutlined /> {t('cogsPanel.title')}
+          <Tooltip title={t('cogsPanel.tooltip')}>
+            <InfoCircleOutlined style={{ marginInlineStart: 6, opacity: 0.4 }} />
           </Tooltip>
         </span>
       }
@@ -128,7 +130,7 @@ const CogsPanel: React.FC = () => {
             </span>
           )}
           <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={refresh}>
-            Refresh
+            {t('common.refresh')}
           </Button>
         </span>
       }
@@ -139,7 +141,7 @@ const CogsPanel: React.FC = () => {
         <Row gutter={8} style={{ marginBottom: 12 }}>
           <Col span={8}>
             <Statistic
-              title={<span style={{ fontSize: 11 }}>Total spend</span>}
+              title={<span style={{ fontSize: 11 }}>{t('cogsPanel.stat.totalSpend')}</span>}
               value={data.total_cost_usd}
               precision={4}
               prefix={<DollarOutlined />}
@@ -148,7 +150,7 @@ const CogsPanel: React.FC = () => {
           </Col>
           <Col span={8}>
             <Statistic
-              title={<span style={{ fontSize: 11 }}>Eval cases</span>}
+              title={<span style={{ fontSize: 11 }}>{t('cogsPanel.stat.evalCases')}</span>}
               value={data.dataset.total_cases}
               prefix={<ExperimentOutlined />}
               valueStyle={{ fontSize: 18 }}
@@ -156,7 +158,7 @@ const CogsPanel: React.FC = () => {
           </Col>
           <Col span={8}>
             <Statistic
-              title={<span style={{ fontSize: 11 }}>Alerts fired</span>}
+              title={<span style={{ fontSize: 11 }}>{t('cogsPanel.stat.alertsFired')}</span>}
               value={data.alerts.total}
               prefix={<AlertOutlined />}
               valueStyle={{
@@ -165,8 +167,8 @@ const CogsPanel: React.FC = () => {
               }}
               suffix={
                 data.alerts.critical > 0 ? (
-                  <Tag color="red" style={{ marginLeft: 4, fontSize: 10 }}>
-                    {data.alerts.critical} crit
+                  <Tag color="red" style={{ marginInlineStart: 4, fontSize: 10 }}>
+                    {t('cogsPanel.critCount', { n: data.alerts.critical })}
                   </Tag>
                 ) : null
               }
@@ -177,9 +179,9 @@ const CogsPanel: React.FC = () => {
         {/* Bottom: 5 derived metrics */}
         <Row gutter={[12, 8]} style={{ borderTop: `1px solid ${tokens.border}`, paddingTop: 12 }}>
           <Col xs={12} sm={8} md={8} lg={4}>
-            <Tooltip title="Total cost / total eval cases recorded">
+            <Tooltip title={t('cogsPanel.ratio.costPerCase')}>
               <Statistic
-                title={<span style={{ fontSize: 10 }}>$ / case</span>}
+                title={<span style={{ fontSize: 10 }}>{t('cogsPanel.metric.costPerCase')}</span>}
                 value={fmtRatio(m.cost_per_case)}
                 valueStyle={{ fontSize: 14 }}
                 prefix={<DollarOutlined />}
@@ -187,9 +189,9 @@ const CogsPanel: React.FC = () => {
             </Tooltip>
           </Col>
           <Col xs={12} sm={8} md={8} lg={5}>
-            <Tooltip title="Total cost / passing eval cases">
+            <Tooltip title={t('cogsPanel.ratio.costPerPass')}>
               <Statistic
-                title={<span style={{ fontSize: 10 }}>$ / passing</span>}
+                title={<span style={{ fontSize: 10 }}>{t('cogsPanel.metric.costPerPass')}</span>}
                 value={fmtRatio(m.cost_per_passing)}
                 valueStyle={{ fontSize: 14, color: '#3f8600' }}
                 prefix={<CheckCircleOutlined />}
@@ -197,9 +199,9 @@ const CogsPanel: React.FC = () => {
             </Tooltip>
           </Col>
           <Col xs={12} sm={8} md={8} lg={5}>
-            <Tooltip title="Total cost / number of fired alerts">
+            <Tooltip title={t('cogsPanel.ratio.costPerAlert')}>
               <Statistic
-                title={<span style={{ fontSize: 10 }}>$ / alert</span>}
+                title={<span style={{ fontSize: 10 }}>{t('cogsPanel.metric.costPerAlert')}</span>}
                 value={fmtRatio(m.cost_per_alert)}
                 valueStyle={{ fontSize: 14 }}
                 prefix={<ThunderboltOutlined />}
@@ -207,9 +209,9 @@ const CogsPanel: React.FC = () => {
             </Tooltip>
           </Col>
           <Col xs={12} sm={8} md={8} lg={5}>
-            <Tooltip title="Passing / total eval cases (0-100%)">
+            <Tooltip title={t('cogsPanel.ratio.efficiency')}>
               <Statistic
-                title={<span style={{ fontSize: 10 }}>Efficiency</span>}
+                title={<span style={{ fontSize: 10 }}>{t('cogsPanel.metric.efficiency')}</span>}
                 value={fmtPercent(m.efficiency)}
                 valueStyle={{
                   fontSize: 14,
@@ -222,9 +224,9 @@ const CogsPanel: React.FC = () => {
             </Tooltip>
           </Col>
           <Col xs={24} sm={8} md={8} lg={5}>
-            <Tooltip title="1 - critical_alerts / total_alerts (higher = less human intervention needed)">
+            <Tooltip title={t('cogsPanel.ratio.approvalYield')}>
               <Statistic
-                title={<span style={{ fontSize: 10 }}>Approval yield</span>}
+                title={<span style={{ fontSize: 10 }}>{t('cogsPanel.metric.approvalYield')}</span>}
                 value={fmtPercent(m.approval_yield)}
                 valueStyle={{
                   fontSize: 14,
@@ -246,9 +248,11 @@ const CogsPanel: React.FC = () => {
           }}
           data-testid="cogs-subtitle"
         >
-          {data.n_llm_calls} LLM calls · {data.dataset.passed} pass / {data.dataset.failed} fail
-          {' · '}
-          {data.alerts.critical} critical / {data.alerts.total} total
+          {t('cogsPanel.subtitle', {
+            calls: data.n_llm_calls, passed: data.dataset.passed,
+            failed: data.dataset.failed, critical: data.alerts.critical,
+            total: data.alerts.total,
+          })}
         </div>
       </Spin>
     </Card>

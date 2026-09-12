@@ -26,9 +26,11 @@
 export interface LLMPreset {
   /** Short id used in the dropdown value (e.g. "deepseek"). */
   id: string;
-  /** Human label shown in the dropdown. */
+  /** i18n key for the human label shown in the dropdown
+   *  (translate at the call site: `t(p.label)`). */
   label: string;
-  /** One-line hint shown under the label in the options panel. */
+  /** i18n key for the one-line hint shown under the label in
+   *  the options panel (translate at the call site: `t(p.hint)`). */
   hint: string;
   /** The full chat completions URL the backend will POST to. */
   endpointUrl: string;
@@ -49,8 +51,8 @@ export interface LLMPreset {
 export const LLM_PRESETS: LLMPreset[] = [
   {
     id: 'openai',
-    label: 'OpenAI',
-    hint: 'GPT-4o / GPT-4.1 / o1 / o3 / o4',
+    label: 'preset.openai.label',
+    hint: 'preset.openai.hint',
     endpointUrl: 'https://api.openai.com/v1/chat/completions',
     defaultModel: 'gpt-4o',
     signupUrl: 'https://platform.openai.com/',
@@ -59,8 +61,8 @@ export const LLM_PRESETS: LLMPreset[] = [
   },
   {
     id: 'deepseek',
-    label: 'DeepSeek',
-    hint: '国内首选 · 极致性价比',
+    label: 'preset.deepseek.label',
+    hint: 'preset.deepseek.hint',
     endpointUrl: 'https://api.deepseek.com/v1/chat/completions',
     defaultModel: 'deepseek-chat',
     signupUrl: 'https://platform.deepseek.com/',
@@ -69,8 +71,8 @@ export const LLM_PRESETS: LLMPreset[] = [
   },
   {
     id: 'qwen',
-    label: 'Qwen (Dashscope)',
-    hint: 'qwen-max / qwen-plus / qwen-coder — 阿里云',
+    label: 'preset.qwen.label',
+    hint: 'preset.qwen.hint',
     endpointUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
     defaultModel: 'qwen-max',
     signupUrl: 'https://dashscope.console.aliyun.com/',
@@ -79,8 +81,8 @@ export const LLM_PRESETS: LLMPreset[] = [
   },
   {
     id: 'glm',
-    label: 'GLM (Zhipu)',
-    hint: 'glm-4-plus / glm-4-flash — 智谱 AI',
+    label: 'preset.glm.label',
+    hint: 'preset.glm.hint',
     endpointUrl: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
     defaultModel: 'glm-4-plus',
     signupUrl: 'https://open.bigmodel.cn/',
@@ -88,8 +90,8 @@ export const LLM_PRESETS: LLMPreset[] = [
   },
   {
     id: 'moonshot',
-    label: 'Moonshot (Kimi)',
-    hint: 'moonshot-v1 / kimi-k2 — 长上下文',
+    label: 'preset.moonshot.label',
+    hint: 'preset.moonshot.hint',
     endpointUrl: 'https://api.moonshot.cn/v1/chat/completions',
     defaultModel: 'moonshot-v1-128k',
     signupUrl: 'https://platform.moonshot.cn/',
@@ -97,8 +99,8 @@ export const LLM_PRESETS: LLMPreset[] = [
   },
   {
     id: 'doubao',
-    label: 'Doubao (火山方舟)',
-    hint: '豆包 — 字节跳动',
+    label: 'preset.doubao.label',
+    hint: 'preset.doubao.hint',
     endpointUrl: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
     defaultModel: 'doubao-pro-32k',
     signupUrl: 'https://www.volcengine.com/product/doubao',
@@ -106,8 +108,8 @@ export const LLM_PRESETS: LLMPreset[] = [
   },
   {
     id: 'ollama-cloud',
-    label: 'Ollama (local)',
-    hint: 'localhost:11434 — 本地离线',
+    label: 'preset.ollamaCloud.label',
+    hint: 'preset.ollamaCloud.hint',
     endpointUrl: 'http://localhost:11434/v1/chat/completions',
     defaultModel: 'qwen2.5-coder:7b',
     signupUrl: 'https://ollama.com/',
@@ -115,8 +117,8 @@ export const LLM_PRESETS: LLMPreset[] = [
   },
   {
     id: 'openrouter',
-    label: 'OpenRouter',
-    hint: '统一接口访问 200+ 模型',
+    label: 'preset.openrouter.label',
+    hint: 'preset.openrouter.hint',
     endpointUrl: 'https://openrouter.ai/api/v1/chat/completions',
     defaultModel: 'anthropic/claude-sonnet-4-20250514',
     signupUrl: 'https://openrouter.ai/',
@@ -124,8 +126,8 @@ export const LLM_PRESETS: LLMPreset[] = [
   },
   {
     id: 'custom',
-    label: 'Custom (任意 OpenAI 兼容 API)',
-    hint: '自填 endpoint URL 和 model',
+    label: 'preset.custom.label',
+    hint: 'preset.custom.hint',
     endpointUrl: '',  // blank — user types
     defaultModel: '',
     signupUrl: '',
@@ -136,8 +138,8 @@ export const LLM_PRESETS: LLMPreset[] = [
   // via URL / model-name matching.
   {
     id: 'ollama-local',
-    label: 'Ollama (local)',
-    hint: 'localhost:11434 — 本地离线',
+    label: 'preset.ollamaLocal.label',
+    hint: 'preset.ollamaLocal.hint',
     endpointUrl: 'http://localhost:11434/v1/chat/completions',
     defaultModel: 'qwen2.5-coder:7b',
     signupUrl: 'https://ollama.com/',
@@ -145,8 +147,8 @@ export const LLM_PRESETS: LLMPreset[] = [
   },
   {
     id: 'groq',
-    label: 'Groq',
-    hint: 'LPU 极速推理 · 免费额度',
+    label: 'preset.groq.label',
+    hint: 'preset.groq.hint',
     endpointUrl: 'https://api.groq.com/openai/v1/chat/completions',
     defaultModel: 'llama-3.3-70b-versatile',
     signupUrl: 'https://console.groq.com/',
@@ -154,8 +156,8 @@ export const LLM_PRESETS: LLMPreset[] = [
   },
   {
     id: 'together',
-    label: 'Together.ai',
-    hint: '开源模型 API · 大免费额度',
+    label: 'preset.together.label',
+    hint: 'preset.together.hint',
     endpointUrl: 'https://api.together.xyz/v1/chat/completions',
     defaultModel: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
     signupUrl: 'https://api.together.xyz/',
@@ -163,8 +165,8 @@ export const LLM_PRESETS: LLMPreset[] = [
   },
   {
     id: 'fireworks',
-    label: 'Fireworks.ai',
-    hint: 'Fast 开源推理 · $1 free',
+    label: 'preset.fireworks.label',
+    hint: 'preset.fireworks.hint',
     endpointUrl: 'https://api.fireworks.ai/inference/v1/chat/completions',
     defaultModel: 'accounts/fireworks/models/llama-v3p3-70b-instruct',
     signupUrl: 'https://fireworks.ai/',
@@ -172,8 +174,8 @@ export const LLM_PRESETS: LLMPreset[] = [
   },
   {
     id: 'mistral',
-    label: 'Mistral AI',
-    hint: 'Codestral / Mistral-Large',
+    label: 'preset.mistral.label',
+    hint: 'preset.mistral.hint',
     endpointUrl: 'https://api.mistral.ai/v1/chat/completions',
     defaultModel: 'mistral-large-latest',
     signupUrl: 'https://console.mistral.ai/',
@@ -181,8 +183,8 @@ export const LLM_PRESETS: LLMPreset[] = [
   },
   {
     id: 'xai',
-    label: 'xAI (Grok)',
-    hint: 'Grok-2 / Grok-2-mini',
+    label: 'preset.xai.label',
+    hint: 'preset.xai.hint',
     endpointUrl: 'https://api.x.ai/v1/chat/completions',
     defaultModel: 'grok-2-latest',
     signupUrl: 'https://console.x.ai/',
@@ -190,8 +192,8 @@ export const LLM_PRESETS: LLMPreset[] = [
   },
   {
     id: 'perplexity',
-    label: 'Perplexity',
-    hint: '联网增强搜索 · 实时',
+    label: 'preset.perplexity.label',
+    hint: 'preset.perplexity.hint',
     endpointUrl: 'https://api.perplexity.ai/v1/chat/completions',
     defaultModel: 'llama-3.1-sonar-large-128k-online',
     signupUrl: 'https://www.perplexity.ai/settings/api',
@@ -199,8 +201,8 @@ export const LLM_PRESETS: LLMPreset[] = [
   },
   {
     id: 'cohere',
-    label: 'Cohere',
-    hint: 'Command-R / Command-R+',
+    label: 'preset.cohere.label',
+    hint: 'preset.cohere.hint',
     endpointUrl: 'https://api.cohere.ai/compatibility/v1/chat/completions',
     defaultModel: 'command-r-plus',
     signupUrl: 'https://dashboard.cohere.com/',

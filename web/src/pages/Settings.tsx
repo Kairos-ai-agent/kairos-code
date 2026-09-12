@@ -9,26 +9,30 @@ import {
   ApiOutlined, CheckCircleOutlined, CloseCircleOutlined, EditOutlined,
 } from '@ant-design/icons';
 import api from '../api/client';
+import { useT } from '../i18n';
 
 const { Title, Text, Paragraph } = Typography;
 
 // LoopReview only ships two roles. Anything else coming from
 // /api/config/models (e.g. a stale settings.json) is ignored by the UI
 // — only entries in this map get a row in the assignment table.
-const roleLabels: Record<string, string> = {
-  coder: 'Coder',
-  reviewer: 'Reviewer',
+// The maps hold dictionary keys; resolve them with t() at render time so
+// the text stays translatable.
+const roleLabelKeys: Record<string, string> = {
+  coder: 'settings.assign.role.coder',
+  reviewer: 'settings.assign.role.reviewer',
 };
 
-const roleDescriptions: Record<string, string> = {
-  coder: '通用编码 Agent:读、写、运行命令、跑测试',
-  reviewer: '只读审查 Agent:打分并给出可执行修复建议',
+const roleDescKeys: Record<string, string> = {
+  coder: 'settings.assign.role.coderDesc',
+  reviewer: 'settings.assign.role.reviewerDesc',
 };
 
 interface ModelOption { id: string; name: string; }
 interface CustomModel { name: string; base_url: string; api_key: string; model: string; protocol: 'openai' | 'anthropic'; }
 
 const SettingsPage: React.FC = () => {
+  const t = useT();
   const [loading, setLoading] = useState(true);
   const [deepseekKey, setDeepseekKey] = useState('');
   const [deepseekModels, setDeepseekModels] = useState<ModelOption[]>([]);
@@ -109,9 +113,9 @@ const SettingsPage: React.FC = () => {
     setSavingLoopCfg(true);
     try {
       await api.post('/config/loop', { specialists, best_of_n: bestOfN });
-      message.success('Loop config saved (applies on next loop start)');
+      message.success(t('settings.loop.saved'));
     } catch (e: any) {
-      message.error(e?.message || 'failed to save loop config');
+      message.error(e?.message || t('settings.loop.saveFailed'));
     } finally {
       setSavingLoopCfg(false);
     }
@@ -126,14 +130,14 @@ const SettingsPage: React.FC = () => {
       for (const [role, model] of Object.entries(roleMappings)) {
         await api.post('/config/models/assign', { role, model_name: model });
       }
-      message.success('设置已保存');
+      message.success(t('settings.page.saved'));
     } catch (e) {
-      message.error('保存失败');
+      message.error(t('settings.page.saveFailed'));
     }
   };
 
   const handleTestDeepSeek = async () => {
-    if (!deepseekKey) { message.warning('请输入 API Key'); return; }
+    if (!deepseekKey) { message.warning(t('settings.deepseek.apiKeyRequired')); return; }
     setDeepseekTesting(true);
     setDeepseekTestResult(null);
     try {
@@ -144,14 +148,14 @@ const SettingsPage: React.FC = () => {
       message[res.data.success ? 'success' : 'error'](res.data.message);
     } catch (e) {
       setDeepseekTestResult(false);
-      message.error('测试失败');
+      message.error(t('settings.shared.testFailed'));
     } finally {
       setDeepseekTesting(false);
     }
   };
 
   const handleFetchCustomModels = async () => {
-    if (!newModel.base_url) { message.warning('请先输入 API URL'); return; }
+    if (!newModel.base_url) { message.warning(t('settings.customModel.apiUrlRequired')); return; }
     setFetchingModels(true);
     setFetchNote('');
     try {
@@ -160,20 +164,20 @@ const SettingsPage: React.FC = () => {
       });
       if (res.data.models?.length > 0) {
         setFetchedModels(res.data.models);
-        message.success(`获取到 ${res.data.count} 个模型`);
+        message.success(t('settings.customModel.fetched', { n: res.data.count }));
       } else {
-        message.warning(res.data.error || '未获取到模型，可手动输入模型 ID');
+        message.warning(res.data.error || t('settings.customModel.noneFetched'));
       }
       if (res.data.note) setFetchNote(res.data.note);
     } catch (e) {
-      message.error('获取模型列表失败，可手动输入模型 ID');
+      message.error(t('settings.customModel.fetchFailed'));
     } finally {
       setFetchingModels(false);
     }
   };
 
   const handleTestCustom = async () => {
-    if (!newModel.base_url || !newModel.model) { message.warning('请填写 API URL 和模型 ID'); return; }
+    if (!newModel.base_url || !newModel.model) { message.warning(t('settings.customModel.urlAndModelRequired')); return; }
     setTestingCustom(true);
     setTestResult(null);
     try {
@@ -185,7 +189,7 @@ const SettingsPage: React.FC = () => {
       message[res.data.success ? 'success' : 'error'](res.data.message);
     } catch (e) {
       setTestResult(false);
-      message.error('测试失败');
+      message.error(t('settings.shared.testFailed'));
     } finally {
       setTestingCustom(false);
     }
@@ -203,7 +207,7 @@ const SettingsPage: React.FC = () => {
 
   // Add or edit custom model and save immediately
   const handleAddCustomModel = async () => {
-    if (!newModel.name || !newModel.base_url || !newModel.model) { message.warning('请填写完整信息'); return; }
+    if (!newModel.name || !newModel.base_url || !newModel.model) { message.warning(t('settings.customModel.incomplete')); return; }
     let updated: CustomModel[];
     if (editIndex !== null) {
       updated = customModels.map((m, i) => i === editIndex ? { ...newModel } : m);
@@ -218,7 +222,7 @@ const SettingsPage: React.FC = () => {
     setTestResult(null);
     setEditIndex(null);
     setAddModalOpen(false);
-    message.success(editIndex !== null ? '已更新并保存' : '已添加并保存');
+    message.success(t(editIndex !== null ? 'settings.customModel.updated' : 'settings.customModel.added'));
   };
 
   // Delete custom model and save immediately
@@ -226,7 +230,7 @@ const SettingsPage: React.FC = () => {
     const updated = customModels.filter((_, i) => i !== index);
     setCustomModels(updated);
     await saveToBackend(updated);
-    message.success('已删除并保存');
+    message.success(t('settings.customModel.deleted'));
   };
 
   // Assign role model and save immediately
@@ -235,7 +239,7 @@ const SettingsPage: React.FC = () => {
     try {
       await api.post('/config/models/assign', { role, model_name: model });
     } catch (e) {
-      message.error('分配失败');
+      message.error(t('settings.assign.failed'));
     }
   };
 
@@ -251,22 +255,22 @@ const SettingsPage: React.FC = () => {
       label: <span><RobotOutlined /> DeepSeek</span>,
       children: (
         <Card>
-          <Paragraph type="secondary">配置 DeepSeek API Key。</Paragraph>
+          <Paragraph type="secondary">{t('settings.deepseek.intro')}</Paragraph>
           <Divider />
           <Form layout="vertical" style={{ maxWidth: 500 }}>
-            <Form.Item label="API Key" required>
-              <Input.Password placeholder="sk-..." value={deepseekKey}
+            <Form.Item label={t('settings.shared.apiKeyLabel')} required>
+              <Input.Password placeholder={t('settingsPage.deepseek.keyPlaceholder')} value={deepseekKey}
                 onChange={(e) => setDeepseekKey(e.target.value)} />
             </Form.Item>
-            <Form.Item label="默认模型">
+            <Form.Item label={t('settings.deepseek.defaultModel')}>
               <Select value={deepseekModel} onChange={setDeepseekModel} style={{ width: '100%' }}
                 options={deepseekModels.map((m) => ({ value: m.id, label: m.name }))} />
             </Form.Item>
             <Space>
-              <Button icon={<ReloadOutlined />} onClick={fetchDeepSeekModels}>刷新模型列表</Button>
+              <Button icon={<ReloadOutlined />} onClick={fetchDeepSeekModels}>{t('settings.deepseek.refreshModels')}</Button>
               <Button onClick={handleTestDeepSeek} loading={deepseekTesting}
                 icon={deepseekTestResult === true ? <CheckCircleOutlined /> : deepseekTestResult === false ? <CloseCircleOutlined /> : undefined}>
-                测试连接
+                {t('settings.shared.testConnection')}
               </Button>
             </Space>
           </Form>
@@ -275,32 +279,32 @@ const SettingsPage: React.FC = () => {
     },
     {
       key: 'custom',
-      label: <span><LinkOutlined /> 自定义模型</span>,
+      label: <span><LinkOutlined /> {t('settings.page.tabCustom')}</span>,
       children: (
         <Card>
           <Paragraph type="secondary">
-            添加 OpenAI 或 Anthropic-compatible的 LLM 服务。
+            {t('settings.customModel.intro')}
           </Paragraph>
           <Divider />
           <Button type="primary" icon={<PlusOutlined />}
             onClick={() => { setEditIndex(null); setNewModel({ name: '', base_url: '', api_key: '', model: '', protocol: 'openai' }); setFetchedModels([]); setFetchNote(''); setTestResult(null); setAddModalOpen(true); }}>
-            添加自定义模型
+            {t('settings.page.addCustomModel')}
           </Button>
 
           {customModels.length > 0 && (
             <Table style={{ marginTop: 16 }}
               dataSource={customModels.map((m, i) => ({ ...m, key: i }))}
               columns={[
-                { title: '名称', dataIndex: 'name' },
-                { title: 'API URL', dataIndex: 'base_url', ellipsis: true },
-                { title: '协议', dataIndex: 'protocol', width: 100,
+                { title: t('common.name'), dataIndex: 'name' },
+                { title: t('settings.customModel.colApiUrl'), dataIndex: 'base_url', ellipsis: true },
+                { title: t('settings.customModel.protocol'), dataIndex: 'protocol', width: 100,
                   render: (p: string) => <Tag color={p === 'anthropic' ? 'orange' : 'blue'}>{p}</Tag> },
-                { title: '模型', dataIndex: 'model' },
-                { title: '操作', width: 120,
+                { title: t('common.model'), dataIndex: 'model' },
+                { title: t('common.actions'), width: 120,
                   render: (_: any, __: any, index: number) => (
                     <Space>
                       <Button type="link" icon={<EditOutlined />}
-                        onClick={() => handleOpenEdit(index)}>编辑</Button>
+                        onClick={() => handleOpenEdit(index)}>{t('common.edit')}</Button>
                       <Button type="link" danger icon={<DeleteOutlined />}
                         onClick={() => handleDeleteCustomModel(index)} />
                     </Space>
@@ -309,38 +313,38 @@ const SettingsPage: React.FC = () => {
               pagination={false} size="small" />
           )}
 
-          <Modal title={editIndex !== null ? '编辑自定义模型' : '添加自定义模型'} open={addModalOpen} width={600}
+          <Modal title={editIndex !== null ? t('settings.page.editCustomModel') : t('settings.page.addCustomModel')} open={addModalOpen} width={600}
             onCancel={() => { setAddModalOpen(false); setEditIndex(null); setFetchedModels([]); setFetchNote(''); setTestResult(null); }}
-            onOk={handleAddCustomModel} okText={editIndex !== null ? '保存' : '添加'}>
+            onOk={handleAddCustomModel} okText={editIndex !== null ? t('common.save') : t('common.add')}>
             <Form layout="vertical">
-              <Form.Item label="名称" required>
-                <Input placeholder="例如: MiniMax" value={newModel.name}
+              <Form.Item label={t('common.name')} required>
+                <Input placeholder={t('settings.customModel.namePlaceholder')} value={newModel.name}
                   onChange={(e) => setNewModel((p) => ({ ...p, name: e.target.value }))} />
               </Form.Item>
-              <Form.Item label="协议" required>
+              <Form.Item label={t('settings.customModel.protocol')} required>
                 <Radio.Group value={newModel.protocol}
                   onChange={(e) => setNewModel((p) => ({ ...p, protocol: e.target.value }))}>
-                  <Radio.Button value="openai">OpenAI-compatible</Radio.Button>
-                  <Radio.Button value="anthropic">Anthropic-compatible</Radio.Button>
+                  <Radio.Button value="openai">{t('settings.customModel.protocolOpenai')}</Radio.Button>
+                  <Radio.Button value="anthropic">{t('settings.customModel.protocolAnthropic')}</Radio.Button>
                 </Radio.Group>
               </Form.Item>
-              <Form.Item label="API Base URL" required>
+              <Form.Item label={t('settings.customModel.baseUrlLabel')} required>
                 <Input placeholder={newModel.protocol === 'anthropic' ? 'https://api.minimaxi.com/anthropic' : 'http://localhost:11434/v1'}
                   value={newModel.base_url}
                   onChange={(e) => setNewModel((p) => ({ ...p, base_url: e.target.value }))} />
               </Form.Item>
-              <Form.Item label="API Key">
-                <Input.Password placeholder="如果需要认证" value={newModel.api_key}
+              <Form.Item label={t('settings.shared.apiKeyLabel')}>
+                <Input.Password placeholder={t('settings.customModel.apiKeyPlaceholder')} value={newModel.api_key}
                   onChange={(e) => setNewModel((p) => ({ ...p, api_key: e.target.value }))} />
               </Form.Item>
-              <Form.Item label="模型 ID" required>
+              <Form.Item label={t('settings.customModel.modelIdLabel')} required>
                 {fetchedModels.length > 0 ? (
-                  <Select placeholder="选择模型" value={newModel.model || undefined}
+                  <Select placeholder={t('settings.shared.selectModel')} value={newModel.model || undefined}
                     onChange={(v) => setNewModel((p) => ({ ...p, model: v }))}
                     style={{ width: '100%' }} showSearch
                     options={fetchedModels.map((m) => ({ value: m.id, label: m.id }))} />
                 ) : (
-                  <Input placeholder={newModel.protocol === 'anthropic' ? '例如: MiniMax-Text-01' : '例如: gpt-4o, llama3.1'}
+                  <Input placeholder={newModel.protocol === 'anthropic' ? t('settings.customModel.modelAnthropicPlaceholder') : t('settings.customModel.modelOpenaiPlaceholder')}
                     value={newModel.model}
                     onChange={(e) => setNewModel((p) => ({ ...p, model: e.target.value }))} />
                 )}
@@ -349,13 +353,13 @@ const SettingsPage: React.FC = () => {
               <Space>
                 <Button icon={<ReloadOutlined />} onClick={handleFetchCustomModels}
                   loading={fetchingModels} disabled={!newModel.base_url}>
-                  获取模型列表
+                  {t('settings.customModel.fetchModels')}
                 </Button>
                 <Button icon={<ApiOutlined />} onClick={handleTestCustom}
                   loading={testingCustom} disabled={!newModel.base_url || !newModel.model}>
                   {testResult === true ? <CheckCircleOutlined style={{ color: '#52c41a' }} /> :
                    testResult === false ? <CloseCircleOutlined style={{ color: '#ff4d4f' }} /> : null}
-                  测试连接
+                  {t('settings.shared.testConnection')}
                 </Button>
               </Space>
             </Form>
@@ -365,23 +369,23 @@ const SettingsPage: React.FC = () => {
     },
     {
       key: 'assign',
-      label: <span><TeamOutlined /> Agent 分配</span>,
+      label: <span><TeamOutlined /> {t('settings.page.tabAssign')}</span>,
       children: (
         <Card>
-          <Paragraph type="secondary">为不同角色分配模型。</Paragraph>
+          <Paragraph type="secondary">{t('settingsPage.assign.intro')}</Paragraph>
           <Divider />
-          <Table dataSource={Object.keys(roleLabels).map((role) => ({ role, key: role }))}
+          <Table dataSource={Object.keys(roleLabelKeys).map((role) => ({ role, key: role }))}
             columns={[
-              { title: '角色', dataIndex: 'role',
+              { title: t('settings.assign.colRole'), dataIndex: 'role',
                 render: (role: string) => (
                   <Space direction="vertical" size={0}>
-                    <Text strong>{roleLabels[role]}</Text>
-                    <Text type="secondary" style={{ fontSize: 12 }}>{roleDescriptions[role]}</Text>
+                    <Text strong>{t(roleLabelKeys[role])}</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>{t(roleDescKeys[role])}</Text>
                   </Space>
                 )},
-              { title: '分配模型', dataIndex: 'role',
+              { title: t('settings.assign.colModel'), dataIndex: 'role',
                 render: (role: string) => (
-                  <Select value={roleMappings[role] || undefined} placeholder="选择模型"
+                  <Select value={roleMappings[role] || undefined} placeholder={t('settings.shared.selectModel')}
                     style={{ width: 280 }}
                     onChange={(v) => handleAssign(role, v)}
                     showSearch
@@ -397,49 +401,48 @@ const SettingsPage: React.FC = () => {
   return (
     <div>
       <Space style={{ marginBottom: 16 }}>
-        <Title level={3} style={{ margin: 0 }}>设置</Title>
-        <Button type="primary" icon={<SaveOutlined />} onClick={handleSave}>保存所有设置</Button>
+        <Title level={3} style={{ margin: 0 }}>{t('common.settings')}</Title>
+        <Button type="primary" icon={<SaveOutlined />} onClick={handleSave}>{t('settingsPage.saveAll')}</Button>
       </Space>
       <Tabs defaultActiveKey="deepseek" items={tabItems} />
-      <Card title="Loop Behavior" size="small" style={{ marginTop: 16 }}>
+      <Card title={t('settings.loop.title')} size="small" style={{ marginTop: 16 }}>
         <Space direction="vertical" style={{ width: '100%' }} size={12}>
-          <Alert type="info" message="These settings apply on the next loop start. They do not change a running loop." />
+          <Alert type="info" message={t('settings.loop.alert')} />
           <div>
-            <Text strong>Specialist reviewers</Text>
+            <Text strong>{t('settings.loop.specialists')}</Text>
             <div style={{ marginTop: 8 }}>
               <Checkbox.Group
                 value={specialists}
                 onChange={(v) => setSpecialists(v as string[])}
                 options={[
-                  { label: 'Security (OWASP)', value: 'security_reviewer' },
-                  { label: 'Performance', value: 'perf_reviewer' },
-                  { label: 'Design / Architecture', value: 'design_reviewer' },
-                  { label: 'Test coverage', value: 'test_reviewer' },
+                  { label: t('settings.loop.specialist.security'), value: 'security_reviewer' },
+                  { label: t('settings.loop.specialist.perf'), value: 'perf_reviewer' },
+                  { label: t('settings.loop.specialist.design'), value: 'design_reviewer' },
+                  { label: t('settings.loop.specialist.test'), value: 'test_reviewer' },
                 ]}
               />
               <div style={{ marginTop: 4, fontSize: 11, color: '#888' }}>
-                Each specialist runs in parallel with the main Reviewer.
-                Scores are weighted-averaged.
+                {t('settings.loop.specialistsHelp')}
               </div>
             </div>
           </div>
 
           <div>
-            <Text strong>Best-of-N coders per round</Text>
+            <Text strong>{t('settings.loop.bestOfN')}</Text>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
               <Slider min={1} max={5} value={bestOfN}
                 onChange={(v) => setBestOfN(v)}
                 style={{ width: 200 }} />
               <Tag color={bestOfN > 1 ? 'orange' : 'default'}>{bestOfN}</Tag>
               <span style={{ fontSize: 11, color: '#888' }}>
-                {bestOfN === 1 ? 'single coder (default)' : 'runs ' + bestOfN + ' parallel coders, picks highest-scoring diff'}
+                {bestOfN === 1 ? t('settings.loop.bestOfNSingle') : t('settings.loop.bestOfNMany', { n: bestOfN })}
               </span>
             </div>
           </div>
 
           <Button type="primary" icon={<SaveOutlined />}
             loading={savingLoopCfg}
-            onClick={handleSaveLoopConfig}>Save loop config</Button>
+            onClick={handleSaveLoopConfig}>{t('settings.loop.save')}</Button>
         </Space>
       </Card>
     </div>

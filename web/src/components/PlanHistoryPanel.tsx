@@ -18,6 +18,7 @@ import {
 } from '@ant-design/icons';
 
 import { useThemeTokens } from '../hooks/useThemeTokens';
+import { tGlobal, useT } from '../i18n';
 
 export interface TodoItem {
   status: 'pending' | 'in_progress' | 'completed';
@@ -97,13 +98,14 @@ function diffIcon(op: string) {
 }
 
 function diffLabel(d: Record<string, string>): React.ReactNode {
-  if (d.op === 'add') return <>add <b>{d.content}</b> <Tag color="default" style={{ marginLeft: 4 }}>{d.status}</Tag></>;
-  if (d.op === 'remove') return <>remove <b style={{ textDecoration: 'line-through' }}>{d.content}</b></>;
+  if (d.op === 'add') return <>{tGlobal('planHistory.diffAdd')} <b>{d.content}</b> <Tag color="default" style={{ marginInlineStart: 4 }}>{d.status}</Tag></>;
+  if (d.op === 'remove') return <>{tGlobal('planHistory.diffRemove')} <b style={{ textDecoration: 'line-through' }}>{d.content}</b></>;
   if (d.op === 'status') return <><b>{d.content}</b>: <Tag>{d.from}</Tag> → <Tag color="blue">{d.to}</Tag></>;
   return <span style={{ opacity: 0.6 }}>{d.content} ({d.status})</span>;
 }
 
 const PlanHistoryPanel: React.FC<Props> = ({ history }) => {
+  const t = useT();
   const tokens = useThemeTokens();
   const timeline = useMemo(() => buildTimeline(history), [history]);
   const [collapsed, setCollapsed] = useState(false);
@@ -119,20 +121,20 @@ const PlanHistoryPanel: React.FC<Props> = ({ history }) => {
           fontSize: 12,
         }}
       >
-        No plan history yet.
+        {t('planHistory.empty')}
       </div>
     );
   }
 
   if (collapsed) {
     return (
-      <Tooltip title="Click to expand plan history">
+      <Tooltip title={t('planHistory.expandTitle')}>
         <Tag
           color="cyan"
           onClick={() => setCollapsed(false)}
           style={{ cursor: 'pointer' }}
         >
-          <ClockCircleOutlined /> Plan history: {timeline.length} round
+          <ClockCircleOutlined /> {t('planHistory.label')} {timeline.length} {t('planHistory.roundUnit')}
           {timeline.length === 1 ? '' : 's'}
         </Tag>
       </Tooltip>
@@ -160,7 +162,7 @@ const PlanHistoryPanel: React.FC<Props> = ({ history }) => {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <ClockCircleOutlined style={{ color: tokens.brand }} />
           <span style={{ fontWeight: 600, color: tokens.labelPrimary }}>
-            Plan history
+            {t('planHistory.title')}
           </span>
           <Tag color="cyan">{timeline.length}</Tag>
         </div>
@@ -171,7 +173,7 @@ const PlanHistoryPanel: React.FC<Props> = ({ history }) => {
             fontSize: 11, userSelect: 'none',
           }}
         >
-          compact
+          {t('planHistory.compactToggle')}
         </a>
       </div>
       <Collapse
@@ -185,8 +187,8 @@ const PlanHistoryPanel: React.FC<Props> = ({ history }) => {
           label: (
             <span>
               <Tag color="blue">R{entry.round}</Tag>
-              <span style={{ marginRight: 8 }}>
-                {Math.round(entry.completion * 100)}% done
+              <span style={{ marginInlineEnd: 8 }}>
+                {t('planHistory.percentDone', { p: Math.round(entry.completion * 100) })}
               </span>
               <Progress
                 percent={Math.round(entry.completion * 100)}
@@ -195,16 +197,16 @@ const PlanHistoryPanel: React.FC<Props> = ({ history }) => {
                 style={{ width: 100, display: 'inline-block' }}
                 strokeColor={tokens.brand}
               />
-              <span style={{ marginLeft: 8, color: tokens.labelSecondary }}>
-                ({entry.todos.length} todo{entry.todos.length === 1 ? '' : 's'})
+              <span style={{ marginInlineStart: 8, color: tokens.labelSecondary }}>
+                ({entry.todos.length} {t('planHistory.todoUnit')}{entry.todos.length === 1 ? '' : 's'})
               </span>
             </span>
           ),
           children: (
-            <div style={{ paddingLeft: 8 }}>
+            <div style={{ paddingInlineStart: 8 }}>
               {entry.diff.length === 0 ? (
                 <div style={{ color: tokens.labelSecondary, fontStyle: 'italic' }}>
-                  No plan changes this round
+                  {t('planHistory.emptyRound')}
                 </div>
               ) : (
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>

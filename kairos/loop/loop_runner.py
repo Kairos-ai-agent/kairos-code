@@ -1128,6 +1128,17 @@ async def run_loop(session, requirement, *, unbounded: bool = False):
                         )
                     except Exception:
                         logger.debug("memory: index_loop_round failed", exc_info=True)
+                    # Persist the round digest itself. The table, its loaders,
+                    # the UI endpoints and the FTS mirror all existed, but no
+                    # production code path wrote the row — so round history was
+                    # lost on restart and the Gate Report had no source. Written
+                    # inside the same best-effort block as its neighbours.
+                    try:
+                        persistence.save_loop_round(
+                            pid, sid, round_no, coder_result or "", review,
+                        )
+                    except Exception:
+                        logger.debug("memory: save_loop_round failed", exc_info=True)
                     # Working-fix: only on a fail -> pass transition.
                     try:
                         from kairos.memory.growth import maybe_record_working_fix

@@ -36,6 +36,7 @@ from api.routes.cost import router as cost_router
 from api.routes.skill_search import router as skill_search_router
 from api.routes.trend import router as trend_router
 from api.routes.alerts import router as alerts_router
+from api.routes.gate import router as gate_router
 # R38.6 §32: Browser panel — Playwright-backed per-project browser
 # sessions used by the 5th tab in the Workbench.
 from api.routes import browser as browser_routes
@@ -268,6 +269,7 @@ app.include_router(cost_router, prefix="/api/cost", tags=["cost"])
 app.include_router(skill_search_router, prefix="/api/skill_search", tags=["skill_search"])
 app.include_router(trend_router, prefix="/api/trend", tags=["trend"])
 app.include_router(alerts_router, prefix="/api/alerts", tags=["alerts"])
+app.include_router(gate_router, prefix="/api/projects", tags=["gate"])
 # R38.6 §32: Playwright-backed browser panel — /api/browser/{pid}/*
 app.include_router(browser_routes.router, tags=["browser"])
 # R38.6 §33: Feishu (Lark) bot — push notifications + remote commands

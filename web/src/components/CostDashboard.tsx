@@ -19,6 +19,7 @@ import {
 
 import api from '../api/client';
 import { formatError } from '../utils/formatError';
+import { useT } from '../i18n';
 
 interface CostSummary {
   calls: number;
@@ -46,6 +47,7 @@ interface RecentEntry {
 const REFRESH_MS = 30_000;
 
 const CostDashboard: React.FC = () => {
+  const t = useT();
   const [summary, setSummary] = useState<CostSummary | null>(null);
   const [recent, setRecent] = useState<RecentEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -80,8 +82,8 @@ const CostDashboard: React.FC = () => {
     return (
       <Card
         size="small"
-        title={<><DollarOutlined /> Cost</>}
-        extra={<Button size="small" icon={<ReloadOutlined />} onClick={refresh}>Retry</Button>}
+        title={<><DollarOutlined /> {t('costDashboard.title')}</>}
+        extra={<Button size="small" icon={<ReloadOutlined />} onClick={refresh}>{t('common.retry')}</Button>}
       >
         <div style={{ color: '#cf1322', fontSize: 12 }}>{err}</div>
       </Card>
@@ -96,7 +98,7 @@ const CostDashboard: React.FC = () => {
   return (
     <Card
       size="small"
-      title={<><DollarOutlined /> Cost</>}
+      title={<><DollarOutlined /> {t('costDashboard.title')}</>}
       extra={
         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {lastRefresh > 0 && (
@@ -108,7 +110,7 @@ const CostDashboard: React.FC = () => {
             size="small" icon={<ReloadOutlined />}
             loading={loading} onClick={refresh}
           >
-            Refresh
+            {t('common.refresh')}
           </Button>
         </span>
       }
@@ -117,7 +119,7 @@ const CostDashboard: React.FC = () => {
         <Row gutter={16} style={{ marginBottom: 12 }}>
           <Col span={12}>
             <Statistic
-              title="Total spend"
+              title={t('costDashboard.stat.totalSpend')}
               prefix={<DollarOutlined />}
               value={totalCost}
               precision={6}
@@ -126,7 +128,7 @@ const CostDashboard: React.FC = () => {
           </Col>
           <Col span={12}>
             <Statistic
-              title="LLM calls"
+              title={t('costDashboard.stat.llmCalls')}
               prefix={<ThunderboltOutlined />}
               value={totalCalls}
             />
@@ -135,7 +137,7 @@ const CostDashboard: React.FC = () => {
         {byModelEntries.length === 0 ? (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="No LLM calls recorded yet"
+            description={t('costDashboard.empty')}
           />
         ) : (
           <Table<[string, any]>
@@ -145,15 +147,15 @@ const CostDashboard: React.FC = () => {
             dataSource={byModelEntries}
             columns={[
               {
-                title: 'Model', dataIndex: '0', key: 'model',
+                title: t('costDashboard.col.model'), dataIndex: '0', key: 'model',
                 render: (m: string) => <code>{m}</code>,
               },
               {
-                title: 'Calls', dataIndex: '1', key: 'calls',
+                title: t('costDashboard.col.calls'), dataIndex: '1', key: 'calls',
                 render: (r: any) => r.calls,
               },
               {
-                title: 'Tokens', key: 'tokens',
+                title: t('costDashboard.col.tokens'), key: 'tokens',
                 render: (_: any, r: [string, any]) => (
                   <span style={{ fontSize: 11 }}>
                     {(r[1].prompt_tokens || 0).toLocaleString()} ↑ / {(r[1].completion_tokens || 0).toLocaleString()} ↓
@@ -161,7 +163,7 @@ const CostDashboard: React.FC = () => {
                 ),
               },
               {
-                title: 'Cost', dataIndex: '1', key: 'cost',
+                title: t('costDashboard.col.cost'), dataIndex: '1', key: 'cost',
                 render: (r: any) => (
                   <span style={{
                     fontWeight: 500,
@@ -172,7 +174,7 @@ const CostDashboard: React.FC = () => {
                 ),
               },
               {
-                title: 'Avg ms', dataIndex: '1', key: 'ms',
+                title: t('costDashboard.col.avgMs'), dataIndex: '1', key: 'ms',
                 render: (r: any) => (
                   <Tag color="blue">{r.avg_duration_ms || 0}</Tag>
                 ),
@@ -183,7 +185,7 @@ const CostDashboard: React.FC = () => {
         {recent.length > 0 && (
           <div style={{ marginTop: 12 }}>
             <div style={{ fontSize: 11, color: '#666', marginBottom: 4 }}>
-              Recent calls
+              {t('costDashboard.recent.title')}
             </div>
             <div style={{
               maxHeight: 120, overflow: 'auto',
@@ -201,7 +203,7 @@ const CostDashboard: React.FC = () => {
                     ${(e.cost_usd || 0).toFixed(6)}
                   </span>{' '}
                   <span style={{ color: '#666' }}>
-                    {e.prompt_tokens}↑ {e.completion_tokens}↓ {e.duration_ms}ms
+                    {e.prompt_tokens}↑ {e.completion_tokens}↓ {e.duration_ms}{t('costDashboard.msUnit')}
                   </span>
                 </div>
               ))}

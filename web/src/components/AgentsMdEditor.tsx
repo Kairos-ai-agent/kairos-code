@@ -25,6 +25,7 @@ import api from '../api/client';
 import { formatError } from '../utils/formatError';
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
+import { useT } from '../i18n';
 
 const { Text, Paragraph } = Typography;
 
@@ -49,6 +50,7 @@ const AgentsMdEditor: React.FC<AgentsMdEditorProps> = ({
   defaultOpen = false,
   onSaved,
 }) => {
+  const t = useT();
   const tokens = useThemeTokens();
   const currentProject = useChatStore((s) => s.currentProject);
   const [open, setOpen] = useState(defaultOpen);
@@ -119,7 +121,7 @@ const AgentsMdEditor: React.FC<AgentsMdEditorProps> = ({
       );
       setContent(r.data.template);
     } catch (e: any) {
-      msgApi.error('failed to load template');
+      msgApi.error(t('agentsMd.loadTemplateFailed'));
     }
   };
 
@@ -130,7 +132,7 @@ const AgentsMdEditor: React.FC<AgentsMdEditorProps> = ({
         disabled
         data-testid="agents-md-button"
       >
-        Memory
+        {t('agentsMd.title')}
       </Button>
     );
   }
@@ -152,9 +154,9 @@ const AgentsMdEditor: React.FC<AgentsMdEditorProps> = ({
         size="small" type="text" icon={<BookOutlined />}
         onClick={() => setOpen(true)}
         data-testid="agents-md-button"
-        title="Edit AGENTS.md (project memory — injected into every agent's system prompt)"
+        title={t('agentsMd.editTitle')}
       >
-        Memory
+        {t('agentsMd.title')}
       </Button>
       <Modal
         open={open}
@@ -164,7 +166,7 @@ const AgentsMdEditor: React.FC<AgentsMdEditorProps> = ({
         title={
           <Space>
             <BookOutlined />
-            <span>Project Memory (AGENTS.md)</span>
+            <span>{t('agentsMd.header')}</span>
             <Tag color={sourceColor} data-testid="agents-md-source-tag">
               {sourceLabel}
             </Tag>
@@ -179,13 +181,7 @@ const AgentsMdEditor: React.FC<AgentsMdEditorProps> = ({
       >
         <Paragraph style={{ fontSize: 12, color: tokens.labelSecondary,
                             marginBottom: 12 }}>
-          This file is read by every agent (Coder, Reviewer,
-          security, perf, test, docs, design, refactor) and
-          prepended to the agent's system prompt. Use it to
-          record conventions, tooling choices, or recurring
-          feedback that the agent should remember across
-          sessions. Project overrides global, both override
-          built-in fallback. 4 KB cap per scope.
+          {t('agentsMd.description')}
         </Paragraph>
         {error && (
           <Alert type="error" message={error} showIcon
@@ -227,15 +223,15 @@ const AgentsMdEditor: React.FC<AgentsMdEditorProps> = ({
             onClick={reset}
             disabled={!dirty || saving}
           >
-            Discard
+            {t('agentsMd.discard')}
           </Button>
           <Button onClick={insertTemplate} disabled={saving || loading}
                   data-testid="agents-md-insert-template">
-            Insert template
+            {t('agentsMd.insertTemplate')}
           </Button>
           <div style={{ flex: 1 }} />
           <Text type="secondary" style={{ fontSize: 11 }}>
-            {content.length} chars · {new Blob([content]).size} bytes
+            {t('agentsMd.stats', { chars: content.length, bytes: new Blob([content]).size })}
           </Text>
         </div>
       </Modal>

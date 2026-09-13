@@ -4,6 +4,33 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project aims at
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reaches 1.0.
 
+## [0.1.3] - 2026-09-13
+
+### Fixed
+
+- **The endpoint edited in Settings is now the endpoint the client calls.** Provider
+  configs carry `endpointUrl` (what the Settings drawer writes, and what the "test
+  connection" probe used) and `baseUrl` (what the orchestrator's chat calls used) — two
+  fields holding one fact, and the client only ever read the second. A user who switched
+  their endpoint to DeepSeek in the drawer kept sending every conversation to the
+  provider configured before it, and got that provider's Cloudflare block page — an
+  error with nothing to do with the configuration on screen. `resolve_base_url()` makes
+  `endpointUrl` authoritative (`baseUrl` stays the fallback) and strips the path the SDK
+  must not receive — `/chat/completions`, `/messages` — including a trailing slash.
+- **Provider failures are summarised instead of pasted.** An unreachable endpoint used to
+  put several kilobytes of HTML (`<!DOCTYPE html>` … Cloudflare Ray ID …) into the chat
+  bubble, because the HTTP client puts the response body in the exception and two call
+  sites interpolated the exception verbatim. An HTML block page now keeps the host and
+  the Ray ID and names what to check; anything else collapses to one line, capped at 280
+  characters. An HTTP 401 says the key is missing or was rejected and where to set it —
+  reproduced against a real endpoint, and the likeliest first-run failure.
+
+### Documentation
+
+- Corrected the comment on `data_dir`: the packaged desktop app pins its data directory
+  to `%LOCALAPPDATA%/kairos-code` and ignores `KAIROS_DATA_DIR` — only the development
+  server honours that variable.
+
 ## [0.1.2] - 2026-09-13
 
 ### Fixed

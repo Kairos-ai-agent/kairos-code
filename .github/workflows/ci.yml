@@ -17,15 +17,13 @@ jobs:
   python:
     name: Python tests (${{ matrix.shard }}/6)
     runs-on: ubuntu-latest
-    # Measured on a 2-vCPU runner: shards without subprocess tests finish in ~20
-    # seconds, while one holding the demo CLI (13 tests, each spawning the whole
-    # gate) or doctor (a port probe per check) runs for tens of minutes. Three
-    # shards therefore put 30+ minutes on a single job and the job limit killed it
-    # mid-run — and a cancelled job keeps no logs, so there was nothing left to
-    # diagnose with. Six shards isolate the expensive files (see
-    # `scripts/split_tests.py --verify --shards 6`: 1.00x balance, one heavy file
-    # each), and 45 minutes is headroom rather than a cliff.
-    timeout-minutes: 45
+    # Measured on a 2-vCPU runner: a shard with the *named* heavy files finishes in
+    # about 40 seconds (demo CLI and doctor are fast there after all), while a shard
+    # of nominally light files took 40+ minutes — the real cost is the long tail of
+    # small tests that each spawn a subprocess across many files, which the local
+    # weight table cannot see. 90 minutes plus --durations=0 is what collects the
+    # per-test numbers, and a killed job keeps no logs, so it has to finish.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -56,7 +54,7 @@ jobs:
           FILES=$(python scripts/split_tests.py --shard ${{ matrix.shard }} --shards 6)
           echo "files in shard ${{ matrix.shard }}: $(echo "$FILES" | wc -w)"
           set +e
-          pytest $FILES -q --timeout=180 --durations=25
+          pytest $FILES -q --timeout=180 --durations=0
           rc=$?
           set -e
           if [ "$rc" -ne 0 ]; then

@@ -102,13 +102,19 @@ def test_nsjail_profile_emits_deny_paths():
 
 
 def test_nsjail_profile_handles_missing_allowed_root():
-    """When allowed_root is empty, no mount_rdonly is emitted."""
-    policy = SandboxPolicy(allowed_root=Path())  # empty Path
+    """An unset allowed_root leaves the mount commented out.
+
+    Note that ``Path()`` is *not* an unset root: it means ``.`` and is always
+    truthy, so the generator legitimately emits a real mount for it. The earlier
+    version of this test asserted the opposite, and because this whole module is
+    skipped on non-Linux it only ever failed for Linux contributors.
+    """
+    policy = SandboxPolicy(allowed_root="")  # unset
     profile = _linux_nsjail_profile(policy)
     # The placeholder comment should be there instead of a real mount
     assert "mount_rdonly" in profile
-    # The mount line should be commented out
-    assert "mount_rdonly:" not in profile.replace("# mount_rdonly: (none)", "")
+    assert "# mount_rdonly: (none)" in profile
+    assert 'mount_rdonly: "' not in profile
 
 
 # ---------------------------------------------------------------------------

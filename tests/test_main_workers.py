@@ -97,11 +97,26 @@ def test_resolve_loop_auto_returns_asyncio_on_windows(monkeypatch):
 
     s = Settings(loop="auto")
     monkeypatch.setattr("kairos.main.settings", s)
-    monkeypatch.setattr("sys.platform", "win32")
+    # `_resolve_loop` keys off os.name, so patch that — not sys.platform, which it
+    # never reads. Patching the wrong attribute made this pass on Windows by
+    # accident and fail on Linux, where uvloop is actually installed.
+    monkeypatch.setattr(os, "name", "nt")
     # Even if uvloop is importable, Windows should fall back to asyncio
     fake = type(sys.modules["sys"])("uvloop")
     with patch.dict(sys.modules, {"uvloop": fake}):
         assert _resolve_loop() == "asyncio"
+
+
+def test_resolve_loop_auto_prefers_uvloop_on_posix(monkeypatch):
+    """The other half of `auto`, which had no coverage outside Linux."""
+    from kairos.main import _resolve_loop
+    from kairos.config.settings import Settings
+
+    monkeypatch.setattr("kairos.main.settings", Settings(loop="auto"))
+    monkeypatch.setattr(os, "name", "posix")
+    fake = type(sys.modules["sys"])("uvloop")
+    with patch.dict(sys.modules, {"uvloop": fake}):
+        assert _resolve_loop() == "uvloop"
 
 
 def test_resolve_loop_explicit_overrides_auto(monkeypatch):

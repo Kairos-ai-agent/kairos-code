@@ -4,6 +4,35 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project aims at
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reaches 1.0.
 
+## [Unreleased]
+
+### Fixed
+
+- **The Task tracker called passed rounds failed.** It parsed Reviewer verdicts by
+  looking for `approve`, which only the pre-R38.7 rubric shape carries. The
+  simplified Reviewer answers `{"has_bugs": ...}`, so every round of a run whose
+  gate said *passed* was listed as "failed — round finished without a verdict".
+  The simple shape now goes through the loop's own translation
+  (`kairos.loop.reviewers._normalize_bug_verdict`), so the tracker cannot disagree
+  with the gate, and payloads truncated at the 2000-character storage cap are
+  still understood.
+- **The test suite wrote into the developer's real data directory.** The data
+  directory defaults to `<repo>/data`, and `tests/unit/test_memory_api.py` creates
+  projects called `mem-api-test-<hex>` through the real persistence layer: running
+  pytest filled `data/kairos.db` with them, and they then showed up in the sidebar
+  of the README screenshots. `tests/conftest.py` points `KAIROS_DATA_DIR` at a
+  throwaway directory for the whole session, and `tests/test_test_isolation.py`
+  asserts the directory the app resolves is that one.
+- **The History table wrapped run ids mid-string.** The Run column had no width,
+  so on a narrow table an eight-character id broke across three lines. It has an
+  explicit width and ellipsis.
+
+### Changed
+
+- **README screenshots are regenerated** from a clean, key-free demo run: no
+  test-fixture projects in the sidebar, no hand-annotated example project, no
+  Chinese in an English README, and the Task tracker agrees with the gate.
+
 ## [0.1.1] - 2026-09-13
 
 The first release that could be published end to end. Cutting 0.1.0 is what

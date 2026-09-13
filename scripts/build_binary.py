@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 """Build a standalone ``kairos-code`` executable for the current platform.
 
-Supersedes ``build_exe_with_icon.py``, which hard-coded the maintainer's checkout
-(``D:\\software_bak\\Kairos_code``, a drive that does not even exist any more) and
-was therefore unusable by anyone else. Everything here is derived from this file's
-own location, so a fresh clone works on Windows, macOS and Linux:
+Supersedes the old Windows-only build script, which pinned the maintainer's
+checkout directory (a drive that does not even exist any more) and was therefore
+unusable by anyone else. Everything here is derived from this file's own
+location, so a fresh clone works on Windows, macOS and Linux:
 
     python scripts/build_binary.py --out dist              # -> dist/kairos-code(.exe)
     python scripts/build_binary.py --out dist --windowed   # Windows GUI build

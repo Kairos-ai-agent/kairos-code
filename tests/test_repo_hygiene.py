@@ -54,9 +54,18 @@ def tracked_text_files() -> list[Path]:
 
 
 def test_no_machine_paths_in_tracked_files() -> None:
+    files = tracked_text_files()
+    # A hygiene check that scans nothing always passes. That is not hypothetical:
+    # this guard reported success in CI while failing on the same commit locally,
+    # and an empty `git ls-files` (or a broken working directory) is the only way
+    # this scan can produce a false pass.
+    assert len(files) > 100, (
+        f"only {len(files)} tracked files were scanned — `git ls-files` did not "
+        "return the repository contents, so this guard would pass vacuously"
+    )
     offenders: list[str] = []
     patterns = [re.compile(p) for p in FORBIDDEN]
-    for path in tracked_text_files():
+    for path in files:
         try:
             text = path.read_text(encoding="utf-8", errors="strict")
         except (UnicodeDecodeError, OSError):

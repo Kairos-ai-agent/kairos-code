@@ -72,3 +72,6 @@ _check_extract.py
 *.rar
 *.7z
 *.iso
+
+# Local test builds (a second output dir so a running dist/ exe is not locked)
+/dist_test/

@@ -49,6 +49,10 @@ dependencies = [
     # SQLite through aiosqlite. It used to be installed only by accident in
     # development, so a clean `pip install` could not even collect those tests.
     "aiosqlite>=0.20.0",
+    # FastAPI refuses to register any Form(...)/file-upload route without it, and
+    # that happens at import time — meaning the server died on startup from a
+    # clean install. Found by the first release dry run, on all three platforms.
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]

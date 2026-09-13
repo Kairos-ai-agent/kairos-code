@@ -30,6 +30,10 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml README.md LICENSE NOTICE ./
+# hatch_build.py is the custom wheel hook declared in pyproject.toml: without it
+# `pip install .` cannot even start building. The UI arrives as web/dist below,
+# so the hook finds it and packs it into the installed package.
+COPY hatch_build.py ./
 COPY kairos/ ./kairos/
 COPY api/ ./api/
 COPY scripts/ ./scripts/

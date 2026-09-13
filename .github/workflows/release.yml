@@ -74,9 +74,15 @@ jobs:
           python-version: "3.11"
 
       - name: Build wheel and sdist
+        # Two separate invocations on purpose: plain `python -m build` builds the
+        # wheel *from the sdist*, and an sdist carries source only (web/dist is
+        # gitignored, so it is not in there) — the wheel would ship no UI and the
+        # assertion below would catch it. Building the wheel from the tree keeps
+        # the frontend in, while the sdist stays a normal source archive.
         run: |
           python -m pip install --upgrade pip build
-          python -m build
+          python -m build --sdist
+          python -m build --wheel
 
       - name: Assert the wheel really ships the UI and a console script
         run: |
@@ -96,6 +102,14 @@ jobs:
           /tmp/clean/bin/pip install --quiet dist/*.whl
           /tmp/clean/bin/kairos --version
           /tmp/clean/bin/kairos demo --json --quiet
+
+      - name: The installed wheel actually serves the UI
+        # Starting the server is a different test from running the demo: the
+        # first release shipped binaries whose server died at import time
+        # because a core dependency was undeclared. Only a clean install shows it.
+        run: |
+          python scripts/smoke_binary.py --installed /tmp/clean/bin/kairos \
+            --port 9989 --timeout 120
 
       - uses: actions/upload-artifact@v4
         with:

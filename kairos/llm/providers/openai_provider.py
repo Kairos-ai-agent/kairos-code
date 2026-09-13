@@ -71,9 +71,16 @@ class OpenAIProvider(BaseLLMProvider):
         try:
             response = await self._client.chat.completions.create(**kwargs)
         except Exception as e:
-            # Enhanced error handling for better diagnostics
+            # Enhanced error handling for better diagnostics. Summarise the provider's
+            # reply instead of interpolating it: when the endpoint answers with an HTML
+            # block page, ``{e}`` *is* that page, and it used to end up whole in the chat.
             if "text/plain" in str(e).lower() or "not json" in str(e).lower():
-                raise type(e)(f"API returned text/plain instead of JSON. Check base_url and model availability: {e}") from e
+                from kairos.llm.errors import describe_provider_error
+
+                raise type(e)(
+                    "API returned text/plain instead of JSON. Check base_url and model "
+                    f"availability: {describe_provider_error(e)}"
+                ) from e
             raise
         
         choice = response.choices[0]

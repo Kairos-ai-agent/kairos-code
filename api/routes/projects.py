@@ -227,8 +227,13 @@ async def chat(project_id: str, request: "ChatRequest"):
         try:
             reply = await project.coder.chat(text)
         except Exception as exc:
+            # Summarise rather than interpolate: a provider that answers with an HTML
+            # page (Cloudflare block, wrong base_url) puts that whole page in the
+            # exception text, and the chat used to render all of it.
+            from kairos.llm.errors import describe_provider_error
+
             raise HTTPException(status_code=500,
-                                detail=f"Coder chat failed: {exc}")
+                                detail=f"Coder chat failed: {describe_provider_error(exc)}")
     except HTTPException:
         # Already a clean 4xx/5xx — let it through.
         raise

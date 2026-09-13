@@ -15,19 +15,21 @@ concurrency:
 
 jobs:
   python:
-    name: Python tests (${{ matrix.shard }}/3)
+    name: Python tests (${{ matrix.shard }}/6)
     runs-on: ubuntu-latest
-    # Measured on a 2-vCPU runner: the fast shard (no subprocess-heavy files) takes
-    # ~20s, while a shard holding the subprocess tests (the demo CLI spawns the
-    # whole gate a dozen times, doctor probes a port per check) needs far longer
-    # than the 35 minutes that used to be allowed — it was killed mid-run and a
-    # cancelled job keeps no logs, so there was nothing to diagnose with. 75
-    # minutes is deliberately generous; --durations=25 names the slow tests.
-    timeout-minutes: 75
+    # Measured on a 2-vCPU runner: shards without subprocess tests finish in ~20
+    # seconds, while one holding the demo CLI (13 tests, each spawning the whole
+    # gate) or doctor (a port probe per check) runs for tens of minutes. Three
+    # shards therefore put 30+ minutes on a single job and the job limit killed it
+    # mid-run — and a cancelled job keeps no logs, so there was nothing left to
+    # diagnose with. Six shards isolate the expensive files (see
+    # `scripts/split_tests.py --verify --shards 6`: 1.00x balance, one heavy file
+    # each), and 45 minutes is headroom rather than a cliff.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v4
 
@@ -42,7 +44,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: "Run shard ${{ matrix.shard }} of 3"
+      - name: "Run shard ${{ matrix.shard }} of 6"
         # --timeout names a genuinely stuck test instead of letting it eat the
         # job budget; --durations keeps the slow ones visible in the log.
         #
@@ -51,7 +53,7 @@ jobs:
         # shards failed once with no explanation. Re-running collection prints
         # the import errors.
         run: |
-          FILES=$(python scripts/split_tests.py --shard ${{ matrix.shard }} --shards 3)
+          FILES=$(python scripts/split_tests.py --shard ${{ matrix.shard }} --shards 6)
           echo "files in shard ${{ matrix.shard }}: $(echo "$FILES" | wc -w)"
           set +e
           pytest $FILES -q --timeout=180 --durations=25

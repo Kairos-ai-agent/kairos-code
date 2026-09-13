@@ -247,7 +247,11 @@ jobs:
         if: needs.meta.outputs.is_tag == 'true'
         run: |
           set -eu
-          IMAGE=ghcr.io/${{ github.repository }}
+          # Docker references must be lowercase; the account is Kairos-ai-agent, so
+          # `ghcr.io/${{ github.repository }}` was rejected with "repository name must
+          # be lowercase" — on the one step that never runs before a real tag.
+          IMAGE="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          echo "pushing to $IMAGE"
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
           docker tag kairos-code:${{ needs.meta.outputs.version }} "$IMAGE:${{ needs.meta.outputs.version }}"
           docker tag kairos-code:${{ needs.meta.outputs.version }} "$IMAGE:latest"
@@ -275,8 +279,17 @@ jobs:
         run: |
           set -eu
           ls -la artifacts
-          gh release create "v${{ needs.meta.outputs.version }}" \
-            --repo "${{ github.repository }}" \
-            --title "Kairos Code v${{ needs.meta.outputs.version }}" \
-            --generate-notes \
-            artifacts/**
+          TAG="v${{ needs.meta.outputs.version }}"
+          REPO="${{ github.repository }}"
+          # Idempotent on purpose: re-cutting a tag (a fix in the release workflow
+          # itself, say) must not fail here with "release already exists".
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "release $TAG exists — refreshing its assets"
+            gh release upload "$TAG" --repo "$REPO" --clobber artifacts/**
+          else
+            gh release create "$TAG" \
+              --repo "$REPO" \
+              --title "Kairos Code v${{ needs.meta.outputs.version }}" \
+              --generate-notes \
+              artifacts/**
+          fi

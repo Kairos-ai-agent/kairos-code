@@ -408,13 +408,17 @@ async def _serve_async(root: Path) -> None:
     from mcp.server.models import InitializationOptions
 
     server, _ = build_mcp_server(root)
+    # Same reason as the client: report the real package version, not a literal
+    # that silently goes stale.
+    from kairos import __version__
+
     async with stdio_server() as (read_stream, write_stream):
         await server.run(
             read_stream,
             write_stream,
             InitializationOptions(
                 server_name="kairos-fs",
-                server_version="0.1.0",
+                server_version=__version__,
                 capabilities=server.get_capabilities(
                     notification_options=None,
                     experimental_capabilities={},

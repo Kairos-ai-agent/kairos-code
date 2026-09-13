@@ -4,6 +4,39 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project aims at
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reaches 1.0.
 
+## [0.1.1] - 2026-09-13
+
+The first release that could be published end to end. Cutting 0.1.0 is what
+surfaced these, and one of them could only ever appear on a tagged run.
+
+### Fixed
+
+- **The container image never reached ghcr.io.** `docker push` rejected the
+  reference outright (`repository name ... must be lowercase`) because the account
+  is `Kairos-ai-agent`; the image path is lowercased now. The image itself built
+  and passed its smoke test in 0.1.0 — only the push failed.
+- **Publishing could dead-end on an existing Release.** `gh release create` now
+  updates an existing release instead of erroring, so re-cutting a tag to pick up
+  a workflow fix works.
+- **The Docker job can no longer gate a release.** It is out of the release job's
+  `needs`, so a registry problem cannot stop a release from being published; the
+  job still runs and still reports red.
+
+### Changed
+
+- **The Python suite runs in six CI shards with a 90-minute ceiling**, printing
+  `--durations=0`. A job killed by its own timeout keeps no logs at all, which is
+  why diagnosing this took several attempts.
+- **Platform-sensitive tests now work on Linux.** `tests/test_landlock_ci.py`
+  called a sandbox API that no longer exists — a `TypeError` for every Linux
+  contributor, invisible where the module is skipped — and its signature guard
+  accepted any signature at all. It now exercises the documented fd + `preexec_fn`
+  mechanism, checks that a write inside the allowed root still succeeds, and
+  asserts that building a ruleset does not confine the calling process.
+- **README and CHANGELOG name the artifacts that exist** (the wheel attached to
+  the release, and a container image built by the release workflow) instead of a
+  PyPI name that is not published yet.
+
 ## [0.1.0] - 2026-09-13
 
 The first public cut of the pipeline — a Coder/Reviewer loop with an enforced
@@ -19,8 +52,10 @@ UI, and a container image.
 
 - **Installable in three ways.** Standalone executables for Linux, macOS and
   Windows (no Python, no Node — unzip and run; it opens the UI in your browser);
-  `pip install kairos-code` for a real `kairos` command with the built Web UI
-  inside the wheel; and `ghcr.io/kairos-ai-agent/kairos-code` for containers.
+  `pip install kairos_code-<version>-py3-none-any.whl` (the wheel attached to this
+  release) for a real `kairos` command with the built Web UI inside; and a
+  container image built and pushed to `ghcr.io/kairos-ai-agent/kairos-code` by the
+  release workflow.
   Every artifact is verified before it is published: the wheel is installed into
   an empty virtualenv and must serve the UI, and each binary is started headless
   and must answer `/api/health` and return the bundled SPA.

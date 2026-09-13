@@ -136,18 +136,30 @@ class ModelRouter:
                 active = (nested.get("active")
                           or settings.get("active_provider") or "openai")
                 if openai_cfg and (openai_cfg.get("apiKey") or openai_cfg.get("model")):
+                    from kairos.llm.endpoints import resolve_base_url
+
                     self._model_configs["__r37_openai__"] = LLMConfig(
                         provider="openai",
                         model=openai_cfg.get("model") or "gpt-4o",
                         api_key=openai_cfg.get("apiKey") or "",
-                        base_url=openai_cfg.get("baseUrl") or "https://api.openai.com/v1",
+                        # endpointUrl is what the Settings drawer writes; baseUrl may
+                        # still point at whatever provider was configured before it.
+                        base_url=resolve_base_url(
+                            openai_cfg, default="https://api.openai.com/v1",
+                            suffix="/chat/completions",
+                        ),
                     )
                 if anthropic_cfg and (anthropic_cfg.get("apiKey") or anthropic_cfg.get("model")):
+                    from kairos.llm.endpoints import resolve_base_url
+
                     self._model_configs["__r37_anthropic__"] = LLMConfig(
                         provider="anthropic",
                         model=anthropic_cfg.get("model") or "claude-3-5-sonnet-latest",
                         api_key=anthropic_cfg.get("apiKey") or "",
-                        base_url=anthropic_cfg.get("baseUrl") or "https://api.anthropic.com",
+                        base_url=resolve_base_url(
+                            anthropic_cfg, default="https://api.anthropic.com",
+                            suffix="/messages",
+                        ),
                     )
                 # R37+: the active provider determines which LLMConfig
                 # the Coder / Reviewer actually use. We register both

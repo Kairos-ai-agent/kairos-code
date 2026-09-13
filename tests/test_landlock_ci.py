@@ -1,23 +1,24 @@
 """Linux Landlock CI test.
 
-The actual ``kairos.sandbox._linux_landlock_sandbox`` uses
-``ctypes`` to invoke Landlock syscalls. The test only runs on
-Linux x86_64 / aarch64 (where Landlock is available) — on other
-platforms it's skipped, so this test is safe to include in the
-default test suite.
+``kairos.sandbox._linux_landlock_sandbox`` builds a Landlock ruleset through
+``ctypes`` and returns its file descriptor; the *caller* keeps that fd open in the
+child (``pass_fds``) and runs ``_landlock_restrict_self(fd)`` there as a
+``preexec_fn``, so only the subprocess is confined. Restricting the parent is
+deliberately not done — that used to be a bug.
 
-The real-world test plan for CI:
+The tests that need a real kernel only run on Linux x86_64 / aarch64 and skip
+elsewhere, which is also why a stale call signature survived here for so long:
+this module never executes on the maintainer's Windows machine.
 
-  1. Spawn a child Python process
-  2. Set up Landlock to deny write to a temp dir
-  3. The child tries to write to that dir
-  4. Parent asserts the write was EPERM'd
+Plan for each real test:
 
-We do this via :mod:`subprocess` (not in-process) so the
-sandbox actually applies to the child.
+  1. build the ruleset from a ``SandboxPolicy``,
+  2. spawn a child with the fd passed through and ``restrict_self`` as preexec,
+  3. assert on what the child could and could not do.
 """
 from __future__ import annotations
 
+import inspect
 import os
 import platform
 import shutil
@@ -28,12 +29,11 @@ from pathlib import Path
 
 import pytest
 
-
 LINUX_X86_64 = (sys.platform == "linux") and (platform.machine() in ("x86_64", "AMD64", "aarch64"))
 
 
 # ---------------------------------------------------------------------------
-# Pure-Python guard: the function exists and is the right shape
+# Pure-Python guards: the function exists, and has the shape callers rely on
 # ---------------------------------------------------------------------------
 
 
@@ -45,130 +45,131 @@ def test_landlock_sandbox_function_exists():
 
 
 def test_landlock_sandbox_signature():
-    """Signature check: takes the existing ``SandboxConfig``-style args."""
-    import inspect
+    """It takes one ``SandboxPolicy`` and returns a ruleset fd or None.
+
+    This assertion used to be `"allowed_cwd" in params or len(params) >= 1`, which
+    passed no matter what the signature was — and by the time it mattered the
+    implementation had moved to ``SandboxPolicy`` while the tests still called it
+    with ``allowed_cwd=``/``writable_paths=`` (a TypeError on Linux only).
+    """
     from kairos.sandbox import _linux_landlock_sandbox
-    sig = inspect.signature(_linux_landlock_sandbox)
-    # The function takes (allowed_cwd, writable_paths, read_only_paths, ...)
-    params = list(sig.parameters.keys())
-    assert "allowed_cwd" in params or len(params) >= 1, params
+
+    assert list(inspect.signature(_linux_landlock_sandbox).parameters) == ["policy"]
 
 
 # ---------------------------------------------------------------------------
-# Real Landlock test — only on Linux
+# Real Landlock tests — Linux only
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(
-    not LINUX_X86_64,
-    reason="Landlock only available on Linux x86_64 / aarch64",
-)
-def test_landlock_blocks_write_to_denied_dir():
-    """End-to-end: spawn a child with Landlock denying write to
-    ``/tmp/forbidden``; the child tries to write, gets EPERM."""
-    from kairos.sandbox import _linux_landlock_sandbox
+def _spawn_confined(policy, body: str) -> subprocess.CompletedProcess:
+    """Run ``body`` in a child confined by Landlock, or skip if unavailable."""
+    from kairos.sandbox import _landlock_restrict_self, _linux_landlock_sandbox
 
-    forbidden = Path(tempfile.mkdtemp(prefix="landlock-forbidden-"))
-    scratch = Path(tempfile.mkdtemp(prefix="landlock-scratch-"))
+    fd = _linux_landlock_sandbox(policy)
+    if fd is None:
+        pytest.skip("Landlock is not available on this kernel")
     try:
-        # Set up a Landlock sandbox that allows scratch but not forbidden
-        sandbox = _linux_landlock_sandbox(
-            allowed_cwd=str(scratch),
-            writable_paths=[str(scratch)],
-            read_only_paths=[str(forbidden)],
+        return subprocess.run(  # noqa: S603 - fixed argv, test-only
+            [sys.executable, "-c", body],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            pass_fds=(fd,),
+            preexec_fn=lambda: _landlock_restrict_self(fd),
         )
-        # If Landlock isn't available (kernel too old), skip
-        if sandbox is None:
-            pytest.skip("Landlock not available on this kernel")
-
-        # Spawn a child that tries to write to both
-        child_code = f"""
-import os, sys
-sys.path.insert(0, {str(Path(__file__).parent.parent)!r})
-from kairos.sandbox import _linux_landlock_sandbox
-sb = _linux_landlock_sandbox(
-    allowed_cwd={str(scratch)!r},
-    writable_paths=[{str(scratch)!r}],
-    read_only_paths=[{str(forbidden)!r}],
-)
-if sb is None:
-    print("NO_LANDLOCK")
-    sys.exit(0)
-# Try to write to the forbidden dir
-try:
-    with open({str(forbidden)!r} + "/test", "w") as f:
-        f.write("should fail")
-    print("WRITE_SUCCEEDED")
-    sys.exit(2)
-except (PermissionError, OSError) as e:
-    print(f"BLOCKED: {{type(e).__name__}}: {{e}}")
-    sys.exit(0)
-except Exception as e:
-    print(f"OTHER: {{type(e).__name__}}: {{e}}")
-    sys.exit(3)
-"""
-        result = subprocess.run(
-            [sys.executable, "-c", child_code],
-            capture_output=True, text=True, timeout=10,
-        )
-        # Child should exit 0 (blocked) or 0 (no Landlock, skip)
-        assert result.returncode in (0, 1), (
-            f"Child exit={result.returncode} stdout={result.stdout!r} "
-            f"stderr={result.stderr!r}"
-        )
-        # If Landlock worked, the write was blocked
-        if "BLOCKED" in result.stdout:
-            assert "PermissionError" in result.stdout or "OSError" in result.stdout
-        elif "NO_LANDLOCK" in result.stdout:
-            pytest.skip("Landlock not available in this kernel")
-        else:
-            pytest.fail(f"Unexpected child output: {result.stdout!r}")
     finally:
-        shutil.rmtree(forbidden, ignore_errors=True)
-        shutil.rmtree(scratch, ignore_errors=True)
+        os.close(fd)
+
+
+WRITE_BODY = """
+import sys
+from pathlib import Path
+
+target = Path({target!r}) / "landlock-probe.txt"
+try:
+    target.write_text("written")
+except (PermissionError, OSError) as exc:
+    print(f"BLOCKED: {{type(exc).__name__}}")
+    sys.exit(0)
+print("WROTE")
+sys.exit(2)
+"""
 
 
 @pytest.mark.skipif(
     not LINUX_X86_64,
     reason="Landlock only available on Linux x86_64 / aarch64",
 )
-def test_landlock_allows_write_to_allowed_path():
-    """Sibling test: the same setup *should* allow writing to
-    scratch/. If this fails, the sandbox is over-restrictive."""
-    from kairos.sandbox import _linux_landlock_sandbox
+def test_landlock_blocks_write_outside_allowed_root():
+    """A write outside the allowed root must be denied by the sandbox."""
+    from kairos.sandbox import SandboxPolicy
+
+    scratch = Path(tempfile.mkdtemp(prefix="landlock-scratch-"))
+    forbidden = Path(tempfile.mkdtemp(prefix="landlock-forbidden-"))
+    try:
+        policy = SandboxPolicy(allowed_root=scratch)
+        result = _spawn_confined(policy, WRITE_BODY.format(target=str(forbidden)))
+        assert "BLOCKED" in result.stdout, (
+            f"the sandbox let the child write outside its root: "
+            f"rc={result.returncode} out={result.stdout!r} err={result.stderr!r}"
+        )
+        assert "PermissionError" in result.stdout or "OSError" in result.stdout
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+        shutil.rmtree(forbidden, ignore_errors=True)
+
+
+@pytest.mark.skipif(
+    not LINUX_X86_64,
+    reason="Landlock only available on Linux x86_64 / aarch64",
+)
+def test_landlock_allows_write_inside_allowed_root():
+    """The mirror image: writing inside the allowed root must still work.
+
+    Without this, an over-restrictive ruleset would look just like a working one.
+    """
+    from kairos.sandbox import SandboxPolicy
 
     scratch = Path(tempfile.mkdtemp(prefix="landlock-allow-"))
     try:
-        sandbox = _linux_landlock_sandbox(
-            allowed_cwd=str(scratch),
-            writable_paths=[str(scratch)],
+        policy = SandboxPolicy(allowed_root=scratch)
+        result = _spawn_confined(policy, WRITE_BODY.format(target=str(scratch)))
+        assert "WROTE" in result.stdout, (
+            f"the sandbox blocked a legitimate write inside its root: "
+            f"rc={result.returncode} out={result.stdout!r} err={result.stderr!r}"
         )
-        if sandbox is None:
-            pytest.skip("Landlock not available")
-
-        child_code = f"""
-import sys
-sys.path.insert(0, {str(Path(__file__).parent.parent)!r})
-from kairos.sandbox import _linux_landlock_sandbox
-sb = _linux_landlock_sandbox(
-    allowed_cwd={str(scratch)!r},
-    writable_paths=[{str(scratch)!r}],
-)
-if sb is None:
-    print("NO_LANDLOCK"); sys.exit(0)
-try:
-    with open({str(scratch)!r} + "/test", "w") as f:
-        f.write("ok")
-    print("WRITE_OK")
-    sys.exit(0)
-except Exception as e:
-    print(f"FAIL: {{e}}")
-    sys.exit(2)
-"""
-        result = subprocess.run(
-            [sys.executable, "-c", child_code],
-            capture_output=True, text=True, timeout=10,
-        )
-        assert "WRITE_OK" in result.stdout or "NO_LANDLOCK" in result.stdout
+        assert (scratch / "landlock-probe.txt").exists()
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
+
+
+@pytest.mark.skipif(
+    not LINUX_X86_64,
+    reason="Landlock only available on Linux x86_64 / aarch64",
+)
+def test_building_a_ruleset_does_not_confine_the_parent():
+    """Building the ruleset must not sandbox this process.
+
+    The implementation restricts the *child* through ``preexec_fn``; calling
+    ``restrict_self`` in the parent was a bug, and it is invisible to every other
+    test because it would only break the process that builds the ruleset.
+    """
+    from kairos.sandbox import _linux_landlock_sandbox
+
+    scratch = Path(tempfile.mkdtemp(prefix="landlock-parent-"))
+    outside = Path(tempfile.mkdtemp(prefix="landlock-parent-outside-"))
+    try:
+        from kairos.sandbox import SandboxPolicy
+
+        fd = _linux_landlock_sandbox(SandboxPolicy(allowed_root=scratch))
+        if fd is None:
+            pytest.skip("Landlock is not available on this kernel")
+        try:
+            # This is the parent process; it must still be unrestricted.
+            (outside / "still-writable.txt").write_text("ok")
+        finally:
+            os.close(fd)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+        shutil.rmtree(outside, ignore_errors=True)

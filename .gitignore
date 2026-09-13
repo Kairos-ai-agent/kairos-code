@@ -73,6 +73,5 @@ _check_extract.py
 *.7z
 *.iso
 
-# Local test builds (a second output dir so a running dist/ exe is not locked)
-/dist_test/
-/dist_test2/
+# Local build outputs (numbered/release dirs exist because a running dist/ exe locks its file)
+/dist*/

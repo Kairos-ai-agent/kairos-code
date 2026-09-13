@@ -111,6 +111,17 @@ def main() -> int:
     # Windowed by default on Windows (double-click experience), console elsewhere.
     windowed = args.windowed or (os.name == "nt" and not args.console)
 
+    # Purge the package's bytecode caches first. Python validates a .pyc on (mtime,
+    # size) at one-second granularity, so an edit that keeps the byte length — "0.1.2"
+    # to "0.1.3", say — can leave a stale .pyc that Python and PyInstaller both accept
+    # without complaint, silently freezing an old module into the binary. PyInstaller's
+    # own --clean does not touch these.
+    import shutil as _shutil
+
+    for _cache in [p for _d in (ROOT / "kairos", ROOT / "api", ROOT / "scripts")
+                   if _d.exists() for p in _d.rglob("__pycache__")]:
+        _shutil.rmtree(_cache, ignore_errors=True)
+
     cmd = [sys.executable, "-m", "PyInstaller", "--noconfirm"]
     if not args.keep_work:
         cmd.append("--clean")

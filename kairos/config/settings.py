@@ -127,8 +127,9 @@ class Settings(BaseSettings):
     # launchers; a CWD-relative data_dir made every restart load a
     # DIFFERENT kairos.db / settings file (empty or foreign), which
     # surfaced as "Project not found: <id>" and "LLM settings lost
-    # after restart". KAIROS_DATA_DIR overrides the data dir (the
-    # packaged exe sets it to <exe>/data); workspace_dir lives next
+    # after restart". KAIROS_DATA_DIR overrides the data dir for the *development*
+    # server; the packaged desktop app pins it to %LOCALAPPDATA%/kairos-code in
+    # kairos_code_launcher.py and ignores this variable. workspace_dir lives next
     # to data_dir so workspaces follow the data location too.
     data_dir: Path = Path(
         os.environ.get("KAIROS_DATA_DIR",

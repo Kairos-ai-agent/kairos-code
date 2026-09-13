@@ -372,3 +372,69 @@ def test_endpoint_replays_a_persisted_plan_after_restart(monkeypatch):
     assert data["source"] == "plan"
     assert [(t["title"], t["status"]) for t in data["tasks"]] == [
         ("alpha", "done"), ("beta", "pending")]
+
+
+# ---------------------------------------------------------------------------
+# 5. the simple R38.7 Reviewer verdict — the tracker did not understand it
+# ---------------------------------------------------------------------------
+
+
+def test_verdict_from_content_understands_the_simple_bug_shape():
+    """The simplified Reviewer answers with ``has_bugs``, not ``approve``.
+
+    This is the shape the current Reviewer persists, and ``_verdict_from_content``
+    only looked for ``approve`` — so every round of a run whose gate said *passed*
+    was listed as a failed task with "round finished without a verdict".
+    """
+    verdict = _verdict_from_content(
+        '{"has_bugs": true, "bugs": [{"file": "relay.py", "line": 19, '
+        '"description": "delay shrinks instead of growing"}, {"file": "relay.py", '
+        '"line": 27, "description": "ignores Retry-After"}], "summary": "2 bugs"}'
+    )
+    assert verdict is not None, "a simple verdict must not read as 'no verdict'"
+    assert verdict["approve"] is False
+    assert len(verdict["issues"]) == 2
+    assert verdict["score"] == 60  # 100 - 20 * 2, same arithmetic as the loop
+
+    clean = _verdict_from_content('{"has_bugs": false, "bugs": [], "summary": "clean"}')
+    assert clean is not None and clean["approve"] is True
+
+
+def test_verdict_from_content_still_reads_a_truncated_simple_verdict():
+    """Stored content is capped at 2000 chars, so the JSON is cut mid-string."""
+    body = ", ".join(
+        '{"file": "relay.py", "line": %d, "description": "bug %d"}' % (i, i)
+        for i in range(1, 60)
+    )
+    truncated = ('{"has_bugs": true, "bugs": [' + body)[:2000]
+    assert not truncated.rstrip().endswith("}")  # genuinely cut off
+    verdict = _verdict_from_content(truncated)
+    assert verdict is not None, "a truncated verdict must not read as 'no verdict'"
+    assert verdict["approve"] is False
+
+
+def test_verdict_from_content_keeps_the_legacy_rubric_shape():
+    """Old sessions and replays still carry {approve, score, ...}."""
+    assert _verdict_from_content('{"approve": true, "score": 92, "summary": "nice"}') == {
+        "approve": True, "score": 92, "summary": "nice"}
+
+
+def test_round_items_do_not_report_a_passed_round_as_failed():
+    """The tracker's round list must agree with the gate.
+
+    Three rounds of a real shape: two with bugs, one clean. Before the fix all
+    three came back "failed — round finished without a verdict".
+    """
+    events = []
+    for rnd, has_bugs in ((1, "true"), (2, "true"), (3, "false")):
+        events.append({"topic": "loop.coder_started", "sender": "orchestrator",
+                       "timestamp": 100.0 + rnd, "content": "",
+                       "metadata": {"round": rnd, "session_id": "s1"}})
+        events.append({"topic": "task.result", "sender": "p1.reviewer",
+                       "timestamp": 100.0 + rnd + 0.5,
+                       "content": '{"has_bugs": %s, "bugs": [], "summary": "x"}' % has_bugs,
+                       "metadata": {"session_id": "s1"}})
+    items, session_id = _round_items_from_events(events, running=False)
+    assert session_id == "s1"
+    assert [i.status for i in items] == ["rejected", "rejected", "done"]
+    assert "without a verdict" not in " ".join(i.detail or "" for i in items)

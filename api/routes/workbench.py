@@ -854,10 +854,19 @@ def _todo_detail(todo: dict) -> Optional[str]:
 def _verdict_from_content(content: Any) -> Optional[dict]:
     """Parse a Reviewer verdict out of a ``task.result`` payload.
 
-    Stored content is capped at 2000 chars, so long verdicts are cut
-    mid-string and ``json.loads`` fails. The Reviewer prompt always
-    emits ``approve`` / ``score`` first, so a regex over the leading
-    fields recovers what the tracker needs.
+    Two shapes are in the wild and both have to work:
+
+    * the R38.7 simple one — ``{"has_bugs": bool, "bugs": [...], "summary": str}``
+      — which the current Reviewer emits. This function only looked for
+      ``approve``, so as soon as the Reviewer was simplified every round became
+      "round finished without a verdict": a run whose gate said *passed* showed
+      three failed tasks in the tracker;
+    * the legacy rubric one — ``{"approve": bool, "score": int, ...}``, kept
+      because old sessions and replays still carry it.
+
+    Stored content is capped at 2000 chars, so long payloads are cut mid-string
+    and ``json.loads`` fails; the regexes recover what the tracker needs from the
+    leading fields.
     """
     text = content if isinstance(content, str) else json.dumps(content or {}, ensure_ascii=False)
     data: Any = None
@@ -867,6 +876,22 @@ def _verdict_from_content(content: Any) -> Optional[dict]:
             data = json.loads(stripped)
         except Exception:
             data = None
+
+    # Route the simple shape through the loop's own translation, so the tracker
+    # cannot disagree with the gate about whether a round passed.
+    from kairos.loop.reviewers import _normalize_bug_verdict
+
+    simple = _normalize_bug_verdict(data)
+    if simple is None:
+        m_simple = re.search(r'"has_bugs"\s*:\s*(true|false)', text, re.I)
+        if m_simple:
+            simple = _normalize_bug_verdict({
+                "has_bugs": m_simple.group(1).lower() == "true",
+                "bugs": [{}] * len(re.findall(r'"description"\s*:', text, re.I)),
+            })
+    if simple is not None:
+        return simple
+
     if isinstance(data, dict) and "approve" in data:
         return data
     m = re.search(r'"approve"\s*:\s*(true|false)', text, re.I)

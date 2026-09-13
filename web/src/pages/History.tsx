@@ -200,7 +200,8 @@ const History: React.FC = () => {
             ) : <Text type="secondary">{t('history.noRounds')}</Text>
           )}
           columns={[
-            { title: t('history.th.run'), dataIndex: 'session_id',
+            { title: t('history.th.run'), dataIndex: 'session_id', width: 150,
+              ellipsis: true,
               render: (v: string, row) => (
                 <Space size={6}>
                   <Text code style={{ fontSize: 12 }}>{v}</Text>

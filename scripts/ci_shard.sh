@@ -23,21 +23,38 @@ echo "shard ${SHARD}/${SHARDS}: $(echo "$FILES" | wc -w) files"
 echo "started: $(date -u +%H:%M:%S)"
 
 rc=0
+mem() {
+  # Memory attribution: the shard that "hung" for 30 minutes was actually killed by
+  # the OOM killer (exit 137), which is invisible in a per-test log. Printing free
+  # memory around every file turns "somewhere in these 23 files" into a name.
+  if command -v free >/dev/null 2>&1; then
+    free -m | awk 'NR==2 {printf "%.0f MB used", $3}'
+  else
+    echo "n/a"
+  fi
+}
+
 for f in $FILES; do
+  before=$(mem)
   t0=$(date +%s)
   # `python -m pytest`, not `pytest`: a console script in a venv carries an
   # absolute interpreter path in its shebang and silently dies (exit 1, no output)
   # if the checkout has moved since the venv was made.
-  if python -m pytest "$f" -q --timeout=150 --durations=5; then
-    echo "  ok    ${f}  ($(( $(date +%s) - t0 ))s)"
-  else
-    code=$?
-    echo "  FAIL  ${f}  (exit ${code} after $(( $(date +%s) - t0 ))s)"
-    if [ "$code" = "124" ]; then
-      echo "  ^^^ TIMEOUT: ${f} blocked for ${PER_FILE}s — this is the file to look at"
-    fi
-    rc=1
-  fi
+  python -m pytest "$f" -q --timeout=150 --durations=5
+  code=$?
+  secs=$(( $(date +%s) - t0 ))
+  case "$code" in
+    0) echo "  ok      ${f}  (${secs}s, mem ${before} -> $(mem))" ;;
+    5) echo "  skip    ${f}  (no tests collected, ${secs}s, mem ${before} -> $(mem))" ;;
+    124) echo "  TIMEOUT ${f}  (blocked for ${PER_FILE}s, mem ${before} -> $(mem))"
+         echo "  ^^^ this file blocked; --timeout cannot see a module that blocks during import"
+         rc=1 ;;
+    137) echo "  KILLED  ${f}  (SIGKILL after ${secs}s, mem ${before} -> $(mem))"
+         echo "  ^^^ OOM killer: this file is what ate the runner"
+         rc=1 ;;
+    *) echo "  FAIL    ${f}  (exit ${code} after ${secs}s, mem ${before} -> $(mem))"
+       rc=1 ;;
+  esac
 done
 
 echo "finished: $(date -u +%H:%M:%S)  (exit ${rc})"

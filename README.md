@@ -217,6 +217,10 @@ pip install -e ".[all]"        # everything
 - **TUI** — `kairos tui` (Textual), for when you live in a terminal.
 - **API** — REST + WebSocket; the UI is just a client. See the [API table](#api).
 
+History lists one row per run, with the delta against the run before it:
+
+![History view](docs/assets/history.png)
+
 ## Features
 
 **The loop**
@@ -376,7 +380,8 @@ the dev setup, the four gates CI enforces, and how to add a language.
 
 ## License
 
-AGPL-3.0-or-later — see [LICENSE](LICENSE). You may run, modify and self-host
-it, including commercially; if you offer a modified version to users over a
-network, you must offer them the source. Vendored third-party components keep
-their own (permissive) licenses — see [NOTICE](NOTICE).
+AGPL-3.0-or-later — see [LICENSE](LICENSE). Copyright (C) 2026 Kairos Code
+contributors. You may run, modify and self-host it, including commercially; if you
+offer a modified version to users over a network, you must offer them the source.
+Vendored third-party components keep their own (permissive) licenses — see
+[NOTICE](NOTICE).

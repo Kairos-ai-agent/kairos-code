@@ -17,13 +17,13 @@ jobs:
   python:
     name: Python tests (${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
-    # Measured: the full suite is ~3 min on a many-core dev box but 40+ on a
-    # 2-vCPU runner, because a large share of the 1867 tests spawn subprocesses
-    # (the demo CLI tests alone run the whole gate a dozen times). One job either
-    # burns the whole timeout or gets killed mid-suite, so the suite is split
-    # into three balanced shards (see scripts/split_tests.py --verify: every
-    # module exactly once, 1.00x balance).
-    timeout-minutes: 35
+    # Measured on a 2-vCPU runner: the fast shard (no subprocess-heavy files) takes
+    # ~20s, while a shard holding the subprocess tests (the demo CLI spawns the
+    # whole gate a dozen times, doctor probes a port per check) needs far longer
+    # than the 35 minutes that used to be allowed — it was killed mid-run and a
+    # cancelled job keeps no logs, so there was nothing to diagnose with. 75
+    # minutes is deliberately generous; --durations=25 names the slow tests.
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
@@ -54,7 +54,7 @@ jobs:
           FILES=$(python scripts/split_tests.py --shard ${{ matrix.shard }} --shards 3)
           echo "files in shard ${{ matrix.shard }}: $(echo "$FILES" | wc -w)"
           set +e
-          pytest $FILES -q --timeout=300 --durations=10
+          pytest $FILES -q --timeout=180 --durations=25
           rc=$?
           set -e
           if [ "$rc" -ne 0 ]; then

@@ -277,6 +277,13 @@ class HookRegistry:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env=env,
+                # Give the hook its own process group. Without this it inherits
+                # ours, and the POSIX branch of _force_kill below kills that group
+                # — i.e. the hook timing out would SIGKILL the test run (or the
+                # whole CI job) from the inside: exit 137, no traceback, nothing to
+                # diagnose with. Windows uses taskkill and has no groups, so this
+                # stays POSIX-only.
+                **({"start_new_session": True} if os.name == "posix" else {}),
             )
             stdout, stderr = await asyncio.wait_for(
                 proc.communicate(), timeout=spec.timeout_s,
@@ -361,10 +368,17 @@ class HookRegistry:
                 except asyncio.TimeoutError:
                     pass
             else:
-                # POSIX: kill the whole process group.
+                # POSIX: kill the hook's own process group, and never our own. If
+                # a caller forgot start_new_session the child shares this process's
+                # group, and killpg would then SIGKILL the test run — exit 137 with
+                # no traceback, which is exactly how this hid for so long.
                 try:
                     import signal
-                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    child_pgid = os.getpgid(proc.pid)
+                    if child_pgid == os.getpgid(0):
+                        proc.kill()
+                    else:
+                        os.killpg(child_pgid, signal.SIGKILL)
                 except (ProcessLookupError, PermissionError):
                     pass
         except Exception:

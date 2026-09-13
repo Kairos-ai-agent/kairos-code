@@ -247,6 +247,112 @@ async def test_command_hook_timeout_does_not_hang():
 
 
 # ---------------------------------------------------------------------------
+# _force_kill: a hook that times out must not take the run down with it
+# ---------------------------------------------------------------------------
+
+
+def _fake_posix_os(monkeypatch, *, getpgid, killpg):
+    """Give the hooks module a POSIX-looking ``os`` without touching the real one.
+
+    Patching ``os.name`` globally makes pathlib build PosixPath on Windows and
+    pytest falls over while it is only trying to format a failure — so swap the
+    name inside the module's namespace instead, keeping every other attribute real
+    (the module also uses os.environ and os.path).
+
+    ``signal.SIGKILL`` does not exist on Windows, and the POSIX branch needs it, so
+    it is added here too; without it the branch dies of an AttributeError that the
+    surrounding ``except Exception`` swallows silently.
+    """
+    import signal
+    import types
+
+    import kairos.hooks as hooks_mod
+
+    if not hasattr(signal, "SIGKILL"):
+        monkeypatch.setattr(signal, "SIGKILL", 9, raising=False)
+
+    fake = types.ModuleType("os")
+    fake.__dict__.update(vars(os))
+    fake.name = "posix"
+    fake.getpgid = getpgid
+    fake.killpg = killpg
+    monkeypatch.setattr(hooks_mod, "os", fake, raising=True)
+    return fake
+
+
+@pytest.mark.asyncio
+async def test_force_kill_never_targets_its_own_process_group(monkeypatch):
+    """A hook sharing our process group must be killed directly, never by group.
+
+    ``os.killpg(os.getpgid(child))`` SIGKILLs the whole group. When the hook's
+    subprocess is not started in its own session that group is *ours*, so a hook
+    timing out killed the test run itself: on Linux the CI shard holding this file
+    died with exit 137 and no traceback, on every run, while the suite stayed green
+    on Windows — which uses taskkill and has no process groups at all.
+    """
+    calls: dict = {}
+
+    class FakeProc:
+        pid = 4242
+
+        def kill(self):
+            calls["kill"] = True
+
+        async def wait(self):
+            return 0
+
+    _fake_posix_os(monkeypatch,
+                   getpgid=lambda pid: 7777,  # same group for us and the child
+                   killpg=lambda pgid, sig: calls.__setitem__("killpg", pgid))
+
+    await HookRegistry._force_kill(FakeProc())
+
+    assert calls.get("kill") is True, "the child process itself must be killed"
+    assert "killpg" not in calls, "must never kill the group this process belongs to"
+
+
+@pytest.mark.asyncio
+async def test_force_kill_uses_killpg_when_the_group_is_its_own(monkeypatch):
+    """With its own session the hook's group can be killed as a tree."""
+    calls: dict = {}
+
+    class FakeProc:
+        pid = 4242
+
+        async def wait(self):
+            return 0
+
+    _fake_posix_os(monkeypatch,
+                   getpgid=lambda pid: 7777 if pid == 4242 else 5555,
+                   killpg=lambda pgid, sig: calls.__setitem__("killpg", pgid))
+
+    await HookRegistry._force_kill(FakeProc())
+
+    assert calls.get("killpg") == 7777
+
+
+@pytest.mark.asyncio
+async def test_command_hook_gets_its_own_session(monkeypatch):
+    """The creation site must ask for a new session, or that kill is a suicide."""
+    seen: dict = {}
+
+    async def fake_create(*args, **kwargs):
+        seen.update(kwargs)
+        raise RuntimeError("inspecting the call is enough")
+
+    _fake_posix_os(monkeypatch, getpgid=lambda pid: 1, killpg=lambda pgid, sig: None)
+    monkeypatch.setattr(asyncio, "create_subprocess_shell", fake_create)
+
+    reg = HookRegistry()
+    spec = HookSpec(event=HookEvent.PRE_TOOL_USE, matcher="x",
+                    hook_type="command", command="true")
+    ctx = HookContext(event=HookEvent.PRE_TOOL_USE, project_id="p", tool_name="x")
+    await reg._run_command(spec, ctx)  # swallows the RuntimeError above
+
+    assert seen.get("start_new_session") is True
+
+
+# ---------------------------------------------------------------------------
 # Builtin hook
 # ---------------------------------------------------------------------------
 

@@ -4,10 +4,17 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project aims at
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reaches 1.0.
 
-## [Unreleased]
+## [0.1.2] - 2026-09-13
 
 ### Fixed
 
+- **A hook that timed out could kill the process that ran it — on POSIX.** The
+  cleanup path used `os.killpg(os.getpgid(child), SIGKILL)`, but hook commands were
+  started without `start_new_session`, so the child shared *this* process's group
+  and the kill took down the running process (and, in CI, the whole job) with it:
+  exit 137 and no traceback. Hook commands now get their own session, and
+  `_force_kill` refuses to signal a group it belongs to. Windows was unaffected
+  (`taskkill`, no process groups), which is why every local run was green.
 - **The Task tracker called passed rounds failed.** It parsed Reviewer verdicts by
   looking for `approve`, which only the pre-R38.7 rubric shape carries. The
   simplified Reviewer answers `{"has_bugs": ...}`, so every round of a run whose
@@ -32,6 +39,13 @@ All notable changes to this project are documented here. The format follows
 - **README screenshots are regenerated** from a clean, key-free demo run: no
   test-fixture projects in the sidebar, no hand-annotated example project, no
   Chinese in an English README, and the Task tracker agrees with the gate.
+- **The licence is now the canonical AGPL-3.0 text**, so GitHub identifies it; the
+  project's own copyright notice moved to the README's licence section.
+- **CI runs each shard file by file**, one bounded pytest process per file, and
+  prints free memory and the largest processes around each one. A module that
+  blocks during import is invisible to pytest's `--timeout`, and a job killed by
+  its own limit keeps no logs — both of which made a shard-sized hole impossible
+  to diagnose.
 
 ## [0.1.1] - 2026-09-13
 

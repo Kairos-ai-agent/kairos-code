@@ -34,8 +34,19 @@ mem() {
   fi
 }
 
+procs() {
+  # And *which* process holds it: a stray child left behind by an earlier file
+  # looks identical to a spike inside the current one unless the big processes are
+  # listed by name.
+  if command -v ps >/dev/null 2>&1; then
+    ps -eo rss=,comm= --sort=-rss 2>/dev/null | head -3 \
+      | awk '{printf "%s(%.0fMB) ", $2, $1/1024}'
+  fi
+}
+
 for f in $FILES; do
   before=$(mem)
+  before_p=$(procs)
   t0=$(date +%s)
   # `python -m pytest`, not `pytest`: a console script in a venv carries an
   # absolute interpreter path in its shebang and silently dies (exit 1, no output)
@@ -44,15 +55,15 @@ for f in $FILES; do
   code=$?
   secs=$(( $(date +%s) - t0 ))
   case "$code" in
-    0) echo "  ok      ${f}  (${secs}s, mem ${before} -> $(mem))" ;;
-    5) echo "  skip    ${f}  (no tests collected, ${secs}s, mem ${before} -> $(mem))" ;;
-    124) echo "  TIMEOUT ${f}  (blocked for ${PER_FILE}s, mem ${before} -> $(mem))"
+    0) echo "  ok      ${f}  (${secs}s, mem ${before} -> $(mem), top: ${before_p})" ;;
+    5) echo "  skip    ${f}  (no tests collected, ${secs}s, mem ${before} -> $(mem), top: ${before_p})" ;;
+    124) echo "  TIMEOUT ${f}  (blocked for ${PER_FILE}s, mem ${before} -> $(mem), top: ${before_p})"
          echo "  ^^^ this file blocked; --timeout cannot see a module that blocks during import"
          rc=1 ;;
-    137) echo "  KILLED  ${f}  (SIGKILL after ${secs}s, mem ${before} -> $(mem))"
+    137) echo "  KILLED  ${f}  (SIGKILL after ${secs}s, mem ${before} -> $(mem), top: ${before_p})"
          echo "  ^^^ OOM killer: this file is what ate the runner"
          rc=1 ;;
-    *) echo "  FAIL    ${f}  (exit ${code} after ${secs}s, mem ${before} -> $(mem))"
+    *) echo "  FAIL    ${f}  (exit ${code} after ${secs}s, mem ${before} -> $(mem), top: ${before_p})"
        rc=1 ;;
   esac
 done

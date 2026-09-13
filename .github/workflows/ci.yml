@@ -17,13 +17,12 @@ jobs:
   python:
     name: Python tests (${{ matrix.shard }}/6)
     runs-on: ubuntu-latest
-    # Measured on a 2-vCPU runner: a shard with the *named* heavy files finishes in
-    # about 40 seconds (demo CLI and doctor are fast there after all), while a shard
-    # of nominally light files took 40+ minutes — the real cost is the long tail of
-    # small tests that each spawn a subprocess across many files, which the local
-    # weight table cannot see. 90 minutes plus --durations=0 is what collects the
-    # per-test numbers, and a killed job keeps no logs, so it has to finish.
-    timeout-minutes: 90
+    # Every file in a shard is bounded individually by scripts/ci_shard.sh, and the
+    # shard as a whole by the `timeout` in the step below, so this limit is only a
+    # backstop. It used to be 90 minutes because a shard would hang and a job killed
+    # by its own limit keeps no logs — the hang had to be allowed to finish for the
+    # log to exist at all. Now the bound is inside the step, where the log survives.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -43,26 +42,13 @@ jobs:
           pip install -e ".[dev]"
 
       - name: "Run shard ${{ matrix.shard }} of 6"
-        # --timeout names a genuinely stuck test instead of letting it eat the
-        # job budget; --durations keeps the slow ones visible in the log.
-        #
-        # The diagnostics block matters: when pytest dies during collection it
-        # exits 2 and the log says nothing else useful, which is exactly how two
-        # shards failed once with no explanation. Re-running collection prints
-        # the import errors.
-        run: |
-          FILES=$(python scripts/split_tests.py --shard ${{ matrix.shard }} --shards 6)
-          echo "files in shard ${{ matrix.shard }}: $(echo "$FILES" | wc -w)"
-          set +e
-          pytest $FILES -q --timeout=180 --durations=0
-          rc=$?
-          set -e
-          if [ "$rc" -ne 0 ]; then
-            echo "::group::diagnostics — collection (pytest exited $rc)"
-            pytest $FILES --collect-only -q -p no:cacheprovider 2>&1 | tail -60
-            echo "::endgroup::"
-          fi
-          exit "$rc"
+        # One file at a time with a bound on each (scripts/ci_shard.sh). A module
+        # that blocks during import or collection is invisible to pytest's
+        # --timeout, and the resulting "a shard hung somewhere" was undiagnosable
+        # because a cancelled job keeps no logs. The log now names every file it
+        # ran, its duration, and the one that blocked; the outer timeout keeps the
+        # whole step inside the job limit so that log survives either way.
+        run: timeout 2400 bash scripts/ci_shard.sh ${{ matrix.shard }} 6
 
       - name: "Zero-key demo (the 60-second first run)"
         # Proves a fresh clone can show the whole gate/ledger story without any

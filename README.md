@@ -149,12 +149,19 @@ The wheel ships the built Web UI, so there is nothing to compile. Python 3.11+.
 
 ### 3. Docker
 
+From a checkout — nothing has to be published first:
+
+```bash
+docker compose up --build      # http://127.0.0.1:8900
+```
+
+When a tag is cut, the release workflow builds this same image, smoke-tests it by
+running the server and curling `/api/health` and the bundled UI, and pushes it to
+ghcr.io, so released tags are also runnable straight from the registry:
+
 ```bash
 docker run --rm -p 8900:8900 -v "$PWD/data:/data" \
   ghcr.io/kairos-ai-agent/kairos-code:latest
-
-# or, from a checkout:
-docker compose up --build      # http://127.0.0.1:8900
 ```
 
 State (SQLite, settings, ledger) lives in `./data`, which compose mounts as a

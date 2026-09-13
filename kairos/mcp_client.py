@@ -215,7 +215,12 @@ class StdioMcpClient:
         # the read pipe doesn't stall.
         self._notification_log: List[Dict[str, Any]] = []
         self._reader_task: Optional[asyncio.Task] = None
-        self._client_info = {"name": "kairos", "version": "0.1.0"}
+        # The version this client announces to servers. Read from the package
+        # instead of repeating the literal: it had drifted to "0.1.0" and would
+        # have kept reporting that forever.
+        from kairos import __version__  # local import: keeps the MCP stack out of package init
+
+        self._client_info = {"name": "kairos", "version": __version__}
         self._server_info: Optional[Dict[str, Any]] = None
 
     # -- lifecycle --------------------------------------------------------

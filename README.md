@@ -117,27 +117,43 @@ A badge for your PR description:
 
 ## Install
 
-### From source (recommended today — 0.1 is alpha)
+Four ways in, from "I just want to look at it" to "I want to hack on it".
+
+### 1. Standalone binary — no Python, no Node, nothing to configure
+
+Download the archive for your platform from
+[Releases](https://github.com/Kairos-ai-agent/kairos-code/releases), unpack it,
+run it:
 
 ```bash
-git clone https://github.com/Kairos-ai-agent/kairos-code
-cd REPO
-python -m venv .venv
-. .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"       # drop [dev] for a plain install
-
-# Web UI (optional: the CLI and TUI work without it)
-cd web && npm install && npm run build && cd ..
-
-python -m kairos serve --host 127.0.0.1 --port 8900
+./kairos-code                 # starts the server and opens the UI in your browser
+./kairos-code --port 9100     # pick a port
+./kairos-code --no-browser    # server only
 ```
 
-Open http://127.0.0.1:8900 — the API serves the built UI, `/docs` has the
-interactive API reference.
+State (SQLite, settings, ledger) lives in your per-user application directory.
+The macOS build is not code-signed: if Gatekeeper refuses it, clear the
+quarantine flag once with `xattr -d com.apple.quarantine kairos-code`.
 
-### Docker
+### 2. Python package
 
 ```bash
+pip install kairos_code-<version>-py3-none-any.whl   # the wheel from Releases
+kairos --version
+kairos demo --json --quiet     # the zero-key 60-second run
+kairos                         # start the server + the Web UI
+```
+
+The wheel ships the built Web UI, so there is nothing to compile. Python 3.11+.
+(`pip install kairos-code` once the first PyPI release is out.)
+
+### 3. Docker
+
+```bash
+docker run --rm -p 8900:8900 -v "$PWD/data:/data" \
+  ghcr.io/kairos-ai-agent/kairos-code:latest
+
+# or, from a checkout:
 docker compose up --build      # http://127.0.0.1:8900
 ```
 
@@ -145,12 +161,40 @@ State (SQLite, settings, ledger) lives in `./data`, which compose mounts as a
 volume. The image binds to loopback by default — see [SECURITY.md](SECURITY.md)
 before exposing it.
 
+### 4. From source (recommended while 0.1 is alpha)
+
+```bash
+git clone https://github.com/Kairos-ai-agent/kairos-code
+cd REPO
+python -m venv .venv
+. .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"       # drop [dev] for a plain install — either way you
+                              # get the `kairos` command on your PATH
+
+# Web UI (optional: the CLI and TUI work without it)
+cd web && npm install && npm run build && cd ..
+
+kairos serve --host 127.0.0.1 --port 8900
+```
+
+Open http://127.0.0.1:8900 — the API serves the built UI, `/docs` has the
+interactive API reference.
+
 ### Optional extras
+
+Every one of these is imported lazily: the base install works without them.
 
 ```bash
 pip install -e ".[tui]"        # kairos tui      (Textual terminal UI)
 pip install -e ".[metrics]"    # /metrics        (Prometheus)
 pip install -e ".[mcp]"        # MCP stdio client + bundled filesystem server
+pip install -e ".[voice]"      # speech in/out   (edge-tts, faster-whisper, pyttsx3)
+pip install -e ".[memory]"     # cognee / graphiti memory backends
+pip install -e ".[browser]"    # playwright      (real-browser tools)
+pip install -e ".[cloud]"      # boto3           (S3-backed artifacts)
+pip install -e ".[llm]"        # litellm         (extra model providers)
+pip install -e ".[telemetry]"  # opentelemetry   (traces and metrics)
+pip install -e ".[daemon]"     # psutil          (kairos daemon)
 pip install -e ".[all]"        # everything
 ```
 

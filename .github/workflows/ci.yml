@@ -45,9 +45,24 @@ jobs:
       - name: "Run shard ${{ matrix.shard }} of 3"
         # --timeout names a genuinely stuck test instead of letting it eat the
         # job budget; --durations keeps the slow ones visible in the log.
+        #
+        # The diagnostics block matters: when pytest dies during collection it
+        # exits 2 and the log says nothing else useful, which is exactly how two
+        # shards failed once with no explanation. Re-running collection prints
+        # the import errors.
         run: |
           FILES=$(python scripts/split_tests.py --shard ${{ matrix.shard }} --shards 3)
+          echo "files in shard ${{ matrix.shard }}: $(echo "$FILES" | wc -w)"
+          set +e
           pytest $FILES -q --timeout=300 --durations=10
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            echo "::group::diagnostics — collection (pytest exited $rc)"
+            pytest $FILES --collect-only -q -p no:cacheprovider 2>&1 | tail -60
+            echo "::endgroup::"
+          fi
+          exit "$rc"
 
       - name: "Zero-key demo (the 60-second first run)"
         # Proves a fresh clone can show the whole gate/ledger story without any

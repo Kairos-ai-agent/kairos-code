@@ -256,7 +256,11 @@ jobs:
 
   release:
     name: Publish the GitHub Release
-    needs: [meta, dist, binary, docker]
+    # docker is deliberately NOT in needs: its ghcr push is the one step the
+    # dry-run cannot exercise (it is gated on a tag), and a package-registry
+    # hiccup should not be able to stop the release from being published. The job
+    # still runs and still reports red — it just cannot gate the Release.
+    needs: [meta, dist, binary]
     if: needs.meta.outputs.is_tag == 'true'
     runs-on: ubuntu-latest
     steps:

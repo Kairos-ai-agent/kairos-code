@@ -109,3 +109,47 @@ jobs:
 
       - name: "Check for hardcoded or missing strings"
         run: node scripts/check_i18n.mjs
+
+  clean-install:
+    name: Clean install (core dependencies only)
+    # The gate that would have caught the first release's worst bug: the shipped
+    # server died at import time because python-multipart was missing from the
+    # core dependency set, and a developer venv has it installed anyway. Nothing
+    # short of installing into an empty environment and starting the server sees
+    # that, so this job does exactly that.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build the Web UI
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install into an empty environment, no extras
+        run: |
+          python -m venv /tmp/core
+          /tmp/core/bin/pip install --quiet --upgrade pip
+          /tmp/core/bin/pip install --quiet .
+
+      - name: The installed CLI answers
+        run: |
+          /tmp/core/bin/kairos --version
+          /tmp/core/bin/kairos demo --json --quiet
+
+      - name: The installed server starts and serves the bundled UI
+        run: |
+          python scripts/smoke_binary.py --installed /tmp/core/bin/kairos \
+            --port 9989 --timeout 120

@@ -4,6 +4,35 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project aims at
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reaches 1.0.
 
+## [0.1.4] - 2026-09-13
+
+### Added
+
+- **Feedback that asks for nothing, and a route that cannot be missed.** The foot of the
+  Settings drawer opens a box: write it, then review and submit the prefilled issue on
+  GitHub. No email field, and the payload is exactly what the user typed — no version, no
+  OS, no logs — with a test that fails if any of that ever changes. A markdown issue
+  template carries the framing (form templates make GitHub drop the `body=` prefill), and a
+  workflow assigns each new issue to the maintainer and mentions them, so delivery does not
+  hinge on anyone's notification settings.
+
+### Fixed
+
+- **A provider preset is the user's choice, not something re-derived from the fields.**
+  The drawer re-ran `matchPreset` on every edit, and that function trusted a model *name*
+  and a host *substring* — so picking "custom URL" with a model called `deepseek-*` snapped
+  the selection back to the DeepSeek preset, and the endpoint the user typed was neither
+  shown nor saved. The dropdown is now derived once from the loaded values; matching is by
+  exact host and the model name is not consulted.
+
+### Changed
+
+- **`scripts/smoke_binary.py` ends the server's whole process tree.** A frozen app forks
+  the real server, so terminating the pid it started left an invisible orphan holding the
+  port — and, on Windows, a lock on the executable, which broke the next build.
+- **`scripts/ci_shard.sh` bounds each file with `--timeout-method=signal` on Linux**, so a
+  hung shard names the test it hung in instead of printing unrelated thread stacks.
+
 ## [0.1.3] - 2026-09-13
 
 ### Fixed

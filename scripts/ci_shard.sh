@@ -51,7 +51,15 @@ for f in $FILES; do
   # `python -m pytest`, not `pytest`: a console script in a venv carries an
   # absolute interpreter path in its shebang and silently dies (exit 1, no output)
   # if the checkout has moved since the venv was made.
-  python -m pytest "$f" -q --timeout=150 --durations=5
+  #
+  # --timeout-method=signal (POSIX only): on timeout pytest-timeout raises inside the
+  # test's own thread, so the log names the stuck test and prints its traceback. The
+  # default (thread) dumps only the *other* threads — which is how a Linux-only hang in
+  # shard 5 produced a page of asyncio-waitpid stacks and no hint of the test waiting
+  # for them, leaving the actual culprit invisible.
+  METHOD="--timeout-method=signal"
+  case "$(uname -s)" in Linux*) ;; *) METHOD="" ;; esac
+  python -m pytest "$f" -q --timeout=150 $METHOD --durations=5
   code=$?
   secs=$(( $(date +%s) - t0 ))
   case "$code" in

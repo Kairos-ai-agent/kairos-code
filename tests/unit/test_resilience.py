@@ -306,24 +306,37 @@ def test_pre_check_workspace_no_workspace(tmp_path: Path):
     result = asyncio.run(pre_check_workspace(missing, []))
     assert "workspace not found" in result["summary"]
 
-def test_pre_check_workspace_detects_pyproject(tmp_path: Path):
+def test_pre_check_workspace_detects_pyproject(tmp_path: Path, monkeypatch):
     """If a pyproject.toml exists and pytest is installed, the test
-    runner should be pytest -q."""
+    runner should be pytest -q.
+
+    The session fixture sets KAIROS_INSIDE_TESTS so the loop never starts the suite from
+    inside the suite; these cases are about *detection*, so they opt out of that fuse.
+    """
     from kairos.loop.precheck import _auto_detect_test_command
+    monkeypatch.delenv("KAIROS_INSIDE_TESTS", raising=False)
     (tmp_path / "pyproject.toml").write_text("[tool.pytest]")
     cmd = _auto_detect_test_command(tmp_path)
     assert cmd[0] == "pytest"
 
-def test_pre_check_workspace_detects_package_json(tmp_path: Path):
+def test_pre_check_workspace_detects_package_json(tmp_path: Path, monkeypatch):
     from kairos.loop.precheck import _auto_detect_test_command
+    monkeypatch.delenv("KAIROS_INSIDE_TESTS", raising=False)
     (tmp_path / "package.json").write_text("{}")
     cmd = _auto_detect_test_command(tmp_path)
     assert cmd[0] == "npm"
 
-def test_pre_check_workspace_no_test_config(tmp_path: Path):
+def test_pre_check_workspace_no_test_config(tmp_path: Path, monkeypatch):
     from kairos.loop.precheck import _auto_detect_test_command
+    monkeypatch.delenv("KAIROS_INSIDE_TESTS", raising=False)
     cmd = _auto_detect_test_command(tmp_path)
     assert cmd is None
+
+def test_pre_check_workspace_is_inert_inside_a_test_session(tmp_path: Path):
+    """The fuse itself: even a project with a pyproject.toml yields no command."""
+    from kairos.loop.precheck import _auto_detect_test_command
+    (tmp_path / "pyproject.toml").write_text("[tool.pytest]")
+    assert _auto_detect_test_command(tmp_path) is None
 
 # ---------------------------------------------------------------- cross-loop patterns
 

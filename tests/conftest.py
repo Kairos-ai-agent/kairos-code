@@ -39,6 +39,10 @@ def pytest_configure(config):
     """Session-wide: never let a test commit into a repository or write to the
     developer's data directory."""
     os.environ["KAIROS_NO_CHECKPOINTS"] = "1"
+    # The loop's precheck auto-detects `pytest` in the project and would run the suite
+    # from inside the suite (tests/unit/test_loop_run.py drives the loop), recursing until
+    # a CI shard ate 13 GB. This marker stops that at the root.
+    os.environ["KAIROS_INSIDE_TESTS"] = "1"
     os.environ["KAIROS_DATA_DIR"] = tempfile.mkdtemp(prefix="kairos-test-data-")
 
 

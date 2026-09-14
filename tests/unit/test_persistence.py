@@ -84,13 +84,17 @@ def test_migration_adds_project_id_column_on_old_db(tmp_path):
     assert len(p.load_messages()) == 2
 
 
-def test_chat_only_drops_stream_and_tool_noise(db):
-    """R38.6.5: a busy project's newest rows are almost all
-    ``stream.chunk`` deltas, so ``chat_only`` must keep just the
-    conversation topics — otherwise the chat page renders noise and
-    the real bubbles never fit in the ``limit`` window."""
+def test_chat_only_drops_stream_noise_but_keeps_the_process(db):
+    """R38.6.5 + R38.8: a busy project's newest rows are almost all
+    ``stream.chunk`` deltas, so ``chat_only`` must keep the conversation
+    topics *and* the agent's process (tool calls and their results, the
+    turn's thinking) — the deltas and the per-turn progress chatter stay
+    out, otherwise the chat page renders noise and the real bubbles never
+    fit in the ``limit`` window."""
     db.save_message(Message(sender="p1.coder", topic="stream.chunk",
                             content="tok", metadata={"project_id": "p1"}))
+    db.save_message(Message(sender="p1.coder", topic="agent.progress",
+                            content="Turn 1/2: reasoning", metadata={"project_id": "p1"}))
     db.save_message(Message(sender="p1.coder", topic="tool.call",
                             content="{}", metadata={"project_id": "p1"}))
     db.save_message(Message(sender="user", topic="user.chat",
@@ -99,7 +103,7 @@ def test_chat_only_drops_stream_and_tool_noise(db):
                             content="hi", metadata={"project_id": "p1"}))
 
     rows = db.load_messages(project_id="p1", chat_only=True, limit=50)
-    assert {r["topic"] for r in rows} == {"user.chat", "agent.response"}
+    assert {r["topic"] for r in rows} == {"user.chat", "agent.response", "tool.call"}
 
 
 def test_chat_only_cursor_pages_backwards_without_gaps(db):

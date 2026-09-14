@@ -20,11 +20,12 @@ import { Tag, Empty, Badge, Tooltip, Segmented } from 'antd';
 import {
   UserOutlined, CodeOutlined, AuditOutlined, ToolOutlined,
   CheckCircleOutlined, CloseCircleOutlined,
-  BranchesOutlined, FileTextOutlined, BulbOutlined,
+  BranchesOutlined, FileTextOutlined, BulbOutlined, LoadingOutlined,
 } from '@ant-design/icons';
 
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import { useT } from '../i18n';
+import { useChatStore } from '../stores/chatStore';
 import type { Message } from '../types';
 
 interface Props {
@@ -133,6 +134,7 @@ const ChatThread: React.FC<Props> = ({ messages, emptyHint, showRawToggle = fals
               <MessageBubble key={m.id || i} message={m} />
             ))
           )}
+          {view !== 'raw' && <LiveStatusRow />}
         </div>
       </div>
     </div>
@@ -142,8 +144,54 @@ const ChatThread: React.FC<Props> = ({ messages, emptyHint, showRawToggle = fals
 export default ChatThread;
 
 // ---------------------------------------------------------------------------
+// LiveStatusRow — "what is the agent doing right now" under the thread.
+//
+// R38.8: `agent.progress` events were deliberately kept out of the thread (they
+// are per-turn chatter), which left the user staring at a silent page while the
+// agent worked. The row consumes the same events as *status*, not as messages:
+// thinking → running a tool → thinking → gone when a reply lands.
+// ---------------------------------------------------------------------------
+
+const LiveStatusRow: React.FC = () => {
+  const tokens = useThemeTokens();
+  const t = useT();
+  const live = useChatStore((s) => s.liveStatus);
+  if (!live) return null;
+  return (
+    <div
+      data-testid="live-status"
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        margin: '10px 0 6px', fontSize: 12, color: tokens.labelTertiary,
+      }}
+    >
+      <LoadingOutlined spin style={{ fontSize: 12 }} />
+      <span>
+        {live.kind === 'tool'
+          ? t('chat.status.tool', { tool: live.detail || 'tool' })
+          : t('chat.status.thinking')}
+      </span>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
 // MessageBubble — render one Message according to its sender/topic/type.
 // ---------------------------------------------------------------------------
+
+const ThinkingBubble: React.FC<{ message: Message }> = ({ message }) => {
+  const t = useT();
+  return (
+    <RoleBubble
+      icon={<BulbOutlined />}
+      roleLabel={t('chat.thread.thinkingRole')}
+      accent="#a78bfa"
+      content={stringifyContent(message.content)}
+      summary={t('chat.thread.thinking')}
+      collapsed
+    />
+  );
+};
 
 const MessageBubble: React.FC<{ message: Message }> = ({ message }) => {
   const tokens = useThemeTokens();
@@ -153,6 +201,9 @@ const MessageBubble: React.FC<{ message: Message }> = ({ message }) => {
   }
   if (role === 'tool') {
     return <ToolBubble message={message} />;
+  }
+  if (role === 'thinking') {
+    return <ThinkingBubble message={message} />;
   }
   if (role === 'reviewer') {
     return <ReviewerBubble message={message} />;
@@ -164,10 +215,17 @@ const MessageBubble: React.FC<{ message: Message }> = ({ message }) => {
   return <SystemBubble message={message} />;
 };
 
-function inferRole(m: Message): 'user' | 'coder' | 'reviewer' | 'tool' | 'system' {
+function inferRole(
+  m: Message,
+): 'user' | 'coder' | 'reviewer' | 'tool' | 'thinking' | 'system' {
   const sender = (m.sender || '').toLowerCase();
   const topic = (m.topic || '').toLowerCase();
   if (sender === 'user' || sender === 'human') return 'user';
+  // R38.8: classify the agent's own process by *topic* first. These are the
+  // events the user wants to watch, and their sender is usually just "agent",
+  // which would otherwise render them as ordinary replies.
+  if (topic === 'agent.thinking') return 'thinking';
+  if (topic.startsWith('tool.')) return 'tool';
   if (sender.includes('reviewer') || topic.includes('review')) return 'reviewer';
   if (sender.includes('tool')) return 'tool';
   if (sender.includes('coder') || sender.includes('planner')
@@ -313,15 +371,28 @@ const ToolBubble: React.FC<{ message: Message }> = ({ message }) => {
   const tokens = useThemeTokens();
   const t = useT();
   const meta = message.metadata || {};
-  const tool = meta.tool || meta.name || 'tool';
+  const tool = String(meta.tool || meta.name || 'tool');
+  const isResult = (message.topic || '').toLowerCase() === 'tool.result';
+  const body = stringifyContent(message.content);
+  // R38.8: a result can be long (a file, a page, a diff) — collapse it behind a
+  // one-line summary so the *sequence* of steps stays readable. The call itself
+  // stays expanded: that is the part the user is watching for.
   return (
     <RoleBubble
       icon={<ToolOutlined />}
-      roleLabel={t('chat.thread.toolLabel', { tool: String(tool) })}
+      // Two explicit calls (not a dynamic key) so scripts/check_i18n.mjs can
+      // see both keys — a dynamic key hides a typo from the gate.
+      roleLabel={isResult
+        ? t('chat.thread.toolResultRole', { tool })
+        : t('chat.thread.toolLabel', { tool })}
       accent={tokens.labelTertiary}
-      content={stringifyContent(message.content)}
+      content={body}
       meta={message.topic}
       mono
+      summary={isResult
+        ? t('chat.thread.expandResult', { n: body.length })
+        : undefined}
+      collapsed={isResult}
     />
   );
 };
@@ -344,8 +415,27 @@ const RoleBubble: React.FC<{
   meta?: string;
   extra?: React.ReactNode;
   mono?: boolean;
-}> = ({ icon, roleLabel, accent, content, meta, extra, mono }) => {
+  /** R38.8: when set, ``content`` collapses behind a one-line summary. */
+  summary?: string;
+  /** Start collapsed (default: expanded). */
+  collapsed?: boolean;
+}> = ({ icon, roleLabel, accent, content, meta, extra, mono, summary, collapsed }) => {
   const tokens = useThemeTokens();
+  const body = (
+    <div style={{
+      background: tokens.agentBubble,
+      border: `1px solid ${tokens.agentBubbleBorder}`,
+      borderRadius: 12, padding: '10px 14px',
+      fontSize: 14, lineHeight: 1.55,
+      color: tokens.labelPrimary,
+      fontFamily: mono
+        ? 'SF Mono, "JetBrains Mono", Consolas, monospace'
+        : undefined,
+      whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+    }}>
+      {content}
+    </div>
+  );
   return (
     <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
       <div style={{
@@ -368,19 +458,19 @@ const RoleBubble: React.FC<{
                      {meta}
                    </span>}
         </div>
-        <div style={{
-          background: tokens.agentBubble,
-          border: `1px solid ${tokens.agentBubbleBorder}`,
-          borderRadius: 12, padding: '10px 14px',
-          fontSize: 14, lineHeight: 1.55,
-          color: tokens.labelPrimary,
-          fontFamily: mono
-            ? 'SF Mono, "JetBrains Mono", Consolas, monospace'
-            : undefined,
-          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-        }}>
-          {content}
-        </div>
+        {summary ? (
+          <details
+            data-testid="collapsible-body"
+            open={!collapsed}
+            style={{ margin: 0 }}
+          >
+            <summary style={{
+              cursor: 'pointer', fontSize: 12,
+              color: tokens.labelTertiary, userSelect: 'none',
+            }}>{summary}</summary>
+            <div style={{ marginTop: 6 }}>{body}</div>
+          </details>
+        ) : body}
         {extra}
       </div>
     </div>

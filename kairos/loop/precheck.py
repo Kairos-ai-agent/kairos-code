@@ -20,8 +20,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 import shutil
+import signal
 import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -31,13 +33,45 @@ logger = logging.getLogger(__name__)
 # Cap output so a long pytest trace doesn'"'"'t blow up the prompt.
 MAX_OUTPUT_CHARS = 3000
 
-async def _run(cmd: List[str], cwd: Path, timeout: int = 60) -> Dict:
-    """Run a shell command asynchronously. Never raises."""
+async def _terminate_tree(proc) -> None:
+    """Kill the command *and its children*, then reap it.
+
+    ``wait_for(proc.communicate())`` cancels the *read* on timeout but leaves the process
+    running with its pipes open — and a command that spawned children keeps those too.
+    The loop calls ``_run`` every round, so leaked processes (and their memory) pile up
+    round after round, which is exactly how a CI shard climbed to 13 GB.
+    """
+    if proc is None or proc.returncode is not None:
+        return
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                       capture_output=True, check=False)
+    else:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except OSError:
+            proc.kill()
     try:
+        await asyncio.wait_for(proc.wait(), timeout=10)
+    except (asyncio.TimeoutError, ProcessLookupError):
+        pass
+
+
+async def _run(cmd: List[str], cwd: Path, timeout: int = 60) -> Dict:
+    """Run a shell command asynchronously. Never raises.
+
+    The child gets its own session (POSIX) / process group (Windows) so that killing a
+    timed-out command cannot signal this process, and so its whole tree can be ended.
+    """
+    proc = None
+    try:
+        extra: Dict = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+                       if os.name == "nt" else {"start_new_session": True})
         proc = await asyncio.create_subprocess_exec(
             *cmd, cwd=str(cwd),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            **extra,
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         return {
@@ -47,10 +81,12 @@ async def _run(cmd: List[str], cwd: Path, timeout: int = 60) -> Dict:
             "stderr": (stderr.decode("utf-8", errors="replace") or "")[:MAX_OUTPUT_CHARS],
         }
     except asyncio.TimeoutError:
+        await _terminate_tree(proc)
         return {"ok": False, "code": -1, "stdout": "", "stderr": "(timeout)"}
     except FileNotFoundError:
         return {"ok": None, "code": 127, "stdout": "", "stderr": "(command not found)"}
     except Exception as e:
+        await _terminate_tree(proc)
         return {"ok": False, "code": -1, "stdout": "", "stderr": str(e)}
 
 async def pre_check_workspace(
@@ -113,6 +149,13 @@ async def pre_check_workspace(
     }
 
 def _auto_detect_test_command(workspace: Path) -> Optional[List[str]]:
+    # Never start a test suite from inside one. The loop calls this every round, and the
+    # workspace is usually this very project — so the auto-detected `pytest` would run the
+    # whole suite from within `tests/unit/test_loop_run.py`, which itself drives the loop,
+    # which prechecks again. Each level spawns the next: the shard that hit this climbed
+    # from 1 GB to 13.5 GB while eight tests timed out at 150 s apiece.
+    if os.environ.get("KAIROS_INSIDE_TESTS"):
+        return None
     if (workspace / "pyproject.toml").exists() or (workspace / "pytest.ini").exists():
         return ["pytest", "-q", "--tb=short", "-x"]
     if (workspace / "package.json").exists():

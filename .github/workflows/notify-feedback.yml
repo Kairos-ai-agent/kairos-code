@@ -1,0 +1,43 @@
+name: Route feedback
+
+# A feedback box is only useful if it actually reaches a human. Relying on "I own the
+# repo, so I must be watching it" makes delivery depend on account notification
+# settings that nobody re-checks; an assignment plus a mention is a *direct*
+# notification, which is the strongest signal GitHub sends.
+#
+# Runs on every newly opened issue — an open-source maintainer wants to hear about all
+# of them, not only the ones that came from the app. Drop the comment step if it reads
+# as noise.
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  route:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Make sure the label exists (idempotent)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: gh label create feedback --repo "$REPO" --color 0e8a16 --description "Submitted from the app" 2>/dev/null || true
+
+      - name: Assign, label, and mention so this cannot be missed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -u
+          gh issue edit "$NUMBER" --repo "$REPO" --add-assignee "$OWNER" || true
+          if printf '%s' '${{ toJSON(github.event.issue.labels) }}' | grep -q '"name":"feedback"'; then
+            gh issue edit "$NUMBER" --repo "$REPO" --add-label feedback || true
+          fi
+          gh issue comment "$NUMBER" --repo "$REPO" \
+            --body "Thanks — routing this to @$OWNER so it does not get lost."

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Drawer, Tabs, Select, Switch, Input, Button, Divider, Tag, Space, Typography, message, Spin, Alert, App as AntdApp } from 'antd';
+import { Drawer, Tabs, Select, Switch, Input, Button, Divider, Tag, Space, Typography, message, Spin, Alert, Modal, App as AntdApp } from 'antd';
 import {
   SettingOutlined,
   CodeOutlined,
@@ -23,6 +23,7 @@ import { useThemeTokens } from '../hooks/useThemeTokens';
 import { LLM_PRESETS, matchPreset, getPreset, CUSTOM_MODEL } from '../llm/presets';
 import api from '../api/client';
 import { formatError } from '../utils/formatError';
+import { openFeedbackIssue } from '../utils/feedback';
 
 const { Title, Text } = Typography;
 
@@ -524,11 +525,11 @@ const OpenAICompatForm: React.FC<{
   const [presetId, setPresetId] = useState<string>(() => {
     return matchPreset(value.endpointUrl, value.model);
   });
-  // Keep presetId in sync when the user edits URL/model manually.
-  useEffect(() => {
-    const detected = matchPreset(value.endpointUrl, value.model);
-    if (detected !== presetId) setPresetId(detected);
-  }, [value.endpointUrl, value.model]);  // eslint-disable-line react-hooks/exhaustive-deps
+  // The dropdown is derived once, from the values that were loaded, and after that it
+  // reflects what the user picked. It used to be re-derived from (endpointUrl, model)
+  // on every edit, which meant an explicit choice could never win: a custom endpoint
+  // plus a model named deepseek-* snapped straight back to the DeepSeek preset, and the
+  // drawer then presented that preset's endpoint and model as if they were the user's.
 
   const test = async () => {
     if (!value.endpointUrl.trim() || !value.apiKey.trim()) {
@@ -1200,6 +1201,71 @@ const SkillsPanel: React.FC<{ projectId: string | null }> = ({ projectId }) => {
 // Section: {t('settings.about')}
 // ---------------------------------------------------------------------------
 
+/**
+ * One line at the foot of the drawer: write it, review it on GitHub, submit there.
+ *
+ * Nothing leaves the machine until the user presses the button in the browser, and the
+ * payload is exactly what they typed — no version, no OS, no logs, no contact field.
+ */
+const FeedbackRow: React.FC = () => {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = () => {
+    if (!openFeedbackIssue(text)) {
+      setError(t('feedback.needText'));
+      return;
+    }
+    setOpen(false);
+    setText('');
+    setError(null);
+  };
+
+  return (
+    <>
+      <Divider style={{ margin: '8px 0' }} />
+      <div style={{ padding: '0 16px 12px' }}>
+        <Button
+          type="link"
+          size="small"
+          style={{ padding: 0 }}
+          onClick={() => { setOpen(true); setError(null); }}
+          data-testid="settings-feedback"
+        >
+          {t('feedback.entry')}
+        </Button>
+      </div>
+      <Modal
+        open={open}
+        title={t('feedback.title')}
+        onCancel={() => setOpen(false)}
+        onOk={submit}
+        okText={t('feedback.continue')}
+        cancelText={t('feedback.cancel')}
+        destroyOnClose
+      >
+        <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
+          {t('feedback.desc')}
+        </Typography.Paragraph>
+        <Input.TextArea
+          rows={6}
+          value={text}
+          autoFocus
+          placeholder={t('feedback.placeholder')}
+          onChange={(e) => { setText(e.target.value); setError(null); }}
+          data-testid="settings-feedback-text"
+        />
+        <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginTop: 8, marginBottom: 0 }}>
+          {error ? <Typography.Text type="danger">{error}</Typography.Text> : t('feedback.note')}
+        </Typography.Paragraph>
+      </Modal>
+    </>
+  );
+};
+
+
 const AboutPanel: React.FC = () => {
   const t = useT();
   const tokens = useThemeTokens();
@@ -1525,6 +1591,7 @@ export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
           },
         ]}
       />
+      <FeedbackRow />
     </Drawer>
   );
 };

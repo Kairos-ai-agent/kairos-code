@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -40,6 +41,30 @@ def get(url: str, timeout: float = 5.0) -> tuple[int, str]:
         return exc.code, ""
     except Exception:  # noqa: BLE001 - not up yet
         return 0, ""
+
+
+def terminate_tree(proc: subprocess.Popen) -> None:
+    """Stop the server *and* everything it started.
+
+    A frozen build is a PyInstaller bootloader: the process we spawn immediately forks
+    the real server, so terminating that pid alone leaves an invisible, port-holding
+    orphan behind — and on Windows it also keeps a lock on the executable, which makes
+    the next build fail with ``[WinError 5]``. ``taskkill /T`` ends the whole tree; on
+    POSIX the child gets its own session (see the Popen call) so signalling its process
+    group cannot reach this process.
+    """
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                       capture_output=True, check=False)
+    else:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        except OSError:
+            proc.terminate()
+    try:
+        proc.wait(timeout=15)
+    except subprocess.TimeoutExpired:
+        proc.kill()
 
 
 def main() -> int:
@@ -70,11 +95,17 @@ def main() -> int:
     if args.installed:
         # Installed console script: `kairos serve --host ... --port ...`.
         argv = [str(binary), "serve", "--host", "127.0.0.1", "--port", str(args.port)]
+    # POSIX: its own session, so a process-group kill cannot take this process (or, in
+    # CI, the whole job) down with it. Windows: a new process group, which taskkill /T
+    # can then end as one tree.
+    popen_kwargs = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+                    if os.name == "nt" else {"start_new_session": True})
     proc = subprocess.Popen(
         argv,
         stdout=log,
         stderr=subprocess.STDOUT,
         stdin=subprocess.DEVNULL,
+        **popen_kwargs,
     )
     print(f"[smoke] started pid={proc.pid}  {binary.name}  ({binary.stat().st_size/1048576:.1f} MB)")
 
@@ -122,11 +153,7 @@ def main() -> int:
         print("PASS: the frozen binary serves the UI and its API")
         return 0
     finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=15)
-        except subprocess.TimeoutExpired:
-            proc.kill()
+        terminate_tree(proc)
 
 
 if __name__ == "__main__":

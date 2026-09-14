@@ -1,0 +1,34 @@
+{
+  "feedback.entry": {
+    "zh": "反馈",
+    "en": "Feedback"
+  },
+  "feedback.title": {
+    "zh": "发送反馈",
+    "en": "Send feedback"
+  },
+  "feedback.desc": {
+    "zh": "内容会匿名提交到项目的 GitHub Issues —— 提交前你可以在 GitHub 上先看一遍。",
+    "en": "Your text is posted anonymously to the project's GitHub Issues — you can review it on GitHub before submitting."
+  },
+  "feedback.placeholder": {
+    "zh": "描述你遇到的问题或想法…",
+    "en": "Describe the problem or the idea…"
+  },
+  "feedback.note": {
+    "zh": "如需回复，请在正文里自行留下联系方式。",
+    "en": "Want a reply? Leave a way to reach you inside the text."
+  },
+  "feedback.needText": {
+    "zh": "请先写点内容。",
+    "en": "Please write something first."
+  },
+  "feedback.continue": {
+    "zh": "在 GitHub 上继续",
+    "en": "Continue on GitHub"
+  },
+  "feedback.cancel": {
+    "zh": "取消",
+    "en": "Cancel"
+  }
+}

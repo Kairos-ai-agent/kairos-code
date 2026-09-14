@@ -211,29 +211,31 @@ export const LLM_PRESETS: LLMPreset[] = [
 ];
 
 
-/** Guess which preset a given (endpointUrl, model) pair matches.
- * Used to auto-select the dropdown when the user loads existing
- * settings. Returns the first matching preset id, or 'custom'
- * if no preset matches.
+/** Guess which preset a given endpoint matches, for the initial dropdown value.
+ *
+ * Compared by *exact host*, never by substring: the old
+ * ``lower.includes(host)`` treated ``https://api.deepseek.com.mirror.example/v1`` as
+ * DeepSeek. The model name is deliberately not consulted — a model called
+ * ``deepseek-chat`` behind the user's own gateway is not the DeepSeek provider, and
+ * treating it as one is what made an explicit "custom URL" choice snap back.
+ *
+ * Returns the first matching preset id, or 'custom' if no preset matches.
  */
-export function matchPreset(endpointUrl: string, model: string): string {
+export function matchPreset(endpointUrl: string, _model?: string): string {
   if (!endpointUrl) return 'openai';
-  const lower = endpointUrl.toLowerCase();
-  for (const p of LLM_PRESETS) {
-    if (p.id === 'custom') continue;
-    if (p.endpointUrl && lower.includes(
-        p.endpointUrl.replace(/^https?:\/\//, '').split('/')[0])) {
-      return p.id;
-    }
+  let host: string;
+  try {
+    host = new URL(endpointUrl).host.toLowerCase();
+  } catch {
+    return 'custom';
   }
-  // Model name hint
-  if (model) {
-    if (model.startsWith('deepseek')) return 'deepseek';
-    if (model.startsWith('qwen')) return 'qwen';
-    if (model.startsWith('glm-')) return 'glm';
-    if (model.startsWith('moonshot') || model.startsWith('kimi'))
-      return 'moonshot';
-    if (model.startsWith('doubao')) return 'doubao';
+  for (const p of LLM_PRESETS) {
+    if (p.id === 'custom' || !p.endpointUrl) continue;
+    try {
+      if (new URL(p.endpointUrl).host.toLowerCase() === host) return p.id;
+    } catch {
+      continue;
+    }
   }
   return 'custom';
 }

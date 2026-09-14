@@ -229,7 +229,20 @@ class Persistence:
     #: newest 200 rows are ~all streaming noise, which is why the chat page
     #: looked empty even though the DB held the whole conversation.
     CHAT_TOPICS = ('user.chat', 'agent.chat', 'agent.chat_reply',
-                   'agent.message', 'agent.response')
+                   'agent.message', 'agent.response',
+                   # R38.8: the agent's *process* — a turn starting, a tool
+                   # being called, what it returned, an error — belongs in the
+                   # thread too. It already rendered live over the WebSocket,
+                   # but it was not in this whitelist, so the moment the user
+                   # refreshed or reopened the session the whole process
+                   # vanished and the agent looked like it had done nothing.
+                   #
+                   # Trade-off: a tool-heavy project now spends part of its
+                   # newest-N window on process rows instead of conversation.
+                   # That is the point (the user wants to see the process), but
+                   # callers that need more *turns* should page back with the
+                   # ``before_ts``/``before_id`` cursor or raise ``limit``.
+                   'agent.thinking', 'tool.call', 'tool.result', 'task.error')
 
     def load_messages(self, limit: int=100, project_id: Optional[str]=None,
                       chat_only: bool=False, before_ts: float=0.0,

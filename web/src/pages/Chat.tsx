@@ -279,6 +279,22 @@ const Chat: React.FC = () => {
       // clutters the conversation with progress noise. The Workbench
       // progress display subscribes to ``agent.progress`` for the
       // same data. Here we just don't add it to the chat.
+      // R38.8: keep the live status row in sync with what the agent is doing.
+      // `agent.progress` is still not rendered as a message — it is per-turn
+      // chatter — but it is exactly the signal the status row needs.
+      if (topic === 'agent.progress' || topic === 'agent.thinking') {
+        useChatStore.getState().setLiveStatus({ kind: 'thinking' });
+      } else if (topic === 'tool.call') {
+        const md = (msg.metadata || {}) as Record<string, unknown>;
+        const name = md.tool || md.name || '';
+        useChatStore.getState().setLiveStatus(
+          { kind: 'tool', detail: name ? String(name) : undefined });
+      } else if (topic === 'tool.result') {
+        useChatStore.getState().setLiveStatus({ kind: 'thinking' });
+      } else if (topic === 'agent.response' || topic === 'task.result'
+                 || topic === 'task.error' || topic === 'agent.chat') {
+        useChatStore.getState().setLiveStatus(null);
+      }
       if (topic === 'agent.progress') return;
       const content = (msg.content ?? '').toString();
       const isTurnProgress = /^Turn \d+\/\d+:\s*reasoning/i.test(content);
@@ -578,6 +594,10 @@ const Chat: React.FC = () => {
       return;
     }
     setBusy(true);
+    // R38.8: the status row lights up the moment the user sends, so a slow
+    // first token doesn't look like nothing happened. The WebSocket events
+    // (and, for a chat turn, `agent.chat`) clear it again.
+    useChatStore.getState().setLiveStatus({ kind: 'thinking' });
     try {
       // Optimistic: render the user's bubble immediately. R38.7: the id is
       // kept so the server-echoed message (text + [附件] block) can replace

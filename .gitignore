@@ -75,3 +75,5 @@ _check_extract.py
 
 # Local build outputs (numbered/release dirs exist because a running dist/ exe locks its file)
 /dist*/
+# Git worktrees the loop creates for the Coder/Reviewer during a run
+/.kairos-worktrees/

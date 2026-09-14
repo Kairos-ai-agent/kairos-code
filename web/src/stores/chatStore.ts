@@ -48,6 +48,16 @@ export interface SessionMeta {
   running?: boolean;
 }
 
+/**
+ * R38.8: what the agent is doing right now — drives the status row under the
+ * chat thread. Set from the WebSocket handler; ``null`` means idle.
+ */
+export interface LiveStatus {
+  kind: 'thinking' | 'tool';
+  /** Tool name, when ``kind === 'tool'``. */
+  detail?: string;
+}
+
 interface ChatStore {
   projects: Project[];
   currentProject: Project | null;
@@ -62,6 +72,9 @@ interface ChatStore {
   currentMessages: Message[];
   sidebarCollapsed: boolean;
   workbenchOpen: boolean;       // R38.6 §26: right-side Workbench panel
+  /** R38.8: what the agent is doing right now (drives the status row under the
+   *  thread). ``null`` = idle. */
+  liveStatus: LiveStatus | null;
 
   setProjects: (p: Project[]) => void;
   setCurrentProject: (p: Project | null) => void;
@@ -84,6 +97,7 @@ interface ChatStore {
   finalizeStream: (sender: string) => void;
   toggleSidebar: () => void;
   toggleWorkbench: () => void;
+  setLiveStatus: (s: LiveStatus | null) => void;
   reset: () => void;
 }
 
@@ -103,6 +117,7 @@ export const useChatStore = create<ChatStore>()(
       // switching projects no longer wipes the user's history.
       messagesByProject: {} as Record<string, Message[]>,
       currentMessages: [],
+      liveStatus: null,
       sidebarCollapsed: false,
       workbenchOpen: true,  // R38.6 §26: open by default — the right
                             // panel is the canonical place to see
@@ -288,6 +303,7 @@ export const useChatStore = create<ChatStore>()(
               : m),
         }));
       },
+      setLiveStatus: (s) => set({ liveStatus: s }),
       toggleSidebar: () =>
         set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       toggleWorkbench: () =>

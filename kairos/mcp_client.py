@@ -77,14 +77,26 @@ DEFAULT_REQUEST_TIMEOUT_S = 60.0
 
 @dataclass
 class McpServerConfig:
-    """One MCP server definition, ready to spawn."""
+    """One MCP server definition, ready to spawn or connect to."""
     name: str
-    command: str
+    command: str = ""
     args: List[str] = field(default_factory=list)
     env: Dict[str, str] = field(default_factory=dict)
     enabled: bool = True
+    # R38.12: "stdio" (spawn `command`) or a remote transport — "http"
+    # (Streamable HTTP) / "sse" — which needs `url` and optionally `headers`.
+    transport: str = "stdio"
+    url: str = ""
+    headers: Dict[str, str] = field(default_factory=dict)
     # Optional connection hints. Defaults below match the spec.
     protocol_version: str = MCP_PROTOCOL_VERSION
+
+    def expanded_headers(self) -> Dict[str, str]:
+        """``headers`` with ``${VAR}`` references filled in, like ``env``."""
+        out: Dict[str, str] = {}
+        for k, v in (self.headers or {}).items():
+            out[k] = os.path.expandvars(v) if isinstance(v, str) and "$" in v else v
+        return out
 
     def expanded_env(self) -> Dict[str, str]:
         """Return a copy of env with ${VAR} references substituted from
@@ -128,21 +140,15 @@ def _load_yaml_config(path: Path) -> Dict[str, Any]:
     return raw
 
 
-def load_configs(
+def _merged_servers(
     project_dir: Optional[Path] = None,
     user_dir: Optional[Path] = None,
-) -> Dict[str, McpServerConfig]:
-    """Load MCP server configs from project + user YAML, project wins.
-
-    Lookup paths:
-      1. <project_dir>/.kairos/mcp.yaml
-      2. <user_dir or ~/.kairos>/mcp.yaml
-    """
-    user_dir = Path(user_dir) if user_dir else Path.home() / ".kairos"
+) -> Dict[str, Dict[str, Any]]:
+    """Raw server entries from both YAML files; project wins, deep-merged."""
     merged_servers: Dict[str, Dict[str, Any]] = {}
 
     if user_dir:
-        user_cfg = _load_yaml_config(user_dir / "mcp.yaml")
+        user_cfg = _load_yaml_config(Path(user_dir) / "mcp.yaml")
         for name, server in (user_cfg.get("mcp_servers") or {}).items():
             if isinstance(server, dict):
                 merged_servers[name] = dict(server)
@@ -153,32 +159,98 @@ def load_configs(
             if isinstance(server, dict):
                 existing = merged_servers.get(name, {})
                 merged_servers[name] = _deep_merge(existing, {**server, "name": name})
+    return merged_servers
 
+
+def load_configs(
+    project_dir: Optional[Path] = None,
+    user_dir: Optional[Path] = None,
+) -> Dict[str, McpServerConfig]:
+    """Load MCP server configs from project + user YAML, project wins.
+
+    Lookup paths:
+      1. <project_dir>/.kairos/mcp.yaml
+      2. <user_dir or ~/.kairos>/mcp.yaml
+
+    An entry that cannot be built is skipped with a warning — see
+    :func:`audit_configs` for the same selection *with* the reasons.
+    """
+    user_dir = Path(user_dir) if user_dir else Path.home() / ".kairos"
     out: Dict[str, McpServerConfig] = {}
-    for name, raw in merged_servers.items():
-        cmd = raw.get("command")
-        if not cmd or not isinstance(cmd, str):
-            logger.warning("mcp: server %s missing 'command'; skipping", name)
+    for name, raw in _merged_servers(project_dir, user_dir).items():
+        config, problem = _build_config(name, raw)
+        if problem:
+            logger.warning("mcp: server %s: %s; skipping", name, problem)
             continue
-        # Only PATH-resolved commands need shutil.which(). Absolute
-        # paths are taken at face value — the subprocess launcher
-        # will produce a clear OSError if they don't exist.
-        is_absolute = os.path.isabs(cmd)
-        if not is_absolute and not shutil.which(cmd):
-            logger.warning(
-                "mcp: command %r for server %s not found on PATH; "
-                "skipped (install it or use an absolute path)", cmd, name
-            )
-            continue
-        out[name] = McpServerConfig(
-            name=name,
-            command=cmd,
-            args=list(raw.get("args") or []),
-            env=dict(raw.get("env") or {}),
-            enabled=bool(raw.get("enabled", True)),
-        )
+        out[name] = config
     return out
 
+def _build_config(
+    name: str, raw: Dict[str, Any],
+) -> Tuple[Optional[McpServerConfig], Optional[str]]:
+    """One raw entry → a config, or the reason it was rejected.
+
+    Split out of :func:`load_configs` so the capability view can explain a
+    server the runtime skipped: a config that vanishes without a trace is how
+    "I set it up and nothing happened" stays unexplained.
+    """
+    transport = str(raw.get("transport") or "stdio").strip().lower()
+    url = str(raw.get("url") or "").strip()
+    cmd = raw.get("command")
+
+    if transport in ("http", "sse"):
+        # A remote server: no subprocess and no PATH lookup — just an endpoint
+        # (and, usually, an auth header).
+        if not url:
+            return None, f"transport {transport!r} needs a url"
+        return McpServerConfig(
+            name=name,
+            transport=transport,
+            url=url,
+            headers=dict(raw.get("headers") or {}),
+            enabled=bool(raw.get("enabled", True)),
+        ), None
+
+    if transport != "stdio":
+        return None, f"unknown transport {transport!r}"
+
+    if not cmd or not isinstance(cmd, str):
+        return None, "no command"
+
+    # Only PATH-resolved commands need shutil.which(). Absolute paths are taken
+    # at face value — the launcher produces a clear OSError if they are wrong.
+    if not os.path.isabs(cmd) and not shutil.which(cmd):
+        return None, f"command {cmd!r} not found on PATH"
+
+    return McpServerConfig(
+        name=name,
+        command=cmd,
+        args=list(raw.get("args") or []),
+        env=dict(raw.get("env") or {}),
+        enabled=bool(raw.get("enabled", True)),
+        transport="stdio",
+    ), None
+
+
+def audit_configs(
+    project_dir: Optional[Path] = None,
+    user_dir: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """Everything configured, including what ``load_configs`` drops and why.
+
+    The same selection as :func:`load_configs`, plus a ``rejected`` map of
+    server → reason. Read-only: nothing is started, nothing is written.
+    """
+    user_dir = Path(user_dir) if user_dir else Path.home() / ".kairos"
+    servers: Dict[str, McpServerConfig] = {}
+    rejected: Dict[str, str] = {}
+    for name, raw in _merged_servers(project_dir, user_dir).items():
+        config, problem = _build_config(name, raw)
+        if problem:
+            rejected[name] = problem
+        else:
+            servers[name] = config
+    return {"servers": servers, "rejected": rejected}
 
 # ---------------------------------------------------------------------------
 # Stdio JSON-RPC transport
@@ -409,6 +481,154 @@ class StdioMcpClient:
 
 
 # ---------------------------------------------------------------------------
+# Remote transports: Streamable HTTP and SSE
+# ---------------------------------------------------------------------------
+
+
+def _init_result_to_dict(info: Any) -> Dict[str, Any]:
+    """The SDK's initialize result as a plain dict, with the stdio spelling."""
+    if hasattr(info, "model_dump"):
+        data = info.model_dump(by_alias=True, exclude_none=True)
+    elif isinstance(info, dict):
+        data = info
+    else:
+        data = {}
+    server = data.get("serverInfo") or data.get("server_info") or {}
+    return {
+        "serverInfo": server,
+        "protocolVersion": data.get("protocolVersion", MCP_PROTOCOL_VERSION),
+        "capabilities": data.get("capabilities", {}),
+    }
+
+
+def _read_write(streams: Any) -> Tuple[Any, Any]:
+    """Pull the two MCP streams out of whatever the SDK handed back.
+
+    ``streamable_http_client`` yields a ``TransportStreams`` object in the SDK
+    version this was built against and a tuple in others. Both are accepted here
+    rather than pinned to one — the live test decides which is which.
+    """
+    if hasattr(streams, "read") and hasattr(streams, "write"):
+        return streams.read, streams.write
+    if isinstance(streams, (tuple, list)) and len(streams) >= 2:
+        return streams[0], streams[1]
+    raise McpError(
+        f"unexpected MCP transport streams: {type(streams).__name__}")
+
+
+class HttpMcpClient:
+    """An MCP client for a *remote* server, over the official SDK transports.
+
+    Same surface as :class:`StdioMcpClient` — ``start`` / ``list_tools`` /
+    ``call_tool`` / ``server_info`` / ``close`` / async context manager — so
+    ``McpToolAdapter`` and ``McpRegistry`` cannot tell the two apart. Nothing is
+    spawned: the server is an endpoint and credentials travel in ``headers``
+    (``${VAR}`` references expand from the host environment, like ``env``).
+
+    ``transport: http`` is Streamable HTTP; ``transport: sse`` speaks the older
+    SSE transport that some deployments still require.
+    """
+
+    def __init__(self, config: McpServerConfig,
+                 request_timeout_s: float = DEFAULT_REQUEST_TIMEOUT_S):
+        self.config = config
+        self._timeout = request_timeout_s
+        self._stack: Optional[Any] = None
+        self._session: Optional[Any] = None
+        self._server_info: Optional[Dict[str, Any]] = None
+
+    async def start(self) -> Dict[str, Any]:
+        """Open the transport and complete the initialize handshake."""
+        if self._session is not None:
+            return self._server_info or {}
+        if not self.config.url:
+            raise McpError(
+                f"MCP server {self.config.name!r}: transport "
+                f"{self.config.transport!r} needs a 'url'")
+
+        from contextlib import AsyncExitStack
+
+        from mcp import ClientSession
+
+        headers = self.config.expanded_headers() or None
+        stack = AsyncExitStack()
+        try:
+            if self.config.transport == "sse":
+                from mcp.client.sse import sse_client
+                read, write = await stack.enter_async_context(
+                    sse_client(self.config.url, headers=headers))
+            else:
+                from mcp.client.streamable_http import (create_mcp_http_client,
+                                                        streamable_http_client)
+                # Headers ride on the http client in this SDK, not on the
+                # transport call — the two were merged in later versions.
+                http_client = create_mcp_http_client(headers=headers) if headers else None
+                streams = await stack.enter_async_context(
+                    streamable_http_client(self.config.url, http_client=http_client))
+                read, write = _read_write(streams)
+            session = await stack.enter_async_context(ClientSession(read, write))
+            info = await session.initialize()
+            self._stack = stack
+            self._session = session
+            self._server_info = _init_result_to_dict(info)
+        except Exception as exc:
+            await stack.aclose()
+            raise McpError(
+                f"MCP server {self.config.name!r}: {self.config.transport} "
+                f"connection failed: {exc}") from exc
+        return self._server_info or {}
+
+    async def close(self) -> None:
+        stack, self._stack = self._stack, None
+        self._session = None
+        if stack is not None:
+            try:
+                await stack.aclose()
+            except Exception as exc:  # a dead socket must not mask shutdown
+                logger.debug("mcp: %s close failed: %s", self.config.name, exc)
+
+    async def __aenter__(self) -> "HttpMcpClient":
+        await self.start()
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        await self.close()
+
+    async def list_tools(self) -> List[Dict[str, Any]]:
+        if self._session is None:
+            raise McpError(f"MCP server {self.config.name!r}: not connected")
+        result = await self._session.list_tools()
+        out: List[Dict[str, Any]] = []
+        for tool in (getattr(result, "tools", None) or []):
+            if hasattr(tool, "model_dump"):
+                # by_alias keeps the spec's camelCase (inputSchema), which is
+                # what McpToolAdapter reads.
+                out.append(tool.model_dump(by_alias=True, exclude_none=True))
+            elif isinstance(tool, dict):
+                out.append(tool)
+        return out
+
+    async def call_tool(self, name: str,
+                        arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        if self._session is None:
+            raise McpError(f"MCP server {self.config.name!r}: not connected")
+        result = await self._session.call_tool(name, arguments or {})
+        if hasattr(result, "model_dump"):
+            return result.model_dump(by_alias=True, exclude_none=True)
+        return result if isinstance(result, dict) else {"content": []}
+
+    def server_info(self) -> Optional[Dict[str, Any]]:
+        return self._server_info
+
+
+def client_for(config: McpServerConfig):
+    """Build the client a config's transport calls for."""
+    if config.transport in ("http", "sse"):
+        return HttpMcpClient(config)
+    return StdioMcpClient(config)
+
+
+# ---------------------------------------------------------------------------
 # Kairos adapter: wrap an MCP tool as a BaseTool
 # ---------------------------------------------------------------------------
 
@@ -552,7 +772,7 @@ class McpRegistry:
         for name, cfg in self._configs.items():
             if not cfg.enabled:
                 continue
-            client = StdioMcpClient(cfg)
+            client = client_for(cfg)
             try:
                 await client.start()
             except Exception as exc:

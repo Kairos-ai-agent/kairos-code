@@ -241,18 +241,21 @@ def check_bundled_mcp_servers() -> CheckResult:
     """
     name = "Bundled MCP servers"
     try:
-        from kairos.mcp_local_servers import BUNDLED_SERVERS, tools_for
+        from kairos.mcp_local_servers import BUNDLED_SERVERS, bundled_tool_names
     except Exception as exc:
         return _fail(name, f"cannot import the bundled servers: {exc}", group="mcp")
     broken = []
     tools = 0
     for server in BUNDLED_SERVERS:
-        if server == "filesystem":        # served by its own module
-            continue
         try:
-            tools += len(tools_for(server))
+            names = bundled_tool_names(server, strict=True)
         except Exception as exc:
             broken.append(f"{server}: {type(exc).__name__}: {exc}")
+            continue
+        if not names:
+            broken.append(f"{server}: no tools")
+            continue
+        tools += len(names)
     if broken:
         return _fail(name, f"{len(broken)} offline server(s) broken",
                      hint=broken[0], group="mcp")

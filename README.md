@@ -220,7 +220,7 @@ Every one of these is imported lazily: the base install works without them.
 ```bash
 pip install -e ".[tui]"        # kairos tui      (Textual terminal UI)
 pip install -e ".[metrics]"    # /metrics        (Prometheus)
-pip install -e ".[mcp]"        # MCP stdio client + bundled filesystem server
+pip install -e ".[mcp]"        # MCP client (stdio + HTTP/SSE) + bundled servers
 pip install -e ".[voice]"      # speech in/out   (edge-tts, faster-whisper, pyttsx3)
 pip install -e ".[memory]"     # cognee / graphiti memory backends
 pip install -e ".[browser]"    # playwright      (real-browser tools)
@@ -273,7 +273,7 @@ History lists one row per run, with the delta against the run before it:
 - OpenTelemetry and Langfuse hooks, plus a built-in Trace view
 - Hooks: `data/hooks/*.py` intercept `pre_tool_use`, `post_tool_use`,
   `loop_round`, `loop_completed`
-- MCP stdio client, three-tier skills with FTS5 index and hot reload
+- MCP client (stdio + Streamable HTTP/SSE), three-tier skills with FTS5 index and hot reload
 - Windows computer-use tools, speech-to-text / text-to-speech, Feishu & Slack
   webhooks
 - **63-language UI**, RTL-aware, one locale per language

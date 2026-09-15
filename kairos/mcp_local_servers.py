@@ -309,6 +309,33 @@ _BUILDERS: Dict[str, Callable[[Path], Dict[str, ToolSpec]]] = {
 # MCP server construction
 # ---------------------------------------------------------------------------
 
+def bundled_tool_names(server: str, *, strict: bool = False) -> List[str]:
+    """Tool names a bundled server exposes, without being started.
+
+    ``filesystem`` predates this module and keeps its own table, so asking
+    :func:`tools_for` about it raises. Both live here so the doctor and the
+    capability view report the same number instead of two different ones.
+
+    ``strict`` re-raises a server's construction error instead of returning an
+    empty list: the doctor needs to say *why* a server is broken, while the
+    capability view wants the quiet form.
+    """
+    if server == "filesystem":
+        try:
+            from kairos.mcp_filesystem_server import _TOOLS
+            return sorted(_TOOLS.keys())
+        except Exception:
+            if strict:
+                raise
+            return []
+    if strict:
+        return sorted(tools_for(server).keys())
+    try:
+        return sorted(tools_for(server).keys())
+    except Exception:
+        return []
+
+
 def tools_for(server: str, root: Optional[Path] = None) -> Dict[str, ToolSpec]:
     """The tool table for ``server`` (no SDK needed)."""
     builder = _BUILDERS.get(server)

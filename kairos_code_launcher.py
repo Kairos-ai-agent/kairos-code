@@ -97,7 +97,36 @@ def _open_browser_when_ready(url: str, timeout: float = 30.0) -> None:
             pass
 
 
+def _serve_bundled_mcp(argv: list) -> int:
+    """Become one of the bundled MCP servers, on stdio, in this executable.
+
+    The app launches its bundled servers as ``kairos-code --mcp-serve <name>``
+    (see ``kairos.mcp_local_servers.bundled_mcp_command``): a frozen build has no
+    ``python -m``, so the executable itself has to be able to turn into the
+    server. Without this branch the "server" is a second copy of the whole app,
+    which never answers ``initialize`` — and every configured server then costs
+    a full request timeout before the UI even comes up.
+    """
+    import asyncio
+
+    name = argv[argv.index("--mcp-serve") + 1]
+    root = Path(argv[argv.index("--root") + 1]) if "--root" in argv else Path.cwd()
+
+    if name == "filesystem":
+        from kairos.mcp_filesystem_server import _serve_async as _serve_filesystem
+        asyncio.run(_serve_filesystem(root))
+    else:
+        from kairos.mcp_local_servers import _serve_async as _serve_local
+        asyncio.run(_serve_local(name, root))
+    return 0
+
+
 def main() -> int:
+    # Must come before argparse: this is a different program (a stdio MCP server)
+    # wearing the same executable.
+    if "--mcp-serve" in sys.argv:
+        return _serve_bundled_mcp(sys.argv)
+
     parser = argparse.ArgumentParser(prog="kairos-code")
     parser.add_argument("--port", type=int, default=9527)
     parser.add_argument("--no-browser", action="store_true")

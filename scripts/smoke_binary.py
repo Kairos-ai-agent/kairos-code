@@ -150,6 +150,26 @@ def main() -> int:
         code, _ = get(f"{base}/assets/definitely-not-here.js")
         print(f"[smoke] missing asset -> {code} (404 expected)")
 
+        # The shipped content must be in the binary, not only in the wheel. A
+        # build that serves the UI but carries no skills and no offline MCP
+        # servers passes every other check here — which is exactly how the
+        # packaged app ended up "installing 36 skills" and loading none.
+        code, body = get(f"{base}/api/extensions/capabilities")
+        if code != 200:
+            return report(f"/api/extensions/capabilities -> {code}")
+        caps = json.loads(body)
+        skills = (caps.get("skills") or {}).get("count", 0)
+        mcp = len((caps.get("mcp") or {}).get("configured") or [])
+        plugins = (caps.get("plugins") or {}).get("bundledCount", 0)
+        print(f"[smoke] shipped content: {skills} skills, {mcp} MCP server(s), "
+              f"{plugins} bundled plugin(s)")
+        if skills < 10:
+            return report(
+                f"only {skills} skills inside the binary — kairos/skills is not packaged")
+        if mcp < 5:
+            return report(
+                f"only {mcp} MCP servers configured — the bundled plugin is not packaged")
+
         print("PASS: the frozen binary serves the UI and its API")
         return 0
     finally:

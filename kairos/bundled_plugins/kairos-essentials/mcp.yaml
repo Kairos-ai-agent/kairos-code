@@ -1,0 +1,75 @@
+# Servers every Kairos install can use immediately.
+#
+# Each entry here is served by the Kairos process itself: nothing is downloaded,
+# no npm/pip install, no API key, and no network. `bundled: <name>` is resolved
+# to the command that actually works in this install (a Python module from a
+# source checkout, a built-in flag from a packaged build), so this file is
+# correct in both.
+#
+# `{project_dir}` expands to the project's working directory, which also becomes
+# the sandbox root for the filesystem and git servers.
+#
+# Override any of it — or turn one off — in ~/.kairos/mcp.yaml (all projects) or
+# <project>/.kairos/mcp.yaml (one project). Your entry wins; it is merged field
+# by field.
+mcp_servers:
+
+  filesystem:
+    bundled: filesystem
+    root: "{project_dir}"
+    enabled: true
+
+  git:
+    bundled: git
+    root: "{project_dir}"
+    enabled: true
+
+  sqlite:
+    bundled: sqlite
+    root: "{project_dir}"
+    enabled: true
+
+  time:
+    bundled: time
+    enabled: true
+
+  fetch:
+    bundled: fetch
+    enabled: true
+
+# ---------------------------------------------------------------------------
+# Common servers that need *your* account or a runtime we do not ship.
+# They are off until you ask for them: copy the one you want into
+# ~/.kairos/mcp.yaml, put the credential in the environment, and set
+# `enabled: true`. Never paste a token into this file — `${VAR}` is read from
+# the environment at connect time.
+#
+#   github:          npx -y @modelcontextprotocol/server-github          (GITHUB_PERSONAL_ACCESS_TOKEN)
+#   gitlab:          uvx mcp-server-gitlab                               (GITLAB_PERSONAL_ACCESS_TOKEN)
+#   notion:          npx -y @notionhq/notion-mcp-server                  (NOTION_TOKEN)
+#   linear:          npx -y @linearapp/linear-mcp-server                 (LINEAR_API_KEY)
+#   slack:           npx -y @modelcontextprotocol/server-slack           (SLACK_BOT_TOKEN)
+#   postgres:        npx -y @modelcontextprotocol/server-postgres <url>
+#   redis:           uvx mcp-server-redis
+#   sentry:          npx -y @sentry/mcp-server                           (SENTRY_AUTH_TOKEN)
+#   cloudflare:      npx -y @cloudflare/mcp-server-cloudflare            (CLOUDFLARE_API_TOKEN)
+#   aws-kb:          uvx mcp-server-aws-kb
+#   brave-search:    npx -y @modelcontextprotocol/server-brave-search    (BRAVE_API_KEY)
+#
+#   # Browsers and docs, no account needed — these still need Node:
+#   playwright:      npx -y @playwright/mcp@latest
+#   puppeteer:       npx -y @modelcontextprotocol/server-puppeteer
+#   context7:        npx -y @upstash/context7-mcp
+#   sequential-thinking: npx -y @modelcontextprotocol/server-sequential-thinking
+#   memory:          npx -y @modelcontextprotocol/server-memory
+#
+# Everything above is listed with its command in the app: open the extensions
+# page, or ask the API for /api/extensions/mcps. Copy the entry you want into
+# your own mcp.yaml — a remote server is four lines and a header:
+#
+#   my-remote:
+#     transport: http
+#     url: https://example.com/mcp
+#     headers:
+#       Authorization: "Bearer ${MY_TOKEN}"
+#     enabled: true

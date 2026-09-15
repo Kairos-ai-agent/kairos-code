@@ -58,6 +58,14 @@ DATA_DIRS = [
     (WEB_DIST, "web/dist"),
     (ROOT / "kairos" / "yamls", "kairos/yamls"),
     (ROOT / "kairos" / "agents" / "prompts", "kairos/agents/prompts"),
+    # The shipped content: skills the loader reads, the extension registries the
+    # API lists, and the bundled plugin that turns on the offline MCP servers.
+    # PyInstaller bundles only Python by default, so a directory missing here
+    # exists in the wheel and is simply absent from the binary — which is how a
+    # "36 skills installed" install can report zero of them.
+    (ROOT / "kairos" / "skills", "kairos/skills"),
+    (ROOT / "kairos" / "extensions", "kairos/extensions"),
+    (ROOT / "kairos" / "bundled_plugins", "kairos/bundled_plugins"),
     (ROOT / "vendor", "vendor"),
 ]
 

@@ -38,6 +38,32 @@ All notable changes to this project are documented here. The format follows
   reported "11 tools" for what is really 16. The doctor and the capability view
   now resolve tool names through one function, so the two numbers agree.
 
+- **A fresh install already has working MCP tools, from a plugin that ships
+  with it.** The five servers Kairos serves itself — filesystem, git, sqlite,
+  time, fetch, sixteen tools between them — used to be *bundled but
+  unconfigured*: nothing was reachable until you wrote an `mcp.yaml` by hand.
+  They now arrive through a bundled plugin, `kairos-essentials`, loaded straight
+  from the package: no npm, no pip, no network, no API key, and nothing copied
+  into your home directory.
+
+  Precedence is bundled defaults < `~/.kairos/mcp.yaml` <
+  `<project>/.kairos/mcp.yaml`, merged field by field, so overriding one setting
+  keeps the rest, and `enabled: false` turns a server off. Entries use
+  `bundled: <name>` — resolved to whatever launch actually works in this
+  install (a `-m` module from a checkout, a built-in flag from a packaged
+  build) — and `{project_dir}`, which is also the sandbox root the filesystem
+  and git servers work in.
+
+  `GET /api/extensions/capabilities` now reports each server's `source`
+  (`bundled-plugin` / `user` / `project`) and separately lists the plugins this
+  build ships, the ones the user installed and the ones the registry could
+  install — so "what did I get?" and "why is this here?" are both answerable.
+  `kairos-essentials/mcp.yaml` also lists the common servers that need *your*
+  account (github, gitlab, notion, linear, slack, postgres, redis, sentry,
+  cloudflare, brave-search) and the ones that only need Node (playwright,
+  puppeteer, context7, sequential-thinking, memory) with their real commands,
+  ready to copy, with credentials read from the environment rather than stored.
+
 - **Rename a project by double-clicking its name.** The sidebar's project list
   edits in place: double-click the name — including the "untitled" placeholder —
   type, Enter. Escape cancels, an empty name is refused, and the write goes

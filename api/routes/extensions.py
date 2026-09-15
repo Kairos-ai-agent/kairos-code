@@ -433,7 +433,7 @@ def _mcp_section(project_root: Optional[Path], probe: bool) -> dict:
             "transport": cfg.transport,
             "enabled": bool(cfg.enabled),
             "bundled": name in bundled_in_registry or name in BUNDLED_SERVERS,
-            "source": "config",
+            "source": cfg.source,
             "needsNetwork": cfg.transport in ("http", "sse"),
             # Header NAMES only. A config file legitimately holds a token, and
             # this endpoint must never echo one back.
@@ -491,20 +491,25 @@ def _plugins_section() -> dict:
     from kairos.plugins import PluginManager
 
     manager = PluginManager()
-    installed: List[dict] = []
-    for info in manager.list_installed():
+
+    def entry_of(info) -> dict:
         entry = info.to_dict()
         entry["compatible"] = getattr(info, "compatible", True)
         entry["capabilities"] = list(getattr(info, "capabilities", []) or [])
-        installed.append(entry)
-    # Two different numbers that both matter: what is installed *here* versus
-    # what this build knows how to install. Reporting only the first reads as
-    # "no plugins exist" on a fresh install.
+        return entry
+
+    bundled = [entry_of(info) for info in manager.list_bundled()]
+    installed = [entry_of(info) for info in manager.list_installed()]
+    # Three different numbers that all matter: what this build ships, what the
+    # user added, and what the registry could install. Reporting only the second
+    # reads as "no plugins exist" on a fresh install.
     registry = _load_json("plugins.json")
     available = registry.get("plugins") or []
     return {
         "installed": installed,
+        "bundled": bundled,
         "count": len(installed),
+        "bundledCount": len(bundled),
         "availableInRegistry": len(available),
     }
 
@@ -561,7 +566,7 @@ async def capabilities(project_id: Optional[str] = None,
         problems.append(f"mcp server {name}: configured but not usable ({reason})")
     for name, err in (mcp.get("startupErrors") or {}).items():
         problems.append(f"mcp server {name} failed to start: {err}")
-    for entry in plugins["installed"]:
+    for entry in plugins["installed"] + plugins.get("bundled", []):
         if not entry.get("compatible", True):
             problems.append(
                 f"plugin {entry.get('name')}: incompatible ({entry.get('reason') or 'version'})")

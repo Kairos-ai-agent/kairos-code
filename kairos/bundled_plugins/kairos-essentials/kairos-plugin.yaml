@@ -1,0 +1,10 @@
+name: kairos-essentials
+version: 1.0.0
+description: >-
+  The servers Kairos can run on its own: filesystem, git, sqlite, time and
+  fetch. No npm, no pip, no network, no API key — working the moment you
+  install Kairos.
+author: Kairos
+capabilities: [mcp]
+compatible: ">=0.1.0"
+enabled: true

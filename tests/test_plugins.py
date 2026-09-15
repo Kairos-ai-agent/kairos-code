@@ -84,13 +84,15 @@ def _make_plugin(
 
 
 def test_list_empty_when_no_plugins(tmp_path):
-    mgr = PluginManager(plugins_root=tmp_path)
+    mgr = PluginManager(plugins_root=tmp_path,
+                        bundled_root=tmp_path / "no_bundled_here")
     assert mgr.list_installed() == []
 
 
 def test_list_returns_plugin_with_manifest(tmp_path):
     _make_plugin(tmp_path, "alpha")
-    mgr = PluginManager(plugins_root=tmp_path)
+    mgr = PluginManager(plugins_root=tmp_path,
+                        bundled_root=tmp_path / "no_bundled_here")
     plugins = mgr.list_installed()
     assert [p.name for p in plugins] == ["alpha"]
     assert plugins[0].version == "0.1.0"
@@ -99,7 +101,8 @@ def test_list_returns_plugin_with_manifest(tmp_path):
 def test_list_ignores_dirs_without_manifest(tmp_path):
     (tmp_path / "rogue").mkdir()
     _make_plugin(tmp_path, "alpha")
-    mgr = PluginManager(plugins_root=tmp_path)
+    mgr = PluginManager(plugins_root=tmp_path,
+                        bundled_root=tmp_path / "no_bundled_here")
     plugins = mgr.list_installed()
     # "rogue" has no manifest; we skip it.
     assert [p.name for p in plugins] == ["alpha"]
@@ -109,7 +112,8 @@ def test_list_ignores_bad_yaml_manifest(tmp_path):
     pdir = tmp_path / "broken"
     pdir.mkdir()
     (pdir / PLUGIN_MANIFEST).write_text("this: is: not: yaml", encoding="utf-8")
-    mgr = PluginManager(plugins_root=tmp_path)
+    mgr = PluginManager(plugins_root=tmp_path,
+                        bundled_root=tmp_path / "no_bundled_here")
     assert mgr.list_installed() == []
 
 
@@ -119,7 +123,8 @@ def test_list_disabled_flag_propagates(tmp_path):
     (pdir / PLUGIN_MANIFEST).write_text(
         "name: alpha\nenabled: false\n", encoding="utf-8"
     )
-    mgr = PluginManager(plugins_root=tmp_path)
+    mgr = PluginManager(plugins_root=tmp_path,
+                        bundled_root=tmp_path / "no_bundled_here")
     info = mgr.list_installed()[0]
     assert info.enabled is False
 
@@ -159,20 +164,23 @@ def test_install_rejects_existing_name(tmp_path):
 def test_install_rejects_non_directory(tmp_path):
     bad = tmp_path / "not-a-dir.txt"
     bad.write_text("hi", encoding="utf-8")
-    mgr = PluginManager(plugins_root=tmp_path)
+    mgr = PluginManager(plugins_root=tmp_path,
+                        bundled_root=tmp_path / "no_bundled_here")
     with pytest.raises(PluginError):
         mgr.install(bad)
 
 
 def test_uninstall_removes_directory(tmp_path):
     _make_plugin(tmp_path, "alpha")
-    mgr = PluginManager(plugins_root=tmp_path)
+    mgr = PluginManager(plugins_root=tmp_path,
+                        bundled_root=tmp_path / "no_bundled_here")
     assert mgr.uninstall("alpha") is True
     assert not (tmp_path / "alpha").exists()
 
 
 def test_uninstall_returns_false_when_not_installed(tmp_path):
-    mgr = PluginManager(plugins_root=tmp_path)
+    mgr = PluginManager(plugins_root=tmp_path,
+                        bundled_root=tmp_path / "no_bundled_here")
     assert mgr.uninstall("nonexistent") is False
 
 
@@ -184,7 +192,8 @@ def test_uninstall_returns_false_when_not_installed(tmp_path):
 def test_load_all_reports_what_each_plugin_offers(tmp_path):
     _make_plugin(tmp_path, "alpha", with_skills=True, with_mcp=True)
     _make_plugin(tmp_path, "beta", with_agents=True, with_hooks=True)
-    mgr = PluginManager(plugins_root=tmp_path)
+    mgr = PluginManager(plugins_root=tmp_path,
+                        bundled_root=tmp_path / "no_bundled_here")
     loaded = mgr.load_all()
     by_name = {p.info.name: p for p in loaded}
     assert by_name["alpha"].skills_dir is not None
@@ -201,7 +210,8 @@ def test_load_all_skips_disabled_plugins(tmp_path):
     )
     (pdir / "skills").mkdir()
     (pdir / "skills" / "x.md").write_text("no skill", encoding="utf-8")
-    mgr = PluginManager(plugins_root=tmp_path)
+    mgr = PluginManager(plugins_root=tmp_path,
+                        bundled_root=tmp_path / "no_bundled_here")
     loaded = mgr.load_all()
     assert loaded == []
 
@@ -209,7 +219,8 @@ def test_load_all_skips_disabled_plugins(tmp_path):
 def test_load_all_partial_plugin_is_fine(tmp_path):
     """A plugin that ships only some directories should still load."""
     _make_plugin(tmp_path, "alpha", with_skills=True)  # no mcp, no agents
-    mgr = PluginManager(plugins_root=tmp_path)
+    mgr = PluginManager(plugins_root=tmp_path,
+                        bundled_root=tmp_path / "no_bundled_here")
     loaded = mgr.load_all()
     assert len(loaded) == 1
     p = loaded[0]
@@ -225,7 +236,8 @@ def test_load_all_partial_plugin_is_fine(tmp_path):
 
 def test_aggregate_mcp_configs_merges_servers(tmp_path):
     _make_plugin(tmp_path, "alpha", with_mcp=True)
-    mgr = PluginManager(plugins_root=tmp_path)
+    mgr = PluginManager(plugins_root=tmp_path,
+                        bundled_root=tmp_path / "no_bundled_here")
     plugins = mgr.load_all()
     merged = PluginManager.aggregate_mcp_configs(plugins)
     assert "demo_server" in merged["mcp_servers"]
@@ -245,7 +257,8 @@ def test_aggregate_mcp_configs_skips_bad_yaml(tmp_path):
     (pdir / "mcp.yaml").write_text(
         "not: valid: yaml: [[[", encoding="utf-8"
     )
-    mgr = PluginManager(plugins_root=tmp_path)
+    mgr = PluginManager(plugins_root=tmp_path,
+                        bundled_root=tmp_path / "no_bundled_here")
     plugins = mgr.load_all()
     # Bad yaml is logged and skipped; result is the empty default.
     merged = PluginManager.aggregate_mcp_configs(plugins)

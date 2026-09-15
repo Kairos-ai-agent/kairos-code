@@ -74,13 +74,17 @@ def load_skill(name: str):
     + bundled directories. Returns the Skill object or None."""
     from kairos.config.settings import settings as ksettings
     from kairos.skills import SkillsLoader
+    # NOTE: no ``bundled_dir`` here. The loader's default is <package>/skills/,
+    # which is where the bundled set actually ships (the wheel carries 52 files).
+    # These wrappers used to point it at <data_dir>/bundled_skills — a path
+    # nothing ever populates — so every bundled skill was invisible to them.
     sl = SkillsLoader(
         project_dir=ksettings.data_dir / "skills",
         global_dir=ksettings.data_dir / "global_skills",
-        bundled_dir=ksettings.data_dir / "bundled_skills",
     )
-    sl.discover()
-    for s in sl.skills if hasattr(sl, "skills") else []:
+    # Use what discover() *returns* — the loader has no ``.skills`` attribute,
+    # so the old ``sl.skills`` lookup found nothing even with correct dirs.
+    for s in sl.discover():
         if s.name == name:
             return s
     return None
@@ -90,13 +94,12 @@ def list_skills():
     """List all available skills."""
     from kairos.config.settings import settings as ksettings
     from kairos.skills import SkillsLoader
+    # See load_skill: bundled_dir stays at its default (<package>/skills/).
     sl = SkillsLoader(
         project_dir=ksettings.data_dir / "skills",
         global_dir=ksettings.data_dir / "global_skills",
-        bundled_dir=ksettings.data_dir / "bundled_skills",
     )
-    sl.discover()
-    return list(getattr(sl, "skills", []))
+    return list(sl.discover())
 
 
 __all__ = [

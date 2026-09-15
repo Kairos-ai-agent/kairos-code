@@ -1,11 +1,14 @@
 ---
-name: Verification Before Completion
 description: Run verification commands and confirm output before claiming success
 when_to_use: when about to claim work is complete, fixed, or passing, before committing or creating PRs
 version: 1.1.0
 languages: all
+name: verification-before-completion
+priority: 0.8
+when:
+  keyword: ['about', 'claim', 'work', 'complete', 'fixed', 'passing']
 ---
-
+<!-- Adapted from obra/superpowers (Apache-2.0 / MIT). -->
 # Verification Before Completion
 
 ## Overview

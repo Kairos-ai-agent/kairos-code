@@ -1,10 +1,13 @@
 ---
-name: Subagent-Driven Development
 description: Execute implementation plan by dispatching fresh subagent for each task, with code review between tasks
 when_to_use: when executing implementation plans with independent tasks in the current session, using fresh subagents with review gates
 version: 1.1.0
+name: subagent-driven-development
+priority: 0.8
+when:
+  keyword: ['executing', 'implementation', 'plans', 'independent', 'tasks', 'current']
 ---
-
+<!-- Adapted from obra/superpowers (Apache-2.0 / MIT). -->
 # Subagent-Driven Development
 
 Execute plan by dispatching fresh subagent per task, with code review after each.

@@ -1,10 +1,13 @@
 ---
-name: Writing Plans
 description: Create detailed implementation plans with bite-sized tasks for engineers with zero codebase context
 when_to_use: when design is complete and you need detailed implementation tasks for engineers with zero codebase context
 version: 2.1.0
+name: writing-plans
+priority: 0.8
+when:
+  keyword: ['spec', 'requirements', 'multi', 'step', 'task', 'touching']
 ---
-
+<!-- Adapted from obra/superpowers (Apache-2.0 / MIT). -->
 # Writing Plans
 
 ## Overview

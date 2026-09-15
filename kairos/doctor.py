@@ -202,23 +202,63 @@ def check_ollama_reachable() -> CheckResult:
 
 
 def check_skills_loadable() -> CheckResult:
-    """SkillsLoader.discover() must run without error and return >= 1 skill."""
+    """Every shipped skill must parse, and the loader must find them.
+
+    R38.11: this used to assert ``n >= 1``, which passed even while the bundled
+    set was unreachable from the API layer. It now compares what is on disk with
+    what the loader returns, and names the files that fail to parse — the
+    failure mode users actually hit.
+    """
     name = "Skills loader"
     try:
-        from kairos.skills import SkillsLoader
-        loader = SkillsLoader()
-        skills = loader.discover()
-        n = len(skills)
+        from kairos.skills import SkillsLoader, _parse_skill
+        bundled = Path(__file__).resolve().parent / "skills"
+        files = sorted(bundled.rglob("*.md"))
+        n = len(SkillsLoader().discover())
+        unparsable = [p for p in files if _parse_skill(p) is None]
     except Exception as exc:
         return _fail(name, f"discover() failed: {exc}",
                      hint="Check that kairos/skills/*.md files are well-formed.",
                      group="skills")
     if n == 0:
         return _fail(name, "no skills discovered",
-                     hint="Re-run scripts/adapt_the skill library_skills.py and "
-                          "scripts/adapt_anthropic_skills.py.",
+                     hint="The bundled set ships in kairos/skills/; check the install.",
                      group="skills")
-    return _ok(name, f"{n} skills discovered", group="skills")
+    if unparsable:
+        return _warn(
+            name, f"{n} skills loaded, {len(unparsable)} shipped file(s) unparsable",
+            hint=f"First: {unparsable[0].relative_to(bundled)}", group="skills")
+    return _ok(name, f"{n} skills loaded ({len(files)} shipped files)",
+               group="skills")
+
+
+def check_bundled_mcp_servers() -> CheckResult:
+    """The offline MCP servers must build their tool tables without a network.
+
+    R38.11: five registry entries are served by this install instead of by
+    ``npx``/``uvx``. If one of them cannot even construct its tools, "works out
+    of the box" is a claim rather than a fact — so ask it.
+    """
+    name = "Bundled MCP servers"
+    try:
+        from kairos.mcp_local_servers import BUNDLED_SERVERS, tools_for
+    except Exception as exc:
+        return _fail(name, f"cannot import the bundled servers: {exc}", group="mcp")
+    broken = []
+    tools = 0
+    for server in BUNDLED_SERVERS:
+        if server == "filesystem":        # served by its own module
+            continue
+        try:
+            tools += len(tools_for(server))
+        except Exception as exc:
+            broken.append(f"{server}: {type(exc).__name__}: {exc}")
+    if broken:
+        return _fail(name, f"{len(broken)} offline server(s) broken",
+                     hint=broken[0], group="mcp")
+    return _ok(name,
+               f"{len(BUNDLED_SERVERS)} offline servers, {tools} tools, no download",
+               group="mcp")
 
 
 def check_fts5() -> CheckResult:
@@ -373,6 +413,7 @@ DEFAULT_CHECKS: List[Callable[[], CheckResult]] = [
     check_skills_loadable,
     check_fts5,
     check_mcp_config,
+    check_bundled_mcp_servers,
 ]
 
 

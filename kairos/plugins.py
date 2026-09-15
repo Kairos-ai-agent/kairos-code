@@ -54,6 +54,12 @@ class PluginInfo:
     description: str = ""
     path: Path = field(default_factory=Path)
     enabled: bool = True
+    #: R38.11: what the plugin contributes, declared in its manifest
+    #: (``capabilities: [skills, hooks, mcp]``). Empty means "not declared" —
+    #: the file layout still tells the truth, so nothing is lost.
+    capabilities: List[str] = field(default_factory=list)
+    #: A version range like ``">=0.1,<0.2"``. Empty means "no constraint".
+    compatible: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -62,7 +68,59 @@ class PluginInfo:
             "description": self.description,
             "path": str(self.path),
             "enabled": self.enabled,
+            "capabilities": list(self.capabilities),
+            "compatible": self.compatible,
         }
+
+
+#: The surfaces a plugin may contribute to. Mirrors what ``load_all`` detects.
+KNOWN_CAPABILITIES: Tuple[str, ...] = ("skills", "agents", "hooks", "mcp",
+                                       "commands")
+
+
+def check_compatible(compatible: str,
+                     version: Optional[str] = None) -> Tuple[bool, str]:
+    """Whether a plugin's ``compatible`` range admits this Kairos build.
+
+    Accepts ``>=``, ``>``, ``<=``, ``<`` and ``=`` against dotted versions,
+    comma-separated: ``">=0.1,<0.2"``. An empty range, or one we cannot parse,
+    counts as compatible — a plugin author's typo must not silently disable
+    their plugin, but a real mismatch must not be hidden either, so the caller
+    gets the reason back and decides.
+    """
+    spec = (compatible or "").strip()
+    if not spec:
+        return True, "no constraint"
+    from kairos.updater import version_tuple
+    if version is None:
+        from kairos import __version__ as version
+    current = version_tuple(str(version))
+
+    for raw in spec.split(","):
+        part = raw.strip()
+        if not part:
+            continue
+        op = "="
+        for candidate in (">=", "<=", ">", "<", "="):
+            if part.startswith(candidate):
+                op, part = candidate, part[len(candidate):].strip()
+                break
+        if not any(ch.isdigit() for ch in part):
+            # "garbage" parses to (0,) and would look like a mismatch. A typo
+            # in a manifest must not silently disable the plugin.
+            return True, f"unparsed constraint {raw.strip()!r} (ignored)"
+        target = version_tuple(part.lstrip("vV"))
+        if op == ">=" and not current >= target:
+            return False, f"requires {spec}, this build is {version}"
+        if op == ">" and not current > target:
+            return False, f"requires {spec}, this build is {version}"
+        if op == "<=" and not current <= target:
+            return False, f"requires {spec}, this build is {version}"
+        if op == "<" and not current < target:
+            return False, f"requires {spec}, this build is {version}"
+        if op == "=" and current != target:
+            return False, f"requires {spec}, this build is {version}"
+    return True, "ok"
 
 
 @dataclass
@@ -123,12 +181,23 @@ class PluginManager:
         # The manifest MAY also have a single top-level key equal to
         # the plugin's directory name; that overrides the name.
         name = raw.get("name") or plugin_path.name
+        caps = raw.get("capabilities")
+        if isinstance(caps, str):
+            caps = [c for c in caps.replace(",", " ").split() if c]
+        caps = [str(c).strip().lower() for c in (caps or []) if str(c).strip()]
+        unknown = [c for c in caps if c not in KNOWN_CAPABILITIES]
+        if unknown:
+            logger.warning(
+                "plugin %s: unknown capabilities %s (known: %s)",
+                name, unknown, list(KNOWN_CAPABILITIES))
         return PluginInfo(
             name=name,
             version=str(raw.get("version", "0.0.0")),
             description=str(raw.get("description", "")),
             path=plugin_path,
             enabled=bool(raw.get("enabled", True)),
+            capabilities=[c for c in caps if c in KNOWN_CAPABILITIES],
+            compatible=str(raw.get("compatible", "") or ""),
         )
 
     # -- install / uninstall ---------------------------------------------

@@ -1,10 +1,13 @@
 ---
-name: Brainstorming Ideas Into Designs
 description: Interactive idea refinement using Socratic method to develop fully-formed designs
 when_to_use: when partner describes any feature or project idea, before writing code or implementation plans
 version: 2.2.0
+name: brainstorming
+priority: 0.8
+when:
+  keyword: ['creative', 'work', 'creating', 'features', 'building', 'components']
 ---
-
+<!-- Adapted from obra/superpowers (Apache-2.0 / MIT). -->
 # Brainstorming Ideas Into Designs
 
 ## Overview

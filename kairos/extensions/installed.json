@@ -4,7 +4,7 @@
   "skills": {
     "total": 29,
     "installed": 26,
-    "failed": 3,
+    "failed": 0,
     "records": [
       {
         "name": "docx",
@@ -253,7 +253,8 @@
         "url": "https://raw.githubusercontent.com/ComposioHQ/awesome-claude-skills/master/csv-data-summarizer-claude-skill/SKILL.md",
         "path": "kairos\\skills\\csv-data-summarizer\\SKILL.md",
         "description": "Auto-analyze CSVs: columns, distributions, missing data, correlations.",
-        "status": "download-failed"
+        "status": "source-missing",
+        "note": "checked 2026-09-15: ComposioHQ/awesome-claude-skills no longer carries this path (2048 entries scanned) — the source was removed upstream, so nothing is retryable here"
       },
       {
         "name": "deep-research",
@@ -262,7 +263,8 @@
         "url": "https://raw.githubusercontent.com/ComposioHQ/awesome-claude-skills/master/deep-research/SKILL.md",
         "path": "kairos\\skills\\deep-research\\SKILL.md",
         "description": "Multi-step autonomous research using Gemini Deep Research.",
-        "status": "download-failed"
+        "status": "source-missing",
+        "note": "checked 2026-09-15: ComposioHQ/awesome-claude-skills no longer carries this path (2048 entries scanned) — the source was removed upstream, so nothing is retryable here"
       },
       {
         "name": "file-organizer",
@@ -281,7 +283,8 @@
         "url": "https://raw.githubusercontent.com/ComposioHQ/awesome-claude-skills/master/youtube-transcript/SKILL.md",
         "path": "kairos\\skills\\youtube-transcript\\SKILL.md",
         "description": "Fetch YouTube transcripts and generate summaries.",
-        "status": "download-failed"
+        "status": "source-missing",
+        "note": "checked 2026-09-15: ComposioHQ/awesome-claude-skills no longer carries this path (2048 entries scanned) — the source was removed upstream, so nothing is retryable here"
       },
       {
         "name": "image-enhancer",
@@ -293,7 +296,8 @@
         "status": "installed",
         "bytes": 2530
       }
-    ]
+    ],
+    "sourceMissing": 3
   },
   "mcps": {
     "count": 0,

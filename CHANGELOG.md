@@ -8,6 +8,36 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **MCP servers can be remote again.** The client spoke stdio only, so the
+  servers that actually exist in the world — hosted endpoints behind a token —
+  could not be configured at all. `transport: http` (Streamable HTTP) and
+  `transport: sse` now connect over the official SDK transports with the same
+  surface as the stdio client, so the tool adapter and the registry cannot tell
+  the two apart. Credentials ride in `headers` and may reference the
+  environment (`"Authorization": "Bearer ${MY_TOKEN}"`); nothing is spawned,
+  and a missing `url` fails loudly instead of being quietly ignored. Tested
+  against a real Streamable-HTTP server started in-process — not a mock.
+
+- **`GET /api/extensions/capabilities` — what the agent will actually have, and
+  what is missing.** One read-only answer for a project: every skill the loader
+  returns with its scope (project / global / bundled), priority and trigger; the
+  MCP servers that are configured, which are rejected *and why*, and the offline
+  servers this build ships with their tool names; installed plugins with their
+  declared capabilities and compatibility; the native tool list; and a
+  `problems` array that names what is unusable instead of dropping it. Header
+  *names* are reported, never their values. `?probe=true` additionally starts
+  the configured servers and reports live tool counts and startup errors.
+
+  It exists because the registry and the runtime could disagree unobserved:
+  `/extensions/summary` counted 29 installed skills while `SkillsLoader`
+  returned none at all. The two endpoints are kept side by side on purpose —
+  one describes the install, the other the running system.
+
+- **`kairos doctor` counts every bundled server.** The bundled-server check
+  skipped `filesystem` (which keeps its own tool table in an older module) and
+  reported "11 tools" for what is really 16. The doctor and the capability view
+  now resolve tool names through one function, so the two numbers agree.
+
 - **Rename a project by double-clicking its name.** The sidebar's project list
   edits in place: double-click the name — including the "untitled" placeholder —
   type, Enter. Escape cancels, an empty name is refused, and the write goes

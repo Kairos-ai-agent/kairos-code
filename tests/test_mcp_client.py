@@ -46,10 +46,20 @@ def test_deep_merge_dicts_recurse():
     assert _deep_merge({"a": {"b": 1}}, {"a": {"c": 2}}) == {"a": {"b": 1, "c": 2}}
 
 
-def test_load_configs_no_files_returns_empty():
+def test_a_fresh_install_gets_the_shipped_defaults(monkeypatch):
+    """No config anywhere is no longer "nothing".
+
+    R38.12: the servers Kairos serves itself (filesystem/git/sqlite/time/fetch)
+    apply until someone overrides them, so a brand-new install has working MCP
+    tools. Asking for the user's own config alone still returns nothing.
+    """
+    monkeypatch.delenv("KAIROS_NO_BUNDLED_MCP", raising=False)
     with tempfile.TemporaryDirectory() as d:
         out = load_configs(project_dir=Path(d), user_dir=Path(d) / "missing")
-        assert out == {}
+        assert out, "a fresh install should already have the bundled servers"
+        assert all(cfg.source == "bundled-plugin" for cfg in out.values())
+        assert load_configs(project_dir=Path(d), user_dir=Path(d) / "missing",
+                            include_bundled=False) == {}
 
 
 def test_load_configs_project_wins_on_collision():
@@ -88,7 +98,8 @@ def test_load_configs_skips_missing_command():
             "mcp_servers:\n  no_cmd:\n    args: [a]\n",
             encoding="utf-8",
         )
-        out = load_configs(project_dir=proj_dir, user_dir=Path(d) / "x")
+        out = load_configs(project_dir=proj_dir, user_dir=Path(d) / "x",
+                           include_bundled=False)
         assert out == {}
 
 
@@ -312,6 +323,9 @@ async def test_registry_loads_and_aggregates_tools():
                 encoding="utf-8",
             )
             registry = McpRegistry()
+            # This test configures the servers it asserts on, so the shipped
+            # defaults are switched off.
+            registry.include_bundled = False
             registry.load(project_dir=proj)
             await registry.start_all()
             try:
@@ -348,6 +362,9 @@ async def test_registry_handles_failing_server():
             encoding="utf-8",
         )
         registry = McpRegistry()
+        # This test configures the servers it asserts on, so the shipped
+        # defaults are switched off.
+        registry.include_bundled = False
         registry.load(project_dir=proj)
         await registry.start_all()
         try:

@@ -20,6 +20,12 @@ from api.routes import extensions as ext
 SECRET = "sk-do-not-echo-this-1234567890"
 
 
+@pytest.fixture(autouse=True)
+def _allow_bundled_defaults(monkeypatch):
+    """The view is supposed to show the shipped servers; unmask them here."""
+    monkeypatch.delenv("KAIROS_NO_BUNDLED_MCP", raising=False)
+
+
 @pytest.fixture()
 def client(monkeypatch, tmp_path: Path) -> TestClient:
     home = tmp_path / "home"

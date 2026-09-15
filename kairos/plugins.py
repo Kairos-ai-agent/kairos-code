@@ -60,6 +60,8 @@ class PluginInfo:
     capabilities: List[str] = field(default_factory=list)
     #: A version range like ``">=0.1,<0.2"``. Empty means "no constraint".
     compatible: str = ""
+    #: True for a plugin that ships with Kairos (``kairos/bundled_plugins/``).
+    bundled: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -70,6 +72,7 @@ class PluginInfo:
             "enabled": self.enabled,
             "capabilities": list(self.capabilities),
             "compatible": self.compatible,
+            "bundled": self.bundled,
         }
 
 
@@ -141,28 +144,44 @@ class PluginError(RuntimeError):
 class PluginManager:
     """Manages a flat collection of plugins under a single root dir."""
 
-    def __init__(self, plugins_root: Optional[Path] = None):
+    def __init__(self, plugins_root: Optional[Path] = None,
+                 bundled_root: Optional[Path] = None):
         self.plugins_root = Path(plugins_root) if plugins_root \
             else (Path.home() / ".kairos" / "plugins")
         self.plugins_root.mkdir(parents=True, exist_ok=True)
+        #: Plugins that ship with Kairos. They are *loaded* from the package,
+        #: never copied into the user's directory: an upgrade then replaces them
+        #: instead of leaving a stale copy behind, and uninstalling cannot
+        #: damage the shipped set.
+        self.bundled_root = Path(bundled_root) if bundled_root \
+            else (Path(__file__).parent / "bundled_plugins")
 
     # -- discovery --------------------------------------------------------
 
     def list_installed(self) -> List[PluginInfo]:
-        """Enumerate every plugin in the root."""
+        """Enumerate every plugin the user installed."""
+        return self._scan(self.plugins_root, bundled=False)
+
+    def list_bundled(self) -> List[PluginInfo]:
+        """Enumerate the plugins that ship with this install."""
+        return self._scan(self.bundled_root, bundled=True)
+
+    def _scan(self, root: Path, *, bundled: bool) -> List[PluginInfo]:
         out: List[PluginInfo] = []
-        for child in sorted(self.plugins_root.iterdir()):
+        if not root.is_dir():
+            return out
+        for child in sorted(root.iterdir()):
             if not child.is_dir():
                 continue
             manifest_path = child / PLUGIN_MANIFEST
-            info = self._read_manifest(manifest_path, child)
+            info = self._read_manifest(manifest_path, child, bundled=bundled)
             if info is None:
                 continue
             out.append(info)
         return out
 
     def _read_manifest(
-        self, manifest_path: Path, plugin_path: Path
+        self, manifest_path: Path, plugin_path: Path, bundled: bool = False
     ) -> Optional[PluginInfo]:
         if not manifest_path.exists():
             return None
@@ -198,6 +217,7 @@ class PluginManager:
             enabled=bool(raw.get("enabled", True)),
             capabilities=[c for c in caps if c in KNOWN_CAPABILITIES],
             compatible=str(raw.get("compatible", "") or ""),
+            bundled=bundled,
         )
 
     # -- install / uninstall ---------------------------------------------
@@ -240,10 +260,17 @@ class PluginManager:
     # -- loading ----------------------------------------------------------
 
     def load_all(self) -> List[LoadedPlugin]:
-        """Load every installed plugin (enabled only) and report what
-        files each one contributes."""
-        loaded: List[LoadedPlugin] = []
+        """Load every plugin (enabled only) and report what each contributes.
+
+        Bundled plugins are loaded first; a user plugin with the same name
+        replaces one, so shipping a plugin never stops anyone overriding it.
+        """
+        by_name: Dict[str, PluginInfo] = {p.name: p for p in self.list_bundled()}
         for info in self.list_installed():
+            by_name[info.name] = info
+        loaded: List[LoadedPlugin] = []
+        for name in sorted(by_name):
+            info = by_name[name]
             if not info.enabled:
                 continue
             def child(name: str) -> Optional[Path]:

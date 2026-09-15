@@ -43,6 +43,11 @@ def pytest_configure(config):
     # from inside the suite (tests/unit/test_loop_run.py drives the loop), recursing until
     # a CI shard ate 13 GB. This marker stops that at the root.
     os.environ["KAIROS_INSIDE_TESTS"] = "1"
+    # The shipped MCP defaults would have every test that attaches MCP spawn five
+    # real servers — hundreds of them over a suite, and `_attach_mcp` starts them
+    # as a fire-and-forget task, so an event loop waits on them at teardown.
+    # Tests that are *about* the defaults opt out locally.
+    os.environ["KAIROS_NO_BUNDLED_MCP"] = "1"
     os.environ["KAIROS_DATA_DIR"] = tempfile.mkdtemp(prefix="kairos-test-data-")
 
 

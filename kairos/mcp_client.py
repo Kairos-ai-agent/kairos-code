@@ -88,6 +88,9 @@ class McpServerConfig:
     transport: str = "stdio"
     url: str = ""
     headers: Dict[str, str] = field(default_factory=dict)
+    #: Where this entry came from: ``bundled-plugin`` / ``user`` / ``project``.
+    #: The capability view reports it so "why is this server here?" is answerable.
+    source: str = "config"
     # Optional connection hints. Defaults below match the spec.
     protocol_version: str = MCP_PROTOCOL_VERSION
 
@@ -140,44 +143,121 @@ def _load_yaml_config(path: Path) -> Dict[str, Any]:
     return raw
 
 
+def _substitute_project_dir(raw: Dict[str, Any],
+                            project_dir: Optional[Path]) -> Dict[str, Any]:
+    """Expand ``{project_dir}`` in an entry's path-ish fields."""
+    if not project_dir:
+        return raw
+    try:
+        root = str(Path(project_dir).resolve())
+    except OSError:
+        return raw
+    out = dict(raw)
+    for key in ("root", "url", "command"):
+        if isinstance(out.get(key), str) and "{project_dir}" in out[key]:
+            out[key] = out[key].replace("{project_dir}", root)
+    if isinstance(out.get("args"), list):
+        out["args"] = [
+            a.replace("{project_dir}", root) if isinstance(a, str) else a
+            for a in out["args"]
+        ]
+    return out
+
+
+def _bundled_defaults_enabled() -> bool:
+    """Whether the shipped defaults join the config at all.
+
+    A test suite that attaches MCP servers for hundreds of projects must not
+    spawn five real processes each time, so `KAIROS_NO_BUNDLED_MCP=1` turns the
+    defaults off (the same fuse pattern as KAIROS_NO_CHECKPOINTS).
+    """
+    return not os.environ.get("KAIROS_NO_BUNDLED_MCP")
+
+
+def _bundled_mcp_defaults() -> Dict[str, Dict[str, Any]]:
+    """The ``mcp.yaml`` shipped by the bundled plugins.
+
+    ``kairos-essentials`` declares the servers this install can run on its own,
+    so a fresh Kairos has working filesystem/git/sqlite/time/fetch tools before
+    anyone writes a config. Any user or project entry of the same name overrides
+    it, field by field.
+    """
+    if not _bundled_defaults_enabled():
+        return {}
+    try:
+        from kairos.plugins import PluginManager
+        manager = PluginManager()
+        plugins = [p for p in manager.load_all() if p.info.bundled and p.mcp_file]
+        merged = PluginManager.aggregate_mcp_configs(plugins)
+    except Exception as exc:  # a broken shipped plugin must not kill MCP
+        logger.debug("mcp: bundled defaults unavailable: %s", exc)
+        return {}
+    servers = merged.get("mcp_servers") if isinstance(merged, dict) else None
+    if not isinstance(servers, dict):
+        return {}
+    return {str(k): dict(v) for k, v in servers.items() if isinstance(v, dict)}
+
+
 def _merged_servers(
     project_dir: Optional[Path] = None,
     user_dir: Optional[Path] = None,
+    *,
+    include_bundled: bool = True,
 ) -> Dict[str, Dict[str, Any]]:
-    """Raw server entries from both YAML files; project wins, deep-merged."""
+    """Raw server entries from every scope; later scopes win, deep-merged.
+
+    Precedence: bundled plugin defaults < ``~/.kairos/mcp.yaml`` <
+    ``<project>/.kairos/mcp.yaml``. Each entry is tagged with ``_source`` so the
+    capability view can say where a server came from.
+    """
     merged_servers: Dict[str, Dict[str, Any]] = {}
+
+    if include_bundled:
+        for name, server in _bundled_mcp_defaults().items():
+            entry = _substitute_project_dir(dict(server), project_dir)
+            entry.setdefault("name", name)
+            entry["_source"] = "bundled-plugin"
+            merged_servers[name] = entry
 
     if user_dir:
         user_cfg = _load_yaml_config(Path(user_dir) / "mcp.yaml")
         for name, server in (user_cfg.get("mcp_servers") or {}).items():
             if isinstance(server, dict):
-                merged_servers[name] = dict(server)
-                merged_servers[name].setdefault("name", name)
+                existing = merged_servers.get(name, {})
+                merged_servers[name] = _deep_merge(existing, {**server, "name": name})
+                merged_servers[name]["_source"] = "user"
     if project_dir:
         proj_cfg = _load_yaml_config(Path(project_dir) / ".kairos" / "mcp.yaml")
         for name, server in (proj_cfg.get("mcp_servers") or {}).items():
             if isinstance(server, dict):
                 existing = merged_servers.get(name, {})
                 merged_servers[name] = _deep_merge(existing, {**server, "name": name})
+                merged_servers[name]["_source"] = "project"
     return merged_servers
 
 
 def load_configs(
     project_dir: Optional[Path] = None,
     user_dir: Optional[Path] = None,
+    *,
+    include_bundled: bool = True,
 ) -> Dict[str, McpServerConfig]:
     """Load MCP server configs from project + user YAML, project wins.
 
     Lookup paths:
-      1. <project_dir>/.kairos/mcp.yaml
+      1. bundled plugin defaults      (what this install already serves)
       2. <user_dir or ~/.kairos>/mcp.yaml
+      3. <project_dir>/.kairos/mcp.yaml
 
     An entry that cannot be built is skipped with a warning — see
     :func:`audit_configs` for the same selection *with* the reasons.
+    ``include_bundled=False`` asks for the user's own config alone.
     """
     user_dir = Path(user_dir) if user_dir else Path.home() / ".kairos"
     out: Dict[str, McpServerConfig] = {}
-    for name, raw in _merged_servers(project_dir, user_dir).items():
+    merged = _merged_servers(project_dir, user_dir,
+                             include_bundled=include_bundled)
+    for name, raw in merged.items():
         config, problem = _build_config(name, raw)
         if problem:
             logger.warning("mcp: server %s: %s; skipping", name, problem)
@@ -197,6 +277,28 @@ def _build_config(
     transport = str(raw.get("transport") or "stdio").strip().lower()
     url = str(raw.get("url") or "").strip()
     cmd = raw.get("command")
+    source = str(raw.get("_source") or "config")
+
+    # `bundled: <name>` asks for a server this install serves itself. The
+    # command it expands to is the one that works here — a `-m` module from a
+    # source checkout, a built-in flag from a packaged build.
+    bundled_name = raw.get("bundled")
+    if bundled_name:
+        from kairos.mcp_local_servers import resolve_bundled
+        root = raw.get("root")
+        resolved = resolve_bundled(str(bundled_name),
+                                   Path(root) if root else None)
+        if resolved is None:
+            return None, f"unknown bundled server {bundled_name!r}"
+        # An explicit command/args in the entry still wins over the default.
+        if raw.get("command"):
+            resolved["command"] = raw["command"]
+        if raw.get("args"):
+            resolved["args"] = list(raw["args"])
+        raw = {**resolved, "enabled": raw.get("enabled", True),
+               "env": raw.get("env") or {}}
+        transport = "stdio"
+        cmd = raw.get("command")
 
     if transport in ("http", "sse"):
         # A remote server: no subprocess and no PATH lookup — just an endpoint
@@ -209,6 +311,7 @@ def _build_config(
             url=url,
             headers=dict(raw.get("headers") or {}),
             enabled=bool(raw.get("enabled", True)),
+            source=source,
         ), None
 
     if transport != "stdio":
@@ -229,12 +332,15 @@ def _build_config(
         env=dict(raw.get("env") or {}),
         enabled=bool(raw.get("enabled", True)),
         transport="stdio",
+        source=source,
     ), None
 
 
 def audit_configs(
     project_dir: Optional[Path] = None,
     user_dir: Optional[Path] = None,
+    *,
+    include_bundled: bool = True,
 ) -> Dict[str, Any]:
     """Everything configured, including what ``load_configs`` drops and why.
 
@@ -244,7 +350,9 @@ def audit_configs(
     user_dir = Path(user_dir) if user_dir else Path.home() / ".kairos"
     servers: Dict[str, McpServerConfig] = {}
     rejected: Dict[str, str] = {}
-    for name, raw in _merged_servers(project_dir, user_dir).items():
+    merged = _merged_servers(project_dir, user_dir,
+                             include_bundled=include_bundled)
+    for name, raw in merged.items():
         config, problem = _build_config(name, raw)
         if problem:
             rejected[name] = problem
@@ -302,6 +410,11 @@ class StdioMcpClient:
         if self._process is not None:
             return self._server_info or {}
         env = {**os.environ, **self.config.expanded_env()}
+        # The protocol is UTF-8 and this side reads UTF-8. A child on
+        # Windows would otherwise default to the console codepage, and one
+        # non-ASCII byte in a tool result becomes a decode error up here.
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUTF8"] = "1"
         try:
             self._process = await asyncio.create_subprocess_exec(
                 self.config.command,
@@ -621,11 +734,20 @@ class HttpMcpClient:
         return self._server_info
 
 
+#: How long to wait for a server *this install serves itself* to answer
+#: ``initialize``. It is a local Python module or nothing at all.
+BUNDLED_START_TIMEOUT_S = 20.0
+
+
 def client_for(config: McpServerConfig):
     """Build the client a config's transport calls for."""
     if config.transport in ("http", "sse"):
         return HttpMcpClient(config)
-    return StdioMcpClient(config)
+    # A server this install serves itself either comes up in a second or is
+    # broken; waiting the full request timeout for it just delays the UI.
+    timeout = (BUNDLED_START_TIMEOUT_S if config.source == "bundled-plugin"
+               else DEFAULT_REQUEST_TIMEOUT_S)
+    return StdioMcpClient(config, request_timeout_s=timeout)
 
 
 # ---------------------------------------------------------------------------
@@ -749,6 +871,9 @@ class McpRegistry:
     def __init__(self) -> None:
         self._clients: Dict[str, StdioMcpClient] = {}
         self._configs: Dict[str, McpServerConfig] = {}
+        #: Whether the shipped defaults join the user's config. Tests and any
+        #: "show me only what I configured" caller turn it off.
+        self.include_bundled = True
         self._tools: Dict[str, McpToolAdapter] = {}
         self._startup_errors: Dict[str, str] = {}
 
@@ -762,7 +887,8 @@ class McpRegistry:
         user_dir: Optional[Path] = None,
     ) -> None:
         """Load + parse YAML configs. Does not start subprocesses yet."""
-        self._configs = load_configs(project_dir=project_dir, user_dir=user_dir)
+        self._configs = load_configs(project_dir=project_dir, user_dir=user_dir,
+                                     include_bundled=self.include_bundled)
 
     async def start_all(self) -> None:
         """Spawn subprocesses and complete initialize for every configured

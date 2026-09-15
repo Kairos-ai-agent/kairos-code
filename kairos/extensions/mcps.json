@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "comment": "R38.6.3: comprehensive MCP registry. 20 servers covering core dev, VCS, web, browser, DB, observability, AI, productivity.",
+  "comment": "R38.11: entries flagged \"bundled\": true are served locally by kairos.mcp_local_servers / kairos.mcp_filesystem_server -- no npx, no uvx, no download. The rest still need the network at first use.",
   "servers": [
     {
       "name": "filesystem",
@@ -16,7 +16,9 @@
       "description": "Read/write/list files under a configured root. The workhorse MCP for any coding agent.",
       "source": "https://github.com/modelcontextprotocol/servers",
       "stars": "8.5k",
-      "official": true
+      "official": true,
+      "bundled": true,
+      "needsNetwork": false
     },
     {
       "name": "git",
@@ -31,7 +33,9 @@
       "description": "git log/diff/show/status/branch/blame via MCP.",
       "source": "https://github.com/modelcontextprotocol/servers",
       "stars": "8.5k",
-      "official": true
+      "official": true,
+      "bundled": true,
+      "needsNetwork": false
     },
     {
       "name": "github",
@@ -77,7 +81,9 @@
       "description": "Fetch and convert web content to markdown.",
       "source": "https://github.com/modelcontextprotocol/servers",
       "stars": "8.5k",
-      "official": true
+      "official": true,
+      "bundled": true,
+      "needsNetwork": true
     },
     {
       "name": "brave-search",
@@ -163,7 +169,9 @@
       "description": "Current time / timezone conversion.",
       "source": "https://github.com/modelcontextprotocol/servers",
       "stars": "8.5k",
-      "official": true
+      "official": true,
+      "bundled": true,
+      "needsNetwork": false
     },
     {
       "name": "memory",
@@ -208,7 +216,9 @@
       "description": "Local SQLite query MCP.",
       "source": "https://github.com/modelcontextprotocol/servers",
       "stars": "8.5k",
-      "official": true
+      "official": true,
+      "bundled": true,
+      "needsNetwork": false
     },
     {
       "name": "redis",

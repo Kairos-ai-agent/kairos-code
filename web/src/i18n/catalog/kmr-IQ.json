@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "جێبەجێکردنەکان",
   "trendPanel.tab.overview": "گشتی",
   "trendPanel.tab.perCase": "بەپێی حاڵەت",
-  "trendPanel.title": "ئاراستە"
+  "trendPanel.title": "ئاراستە",
+  "updates.applied": "داگیرا و پشتڕاستکرایەوە — کاتێک دەردەچیت خۆی جێگۆڕین دەکات، پاشان دووبارە دەست پێدەکات.",
+  "updates.apply": "ئێستا نوێ بکەرەوە",
+  "updates.applyFailed": "نوێکردنەوە سەرکەوتوو نەبوو — دواتر هەوڵ بدە، یان لە پەڕەی بڵاوکردنەوە دایبگرە.",
+  "updates.applying": "دادەگیرێت و پشتڕاست دەکرێتەوە…",
+  "updates.available": "وەشانی {version} بەردەستە (تۆ {current}ت هەیە)",
+  "updates.notes": "تێبینییەکانی بڵاوکردنەوە",
+  "updates.reason.checksumMismatch": "چێکسەم ناگونجێت — هەڵوەشێنرایەوە، هیچ نەگۆڕدرا.",
+  "updates.reason.macos": "لە macOS، بیلدی نوێ بە دەستی دایبگرە (جێگۆڕینەوەی شوێنی بلۆک کراوە).",
+  "updates.reason.noAssetForPlatform": "ئەو بڵاوکردنەوەیە بۆ ئەم پلاتفۆرمە بیلدی نییە.",
+  "updates.reason.noChecksum": "ئەو بڵاوکردنەوەیە چێکسەم بڵاو ناکاتەوە، بۆیە خۆی جێگۆڕین ناکات.",
+  "updates.reason.notPackaged": "ئەمە دامەزراندنی سەرچاوە یان پاکێجە — بە git یان pip نوێی بکەرەوە.",
+  "updates.reason.readOnly": "فۆڵدەری دامەزراندن نووسراو نییە — بیلدی نوێ بە دەستی دایبگرە.",
+  "updates.settings.check": "لە دەستپێکردندا بگەڕێ بۆ نوێکردنەوە",
+  "updates.settings.checkHint": "یەک گەڕانی خوێندنەوە-تەنها، بۆ ١٢ کاتژمێر کاش کراوە. داگرتن تەنها کاتێک ڕوودەدات کە کلیک لە ئێستا نوێ بکەرەوە بکەیت.",
+  "updates.settings.checkNow": "ئێستا بگەڕێ",
+  "updates.settings.upToDate": "تۆ نوێیت.",
+  "updates.settings.version": "وەشانی {version}"
 }

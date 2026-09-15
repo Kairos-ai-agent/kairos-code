@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "रन",
   "trendPanel.tab.overview": "अवलोकन",
   "trendPanel.tab.perCase": "प्रति-केस",
-  "trendPanel.title": "रुझान"
+  "trendPanel.title": "रुझान",
+  "updates.applied": "डाउनलोड और सत्यापित — बाहर निकलने पर यह स्वयं को बदल देता है, फिर पुनः आरंभ होता है।",
+  "updates.apply": "अभी अपडेट करें",
+  "updates.applyFailed": "अपडेट विफल — बाद में पुनः प्रयास करें, या रिलीज़ पेज से डाउनलोड करें।",
+  "updates.applying": "डाउनलोड और सत्यापन हो रहा है…",
+  "updates.available": "संस्करण {version} उपलब्ध है (आपके पास {current} है)",
+  "updates.notes": "रिलीज़ नोट्स",
+  "updates.reason.checksumMismatch": "चेकसम मेल नहीं खाता — निरस्त, कुछ भी नहीं बदला गया।",
+  "updates.reason.macos": "macOS पर, नया बिल्ड मैन्युअल रूप से डाउनलोड करें (इन-प्लेस प्रतिस्थापन अवरुद्ध है)।",
+  "updates.reason.noAssetForPlatform": "उस रिलीज़ में इस प्लेटफ़ॉर्म के लिए कोई बिल्ड नहीं है।",
+  "updates.reason.noChecksum": "वह रिलीज़ कोई चेकसम प्रकाशित नहीं करती, इसलिए यह स्वयं को प्रतिस्थापित नहीं करेगा।",
+  "updates.reason.notPackaged": "यह सोर्स या पैकेज इंस्टॉल है — git या pip से अपग्रेड करें।",
+  "updates.reason.readOnly": "इंस्टॉल डायरेक्टरी लिखने योग्य नहीं है — नया बिल्ड मैन्युअल रूप से डाउनलोड करें।",
+  "updates.settings.check": "शुरू होने पर अपडेट जाँचें",
+  "updates.settings.checkHint": "एक रीड-ओनली लुकअप, 12 घंटे के लिए कैश किया गया। डाउनलोड केवल तब होता है जब आप अभी अपडेट करें पर क्लिक करते हैं।",
+  "updates.settings.checkNow": "अभी जाँचें",
+  "updates.settings.upToDate": "आप अद्यतित हैं।",
+  "updates.settings.version": "संस्करण {version}"
 }

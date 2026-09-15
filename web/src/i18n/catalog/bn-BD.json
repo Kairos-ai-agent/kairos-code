@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "রান",
   "trendPanel.tab.overview": "সারসংক্ষেপ",
   "trendPanel.tab.perCase": "প্রতি-কেস",
-  "trendPanel.title": "প্রবণতা"
+  "trendPanel.title": "প্রবণতা",
+  "updates.applied": "ডাউনলোড ও যাচাই সম্পন্ন — আপনি বেরোনোর সময় এটি নিজেকে প্রতিস্থাপন করে, তারপর রিস্টার্ট হয়।",
+  "updates.apply": "এখনই আপডেট করুন",
+  "updates.applyFailed": "আপডেট ব্যর্থ — পরে আবার চেষ্টা করুন, বা রিলিজ পেজ থেকে ডাউনলোড করুন।",
+  "updates.applying": "ডাউনলোড ও যাচাই হচ্ছে…",
+  "updates.available": "সংস্করণ {version} পাওয়া গেছে (আপনার আছে {current})",
+  "updates.notes": "রিলিজ নোট",
+  "updates.reason.checksumMismatch": "চেকসাম মেলেনি — বাতিল, কিছুই পরিবর্তন হয়নি।",
+  "updates.reason.macos": "macOS-এ, নতুন বিল্ড ম্যানুয়ালি ডাউনলোড করুন (ইন-প্লেস প্রতিস্থাপন ব্লক করা)।",
+  "updates.reason.noAssetForPlatform": "সেই রিলিজে এই প্ল্যাটফর্মের জন্য কোনো বিল্ড নেই।",
+  "updates.reason.noChecksum": "সেই রিলিজে কোনো চেকসাম প্রকাশ করা হয়নি, তাই এটি নিজেকে প্রতিস্থাপন করবে না।",
+  "updates.reason.notPackaged": "এটি একটি সোর্স বা প্যাকেজ ইনস্টল — git বা pip দিয়ে আপগ্রেড করুন।",
+  "updates.reason.readOnly": "ইনস্টল ডিরেক্টরি লেখার যোগ্য নয় — নতুন বিল্ড ম্যানুয়ালি ডাউনলোড করুন।",
+  "updates.settings.check": "শুরুর সময় আপডেট চেক করুন",
+  "updates.settings.checkHint": "একটি রিড-অনলি লুকআপ, ১২ ঘণ্টার জন্য ক্যাশ করা। আপনি 'এখনই আপডেট করুন' ক্লিক করলে তবেই ডাউনলোড হয়।",
+  "updates.settings.checkNow": "এখনই চেক করুন",
+  "updates.settings.upToDate": "আপনি আপ-টু-ডেট।",
+  "updates.settings.version": "সংস্করণ {version}"
 }

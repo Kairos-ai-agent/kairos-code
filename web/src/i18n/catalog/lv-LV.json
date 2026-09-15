@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "Palaišanas",
   "trendPanel.tab.overview": "Pārskats",
   "trendPanel.tab.perCase": "Pēc gadījuma",
-  "trendPanel.title": "Tendence"
+  "trendPanel.title": "Tendence",
+  "updates.applied": "Lejupielādēts un pārbaudīts — aizvietos sevi, kad aizvērsiet, tad restartēsies.",
+  "updates.apply": "Atjaunināt tagad",
+  "updates.applyFailed": "Atjaunināšana neizdevās — mēģiniet vēlāk vai lejupielādējiet no laidiena lapas.",
+  "updates.applying": "Lejupielādē un pārbauda…",
+  "updates.available": "Ir pieejama versija {version} (jums ir {current})",
+  "updates.notes": "Laidiena piezīmes",
+  "updates.reason.checksumMismatch": "Kontrolsummas neatbilstība — pārtraukts, nekas netika mainīts.",
+  "updates.reason.macos": "Operētājsistēmā macOS lejupielādējiet jauno būvējumu manuāli (aizvietošana vietā ir bloķēta).",
+  "updates.reason.noAssetForPlatform": "Šim laidienam nav būvējuma šai platformai.",
+  "updates.reason.noChecksum": "Šis laidiens publicē kontrolsummu, tāpēc tas neaizvietos sevi.",
+  "updates.reason.notPackaged": "Šis ir pirmkoda vai pakotnes instalējums — jauniniet ar git vai pip.",
+  "updates.reason.readOnly": "Instalēšanas direktorijs nav rakstāms — lejupielādējiet jauno būvējumu manuāli.",
+  "updates.settings.check": "Pārbaudīt atjauninājumus startējot",
+  "updates.settings.checkHint": "Viena tikai lasāma pārbaude, kešota 12 stundas. Lejupielāde notiek tikai, kad noklikšķināt Atjaunināt tagad.",
+  "updates.settings.checkNow": "Pārbaudīt tagad",
+  "updates.settings.upToDate": "Jums ir jaunākā versija.",
+  "updates.settings.version": "Versija {version}"
 }

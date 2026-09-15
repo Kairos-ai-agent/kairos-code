@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "عمليات التشغيل",
   "trendPanel.tab.overview": "نظرة عامة",
   "trendPanel.tab.perCase": "حسب الحالة",
-  "trendPanel.title": "الاتجاه"
+  "trendPanel.title": "الاتجاه",
+  "updates.applied": "تم التنزيل والتحقق — يستبدل نفسه عند الخروج، ثم يعيد التشغيل.",
+  "updates.apply": "حدّث الآن",
+  "updates.applyFailed": "فشل التحديث — حاول لاحقًا، أو نزّله من صفحة الإصدارات.",
+  "updates.applying": "جارٍ التنزيل والتحقق…",
+  "updates.available": "الإصدار {version} متاح (لديك {current})",
+  "updates.notes": "ملاحظات الإصدار",
+  "updates.reason.checksumMismatch": "عدم تطابق checksum — أُلغيت العملية، لم يتغير شيء.",
+  "updates.reason.macos": "على macOS، نزّل البناء الجديد يدويًا (الاستبدال في المكان محظور).",
+  "updates.reason.noAssetForPlatform": "هذا الإصدار لا يحتوي على بناء لهذه المنصة.",
+  "updates.reason.noChecksum": "هذا الإصدار لا ينشر checksum، لذا لن يستبدل نفسه.",
+  "updates.reason.notPackaged": "هذا تثبيت من المصدر أو حزمة — رقِّ باستخدام git أو pip.",
+  "updates.reason.readOnly": "دليل التثبيت غير قابل للكتابة — نزّل البناء الجديد يدويًا.",
+  "updates.settings.check": "التحقق من التحديثات عند البدء",
+  "updates.settings.checkHint": "بحث واحد للقراءة فقط، مخزّن مؤقتًا لمدة 12 ساعة. لا يحدث التنزيل إلا عند النقر على حدّث الآن.",
+  "updates.settings.checkNow": "تحقق الآن",
+  "updates.settings.upToDate": "لديك أحدث إصدار.",
+  "updates.settings.version": "الإصدار {version}"
 }

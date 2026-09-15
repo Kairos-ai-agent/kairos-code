@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "ರನ್‌ಗಳು",
   "trendPanel.tab.overview": "ಅವಲೋಕನ",
   "trendPanel.tab.perCase": "ಪ್ರತಿ-ಪ್ರಕರಣ",
-  "trendPanel.title": "ಪ್ರವೃತ್ತಿ"
+  "trendPanel.title": "ಪ್ರವೃತ್ತಿ",
+  "updates.applied": "ಡೌನ್‌ಲೋಡ್ ಮತ್ತು ಪರಿಶೀಲಿಸಲಾಗಿದೆ — ನೀವು ನಿರ್ಗಮಿಸಿದಾಗ ಅದು ಸ್ವತಃ ಬದಲಾಗಿ ಮರುಪ್ರಾರಂಭವಾಗುತ್ತದೆ.",
+  "updates.apply": "ಈಗ ಅಪ್‌ಡೇಟ್ ಮಾಡಿ",
+  "updates.applyFailed": "ಅಪ್‌ಡೇಟ್ ವಿಫಲವಾಯಿತು — ನಂತರ ಪ್ರಯತ್ನಿಸಿ, ಅಥವಾ ಬಿಡುಗಡೆ ಪುಟದಿಂದ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ.",
+  "updates.applying": "ಡೌನ್‌ಲೋಡ್ ಮತ್ತು ಪರಿಶೀಲನೆ…",
+  "updates.available": "ಆವೃತ್ತಿ {version} ಲಭ್ಯವಿದೆ (ನಿಮ್ಮಲ್ಲಿ {current} ಇದೆ)",
+  "updates.notes": "ಬಿಡುಗಡೆ ಟಿಪ್ಪಣಿಗಳು",
+  "updates.reason.checksumMismatch": "ಚೆಕ್‌ಸಮ್ ಹೊಂದಿಕೆಯಾಗಿಲ್ಲ — ರದ್ದುಗೊಳಿಸಲಾಗಿದೆ, ಏನೂ ಬದಲಾಗಿಲ್ಲ.",
+  "updates.reason.macos": "macOS ನಲ್ಲಿ, ಹೊಸ ಬಿಲ್ಡ್ ಅನ್ನು ಹಸ್ತಚಾಲಿತವಾಗಿ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ (ಸ್ಥಳದಲ್ಲೇ ಬದಲಾವಣೆ ನಿರ್ಬಂಧಿಸಲಾಗಿದೆ).",
+  "updates.reason.noAssetForPlatform": "ಆ ಬಿಡುಗಡೆಯಲ್ಲಿ ಈ ಪ್ಲಾಟ್‌ಫಾರ್ಮ್‌ಗೆ ಬಿಲ್ಡ್ ಇಲ್ಲ.",
+  "updates.reason.noChecksum": "ಆ ಬಿಡುಗಡೆಯು ಚೆಕ್‌ಸಮ್ ಪ್ರಕಟಿಸುವುದಿಲ್ಲ, ಆದ್ದರಿಂದ ಅದು ಸ್ವತಃ ಬದಲಾಗುವುದಿಲ್ಲ.",
+  "updates.reason.notPackaged": "ಇದು ಮೂಲ ಅಥವಾ ಪ್ಯಾಕೇಜ್ ಇನ್‌ಸ್ಟಾಲ್ — git ಅಥವಾ pip ನಿಂದ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ.",
+  "updates.reason.readOnly": "ಇನ್‌ಸ್ಟಾಲ್ ಡೈರೆಕ್ಟರಿ ಬರೆಯಲು ಸಾಧ್ಯವಿಲ್ಲ — ಹೊಸ ಬಿಲ್ಡ್ ಅನ್ನು ಹಸ್ತಚಾಲಿತವಾಗಿ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ.",
+  "updates.settings.check": "ಪ್ರಾರಂಭದಲ್ಲಿ ಅಪ್‌ಡೇಟ್‌ಗಳಿಗಾಗಿ ಪರಿಶೀಲಿಸಿ",
+  "updates.settings.checkHint": "ಒಂದು ಓದಲು-ಮಾತ್ರ ಹುಡುಕಾಟ, 12 ಗಂಟೆಗಳ ಕಾಲ ಕ್ಯಾಶ್ ಆಗಿರುತ್ತದೆ. ನೀವು ಈಗ ಅಪ್‌ಡೇಟ್ ಮಾಡಿ ಕ್ಲಿಕ್ ಮಾಡಿದಾಗ ಮಾತ್ರ ಡೌನ್‌ಲೋಡ್ ಆಗುತ್ತದೆ.",
+  "updates.settings.checkNow": "ಈಗ ಪರಿಶೀಲಿಸಿ",
+  "updates.settings.upToDate": "ನೀವು ಅಪ್ ಟು ಡೇಟ್ ಆಗಿದ್ದೀರಿ.",
+  "updates.settings.version": "ಆವೃತ್ತಿ {version}"
 }

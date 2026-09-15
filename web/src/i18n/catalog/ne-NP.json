@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "रनहरू",
   "trendPanel.tab.overview": "अवलोकन",
   "trendPanel.tab.perCase": "प्रति-केस",
-  "trendPanel.title": "प्रवृत्ति"
+  "trendPanel.title": "प्रवृत्ति",
+  "updates.applied": "डाउनलोड र प्रमाणित भयो — तपाईं बाहिरिँदा यसले आफैलाई प्रतिस्थापन गर्छ, त्यसपछि पुनः सुरु हुन्छ।",
+  "updates.apply": "अहिले अपडेट गर्नुहोस्",
+  "updates.applyFailed": "अपडेट असफल भयो — पछि फेरि प्रयास गर्नुहोस्, वा रिलिज पृष्ठबाट डाउनलोड गर्नुहोस्।",
+  "updates.applying": "डाउनलोड र प्रमाणित गर्दै…",
+  "updates.available": "संस्करण {version} उपलब्ध छ (तपाईंसँग {current} छ)",
+  "updates.notes": "रिलिज नोटहरू",
+  "updates.reason.checksumMismatch": "चेकसम मिलेन — रद्द गरियो, केही परिवर्तन भएन।",
+  "updates.reason.macos": "macOS मा, नयाँ बिल्ड म्यानुअल रूपमा डाउनलोड गर्नुहोस् (इन-प्लेस प्रतिस्थापन अवरुद्ध छ)।",
+  "updates.reason.noAssetForPlatform": "त्यो रिलिजमा यो प्लेटफर्मका लागि कुनै बिल्ड छैन।",
+  "updates.reason.noChecksum": "त्यो रिलिजले कुनै चेकसम प्रकाशित गर्दैन, त्यसैले यो आफै प्रतिस्थापन हुँदैन।",
+  "updates.reason.notPackaged": "यो स्रोत वा प्याकेज इन्स्टल हो — git वा pip बाट अपग्रेड गर्नुहोस्।",
+  "updates.reason.readOnly": "इन्स्टल डाइरेक्टरी लेख्न योग्य छैन — नयाँ बिल्ड म्यानुअल रूपमा डाउनलोड गर्नुहोस्।",
+  "updates.settings.check": "सुरु गर्दा अपडेट जाँच्नुहोस्",
+  "updates.settings.checkHint": "एक पटक पढ्ने-मात्र खोज, १२ घण्टाका लागि क्यास गरिन्छ। तपाईंले अहिले अपडेट गर्नुहोस् क्लिक गर्दा मात्र डाउनलोड हुन्छ।",
+  "updates.settings.checkNow": "अहिले जाँच्नुहोस्",
+  "updates.settings.upToDate": "तपाईं अद्यावधिक छ।",
+  "updates.settings.version": "संस्करण {version}"
 }

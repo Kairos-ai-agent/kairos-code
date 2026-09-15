@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "Εκτελέσεις",
   "trendPanel.tab.overview": "Επισκόπηση",
   "trendPanel.tab.perCase": "Ανά περίπτωση",
-  "trendPanel.title": "Τάση"
+  "trendPanel.title": "Τάση",
+  "updates.applied": "Λήφθηκε και επαληθεύτηκε — αντικαθίσταται κατά την έξοδο και επανεκκινεί.",
+  "updates.apply": "Ενημέρωση τώρα",
+  "updates.applyFailed": "Η ενημέρωση απέτυχε — δοκιμάστε ξανά αργότερα ή κατεβάστε την από τη σελίδα έκδοσης.",
+  "updates.applying": "Λήψη και επαλήθευση…",
+  "updates.available": "Η έκδοση {version} είναι διαθέσιμη (έχετε {current})",
+  "updates.notes": "Σημειώσεις έκδοσης",
+  "updates.reason.checksumMismatch": "Ασυμφωνία checksum — ματαιώθηκε, δεν άλλαξε τίποτα.",
+  "updates.reason.macos": "Στο macOS, κατεβάστε τη νέα έκδοση χειροκίνητα (η επιτόπια αντικατάσταση είναι αποκλεισμένη).",
+  "updates.reason.noAssetForPlatform": "Αυτή η έκδοση δεν έχει build για αυτή την πλατφόρμα.",
+  "updates.reason.noChecksum": "Αυτή η έκδοση δεν δημοσιεύει checksum, οπότε δεν αυτοαντικαθίσταται.",
+  "updates.reason.notPackaged": "Αυτή είναι εγκατάσταση από πηγή ή πακέτο — ενημερώστε με git ή pip.",
+  "updates.reason.readOnly": "Ο κατάλογος εγκατάστασης δεν είναι εγγράψιμος — κατεβάστε τη νέα έκδοση χειροκίνητα.",
+  "updates.settings.check": "Έλεγχος για ενημερώσεις στην εκκίνηση",
+  "updates.settings.checkHint": "Μία αναζήτηση μόνο για ανάγνωση, σε cache για 12 ώρες. Λήψη γίνεται μόνο όταν πατήσετε Ενημέρωση τώρα.",
+  "updates.settings.checkNow": "Έλεγχος τώρα",
+  "updates.settings.upToDate": "Είστε ενημερωμένοι.",
+  "updates.settings.version": "Έκδοση {version}"
 }

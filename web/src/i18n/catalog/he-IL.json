@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "הרצות",
   "trendPanel.tab.overview": "סקירה",
   "trendPanel.tab.perCase": "לפי מקרה",
-  "trendPanel.title": "מגמה"
+  "trendPanel.title": "מגמה",
+  "updates.applied": "הורד ואומת — הוא מחליף את עצמו ביציאה, ואז מופעל מחדש.",
+  "updates.apply": "עדכן עכשיו",
+  "updates.applyFailed": "העדכון נכשל — נסה שוב מאוחר יותר, או הורד אותו מדף הגרסאות.",
+  "updates.applying": "מוריד ומאמת…",
+  "updates.available": "גרסה {version} זמינה (ברשותך {current})",
+  "updates.notes": "הערות גרסה",
+  "updates.reason.checksumMismatch": "אי-התאמת checksum — בוטל, דבר לא שונה.",
+  "updates.reason.macos": "ב-macOS, הורד את הבנייה החדשה ידנית (החלפה במקום חסומה).",
+  "updates.reason.noAssetForPlatform": "לגרסה הזו אין בנייה לפלטפורמה הזו.",
+  "updates.reason.noChecksum": "הגרסה הזו לא מפרסמת checksum, ולכן לא תחליף את עצמה.",
+  "updates.reason.notPackaged": "זו התקנת מקור או חבילה — שדרג עם git או pip.",
+  "updates.reason.readOnly": "תיקיית ההתקנה אינה ניתנת לכתיבה — הורד את הבנייה החדשה ידנית.",
+  "updates.settings.check": "בדוק עדכונים בעת ההפעלה",
+  "updates.settings.checkHint": "חיפוש קריאה בלבד אחד, נשמר במטמון ל-12 שעות. הורדה מתרחשת רק כשתלחץ על עדכן עכשיו.",
+  "updates.settings.checkNow": "בדוק עכשיו",
+  "updates.settings.upToDate": "אתה מעודכן.",
+  "updates.settings.version": "גרסה {version}"
 }

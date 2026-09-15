@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "Esecuzioni",
   "trendPanel.tab.overview": "Panoramica",
   "trendPanel.tab.perCase": "Per caso",
-  "trendPanel.title": "Tendenza"
+  "trendPanel.title": "Tendenza",
+  "updates.applied": "Scaricato e verificato — si sostituisce all'uscita, poi si riavvia.",
+  "updates.apply": "Aggiorna ora",
+  "updates.applyFailed": "Aggiornamento non riuscito — riprova più tardi o scaricalo dalla pagina di rilascio.",
+  "updates.applying": "Download e verifica…",
+  "updates.available": "La versione {version} è disponibile (hai la {current})",
+  "updates.notes": "Note di rilascio",
+  "updates.reason.checksumMismatch": "Checksum non corrispondente — annullato, nulla è stato modificato.",
+  "updates.reason.macos": "Su macOS, scarica manualmente la nuova build (la sostituzione sul posto è bloccata).",
+  "updates.reason.noAssetForPlatform": "Quel rilascio non ha una build per questa piattaforma.",
+  "updates.reason.noChecksum": "Quel rilascio non pubblica un checksum, quindi non si auto-sostituirà.",
+  "updates.reason.notPackaged": "Questa è un'installazione da sorgente o pacchetto — aggiorna con git o pip.",
+  "updates.reason.readOnly": "La directory di installazione non è scrivibile — scarica manualmente la nuova build.",
+  "updates.settings.check": "Controlla aggiornamenti all'avvio",
+  "updates.settings.checkHint": "Una sola ricerca in sola lettura, in cache per 12 ore. Il download avviene solo quando clicchi Aggiorna ora.",
+  "updates.settings.checkNow": "Controlla ora",
+  "updates.settings.upToDate": "Sei aggiornato.",
+  "updates.settings.version": "Versione {version}"
 }

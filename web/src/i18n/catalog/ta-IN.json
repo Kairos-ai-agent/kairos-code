@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "இயக்கங்கள்",
   "trendPanel.tab.overview": "மேலோட்டம்",
   "trendPanel.tab.perCase": "ஒரு வழக்குக்கு",
-  "trendPanel.title": "போக்கு"
+  "trendPanel.title": "போக்கு",
+  "updates.applied": "பதிவிறக்கப்பட்டு சரிபார்க்கப்பட்டது — நீங்கள் வெளியேறும்போது அது தன்னை மாற்றிக்கொண்டு மீண்டும் தொடங்கும்.",
+  "updates.apply": "இப்போது புதுப்பிக்கவும்",
+  "updates.applyFailed": "புதுப்பிப்பு தோல்வியடைந்தது — பின்னர் முயற்சிக்கவும் அல்லது வெளியீட்டுப் பக்கத்திலிருந்து பதிவிறக்கவும்.",
+  "updates.applying": "பதிவிறக்கி சரிபார்க்கிறது…",
+  "updates.available": "பதிப்பு {version} கிடைக்கிறது (உங்களிடம் {current} உள்ளது)",
+  "updates.notes": "வெளியீட்டுக் குறிப்புகள்",
+  "updates.reason.checksumMismatch": "Checksum பொருந்தவில்லை — நிறுத்தப்பட்டது, எதுவும் மாற்றப்படவில்லை.",
+  "updates.reason.macos": "macOS-இல், புதிய பதிப்பை கைமுறையாக பதிவிறக்கவும் (இடத்திலேயே மாற்றுவது தடுக்கப்பட்டுள்ளது).",
+  "updates.reason.noAssetForPlatform": "அந்த வெளியீட்டில் இந்த தளத்திற்கான பதிப்பு இல்லை.",
+  "updates.reason.noChecksum": "அந்த வெளியீடு checksum-ஐ வெளியிடவில்லை, எனவே அது தன்னை மாற்றிக்கொள்ளாது.",
+  "updates.reason.notPackaged": "இது source அல்லது package நிறுவல் — git அல்லது pip மூலம் மேம்படுத்தவும்.",
+  "updates.reason.readOnly": "நிறுவல் கோப்பகம் எழுதக்கூடியதாக இல்லை — புதிய பதிப்பை கைமுறையாக பதிவிறக்கவும்.",
+  "updates.settings.check": "தொடங்கும்போது புதுப்பிப்புகளைச் சரிபார்க்கவும்",
+  "updates.settings.checkHint": "ஒரு read-only தேடல், 12 மணி நேரம் cache செய்யப்படும். நீங்கள் இப்போது புதுப்பிக்கவும் என்பதைக் கிளிக் செய்தால் மட்டுமே பதிவிறக்கம் நடக்கும்.",
+  "updates.settings.checkNow": "இப்போது சரிபார்க்கவும்",
+  "updates.settings.upToDate": "நீங்கள் புதுப்பித்த நிலையில் உள்ளீர்கள்.",
+  "updates.settings.version": "பதிப்பு {version}"
 }

@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "İşləmələr",
   "trendPanel.tab.overview": "Ümumi baxış",
   "trendPanel.tab.perCase": "Hər hal üzrə",
-  "trendPanel.title": "Trend"
+  "trendPanel.title": "Trend",
+  "updates.applied": "Yükləndi və yoxlanıldı — çıxdıqda özünü əvəz edir, sonra yenidən başlayır.",
+  "updates.apply": "İndi yenilə",
+  "updates.applyFailed": "Yeniləmə alınmadı — sonra yenidən cəhd edin və ya buraxılış səhifəsindən yükləyin.",
+  "updates.applying": "Yüklənir və yoxlanılır…",
+  "updates.available": "{version} versiyası mövcuddur (sizdə {current})",
+  "updates.notes": "Buraxılış qeydləri",
+  "updates.reason.checksumMismatch": "Checksum uyğun gəlmir — dayandırıldı, heç nə dəyişmədi.",
+  "updates.reason.macos": "macOS-da yeni buraxılışı əl ilə yükləyin (yerində əvəzləmə bloklanıb).",
+  "updates.reason.noAssetForPlatform": "Bu buraxılışda bu platforma üçün build yoxdur.",
+  "updates.reason.noChecksum": "Bu buraxılış checksum dərc etmir, ona görə özünü əvəz etməyəcək.",
+  "updates.reason.notPackaged": "Bu, mənbə və ya paket quraşdırmasıdır — git və ya pip ilə yeniləyin.",
+  "updates.reason.readOnly": "Quraşdırma qovluğuna yazmaq mümkün deyil — yeni buraxılışı əl ilə yükləyin.",
+  "updates.settings.check": "Başlanğıcda yeniləmələri yoxla",
+  "updates.settings.checkHint": "Bir dəfə yalnız-oxuma sorğusu, 12 saat keşlənir. Yükləmə yalnız \"İndi yenilə\" düyməsinə basdıqda baş verir.",
+  "updates.settings.checkNow": "İndi yoxla",
+  "updates.settings.upToDate": "Siz ən son versiyadasınız.",
+  "updates.settings.version": "Versiya {version}"
 }

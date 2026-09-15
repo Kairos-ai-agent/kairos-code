@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "Ejecuciones",
   "trendPanel.tab.overview": "Resumen",
   "trendPanel.tab.perCase": "Por caso",
-  "trendPanel.title": "Tendencia"
+  "trendPanel.title": "Tendencia",
+  "updates.applied": "Descargada y verificada — se reemplaza sola al salir y luego se reinicia.",
+  "updates.apply": "Actualizar ahora",
+  "updates.applyFailed": "Error al actualizar — inténtalo más tarde o descárgala desde la página de versiones.",
+  "updates.applying": "Descargando y verificando…",
+  "updates.available": "La versión {version} está disponible (tienes la {current})",
+  "updates.notes": "Notas de la versión",
+  "updates.reason.checksumMismatch": "El checksum no coincide — cancelado, no se cambió nada.",
+  "updates.reason.macos": "En macOS, descarga la nueva compilación manualmente (el reemplazo in situ está bloqueado).",
+  "updates.reason.noAssetForPlatform": "Esa versión no tiene compilación para esta plataforma.",
+  "updates.reason.noChecksum": "Esa versión no publica checksum, así que no se reemplazará sola.",
+  "updates.reason.notPackaged": "Esta es una instalación desde código fuente o paquete — actualiza con git o pip.",
+  "updates.reason.readOnly": "El directorio de instalación no tiene permisos de escritura — descarga la nueva compilación manualmente.",
+  "updates.settings.check": "Buscar actualizaciones al iniciar",
+  "updates.settings.checkHint": "Una consulta de solo lectura, en caché durante 12 horas. Solo se descarga cuando haces clic en Actualizar ahora.",
+  "updates.settings.checkNow": "Buscar ahora",
+  "updates.settings.upToDate": "Estás al día.",
+  "updates.settings.version": "Versión {version}"
 }

@@ -876,6 +876,8 @@
   "shell.sidebar.light": "روشن",
   "shell.sidebar.noSessions": "هنوز نشستی نیست — یک Loop جدید در پایین شروع کنید.",
   "shell.sidebar.projectDeleted": "«{name}» حذف شد",
+  "shell.sidebar.renameFailed": "تغییر نام ناموفق بود",
+  "shell.sidebar.renameHint": "برای تغییر نام دوبار کلیک کنید",
   "shell.sidebar.roundScore": "R{round} · امتیاز {score}",
   "shell.sidebar.sessionEmpty": "نشست خالی",
   "shell.sidebar.sessionLoopRound": "Loop · {n} دور",

@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Světlý",
   "shell.sidebar.noSessions": "Zatím žádné relace — spusťte nový Loop níže.",
   "shell.sidebar.projectDeleted": "Smazáno \"{name}\"",
+  "shell.sidebar.renameFailed": "Přejmenování se nezdařilo",
+  "shell.sidebar.renameHint": "Dvojklikem přejmenujete",
   "shell.sidebar.roundScore": "R{round} · skóre {score}",
   "shell.sidebar.sessionEmpty": "Prázdná relace",
   "shell.sidebar.sessionLoopRound": "Loop · {n} kolo",

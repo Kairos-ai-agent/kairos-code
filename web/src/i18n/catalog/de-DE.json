@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Hell",
   "shell.sidebar.noSessions": "Noch keine Sitzungen — starte unten einen neuen Loop.",
   "shell.sidebar.projectDeleted": "\"{name}\" gelöscht",
+  "shell.sidebar.renameFailed": "Umbenennen fehlgeschlagen",
+  "shell.sidebar.renameHint": "Zum Umbenennen doppelklicken",
   "shell.sidebar.roundScore": "R{round} · Punktzahl {score}",
   "shell.sidebar.sessionEmpty": "Leere Sitzung",
   "shell.sidebar.sessionLoopRound": "Loop · {n} Runde",

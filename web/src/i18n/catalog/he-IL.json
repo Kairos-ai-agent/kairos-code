@@ -876,6 +876,8 @@
   "shell.sidebar.light": "בהיר",
   "shell.sidebar.noSessions": "אין הפעלות עדיין — התחל Loop חדש למטה.",
   "shell.sidebar.projectDeleted": "נמחק \"{name}\"",
+  "shell.sidebar.renameFailed": "שינוי השם נכשל",
+  "shell.sidebar.renameHint": "לחץ פעמיים לשינוי שם",
   "shell.sidebar.roundScore": "R{round} · ניקוד {score}",
   "shell.sidebar.sessionEmpty": "הפעלה ריקה",
   "shell.sidebar.sessionLoopRound": "Loop · סבב {n}",

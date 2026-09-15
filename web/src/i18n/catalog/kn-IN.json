@@ -876,6 +876,8 @@
   "shell.sidebar.light": "ಬೆಳಕು",
   "shell.sidebar.noSessions": "ಇನ್ನೂ ಅಧಿವೇಶನಗಳಿಲ್ಲ — ಕೆಳಗೆ ಹೊಸ Loop ಪ್ರಾರಂಭಿಸಿ.",
   "shell.sidebar.projectDeleted": "\"{name}\" ಅಳಿಸಲಾಗಿದೆ",
+  "shell.sidebar.renameFailed": "ಮರುಹೆಸರಿಸುವಿಕೆ ವಿಫಲವಾಗಿದೆ",
+  "shell.sidebar.renameHint": "ಮರುಹೆಸರಿಸಲು ಡಬಲ್-ಕ್ಲಿಕ್ ಮಾಡಿ",
   "shell.sidebar.roundScore": "R{round} · ಸ್ಕೋರ್ {score}",
   "shell.sidebar.sessionEmpty": "ಖಾಲಿ ಅಧಿವೇಶನ",
   "shell.sidebar.sessionLoopRound": "Loop · {n} ಸುತ್ತು",

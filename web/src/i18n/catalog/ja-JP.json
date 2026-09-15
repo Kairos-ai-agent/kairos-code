@@ -876,6 +876,8 @@
   "shell.sidebar.light": "ライト",
   "shell.sidebar.noSessions": "セッションはまだありません — 下で新しいLoopを開始してください。",
   "shell.sidebar.projectDeleted": "「{name}」を削除しました",
+  "shell.sidebar.renameFailed": "名前の変更に失敗しました",
+  "shell.sidebar.renameHint": "ダブルクリックで名前を変更",
   "shell.sidebar.roundScore": "R{round} · スコア {score}",
   "shell.sidebar.sessionEmpty": "空のセッション",
   "shell.sidebar.sessionLoopRound": "Loop · {n} ラウンド",

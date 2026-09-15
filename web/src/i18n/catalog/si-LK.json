@@ -876,6 +876,8 @@
   "shell.sidebar.light": "ආලෝකය",
   "shell.sidebar.noSessions": "තවම සැසි නැත — පහතින් නව Loop එකක් අරඹන්න.",
   "shell.sidebar.projectDeleted": "\"{name}\" මකා දමන ලදි",
+  "shell.sidebar.renameFailed": "නම වෙනස් කිරීම අසාර්ථකයි",
+  "shell.sidebar.renameHint": "නම වෙනස් කිරීමට දෙවරක් ක්ලික් කරන්න",
   "shell.sidebar.roundScore": "R{round} · ලකුණු {score}",
   "shell.sidebar.sessionEmpty": "හිස් සැසිය",
   "shell.sidebar.sessionLoopRound": "Loop · වට {n}",

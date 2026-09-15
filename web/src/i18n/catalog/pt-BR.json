@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Claro",
   "shell.sidebar.noSessions": "Ainda sem sessões — inicie um novo Loop abaixo.",
   "shell.sidebar.projectDeleted": "\"{name}\" excluído",
+  "shell.sidebar.renameFailed": "Falha ao renomear",
+  "shell.sidebar.renameHint": "Clique duas vezes para renomear",
   "shell.sidebar.roundScore": "R{round} · pontuação {score}",
   "shell.sidebar.sessionEmpty": "Sessão vazia",
   "shell.sidebar.sessionLoopRound": "Loop · {n} rodada",

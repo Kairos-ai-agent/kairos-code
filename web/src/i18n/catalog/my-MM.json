@@ -876,6 +876,8 @@
   "shell.sidebar.light": "အလင်း",
   "shell.sidebar.noSessions": "ဆက်ရှင်မရှိသေးပါ — အောက်တွင် Loop အသစ်စတင်ပါ။",
   "shell.sidebar.projectDeleted": "\"{name}\" ကို ဖျက်လိုက်ပါပြီ",
+  "shell.sidebar.renameFailed": "အမည်ပြောင်းခြင်း မအောင်မြင်ပါ",
+  "shell.sidebar.renameHint": "အမည်ပြောင်းရန် နှစ်ချက်နှိပ်ပါ",
   "shell.sidebar.roundScore": "R{round} · အမှတ် {score}",
   "shell.sidebar.sessionEmpty": "ဆက်ရှင်အလွတ်",
   "shell.sidebar.sessionLoopRound": "Loop · {n} ကြိမ်",

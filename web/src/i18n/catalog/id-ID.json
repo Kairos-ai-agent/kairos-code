@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Terang",
   "shell.sidebar.noSessions": "Belum ada sesi — mulai Loop baru di bawah.",
   "shell.sidebar.projectDeleted": "Menghapus \"{name}\"",
+  "shell.sidebar.renameFailed": "Gagal mengganti nama",
+  "shell.sidebar.renameHint": "Klik dua kali untuk mengganti nama",
   "shell.sidebar.roundScore": "R{round} · skor {score}",
   "shell.sidebar.sessionEmpty": "Sesi kosong",
   "shell.sidebar.sessionLoopRound": "Loop · {n} putaran",

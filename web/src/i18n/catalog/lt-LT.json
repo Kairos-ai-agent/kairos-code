@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Šviesi",
   "shell.sidebar.noSessions": "Sesijų dar nėra — pradėkite naują Loop žemiau.",
   "shell.sidebar.projectDeleted": "Ištrinta „{name}“",
+  "shell.sidebar.renameFailed": "Pervadinimas nepavyko",
+  "shell.sidebar.renameHint": "Dukart spustelėkite, kad pervadintumėte",
   "shell.sidebar.roundScore": "R{round} · balas {score}",
   "shell.sidebar.sessionEmpty": "Tuščia sesija",
   "shell.sidebar.sessionLoopRound": "Loop · {n} raundas",

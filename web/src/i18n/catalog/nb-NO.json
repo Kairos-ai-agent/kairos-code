@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Lyst",
   "shell.sidebar.noSessions": "Ingen økter ennå — start en ny Loop nedenfor.",
   "shell.sidebar.projectDeleted": "Slettet \"{name}\"",
+  "shell.sidebar.renameFailed": "Kunne ikke gi nytt navn",
+  "shell.sidebar.renameHint": "Dobbeltklikk for å gi nytt navn",
   "shell.sidebar.roundScore": "R{round} · poeng {score}",
   "shell.sidebar.sessionEmpty": "Tom økt",
   "shell.sidebar.sessionLoopRound": "Loop · {n} runde",

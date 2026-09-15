@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Clar",
   "shell.sidebar.noSessions": "Encara no hi ha sessions — inicia un Loop nou a sota.",
   "shell.sidebar.projectDeleted": "S'ha eliminat \"{name}\"",
+  "shell.sidebar.renameFailed": "No s'ha pogut canviar el nom",
+  "shell.sidebar.renameHint": "Feu doble clic per canviar el nom",
   "shell.sidebar.roundScore": "R{round} · puntuació {score}",
   "shell.sidebar.sessionEmpty": "Sessió buida",
   "shell.sidebar.sessionLoopRound": "Loop · {n} ronda",

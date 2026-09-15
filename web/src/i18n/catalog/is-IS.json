@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Ljóst",
   "shell.sidebar.noSessions": "Engar lotur enn — byrjaðu nýjan Loop hér fyrir neðan.",
   "shell.sidebar.projectDeleted": "Eyddi \"{name}\"",
+  "shell.sidebar.renameFailed": "Endurnefning mistókst",
+  "shell.sidebar.renameHint": "Tvísmelltu til að endurnefna",
   "shell.sidebar.roundScore": "R{round} · stig {score}",
   "shell.sidebar.sessionEmpty": "Tóm lota",
   "shell.sidebar.sessionLoopRound": "Loop · {n} umferð",

@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Ljust",
   "shell.sidebar.noSessions": "Inga sessioner än — starta en ny Loop nedan.",
   "shell.sidebar.projectDeleted": "Tog bort \"{name}\"",
+  "shell.sidebar.renameFailed": "Namnbyte misslyckades",
+  "shell.sidebar.renameHint": "Dubbelklicka för att byta namn",
   "shell.sidebar.roundScore": "R{round} · poäng {score}",
   "shell.sidebar.sessionEmpty": "Tom session",
   "shell.sidebar.sessionLoopRound": "Loop · {n} runda",

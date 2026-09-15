@@ -37,7 +37,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Button, Spin, Empty, Tooltip, Popconfirm, App as AntdApp } from 'antd';
+import { Button, Spin, Empty, Tooltip, Popconfirm, Input, App as AntdApp } from 'antd';
 import {
   MessageOutlined, ThunderboltOutlined,
   CheckCircleFilled, CloseCircleFilled, DownOutlined,
@@ -148,6 +148,22 @@ const ChatSidebar: React.FC = () => {
     }
   };
 
+  // R38.10: rename in place — double-click the name, type, Enter. Optimistic:
+  // the list (and the chat header, if it is the current project) update at once
+  // and roll back if the write fails.
+  const renameProject = async (p: Project, name: string) => {
+    const previous = projects;
+    setProjects(projects.map((x) => (x.id === p.id ? { ...x, name } : x)));
+    if (currentProject?.id === p.id) setCurrentProject({ ...currentProject, name });
+    try {
+      await api.patch(`/projects/${p.id}`, { name });
+    } catch (e: any) {
+      setProjects(previous);
+      if (currentProject?.id === p.id) setCurrentProject(currentProject);
+      msgApi.error(e?.response?.data?.detail || t('shell.sidebar.renameFailed'));
+    }
+  };
+
   return (
     <div style={{
       height: `calc(100vh - 52px)`,
@@ -185,6 +201,7 @@ const ChatSidebar: React.FC = () => {
                 active={currentProject?.id === p.id}
                 onClick={() => selectProject(p)}
                 onDelete={() => deleteProject(p)}
+                onRename={(name) => renameProject(p, name)}
               />
             ))}
             {hiddenCount > 0 && !projectsExpanded && (
@@ -510,10 +527,14 @@ const ProjectRow: React.FC<{
   active: boolean;
   onClick: () => void;
   onDelete: () => void;
-}> = ({ project, active, onClick, onDelete }) => {
+  /** R38.10: double-click the name to edit it in place. */
+  onRename: (name: string) => void;
+}> = ({ project, active, onClick, onDelete, onRename }) => {
   const t = useT();
   const tokens = useThemeTokens();
   const [hover, setHover] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(project.name || '');
   // stopPropagation so clicking the delete icon doesn't also
   // select the project. Popconfirm handles the confirm UI.
   // The signature accepts both React.MouseEvent (Button onClick) and
@@ -525,6 +546,21 @@ const ProjectRow: React.FC<{
       evt.stopPropagation();
     }
   };
+  const startEdit = () => {
+    setDraft(project.name || '');
+    setEditing(true);
+  };
+  const commit = () => {
+    if (!editing) return;
+    setEditing(false);
+    const next = draft.trim();
+    if (!next || next === (project.name || '')) return;   // nothing to do
+    onRename(next);
+  };
+  const cancel = () => {
+    setEditing(false);
+    setDraft(project.name || '');
+  };
   return (
     <Tooltip
       title={project.description && project.description !== project.name
@@ -533,9 +569,10 @@ const ProjectRow: React.FC<{
     >
       <div
         onClick={onClick}
+        onDoubleClick={(e) => { stop(e); startEdit(); }}
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => { if (e.key === 'Enter') onClick(); }}
+        onKeyDown={(e) => { if (e.key === 'Enter' && !editing) onClick(); }}
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
         data-testid={`project-row-${project.id}`}
@@ -556,14 +593,37 @@ const ProjectRow: React.FC<{
         )}
         <ProjectOutlined style={{ color: active ? tokens.labelPrimary
                                               : tokens.labelTertiary }} />
-        <div style={{
-          flex: 1, minWidth: 0,
-          fontSize: 13, fontWeight: active ? 600 : 500,
-          whiteSpace: 'nowrap', overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}>
-          {project.name || project.id}
-        </div>
+        {editing ? (
+          <Input
+            autoFocus
+            size="small"
+            value={draft}
+            maxLength={120}
+            data-testid={`project-rename-input-${project.id}`}
+            onClick={stop}
+            onDoubleClick={stop}
+            onChange={(e) => setDraft(e.target.value)}
+            onPressEnter={commit}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') { e.stopPropagation(); cancel(); }
+            }}
+            style={{ flex: 1, minWidth: 0, fontSize: 13, height: 24 }}
+          />
+        ) : (
+          <div
+            data-testid={`project-name-${project.id}`}
+            title={t('shell.sidebar.renameHint')}
+            style={{
+              flex: 1, minWidth: 0,
+              fontSize: 13, fontWeight: active ? 600 : 500,
+              whiteSpace: 'nowrap', overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {project.name || project.id}
+          </div>
+        )}
         {/* Delete button — only visible on hover (or when active).
             Uses Popconfirm so the user gets one extra click before
             the project is gone. */}

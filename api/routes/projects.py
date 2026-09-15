@@ -565,6 +565,39 @@ async def get_project_settings(project_id: str):
     }
 
 
+@router.patch("/{project_id}")
+async def rename_project(project_id: str, patch: dict):
+    """Rename a project (and optionally its description).
+
+    The sidebar edits this in place — double-click the name, type, Enter. The
+    stored name is what every surface shows (list, chat header, gate report),
+    so the change is written straight through. An empty name is refused: a
+    project with no label is indistinguishable from every other one.
+    """
+    project = _orch().get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+    body = patch or {}
+    if "name" in body:
+        name = str(body.get("name") or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Project name must not be empty")
+        if len(name) > 120:
+            raise HTTPException(status_code=400,
+                                detail="Project name is too long (120 characters max)")
+        project.name = name
+    if "description" in body:
+        project.description = str(body.get("description") or "")
+    if "name" not in body and "description" not in body:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    _orch()._db.save_project(project)
+    return {
+        "id": project_id,
+        "name": project.name,
+        "description": getattr(project, "description", "") or "",
+    }
+
+
 @router.post("/{project_id}/settings")
 async def update_project_settings(project_id: str, patch: dict):
     """Update per-project settings (e.g. Coder sub-mode).

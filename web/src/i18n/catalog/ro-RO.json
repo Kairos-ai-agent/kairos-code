@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Luminos",
   "shell.sidebar.noSessions": "Încă nicio sesiune — începe un Loop nou mai jos.",
   "shell.sidebar.projectDeleted": "Am șters „{name}”",
+  "shell.sidebar.renameFailed": "Redenumirea a eșuat",
+  "shell.sidebar.renameHint": "Dublu-clic pentru a redenumi",
   "shell.sidebar.roundScore": "R{round} · scor {score}",
   "shell.sidebar.sessionEmpty": "Sesiune goală",
   "shell.sidebar.sessionLoopRound": "Loop · {n} rundă",

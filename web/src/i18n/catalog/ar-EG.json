@@ -876,6 +876,8 @@
   "shell.sidebar.light": "فاتح",
   "shell.sidebar.noSessions": "لا توجد جلسات بعد — ابدأ Loop جديدًا أدناه.",
   "shell.sidebar.projectDeleted": "تم حذف \"{name}\"",
+  "shell.sidebar.renameFailed": "فشلت إعادة التسمية",
+  "shell.sidebar.renameHint": "انقر نقرًا مزدوجًا لإعادة التسمية",
   "shell.sidebar.roundScore": "R{round} · النتيجة {score}",
   "shell.sidebar.sessionEmpty": "جلسة فارغة",
   "shell.sidebar.sessionLoopRound": "Loop · {n} جولة",

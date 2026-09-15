@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Vaalea",
   "shell.sidebar.noSessions": "Ei istuntoja vielä — aloita uusi Loop alla.",
   "shell.sidebar.projectDeleted": "Poistettu \"{name}\"",
+  "shell.sidebar.renameFailed": "Uudelleennimeäminen epäonnistui",
+  "shell.sidebar.renameHint": "Kaksoisnapsauta nimetäksesi uudelleen",
   "shell.sidebar.roundScore": "R{round} · pisteet {score}",
   "shell.sidebar.sessionEmpty": "Tyhjä istunto",
   "shell.sidebar.sessionLoopRound": "Loop · {n} kierros",

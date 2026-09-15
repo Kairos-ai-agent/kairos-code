@@ -876,6 +876,8 @@
   "shell.sidebar.light": "उज्यालो",
   "shell.sidebar.noSessions": "अझै कुनै सत्र छैन — तल नयाँ Loop सुरु गर्नुहोस्।",
   "shell.sidebar.projectDeleted": "\"{name}\" मेटाइयो",
+  "shell.sidebar.renameFailed": "नाम परिवर्तन असफल भयो",
+  "shell.sidebar.renameHint": "नाम परिवर्तन गर्न डबल-क्लिक गर्नुहोस्",
   "shell.sidebar.roundScore": "R{round} · स्कोर {score}",
   "shell.sidebar.sessionEmpty": "खाली सत्र",
   "shell.sidebar.sessionLoopRound": "Loop · {n} राउन्ड",

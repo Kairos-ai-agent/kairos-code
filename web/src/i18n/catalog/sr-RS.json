@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Svetla",
   "shell.sidebar.noSessions": "Još nema sesija — započnite novi Loop ispod.",
   "shell.sidebar.projectDeleted": "Obrisano \"{name}\"",
+  "shell.sidebar.renameFailed": "Preimenovanje nije uspelo",
+  "shell.sidebar.renameHint": "Dvoklik za preimenovanje",
   "shell.sidebar.roundScore": "R{round} · rezultat {score}",
   "shell.sidebar.sessionEmpty": "Prazna sesija",
   "shell.sidebar.sessionLoopRound": "Loop · {n} krug",

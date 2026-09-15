@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Φωτεινό",
   "shell.sidebar.noSessions": "Δεν υπάρχουν συνεδρίες ακόμη — ξεκινήστε ένα νέο Loop παρακάτω.",
   "shell.sidebar.projectDeleted": "Διαγράφηκε το \"{name}\"",
+  "shell.sidebar.renameFailed": "Η μετονομασία απέτυχε",
+  "shell.sidebar.renameHint": "Διπλό κλικ για μετονομασία",
   "shell.sidebar.roundScore": "R{round} · βαθμολογία {score}",
   "shell.sidebar.sessionEmpty": "Κενή συνεδρία",
   "shell.sidebar.sessionLoopRound": "Loop · {n} γύρος",

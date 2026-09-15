@@ -876,6 +876,8 @@
   "shell.sidebar.light": "লাইট",
   "shell.sidebar.noSessions": "এখনো কোনো সেশন নেই — নিচে নতুন Loop শুরু করুন।",
   "shell.sidebar.projectDeleted": "\"{name}\" মুছে ফেলা হয়েছে",
+  "shell.sidebar.renameFailed": "নাম বদলানো ব্যর্থ হয়েছে",
+  "shell.sidebar.renameHint": "নাম বদলাতে ডাবল-ক্লিক করুন",
   "shell.sidebar.roundScore": "R{round} · স্কোর {score}",
   "shell.sidebar.sessionEmpty": "খালি সেশন",
   "shell.sidebar.sessionLoopRound": "Loop · {n} রাউন্ড",

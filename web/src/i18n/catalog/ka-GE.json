@@ -876,6 +876,8 @@
   "shell.sidebar.light": "ღია",
   "shell.sidebar.noSessions": "სესიები ჯერ არ არის — დაიწყეთ ახალი Loop ქვემოთ.",
   "shell.sidebar.projectDeleted": "წაიშალა \"{name}\"",
+  "shell.sidebar.renameFailed": "გადარქმევა ვერ მოხერხდა",
+  "shell.sidebar.renameHint": "ორმაგი დაწკაპებით გადარქმევა",
   "shell.sidebar.roundScore": "R{round} · ქულა {score}",
   "shell.sidebar.sessionEmpty": "ცარიელი სესია",
   "shell.sidebar.sessionLoopRound": "Loop · {n} რაუნდი",

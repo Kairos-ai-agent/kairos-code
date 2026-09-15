@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Rename a project by double-clicking its name.** The sidebar's project list
+  edits in place: double-click the name — including the "untitled" placeholder —
+  type, Enter. Escape cancels, an empty name is refused, and the write goes
+  through `PATCH /api/projects/{id}`, so the new name is what the list, the chat
+  header and the gate report all show. It is optimistic: the list updates at
+  once and rolls back if the write fails.
+
 - **The app can update itself — one click, and only when it can prove what it
   downloads.** A cached, read-only check against GitHub Releases
   (`GET /api/update/check`) feeds a banner in the app shell and a version row in

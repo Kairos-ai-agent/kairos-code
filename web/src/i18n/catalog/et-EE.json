@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Hele",
   "shell.sidebar.noSessions": "Seansse veel pole — alusta uut Loop'i allpool.",
   "shell.sidebar.projectDeleted": "Kustutatud \"{name}\"",
+  "shell.sidebar.renameFailed": "Ümbernimetamine ebaõnnestus",
+  "shell.sidebar.renameHint": "Topeltklõpsa ümbernimetamiseks",
   "shell.sidebar.roundScore": "R{round} · skoor {score}",
   "shell.sidebar.sessionEmpty": "Tühi seanss",
   "shell.sidebar.sessionLoopRound": "Loop · {n} voor",

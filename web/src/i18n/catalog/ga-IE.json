@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Solas",
   "shell.sidebar.noSessions": "Níl aon seisiún fós — cuir tús le Loop nua thíos.",
   "shell.sidebar.projectDeleted": "Scriosadh \"{name}\"",
+  "shell.sidebar.renameFailed": "Theip ar athainmniú",
+  "shell.sidebar.renameHint": "Cliceáil faoi dhó chun athainmniú",
   "shell.sidebar.roundScore": "R{round} · scór {score}",
   "shell.sidebar.sessionEmpty": "Seisiún folamh",
   "shell.sidebar.sessionLoopRound": "Loop · {n} babhta",

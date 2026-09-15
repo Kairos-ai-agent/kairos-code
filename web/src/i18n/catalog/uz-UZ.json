@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Yorug'",
   "shell.sidebar.noSessions": "Hozircha sessiyalar yo'q — quyida yangi Loop boshlang.",
   "shell.sidebar.projectDeleted": "\"{name}\" o'chirildi",
+  "shell.sidebar.renameFailed": "Nomini o'zgartirib bo'lmadi",
+  "shell.sidebar.renameHint": "Nomini o'zgartirish uchun ikki marta bosing",
   "shell.sidebar.roundScore": "R{round} · ball {score}",
   "shell.sidebar.sessionEmpty": "Bo'sh sessiya",
   "shell.sidebar.sessionLoopRound": "Loop · {n} raund",

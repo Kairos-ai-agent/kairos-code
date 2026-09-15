@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Sáng",
   "shell.sidebar.noSessions": "Chưa có phiên nào — bắt đầu Loop mới bên dưới.",
   "shell.sidebar.projectDeleted": "Đã xóa \"{name}\"",
+  "shell.sidebar.renameFailed": "Đổi tên thất bại",
+  "shell.sidebar.renameHint": "Nhấp đúp để đổi tên",
   "shell.sidebar.roundScore": "R{round} · điểm {score}",
   "shell.sidebar.sessionEmpty": "Phiên trống",
   "shell.sidebar.sessionLoopRound": "Loop · {n} vòng",

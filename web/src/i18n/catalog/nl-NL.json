@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Licht",
   "shell.sidebar.noSessions": "Nog geen sessies — start hieronder een nieuwe loop.",
   "shell.sidebar.projectDeleted": "\"{name}\" verwijderd",
+  "shell.sidebar.renameFailed": "Hernoemen mislukt",
+  "shell.sidebar.renameHint": "Dubbelklik om te hernoemen",
   "shell.sidebar.roundScore": "R{round} · score {score}",
   "shell.sidebar.sessionEmpty": "Lege sessie",
   "shell.sidebar.sessionLoopRound": "Loop · {n} ronde",

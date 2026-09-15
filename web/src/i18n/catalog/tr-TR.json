@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Açık",
   "shell.sidebar.noSessions": "Henüz oturum yok — aşağıdan yeni bir Loop başlat.",
   "shell.sidebar.projectDeleted": "\"{name}\" silindi",
+  "shell.sidebar.renameFailed": "Yeniden adlandırma başarısız",
+  "shell.sidebar.renameHint": "Yeniden adlandırmak için çift tıklayın",
   "shell.sidebar.roundScore": "R{round} · puan {score}",
   "shell.sidebar.sessionEmpty": "Boş oturum",
   "shell.sidebar.sessionLoopRound": "Loop · {n} tur",

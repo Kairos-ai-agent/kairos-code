@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Világos",
   "shell.sidebar.noSessions": "Még nincs munkamenet — indíts új Loopot lent.",
   "shell.sidebar.projectDeleted": "„{name}” törölve",
+  "shell.sidebar.renameFailed": "Az átnevezés nem sikerült",
+  "shell.sidebar.renameHint": "Kattints duplán az átnevezéshez",
   "shell.sidebar.roundScore": "R{round} · pontszám {score}",
   "shell.sidebar.sessionEmpty": "Üres munkamenet",
   "shell.sidebar.sessionLoopRound": "Loop · {n} kör",

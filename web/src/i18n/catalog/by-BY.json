@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Светлая",
   "shell.sidebar.noSessions": "Пакуль няма сесій — пачніце новы Loop ніжэй.",
   "shell.sidebar.projectDeleted": "Выдалена \"{name}\"",
+  "shell.sidebar.renameFailed": "Не ўдалося перайменаваць",
+  "shell.sidebar.renameHint": "Двойчы пстрыкніце, каб перайменаваць",
   "shell.sidebar.roundScore": "R{round} · бал {score}",
   "shell.sidebar.sessionEmpty": "Пустая сесія",
   "shell.sidebar.sessionLoopRound": "Loop · {n} раунд",

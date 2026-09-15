@@ -876,6 +876,8 @@
   "shell.sidebar.light": "라이트",
   "shell.sidebar.noSessions": "아직 세션이 없습니다 — 아래에서 새 Loop를 시작하세요.",
   "shell.sidebar.projectDeleted": "\"{name}\" 삭제됨",
+  "shell.sidebar.renameFailed": "이름 변경 실패",
+  "shell.sidebar.renameHint": "더블클릭하여 이름 변경",
   "shell.sidebar.roundScore": "R{round} · 점수 {score}",
   "shell.sidebar.sessionEmpty": "빈 세션",
   "shell.sidebar.sessionLoopRound": "Loop · {n} 라운드",

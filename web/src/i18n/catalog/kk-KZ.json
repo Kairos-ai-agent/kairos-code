@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Ашық",
   "shell.sidebar.noSessions": "Әзірге сессия жоқ — төменде жаңа Loop бастаңыз.",
   "shell.sidebar.projectDeleted": "\"{name}\" жойылды",
+  "shell.sidebar.renameFailed": "Атын өзгерту сәтсіз аяқталды",
+  "shell.sidebar.renameHint": "Атын өзгерту үшін қос рет басыңыз",
   "shell.sidebar.roundScore": "R{round} · ұпай {score}",
   "shell.sidebar.sessionEmpty": "Бос сессия",
   "shell.sidebar.sessionLoopRound": "Loop · {n} айналым",

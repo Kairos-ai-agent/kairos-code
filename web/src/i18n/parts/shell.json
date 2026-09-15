@@ -27,6 +27,8 @@
   "shell.sidebar.deleteProjectTitle": { "zh": "删除“{name}”？", "en": "Delete \"{name}\"?" },
   "shell.sidebar.deleteProjectDescription": { "zh": "将删除该项目及其全部会话。", "en": "This removes the project and all its sessions." },
   "shell.sidebar.deleteProjectAria": { "zh": "删除项目 {name}", "en": "Delete project {name}" },
+  "shell.sidebar.renameHint": { "zh": "双击可重命名", "en": "Double-click to rename" },
+  "shell.sidebar.renameFailed": { "zh": "重命名失败", "en": "Rename failed" },
   "shell.sidebar.sessionStarting": { "zh": "启动中…", "en": "Starting…" },
   "shell.sidebar.sessionEmpty": { "zh": "空会话", "en": "Empty session" },
   "shell.sidebar.sessionLoopRound": { "zh": "循环 · {n} 轮", "en": "Loop · {n} round" },

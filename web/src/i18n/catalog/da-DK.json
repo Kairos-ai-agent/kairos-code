@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Lys",
   "shell.sidebar.noSessions": "Ingen sessioner endnu — start et nyt loop nedenfor.",
   "shell.sidebar.projectDeleted": "Slettede \"{name}\"",
+  "shell.sidebar.renameFailed": "Omdøbning mislykkedes",
+  "shell.sidebar.renameHint": "Dobbeltklik for at omdøbe",
   "shell.sidebar.roundScore": "R{round} · score {score}",
   "shell.sidebar.sessionEmpty": "Tom session",
   "shell.sidebar.sessionLoopRound": "Loop · {n} runde",

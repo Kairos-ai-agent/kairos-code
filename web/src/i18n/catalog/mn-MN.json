@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Гэрэлтэй",
   "shell.sidebar.noSessions": "Сесс байхгүй — доор шинэ Loop эхлүүлнэ үү.",
   "shell.sidebar.projectDeleted": "\"{name}\" устгагдлаа",
+  "shell.sidebar.renameFailed": "Нэр солих амжилтгүй",
+  "shell.sidebar.renameHint": "Нэр солихын тулд давхар товшино уу",
   "shell.sidebar.roundScore": "R{round} · оноо {score}",
   "shell.sidebar.sessionEmpty": "Хоосон сесс",
   "shell.sidebar.sessionLoopRound": "Loop · {n} тойрог",

@@ -876,6 +876,8 @@
   "shell.sidebar.light": "Բաց",
   "shell.sidebar.noSessions": "Դեռ նստաշրջաններ չկան — սկսեք նոր Loop ներքևում։",
   "shell.sidebar.projectDeleted": "Ջնջվեց «{name}»",
+  "shell.sidebar.renameFailed": "Վերանվանումը ձախողվեց",
+  "shell.sidebar.renameHint": "Կրկնակի սեղմեք՝ վերանվանելու համար",
   "shell.sidebar.roundScore": "R{round} · միավոր {score}",
   "shell.sidebar.sessionEmpty": "Դատարկ նստաշրջան",
   "shell.sidebar.sessionLoopRound": "Loop · {n} փուլ",

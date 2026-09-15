@@ -214,7 +214,15 @@ class SkillsLoader:
                 # "backend/api/commit.md" -> "backend__api__commit"
                 rel = md.relative_to(scope_root)
                 parts = list(rel.parts[:-1])  # drop the filename
-                if parts:
+                if md.name.upper() == "SKILL.MD" and parts:
+                    # Anthropic's layout is <skill-name>/SKILL.md: the directory
+                    # *is* the name. Without this the skill would be called
+                    # "docx__SKILL" (the filename), so `load_skill("docx")`
+                    # would miss every skill installed in that layout.
+                    namespaced = "__".join(
+                        p.replace("__", "_") for p in parts
+                    )
+                elif parts:
                     prefix = "__".join(
                         p.replace("__", "_") for p in parts
                     )

@@ -53,6 +53,7 @@ import json
 import logging
 import os
 import shutil
+import time
 import sys
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -735,18 +736,32 @@ class HttpMcpClient:
 
 
 #: How long to wait for a server *this install serves itself* to answer
-#: ``initialize``. It is a local Python module or nothing at all.
-BUNDLED_START_TIMEOUT_S = 20.0
+#: ``initialize``. It is a local module or nothing at all, so a short budget is
+#: honest — a bundled server that has not answered in this long is broken.
+BUNDLED_START_TIMEOUT_S = 45.0
+
+#: Wall-clock ceiling for the whole start phase of a project's servers. Startup
+#: is sequential (see McpRegistry.start_all for the measurements), so the guard
+#: against one hanging server is this budget, not parallelism.
+START_BUDGET_S = 60.0
 
 
-def client_for(config: McpServerConfig):
-    """Build the client a config's transport calls for."""
+def client_for(config: McpServerConfig, budget_s: Optional[float] = None):
+    """Build the client a config's transport calls for.
+
+    ``budget_s`` caps the connection attempt: the registry hands each server the
+    time left in its start phase, so one slow server cannot spend the budget of
+    the ones behind it.
+    """
     if config.transport in ("http", "sse"):
-        return HttpMcpClient(config)
+        timeout = budget_s or DEFAULT_REQUEST_TIMEOUT_S
+        return HttpMcpClient(config, request_timeout_s=timeout)
     # A server this install serves itself either comes up in a second or is
     # broken; waiting the full request timeout for it just delays the UI.
     timeout = (BUNDLED_START_TIMEOUT_S if config.source == "bundled-plugin"
                else DEFAULT_REQUEST_TIMEOUT_S)
+    if budget_s is not None:
+        timeout = min(timeout, budget_s)
     return StdioMcpClient(config, request_timeout_s=timeout)
 
 
@@ -894,46 +909,69 @@ class McpRegistry:
         """Spawn subprocesses and complete initialize for every configured
         server. Servers that fail to start are recorded in
         `startup_errors` so callers can show a warning instead of
-        crashing the whole registry."""
+        crashing the whole registry.
+
+        They start **one at a time, under a total budget**. Starting stdio
+        servers concurrently does not work on this platform — measured, five of
+        the bundled servers at once: 1/5 answered, staggered 2/5, two at a time
+        2/4, one after another 5/5 — so the protection against a hanging server
+        is a ceiling on the whole phase (START_BUDGET_S) instead of parallelism.
+        A server that hangs spends its slice; the rest still start.
+        """
+        deadline = time.monotonic() + START_BUDGET_S
+
         for name, cfg in self._configs.items():
             if not cfg.enabled:
                 continue
-            client = client_for(cfg)
-            try:
-                await client.start()
-            except Exception as exc:
-                logger.warning("mcp: server %s failed to start: %s", name, exc)
-                self._startup_errors[name] = str(exc)
-                # Clean up partial state
-                await client.close()
-                continue
-            self._clients[name] = client
-            try:
-                schemas = await client.list_tools()
-            except Exception as exc:
+            remaining = deadline - time.monotonic()
+            if remaining <= 1.0:
                 logger.warning(
-                    "mcp: server %s tools/list failed: %s", name, exc
-                )
-                self._startup_errors[name] = f"tools/list: {exc}"
-                await client.close()
-                self._clients.pop(name, None)
+                    "mcp: server %s skipped, the %.0fs start budget is spent",
+                    name, START_BUDGET_S)
+                self._startup_errors[name] = (
+                    f"skipped: the {START_BUDGET_S:.0f}s start budget was spent")
                 continue
-            for schema in schemas:
-                if not isinstance(schema, dict):
-                    continue
-                tname = schema.get("name")
-                if not tname:
-                    continue
-                # Scope names so two servers exposing the same tool
-                # name don't collide: mcp_<server>__<tool>.
-                namespaced = f"mcp_{name}__{tname}"
-                self._tools[namespaced] = McpToolAdapter(client, schema)
-                # But BaseTool.name must be the namespaced one so the
-                # LLM sees a unique identifier.
-                self._tools[namespaced].name = namespaced
-            logger.info(
-                "mcp: server %s ready, %d tools", name, len(schemas)
+            await self._start_one(name, cfg, remaining)
+
+    async def _start_one(self, name: str, cfg: McpServerConfig,
+                         budget_s: float) -> None:
+        """Start a single server. Never raises — failures are recorded."""
+        client = client_for(cfg, budget_s=budget_s)
+        try:
+            await client.start()
+        except Exception as exc:
+            logger.warning("mcp: server %s failed to start: %s", name, exc)
+            self._startup_errors[name] = str(exc)
+            # Clean up partial state
+            await client.close()
+            return
+        self._clients[name] = client
+        try:
+            schemas = await client.list_tools()
+        except Exception as exc:
+            logger.warning(
+                "mcp: server %s tools/list failed: %s", name, exc
             )
+            self._startup_errors[name] = f"tools/list: {exc}"
+            await client.close()
+            self._clients.pop(name, None)
+            return
+        for schema in schemas:
+            if not isinstance(schema, dict):
+                continue
+            tname = schema.get("name")
+            if not tname:
+                continue
+            # Scope names so two servers exposing the same tool
+            # name don't collide: mcp_<server>__<tool>.
+            namespaced = f"mcp_{name}__{tname}"
+            self._tools[namespaced] = McpToolAdapter(client, schema)
+            # But BaseTool.name must be the namespaced one so the
+            # LLM sees a unique identifier.
+            self._tools[namespaced].name = namespaced
+        logger.info(
+            "mcp: server %s ready, %d tools", name, len(schemas)
+        )
 
     def all_tools(self) -> List[BaseTool]:
         return list(self._tools.values())

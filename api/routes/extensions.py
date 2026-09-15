@@ -122,6 +122,10 @@ class MCPItem(BaseModel):
     source: Optional[str] = None
     official: bool = False
     stars: Optional[str] = None
+    #: R38.11: served by this install — no npx, no uvx, nothing to download.
+    bundled: bool = False
+    #: False when a bundled server works with the network unplugged.
+    needs_network: bool = True
 
 
 class MCPsResponse(BaseModel):
@@ -232,28 +236,42 @@ async def get_skill(name: str) -> dict:
 async def list_mcps() -> MCPsResponse:
     """List the curated MCP server registry.
 
-    These are the MCP servers the user can launch via stdio.
-    Each entry has the command + args + required env keys.
-    The backend does NOT auto-launch them — the user installs
-    Node.js / uv / Python deps separately and starts them
-    when needed.
+    Each entry has the command + args + required env keys. Entries flagged
+    ``bundled`` are served by *this* install (:mod:`kairos.mcp_local_servers`
+    and :mod:`kairos.mcp_filesystem_server`): they need no Node.js, no uv and
+    nothing downloaded, and the command shown here is the one that will run.
+    The rest are upstream invocations (``npx``/``uvx``) that fetch a package at
+    first use, which is why they carry ``needsNetwork: true``.
     """
+    from kairos.mcp_local_servers import resolve_bundled
+
     reg = _load_json("mcps.json")
-    servers = [
-        MCPItem(
-            name=s["name"],
-            category=s.get("category", "other"),
-            transport=s.get("transport", "stdio"),
-            command=s.get("command", ""),
-            args=s.get("args", []),
-            description=s.get("description", ""),
-            env_keys=s.get("env_keys", []),
-            source=s.get("source"),
-            official=bool(s.get("official")),
-            stars=s.get("stars"),
+    servers = []
+    for s in (reg.get("servers") or []):
+        command = s.get("command", "")
+        args = list(s.get("args", []))
+        bundled = bool(s.get("bundled"))
+        if bundled:
+            resolved = resolve_bundled(str(s.get("name", "")))
+            if resolved:
+                command = resolved["command"]
+                args = list(resolved["args"])
+        servers.append(
+            MCPItem(
+                name=s["name"],
+                category=s.get("category", "other"),
+                transport=s.get("transport", "stdio"),
+                command=command,
+                args=args,
+                description=s.get("description", ""),
+                env_keys=s.get("env_keys", []),
+                source=s.get("source"),
+                official=bool(s.get("official")),
+                stars=s.get("stars"),
+                bundled=bundled,
+                needs_network=bool(s.get("needsNetwork", not bundled)),
+            )
         )
-        for s in (reg.get("servers") or [])
-    ]
     return MCPsResponse(servers=servers, total=len(servers))
 
 

@@ -294,17 +294,26 @@ def test_skip_set_excludes_only_internal_comms_and_web_artifacts():
 
 
 def test_r33_new_skills_in_production():
-    """The 3 R33 skills must be in the production kairos/skills/ dir."""
+    """The 3 R33 skills must be in the production kairos/skills/ dir.
+
+    R38.11: they were shipped twice — a flat ``anthropic__<name>.md`` carrying the
+    trigger metadata plus a ``<name>/SKILL.md`` carrying the body — and the loader
+    kept only one of them by name. scripts/merge_duplicate_skills.py folded the
+    metadata into the directory copy and removed the duplicate, so the canonical
+    location is now the directory. The assertions are unchanged: priority, a
+    ``when:`` trigger and the provenance line all still have to be there.
+    """
     from pathlib import Path
-    kairos_skills = Path("kairos/skills")
+    kairos_skills = Path(__file__).resolve().parent.parent / "kairos" / "skills"
     for name in ("algorithmic-art", "canvas-design", "brand-guidelines"):
-        p = kairos_skills / f"anthropic__{name}.md"
+        p = kairos_skills / name / "SKILL.md"
         assert p.exists(), f"{p} should exist after R33 adaptation"
-        # Verify frontmatter has the expected fields
         text = p.read_text(encoding="utf-8")
         assert "priority: 0.7" in text
         assert "when:" in text
         assert "Adapted from anthropics/skills" in text
+        # And the duplicate is gone for good.
+        assert not (kairos_skills / f"anthropic__{name}.md").exists()
 
 
 def test_r33_skills_discoverable_by_loader():

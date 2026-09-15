@@ -609,6 +609,29 @@ def _download(url: str, timeout: int = 30, retries: int = 3) -> Optional[str]:
     return None
 
 
+def _source_is_gone(source: Optional[str], path: Optional[str],
+                    timeout: int = 15) -> bool:
+    """True when GitHub says the file is not there — not when we failed to ask.
+
+    ``source`` is ``owner/repo`` as the catalog stores it and ``path`` the file
+    inside it. Anything other than a definitive 404 (a timeout, a 5xx, a rate
+    limit) returns False, so a bad network is never reported as a vanished
+    source — and a vanished source is never buried under "download failed".
+    """
+    if not source or not path or "/" not in source:
+        return False
+    url = f"https://api.github.com/repos/{source}/contents/{path}"
+    try:
+        req = urllib.request.Request(
+            url, headers={"User-Agent": "Kairos-install-extensions/1.0"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+            return getattr(resp, "status", 200) == 404
+    except urllib.error.HTTPError as exc:
+        return exc.code == 404
+    except Exception:
+        return False
+
+
 def _download_github_api(source: str, path: str,
                           timeout: int = 30) -> Optional[str]:
     """Fetch a file from GitHub via the Contents API.
@@ -743,8 +766,16 @@ def install_skills(repo_root: Path, dry_run: bool = False) -> List[dict]:
                     log.info("✓ %s (%d bytes) -> %s", name, len(content),
                              target_file.relative_to(repo_root))
                 else:
-                    record["status"] = "download-failed"
-                    log.warning("✗ %s (download failed)", name)
+                    # A 404 means the source moved or was removed. Reporting
+                    # that as "download failed" buries a fact the user can act
+                    # on (drop it from the catalog) under a network error they
+                    # cannot.
+                    if _source_is_gone(entry.get("source"), entry.get("path")):
+                        record["status"] = "source-missing"
+                        log.warning("✗ %s (the source no longer exists)", name)
+                    else:
+                        record["status"] = "download-failed"
+                        log.warning("✗ %s (download failed)", name)
         records.append(record)
     return records
 
@@ -805,6 +836,9 @@ def write_summary(repo_root: Path, skill_records: List[dict],
                               if r["status"] in ("installed", "already-installed")),
             "failed": sum(1 for r in skill_records
                            if r["status"] == "download-failed"),
+            # Sources that no longer exist: not a failure to retry.
+            "sourceMissing": sum(1 for r in skill_records
+                                 if r["status"] == "source-missing"),
             "records": skill_records,
         },
         "mcps": mcp_record,

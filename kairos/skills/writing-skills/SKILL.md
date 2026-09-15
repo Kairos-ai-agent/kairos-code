@@ -1,11 +1,14 @@
 ---
-name: Writing Skills
 description: TDD for process documentation - test with subagents before writing, iterate until bulletproof
 when_to_use: when creating new skills, editing existing skills, or verifying skills work before deployment
 version: 5.1.0
 languages: all
+name: writing-skills
+priority: 0.8
+when:
+  keyword: ['creating', 'new', 'skills', 'editing', 'existing', 'verifying']
 ---
-
+<!-- Adapted from obra/superpowers (Apache-2.0 / MIT). -->
 # Writing Skills
 
 ## Overview

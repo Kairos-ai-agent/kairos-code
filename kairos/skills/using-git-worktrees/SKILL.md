@@ -1,10 +1,13 @@
 ---
-name: Using Git Worktrees
 description: Create isolated git worktrees with smart directory selection and safety verification
 when_to_use: when starting feature work that needs isolation from current workspace, before executing implementation plans
 version: 1.1.0
+name: using-git-worktrees
+priority: 0.8
+when:
+  keyword: ['starting', 'feature', 'work', 'needs', 'isolation', 'current']
 ---
-
+<!-- Adapted from obra/superpowers (Apache-2.0 / MIT). -->
 # Using Git Worktrees
 
 ## Overview

@@ -36,7 +36,9 @@ def _discovered(bundled_dir=BUNDLED):
 
 def test_the_bundled_set_is_not_empty():
     files = _bundled_files()
-    assert len(files) >= 40, f"only {len(files)} bundled skill files found"
+    # 36 after scripts/merge_duplicate_skills.py removed the 16 flat copies that
+    # duplicated a directory skill. The floor is what matters, not the number.
+    assert len(files) >= 30, f"only {len(files)} bundled skill files found"
 
 
 @pytest.mark.parametrize("md", _bundled_files(),

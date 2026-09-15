@@ -1,11 +1,14 @@
 ---
-name: Test-Driven Development (TDD)
 description: Write the test first, watch it fail, write minimal code to pass
 when_to_use: when implementing any feature or bugfix, before writing implementation code
 version: 3.1.0
 languages: all
+name: test-driven-development
+priority: 0.8
+when:
+  keyword: ['implementing', 'feature', 'bugfix', 'writing', 'implementation', 'code']
 ---
-
+<!-- Adapted from obra/superpowers (Apache-2.0 / MIT). -->
 # Test-Driven Development (TDD)
 
 ## Overview

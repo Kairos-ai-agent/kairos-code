@@ -8,6 +8,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The capability view has a screen: Tools → Capabilities.** It shows what the
+  agent actually has in the current project — skills with their scope, priority
+  and whether they carry a trigger; the MCP servers that are configured, where
+  each came from (your config, a project file, or the bundled defaults) and
+  which ones were rejected *with the reason*; the servers this build runs itself
+  with their tool names; the plugins it ships, next to the ones you installed
+  and the ones the registry could install; the built-in tool list; and a
+  **Problems** panel that names anything unusable. It reads the runtime on every
+  open, so it cannot describe an install that is not there.
+
 - **MCP servers can be remote again.** The client spoke stdio only, so the
   servers that actually exist in the world — hosted endpoints behind a token —
   could not be configured at all. `transport: http` (Streamable HTTP) and

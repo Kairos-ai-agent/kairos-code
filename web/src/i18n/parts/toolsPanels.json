@@ -7,6 +7,174 @@
     "zh": "用于增强核心 Coder / Reviewer 循环的可选子系统。",
     "en": "Optional subsystems that augment the core Coder / Reviewer loop."
   },
+  "tools.capabilities.title": {
+    "zh": "能力总览",
+    "en": "Capabilities"
+  },
+  "tools.capabilities.description": {
+    "zh": "这个项目里智能体实际能拿到什么、缺什么 —— 数据取自运行时，不是配置文件。",
+    "en": "What the agent actually has in this project, and what is missing — read from the runtime, not from config files."
+  },
+  "tools.capabilities.status": {
+    "zh": "运行时实测",
+    "en": "Read from the runtime"
+  },
+  "tools.capabilities.problemsTitle": {
+    "zh": "需要注意的问题",
+    "en": "Problems"
+  },
+  "tools.capabilities.noProblems": {
+    "zh": "没有发现问题，全部可用。",
+    "en": "Nothing is missing — everything below is usable."
+  },
+  "tools.capabilities.reload": {
+    "zh": "重新检查",
+    "en": "Re-check"
+  },
+  "tools.capabilities.loadFailed": {
+    "zh": "读取能力报告失败。",
+    "en": "Could not load the capability report."
+  },
+  "tools.capabilities.summaryTitle": {
+    "zh": "概览",
+    "en": "Summary"
+  },
+  "tools.capabilities.skills": {
+    "zh": "技能",
+    "en": "Skills"
+  },
+  "tools.capabilities.mcpServers": {
+    "zh": "MCP 服务器",
+    "en": "MCP servers"
+  },
+  "tools.capabilities.offlineServers": {
+    "zh": "离线服务器",
+    "en": "Offline servers"
+  },
+  "tools.capabilities.plugins": {
+    "zh": "插件",
+    "en": "Plugins"
+  },
+  "tools.capabilities.skillsTitle": {
+    "zh": "技能明细",
+    "en": "Skills"
+  },
+  "tools.capabilities.mcpTitle": {
+    "zh": "已配置的 MCP 服务器",
+    "en": "Configured MCP servers"
+  },
+  "tools.capabilities.offlineTitle": {
+    "zh": "随包自带、无需下载的服务器",
+    "en": "Servers this install runs itself"
+  },
+  "tools.capabilities.pluginsTitle": {
+    "zh": "插件",
+    "en": "Plugins"
+  },
+  "tools.capabilities.nativeTitle": {
+    "zh": "内置工具",
+    "en": "Built-in tools"
+  },
+  "tools.capabilities.colName": {
+    "zh": "名称",
+    "en": "Name"
+  },
+  "tools.capabilities.colScope": {
+    "zh": "来源层级",
+    "en": "Scope"
+  },
+  "tools.capabilities.colPriority": {
+    "zh": "优先级",
+    "en": "Priority"
+  },
+  "tools.capabilities.colTrigger": {
+    "zh": "有触发条件",
+    "en": "Trigger"
+  },
+  "tools.capabilities.colTransport": {
+    "zh": "传输",
+    "en": "Transport"
+  },
+  "tools.capabilities.colSource": {
+    "zh": "配置来源",
+    "en": "Source"
+  },
+  "tools.capabilities.colEnabled": {
+    "zh": "启用",
+    "en": "Enabled"
+  },
+  "tools.capabilities.colDetail": {
+    "zh": "命令 / 地址",
+    "en": "Command / URL"
+  },
+  "tools.capabilities.scopeBundled": {
+    "zh": "随包",
+    "en": "Bundled"
+  },
+  "tools.capabilities.scopeGlobal": {
+    "zh": "全局",
+    "en": "Global"
+  },
+  "tools.capabilities.scopeProject": {
+    "zh": "项目",
+    "en": "Project"
+  },
+  "tools.capabilities.scopeUnknown": {
+    "zh": "未知",
+    "en": "Unknown"
+  },
+  "tools.capabilities.sourceBundledPlugin": {
+    "zh": "随包默认",
+    "en": "Bundled default"
+  },
+  "tools.capabilities.sourceUser": {
+    "zh": "用户配置",
+    "en": "Your config"
+  },
+  "tools.capabilities.sourceConfig": {
+    "zh": "配置",
+    "en": "Config"
+  },
+  "tools.capabilities.on": {
+    "zh": "已启用",
+    "en": "On"
+  },
+  "tools.capabilities.off": {
+    "zh": "已关闭",
+    "en": "Off"
+  },
+  "tools.capabilities.offline": {
+    "zh": "离线",
+    "en": "Offline"
+  },
+  "tools.capabilities.toolsUnit": {
+    "zh": "个工具",
+    "en": "tools"
+  },
+  "tools.capabilities.rejectedTitle": {
+    "zh": "已配置但无法使用",
+    "en": "Configured but not usable"
+  },
+  "tools.capabilities.noServers": {
+    "zh": "还没有配置任何 MCP 服务器。",
+    "en": "No MCP servers are configured."
+  },
+  "tools.capabilities.shipped": {
+    "zh": "随包",
+    "en": "Shipped"
+  },
+  "tools.capabilities.installedTag": {
+    "zh": "已安装",
+    "en": "Installed"
+  },
+  "tools.capabilities.noUserPlugins": {
+    "zh": "你还没有安装第三方插件。",
+    "en": "You have not installed any third-party plugins."
+  },
+  "tools.capabilities.registryHint": {
+    "zh": "注册表里还有 {n} 个插件可以安装。",
+    "en": "The registry lists {n} more plugins you can install."
+  },
   "tools.page.teamsTitle": {
     "zh": "智能体团队",
     "en": "Agent Teams"

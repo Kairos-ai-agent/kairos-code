@@ -18,7 +18,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Card, Row, Col, Button, Tag, Space, Tooltip, Empty, Spin, Modal,
-  Input, Select, Form, Statistic, App as AntdApp, Switch, Alert,
+  Input, Select, Form, Statistic, App as AntdApp, Switch, Alert, Table,
 } from 'antd';
 import {
   TeamOutlined, CloudOutlined, AudioOutlined, DesktopOutlined,
@@ -33,7 +33,7 @@ import api from '../api/client';
 import { formatError } from '../utils/formatError';
 import { useT } from '../i18n';
 
-type Tool = 'teams' | 'cloud' | 'voice' | 'computer';
+type Tool = 'teams' | 'cloud' | 'voice' | 'computer' | 'capabilities';
 
 const TOOLS: { key: Tool; titleKey: string; icon: React.ReactNode;
               descriptionKey: string; route: string; statusKey: string }[] = [
@@ -53,6 +53,10 @@ const TOOLS: { key: Tool; titleKey: string; icon: React.ReactNode;
     icon: <DesktopOutlined style={{ fontSize: 28 }} />,
     descriptionKey: 'tools.page.computerDescription',
     route: 'computer', statusKey: 'tools.page.statusSafetyRequired' },
+  { key: 'capabilities', titleKey: 'tools.capabilities.title',
+    icon: <ApiOutlined style={{ fontSize: 28 }} />,
+    descriptionKey: 'tools.capabilities.description',
+    route: 'capabilities', statusKey: 'tools.capabilities.status' },
 ];
 
 /**
@@ -161,7 +165,249 @@ const ToolDetail: React.FC<{
       {tool === 'cloud' && <CloudPanel currentProject={currentProject} notify={notify} />}
       {tool === 'voice' && <VoicePanel notify={notify} />}
       {tool === 'computer' && <ComputerPanel notify={notify} />}
+      {tool === 'capabilities' && <CapabilitiesPanel currentProject={currentProject} />}
     </div>
+  );
+};
+
+// ---- Capabilities (R38.12) ----
+// One screen answering "what does the agent actually have here, and what is
+// missing?" — read from the runtime (the loader, the MCP registry, the plugin
+// manager), not from the registry files, so it cannot disagree with reality the
+// way /extensions/summary did.
+const CapabilitiesPanel: React.FC<{ currentProject: any }> = ({ currentProject }) => {
+  const t = useT();
+  const tokens = useThemeTokens();
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setFailed(false);
+    try {
+      const res = await api.get('/extensions/capabilities', {
+        params: currentProject?.id ? { project_id: currentProject.id } : {},
+      });
+      setData(res.data);
+    } catch {
+      setFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentProject?.id]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const card = { background: tokens.bgLay1, border: `1px solid ${tokens.border}` };
+
+  if (loading) {
+    return <Card style={card}><Spin /></Card>;
+  }
+  if (failed || !data) {
+    return (
+      <Card style={card}>
+        <Empty description={t('tools.capabilities.loadFailed')} />
+        <div style={{ textAlign: 'center', marginTop: 12 }}>
+          <Button icon={<ReloadOutlined />} onClick={load}>
+            {t('tools.capabilities.reload')}
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
+  const skills = data.skills || {};
+  const mcp = data.mcp || {};
+  const plugins = data.plugins || {};
+  const problems: string[] = data.problems || [];
+  const nativeTools: string[] = data.nativeTools || [];
+  const configured: any[] = mcp.configured || [];
+  const bundledServers: any[] = mcp.bundledServers || [];
+  const rejected: Record<string, string> = mcp.rejected || {};
+
+  const SCOPE_KEYS: Record<string, string> = {
+    bundled: 'tools.capabilities.scopeBundled',
+    global: 'tools.capabilities.scopeGlobal',
+    project: 'tools.capabilities.scopeProject',
+    unknown: 'tools.capabilities.scopeUnknown',
+    'bundled-plugin': 'tools.capabilities.sourceBundledPlugin',
+    user: 'tools.capabilities.sourceUser',
+    config: 'tools.capabilities.sourceConfig',
+  };
+  const label = (value: string) =>
+    (SCOPE_KEYS[value] ? t(SCOPE_KEYS[value]) : value);
+
+  const skillRows = (skills.items || []).map((s: any) => ({
+    key: s.name,
+    name: s.name,
+    scope: s.scope,
+    priority: s.priority,
+    trigger: Boolean(s.when && Object.keys(s.when).length),
+    description: s.description,
+  }));
+  const mcpRows = configured.map((m: any) => ({
+    key: m.name,
+    name: m.name,
+    transport: m.transport,
+    source: m.source,
+    enabled: m.enabled,
+    detail: m.url || m.command || '',
+  }));
+
+  return (
+    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Card
+        style={card}
+        title={t('tools.capabilities.problemsTitle')}
+        extra={<Button size="small" icon={<ReloadOutlined />} onClick={load}>
+          {t('tools.capabilities.reload')}
+        </Button>}
+      >
+        {problems.length === 0
+          ? <Alert type="success" showIcon message={t('tools.capabilities.noProblems')} />
+          : <Space direction="vertical" size={6} style={{ width: '100%' }}>
+              {problems.map((p, i) => (
+                <Alert key={i} type="warning" showIcon message={<code>{p}</code>} />
+              ))}
+            </Space>}
+      </Card>
+
+      <Card style={card} title={t('tools.capabilities.summaryTitle')}>
+        <Row gutter={16}>
+          <Col span={6}>
+            <Statistic title={t('tools.capabilities.skills')}
+                       value={skills.count || 0}
+                       suffix={`/ ${skills.filesOnDisk || 0}`} />
+          </Col>
+          <Col span={6}>
+            <Statistic title={t('tools.capabilities.mcpServers')}
+                       value={configured.length} />
+          </Col>
+          <Col span={6}>
+            <Statistic title={t('tools.capabilities.offlineServers')}
+                       value={bundledServers.length}
+                       suffix={`/ ${bundledServers.reduce(
+                         (n: number, s: any) => n + (s.toolCount || 0), 0)}`} />
+          </Col>
+          <Col span={6}>
+            <Statistic title={t('tools.capabilities.plugins')}
+                       value={plugins.count || 0}
+                       suffix={`+ ${plugins.bundledCount || 0}`} />
+          </Col>
+        </Row>
+      </Card>
+
+      <Card style={card} title={t('tools.capabilities.skillsTitle')}>
+        <Table size="small" pagination={{ pageSize: 8 }}
+               dataSource={skillRows}
+               columns={[
+                 { title: t('tools.capabilities.colName'), dataIndex: 'name',
+                   render: (v: string) => <code>{v}</code> },
+                 { title: t('tools.capabilities.colScope'), dataIndex: 'scope',
+                   width: 120, render: (v: string) => <Tag>{label(v)}</Tag> },
+                 { title: t('tools.capabilities.colPriority'), dataIndex: 'priority',
+                   width: 100 },
+                 { title: t('tools.capabilities.colTrigger'), dataIndex: 'trigger',
+                   width: 110,
+                   render: (v: boolean) => v
+                     ? <CheckCircleFilled style={{ color: tokens.success }} />
+                     : <CloseCircleFilled style={{ color: tokens.labelTertiary }} /> },
+               ]}
+        />
+      </Card>
+
+      <Card style={card} title={t('tools.capabilities.mcpTitle')}>
+        <Table size="small" pagination={false}
+               dataSource={mcpRows}
+               locale={{ emptyText: t('tools.capabilities.noServers') }}
+               columns={[
+                 { title: t('tools.capabilities.colName'), dataIndex: 'name',
+                   render: (v: string) => <code>{v}</code> },
+                 { title: t('tools.capabilities.colTransport'), dataIndex: 'transport',
+                   width: 110 },
+                 { title: t('tools.capabilities.colSource'), dataIndex: 'source',
+                   width: 150, render: (v: string) => <Tag color="blue">{label(v)}</Tag> },
+                 { title: t('tools.capabilities.colEnabled'), dataIndex: 'enabled',
+                   width: 100,
+                   render: (v: boolean) => v
+                     ? <Tag color="green">{t('tools.capabilities.on')}</Tag>
+                     : <Tag>{t('tools.capabilities.off')}</Tag> },
+                 { title: t('tools.capabilities.colDetail'), dataIndex: 'detail',
+                   ellipsis: true, render: (v: string) => <span style={{
+                     fontSize: 12, color: tokens.labelTertiary }}>{v}</span> },
+               ]}
+        />
+        {Object.keys(rejected).length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 13, color: tokens.labelSecondary,
+                          marginBottom: 6 }}>
+              {t('tools.capabilities.rejectedTitle')}
+            </div>
+            {Object.entries(rejected).map(([name, reason]) => (
+              <div key={name} style={{ fontSize: 12 }}>
+                <code>{name}</code> — {reason}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card style={card} title={t('tools.capabilities.offlineTitle')}>
+        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          {bundledServers.map((s: any) => (
+            <div key={s.name}>
+              <code>{s.name}</code>{' '}
+              <Tag color="green">{t('tools.capabilities.offline')}</Tag>{' '}
+              <span style={{ fontSize: 12, color: tokens.labelTertiary }}>
+                {s.toolCount} {t('tools.capabilities.toolsUnit')}
+              </span>
+              <div style={{ marginTop: 4 }}>
+                {(s.tools || []).map((n: string) => (
+                  <Tag key={n} style={{ marginBottom: 4 }}>{n}</Tag>
+                ))}
+              </div>
+            </div>
+          ))}
+        </Space>
+      </Card>
+
+      <Card style={card} title={t('tools.capabilities.pluginsTitle')}>
+        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          {(plugins.bundled || []).map((p: any) => (
+            <div key={`b-${p.name}`}>
+              <Tag color="blue">{t('tools.capabilities.shipped')}</Tag>{' '}
+              <code>{p.name}</code> <span style={{
+                fontSize: 12, color: tokens.labelTertiary }}>v{p.version}</span>
+              <div style={{ marginTop: 4 }}>
+                {(p.capabilities || []).map((c: string) => (
+                  <Tag key={c}>{c}</Tag>
+                ))}
+              </div>
+            </div>
+          ))}
+          {(plugins.installed || []).length === 0 && (
+            <div style={{ fontSize: 13, color: tokens.labelTertiary }}>
+              {t('tools.capabilities.noUserPlugins')}
+            </div>
+          )}
+          {(plugins.installed || []).map((p: any) => (
+            <div key={`i-${p.name}`}>
+              <Tag>{t('tools.capabilities.installedTag')}</Tag>{' '}
+              <code>{p.name}</code>
+            </div>
+          ))}
+          <div style={{ fontSize: 12, color: tokens.labelTertiary }}>
+            {t('tools.capabilities.registryHint')
+              .replace('{n}', String(plugins.availableInRegistry || 0))}
+          </div>
+        </Space>
+      </Card>
+
+      <Card style={card} title={t('tools.capabilities.nativeTitle')}>
+        {nativeTools.map((n) => <Tag key={n} style={{ marginBottom: 4 }}>{n}</Tag>)}
+      </Card>
+    </Space>
   );
 };
 

@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "رنز",
   "trendPanel.tab.overview": "جائزہ",
   "trendPanel.tab.perCase": "فی کیس",
-  "trendPanel.title": "رجحان"
+  "trendPanel.title": "رجحان",
+  "updates.applied": "ڈاؤن لوڈ اور تصدیق شدہ — بند کرنے پر خود کو بدل کر دوبارہ شروع ہو جائے گا۔",
+  "updates.apply": "ابھی اپ ڈیٹ کریں",
+  "updates.applyFailed": "اپ ڈیٹ ناکام — بعد میں دوبارہ کوشش کریں، یا ریلیز صفحے سے ڈاؤن لوڈ کریں۔",
+  "updates.applying": "ڈاؤن لوڈ اور تصدیق ہو رہی ہے…",
+  "updates.available": "ورژن {version} دستیاب ہے (آپ کے پاس {current} ہے)",
+  "updates.notes": "ریلیز نوٹس",
+  "updates.reason.checksumMismatch": "چیک سم مماثل نہیں — روک دیا گیا، کچھ تبدیل نہیں ہوا۔",
+  "updates.reason.macos": "macOS پر، نیا بلڈ دستی طور پر ڈاؤن لوڈ کریں (جگہ پر تبدیلی مسدود ہے)۔",
+  "updates.reason.noAssetForPlatform": "اس ریلیز میں اس پلیٹ فارم کے لیے کوئی بلڈ نہیں۔",
+  "updates.reason.noChecksum": "وہ ریلیز کوئی چیک سم شائع نہیں کرتی، اس لیے خود کو تبدیل نہیں کرے گی۔",
+  "updates.reason.notPackaged": "یہ سورس یا پیکیج انسٹال ہے — git یا pip سے اپ گریڈ کریں۔",
+  "updates.reason.readOnly": "انسٹال ڈائریکٹری قابلِ تحریر نہیں — نیا بلڈ دستی طور پر ڈاؤن لوڈ کریں۔",
+  "updates.settings.check": "شروع پر اپ ڈیٹ چیک کریں",
+  "updates.settings.checkHint": "ایک صرف پڑھنے والی تلاش، 12 گھنٹے کے لیے کیش۔ ڈاؤن لوڈ صرف اسی وقت ہوتا ہے جب آپ ابھی اپ ڈیٹ کریں پر کلک کریں۔",
+  "updates.settings.checkNow": "ابھی چیک کریں",
+  "updates.settings.upToDate": "آپ اپ ٹو ڈیٹ ہیں۔",
+  "updates.settings.version": "ورژن {version}"
 }

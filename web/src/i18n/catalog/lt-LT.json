@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "Vykdymai",
   "trendPanel.tab.overview": "Apžvalga",
   "trendPanel.tab.perCase": "Pagal atvejį",
-  "trendPanel.title": "Tendencija"
+  "trendPanel.title": "Tendencija",
+  "updates.applied": "Atsisiųsta ir patikrinta — išėjus ji pakeis save, tada paleis iš naujo.",
+  "updates.apply": "Atnaujinti dabar",
+  "updates.applyFailed": "Atnaujinimas nepavyko — bandykite vėliau arba atsisiųskite iš leidimų puslapio.",
+  "updates.applying": "Atsisiunčiama ir tikrinama…",
+  "updates.available": "Yra {version} versija (turite {current})",
+  "updates.notes": "Leidimo pastabos",
+  "updates.reason.checksumMismatch": "Nesutampa kontrolinė suma — nutraukta, niekas nepakeista.",
+  "updates.reason.macos": "macOS atveju atsisiųskite naują versiją rankiniu būdu (pakeitimas vietoje užblokuotas).",
+  "updates.reason.noAssetForPlatform": "Šis leidimas neturi versijos šiai platformai.",
+  "updates.reason.noChecksum": "Šis leidimas neskelbia kontrolinės sumos, todėl savęs nepakeis.",
+  "updates.reason.notPackaged": "Tai šaltinio arba paketo diegimas — atnaujinkite su git arba pip.",
+  "updates.reason.readOnly": "Diegimo katalogas neįrašomas — atsisiųskite naują versiją rankiniu būdu.",
+  "updates.settings.check": "Tikrinti atnaujinimus paleidžiant",
+  "updates.settings.checkHint": "Vienas tik skaitymo patikrinimas, talpinamas 12 valandų. Atsisiuntimas įvyksta tik paspaudus Atnaujinti dabar.",
+  "updates.settings.checkNow": "Tikrinti dabar",
+  "updates.settings.upToDate": "Naudojate naujausią versiją.",
+  "updates.settings.version": "Versija {version}"
 }

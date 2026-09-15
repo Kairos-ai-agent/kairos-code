@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "Läufe",
   "trendPanel.tab.overview": "Übersicht",
   "trendPanel.tab.perCase": "Pro Fall",
-  "trendPanel.title": "Trend"
+  "trendPanel.title": "Trend",
+  "updates.applied": "Heruntergeladen und verifiziert — ersetzt sich beim Beenden selbst und startet dann neu.",
+  "updates.apply": "Jetzt aktualisieren",
+  "updates.applyFailed": "Update fehlgeschlagen — später erneut versuchen oder von der Release-Seite herunterladen.",
+  "updates.applying": "Wird heruntergeladen und verifiziert…",
+  "updates.available": "Version {version} ist verfügbar (du hast {current})",
+  "updates.notes": "Release Notes",
+  "updates.reason.checksumMismatch": "Checksumme stimmt nicht — abgebrochen, nichts wurde geändert.",
+  "updates.reason.macos": "Unter macOS den neuen Build manuell herunterladen (direkter Austausch ist blockiert).",
+  "updates.reason.noAssetForPlatform": "Dieses Release hat keinen Build für diese Plattform.",
+  "updates.reason.noChecksum": "Dieses Release veröffentlicht keine Checksumme, daher kein Selbst-Austausch.",
+  "updates.reason.notPackaged": "Dies ist eine Source- oder Paket-Installation — mit git oder pip aktualisieren.",
+  "updates.reason.readOnly": "Das Installationsverzeichnis ist nicht beschreibbar — den neuen Build manuell herunterladen.",
+  "updates.settings.check": "Beim Start nach Updates suchen",
+  "updates.settings.checkHint": "Eine schreibgeschützte Abfrage, 12 Stunden gecacht. Ein Download erfolgt nur, wenn du auf Jetzt aktualisieren klickst.",
+  "updates.settings.checkNow": "Jetzt prüfen",
+  "updates.settings.upToDate": "Du bist auf dem neuesten Stand.",
+  "updates.settings.version": "Version {version}"
 }

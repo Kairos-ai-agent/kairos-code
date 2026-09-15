@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "Ritheanna",
   "trendPanel.tab.overview": "Forbhreathnú",
   "trendPanel.tab.perCase": "De réir cás",
-  "trendPanel.title": "Treocht"
+  "trendPanel.title": "Treocht",
+  "updates.applied": "Íoslódáilte agus fíoraithe — cuirfidh sé ina ionad féin nuair a scorann tú, ansin atosóidh sé.",
+  "updates.apply": "Nuashonraigh anois",
+  "updates.applyFailed": "Theip ar an nuashonrú — bain triail eile as níos déanaí, nó íoslódáil ón leathanach eisiúna é.",
+  "updates.applying": "Á íoslódáil agus á fíorú…",
+  "updates.available": "Tá leagan {version} ar fáil (tá {current} agat)",
+  "updates.notes": "Nótaí eisiúna",
+  "updates.reason.checksumMismatch": "Mí-oiriúint seicsum — cuireadh ar ceal é, níor athraíodh aon rud.",
+  "updates.reason.macos": "Ar macOS, íoslódáil an leagan nua de láimh (cuirtear cosc ar ionadú in áit).",
+  "updates.reason.noAssetForPlatform": "Níl aon leagan den eisiúint sin don ardán seo.",
+  "updates.reason.noChecksum": "Ní fhoilsíonn an eisiúint sin seicsum, mar sin ní chuirfidh sé ina ionad féin.",
+  "updates.reason.notPackaged": "Suiteáil foinse nó pacáiste atá anseo — uasghrádaigh le git nó pip.",
+  "updates.reason.readOnly": "Níl an chomhadlann suiteála inscríofa — íoslódáil an leagan nua de láimh.",
+  "updates.settings.check": "Seiceáil le haghaidh nuashonruithe ar thosú",
+  "updates.settings.checkHint": "Cuardach amháin inléite, i dtaisce ar feadh 12 uair an chloig. Ní tharlaíonn íoslódáil ach amháin nuair a chliceálann tú Nuashonraigh anois.",
+  "updates.settings.checkNow": "Seiceáil anois",
+  "updates.settings.upToDate": "Tá tú suas chun dáta.",
+  "updates.settings.version": "Leagan {version}"
 }

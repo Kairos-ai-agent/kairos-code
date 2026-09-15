@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "ចំនួនដំណើរការ",
   "trendPanel.tab.overview": "ទិដ្ឋភាពទូទៅ",
   "trendPanel.tab.perCase": "តាមករណី",
-  "trendPanel.title": "និន្នាការ"
+  "trendPanel.title": "និន្នាការ",
+  "updates.applied": "បានទាញយក និងផ្ទៀងផ្ទាត់ — វាជំនួសខ្លួនវានៅពេលអ្នកចាកចេញ បន្ទាប់មកចាប់ផ្តើមឡើងវិញ។",
+  "updates.apply": "ធ្វើបច្ចុប្បន្នភាពឥឡូវ",
+  "updates.applyFailed": "ធ្វើបច្ចុប្បន្នភាពបរាជ័យ — ព្យាយាមម្តងទៀតនៅពេលក្រោយ ឬទាញយកពីទំព័រចេញផ្សាយ។",
+  "updates.applying": "កំពុងទាញយក និងផ្ទៀងផ្ទាត់…",
+  "updates.available": "មានកំណែ {version} (អ្នកមាន {current})",
+  "updates.notes": "កំណត់សម្គាល់ចេញផ្សាយ",
+  "updates.reason.checksumMismatch": "Checksum មិនត្រូវគ្នា — បានបោះបង់ គ្មានអ្វីត្រូវបានផ្លាស់ប្តូរទេ។",
+  "updates.reason.macos": "នៅលើ macOS សូមទាញយក build ថ្មីដោយដៃ (ការជំនួសនៅនឹងកន្លែងត្រូវបានរារាំង)។",
+  "updates.reason.noAssetForPlatform": "ការចេញផ្សាយនោះគ្មាន build សម្រាប់វេទិកានេះទេ។",
+  "updates.reason.noChecksum": "ការចេញផ្សាយនោះមិនបង្ហោះ checksum ដូច្នេះវានឹងមិនជំនួសខ្លួនវាទេ។",
+  "updates.reason.notPackaged": "នេះជាការដំឡើងពី source ឬ package — ធ្វើបច្ចុប្បន្នភាពដោយ git ឬ pip។",
+  "updates.reason.readOnly": "ថតដំឡើងមិនអាចសរសេរបានទេ — សូមទាញយក build ថ្មីដោយដៃ។",
+  "updates.settings.check": "ពិនិត្យរកបច្ចុប្បន្នភាពនៅពេលចាប់ផ្តើម",
+  "updates.settings.checkHint": "ការស្វែងរកតែអានម្តង ដែលរក្សាទុកក្នុងឃ្លាំងសម្រាប់ 12 ម៉ោង។ ការទាញយកកើតឡើងតែពេលអ្នកចុច ធ្វើបច្ចុប្បន្នភាពឥឡូវ។",
+  "updates.settings.checkNow": "ពិនិត្យឥឡូវ",
+  "updates.settings.upToDate": "អ្នកមានកំណែថ្មីបំផុតហើយ។",
+  "updates.settings.version": "កំណែ {version}"
 }

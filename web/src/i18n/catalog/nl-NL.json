@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "Runs",
   "trendPanel.tab.overview": "Overzicht",
   "trendPanel.tab.perCase": "Per case",
-  "trendPanel.title": "Trend"
+  "trendPanel.title": "Trend",
+  "updates.applied": "Gedownload en geverifieerd — vervangt zichzelf bij afsluiten en start daarna opnieuw.",
+  "updates.apply": "Nu bijwerken",
+  "updates.applyFailed": "Bijwerken mislukt — probeer het later opnieuw of download het vanaf de releasepagina.",
+  "updates.applying": "Downloaden en verifiëren…",
+  "updates.available": "Versie {version} is beschikbaar (je hebt {current})",
+  "updates.notes": "Release-opmerkingen",
+  "updates.reason.checksumMismatch": "Checksum komt niet overeen — afgebroken, niets is gewijzigd.",
+  "updates.reason.macos": "Download op macOS de nieuwe build handmatig (in-place vervanging is geblokkeerd).",
+  "updates.reason.noAssetForPlatform": "Die release heeft geen build voor dit platform.",
+  "updates.reason.noChecksum": "Die release publiceert geen checksum en vervangt zichzelf dus niet.",
+  "updates.reason.notPackaged": "Dit is een source- of package-installatie — werk bij met git of pip.",
+  "updates.reason.readOnly": "De installatiemap is niet beschrijfbaar — download de nieuwe build handmatig.",
+  "updates.settings.check": "Bij opstarten controleren op updates",
+  "updates.settings.checkHint": "Eén read-only lookup, 12 uur gecachet. Er wordt alleen gedownload als je op Nu bijwerken klikt.",
+  "updates.settings.checkNow": "Nu controleren",
+  "updates.settings.upToDate": "Je bent up-to-date.",
+  "updates.settings.version": "Versie {version}"
 }

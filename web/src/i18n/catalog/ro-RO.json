@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "Rulări",
   "trendPanel.tab.overview": "Prezentare generală",
   "trendPanel.tab.perCase": "Pe caz",
-  "trendPanel.title": "Tendință"
+  "trendPanel.title": "Tendință",
+  "updates.applied": "Descărcată și verificată — se înlocuiește la închidere, apoi repornește.",
+  "updates.apply": "Actualizează acum",
+  "updates.applyFailed": "Actualizarea a eșuat — încearcă mai târziu sau descarcă-o de pe pagina de release.",
+  "updates.applying": "Se descarcă și se verifică…",
+  "updates.available": "Versiunea {version} este disponibilă (ai {current})",
+  "updates.notes": "Note de release",
+  "updates.reason.checksumMismatch": "Checksum nepotrivit — anulat, nimic nu a fost modificat.",
+  "updates.reason.macos": "Pe macOS, descarcă manual noua versiune (înlocuirea pe loc este blocată).",
+  "updates.reason.noAssetForPlatform": "Acea versiune nu are un build pentru această platformă.",
+  "updates.reason.noChecksum": "Acea versiune nu publică un checksum, deci nu se va auto-înlocui.",
+  "updates.reason.notPackaged": "Aceasta este o instalare din surse sau din pachet — actualizează cu git sau pip.",
+  "updates.reason.readOnly": "Directorul de instalare nu este inscriptibil — descarcă manual noua versiune.",
+  "updates.settings.check": "Verifică actualizările la pornire",
+  "updates.settings.checkHint": "O singură interogare read-only, memorată 12 ore. O descărcare are loc doar când apeși Actualizează acum.",
+  "updates.settings.checkNow": "Verifică acum",
+  "updates.settings.upToDate": "Ești la zi.",
+  "updates.settings.version": "Versiunea {version}"
 }

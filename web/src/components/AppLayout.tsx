@@ -52,6 +52,7 @@ import ChatSidebar from './ChatSidebar';
 import { SettingsDrawer } from './SettingsDrawer';
 import WorkbenchPanel from './WorkbenchPanel';
 import TaskTracker from './TaskTracker';
+import UpdateBanner from './UpdateBanner';
 
 const { Header, Sider, Content } = Layout;
 
@@ -293,6 +294,7 @@ const AppLayout: React.FC = () => {
           <ChatSidebar />
         </Sider>
         <Content style={{ background: tokens.bgBase, overflow: 'hidden' }}>
+          <UpdateBanner />
           <Outlet />
         </Content>
         {/* Right-side Workbench. When open it hosts WorkbenchPanel

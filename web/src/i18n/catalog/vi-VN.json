@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "Số lần chạy",
   "trendPanel.tab.overview": "Tổng quan",
   "trendPanel.tab.perCase": "Theo用例",
-  "trendPanel.title": "Xu hướng"
+  "trendPanel.title": "Xu hướng",
+  "updates.applied": "Đã tải và xác minh — sẽ tự thay thế khi bạn thoát, rồi khởi động lại.",
+  "updates.apply": "Cập nhật ngay",
+  "updates.applyFailed": "Cập nhật thất bại — thử lại sau, hoặc tải từ trang phát hành.",
+  "updates.applying": "Đang tải và xác minh…",
+  "updates.available": "Đã có phiên bản {version} (bạn đang dùng {current})",
+  "updates.notes": "Ghi chú phát hành",
+  "updates.reason.checksumMismatch": "Checksum không khớp — đã hủy, không có gì bị thay đổi.",
+  "updates.reason.macos": "Trên macOS, hãy tải bản dựng mới thủ công (không thể thay thế tại chỗ).",
+  "updates.reason.noAssetForPlatform": "Bản phát hành đó không có bản dựng cho nền tảng này.",
+  "updates.reason.noChecksum": "Bản phát hành đó không công bố checksum, nên sẽ không tự thay thế.",
+  "updates.reason.notPackaged": "Đây là bản cài từ mã nguồn hoặc gói — nâng cấp bằng git hoặc pip.",
+  "updates.reason.readOnly": "Thư mục cài đặt không ghi được — hãy tải bản dựng mới thủ công.",
+  "updates.settings.check": "Kiểm tra cập nhật khi khởi động",
+  "updates.settings.checkHint": "Một lần tra cứu chỉ đọc, lưu đệm 12 giờ. Chỉ tải xuống khi bạn bấm Cập nhật ngay.",
+  "updates.settings.checkNow": "Kiểm tra ngay",
+  "updates.settings.upToDate": "Bạn đã dùng bản mới nhất.",
+  "updates.settings.version": "Phiên bản {version}"
 }

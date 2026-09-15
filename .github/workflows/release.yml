@@ -273,6 +273,17 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      # The in-app updater refuses to replace an install whose release does not
+      # publish a checksum: verify-then-execute is the one guarantee worth
+      # having in an auto-updater, and it has to come from this same build.
+      - name: Publish SHA256SUMS
+        run: |
+          set -eu
+          cd artifacts
+          find . -maxdepth 1 -type f ! -name 'SHA256SUMS' -printf '%f\n' \
+            | sort | xargs -r sha256sum > SHA256SUMS
+          cat SHA256SUMS
+
       - name: Attach everything to the Release
         env:
           GH_TOKEN: ${{ github.token }}

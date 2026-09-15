@@ -1,0 +1,19 @@
+{
+  "updates.available": { "zh": "有新版本 {version}（当前 {current}）", "en": "Version {version} is available (you have {current})" },
+  "updates.apply": { "zh": "立即更新", "en": "Update now" },
+  "updates.applyFailed": { "zh": "更新失败，请稍后重试，或到发布页手动下载。", "en": "Update failed — try again later, or download it from the release page." },
+  "updates.applied": { "zh": "已下载并通过校验 —— 退出应用后自动替换并重启。", "en": "Downloaded and verified — it replaces itself when you quit, then restarts." },
+  "updates.applying": { "zh": "正在下载并校验…", "en": "Downloading and verifying…" },
+  "updates.notes": { "zh": "查看说明", "en": "Release notes" },
+  "updates.reason.checksumMismatch": { "zh": "校验和不符，已中止 —— 文件未做任何改动。", "en": "Checksum mismatch — aborted, nothing was changed." },
+  "updates.reason.macos": { "zh": "macOS 上请手动下载新版本（系统会拦截就地替换）。", "en": "On macOS, download the new build manually (in-place replacement is blocked)." },
+  "updates.reason.noAssetForPlatform": { "zh": "该版本没有适配当前平台的安装包。", "en": "That release has no build for this platform." },
+  "updates.reason.noChecksum": { "zh": "该版本未发布校验和，已拒绝自动替换（只提示，不下载执行）。", "en": "That release publishes no checksum, so it will not self-replace." },
+  "updates.reason.notPackaged": { "zh": "当前是源码或包安装，请用 git pull / pip 升级。", "en": "This is a source or package install — upgrade with git or pip." },
+  "updates.reason.readOnly": { "zh": "安装目录不可写，请手动下载新版本。", "en": "The install directory is not writable — download the new build manually." },
+  "updates.settings.check": { "zh": "启动时检查更新", "en": "Check for updates on start" },
+  "updates.settings.checkHint": { "zh": "只做一次只读查询（缓存 12 小时）。下载只在你点击「立即更新」时发生。", "en": "One read-only lookup, cached for 12 hours. A download only happens when you click Update now." },
+  "updates.settings.checkNow": { "zh": "检查更新", "en": "Check now" },
+  "updates.settings.upToDate": { "zh": "已是最新版本。", "en": "You are up to date." },
+  "updates.settings.version": { "zh": "当前版本 {version}", "en": "Version {version}" }
+}

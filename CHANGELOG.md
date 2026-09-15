@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project aims at
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reaches 1.0.
 
+## [Unreleased]
+
+### Added
+
+- **The app can update itself — one click, and only when it can prove what it
+  downloads.** A cached, read-only check against GitHub Releases
+  (`GET /api/update/check`) feeds a banner in the app shell and a version row in
+  About; **Update now** downloads the release asset, verifies the SHA-256 the
+  same CI run published in `SHA256SUMS`, and hands the swap to a detached helper
+  that replaces the binary after you quit and starts it again. Where
+  self-replacement is not possible — macOS, `pip`/source installs, a read-only
+  install directory, a release with no published checksum — the banner says why
+  and points at the release page. The release workflow now publishes
+  `SHA256SUMS` for every artifact.
+
 ## [0.1.4] - 2026-09-13
 
 ### Added

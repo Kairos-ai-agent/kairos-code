@@ -1266,6 +1266,61 @@ const FeedbackRow: React.FC = () => {
 };
 
 
+/**
+ * R38.9: "which version am I on" belongs in About. The check here is the same
+ * cached, read-only lookup the banner uses — forced, because the user asked.
+ */
+const UpdateSettingsRow: React.FC = () => {
+  const t = useT();
+  const tokens = useThemeTokens();
+  const [version, setVersion] = useState('');
+  const [checking, setChecking] = useState(false);
+  const [result, setResult] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    api.get<{ version: string }>('/update/status')
+      .then((r) => { if (alive) setVersion(String(r.data?.version || '')); })
+      .catch(() => { /* a cosmetic panel never surfaces an error */ });
+    return () => { alive = false; };
+  }, []);
+
+  const checkNow = async () => {
+    setChecking(true);
+    try {
+      const r = await api.get<{ hasUpdate: boolean; latest: string; current: string }>(
+        '/update/check?force=true');
+      setResult(r.data?.hasUpdate
+        ? t('updates.available', { version: r.data.latest, current: r.data.current })
+        : t('updates.settings.upToDate'));
+    } catch {
+      setResult(t('updates.applyFailed'));
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  return (
+    <Space direction="vertical" size={4} style={{ width: '100%' }}
+           data-testid="about-update-row">
+      {version ? (
+        <Text style={{ color: tokens.labelTertiary, fontSize: 12 }}>
+          {t('updates.settings.version', { version })}
+        </Text>
+      ) : null}
+      <Space size={8} align="center" wrap>
+        <Button size="small" icon={<ReloadOutlined />} loading={checking}
+                onClick={checkNow} data-testid="about-check-updates">
+          {t('updates.settings.checkNow')}
+        </Button>
+        {result ? (
+          <Text style={{ color: tokens.labelTertiary, fontSize: 12 }}>{result}</Text>
+        ) : null}
+      </Space>
+    </Space>
+  );
+};
+
 const AboutPanel: React.FC = () => {
   const t = useT();
   const tokens = useThemeTokens();
@@ -1313,6 +1368,7 @@ const AboutPanel: React.FC = () => {
           {t('settings.model3')} {model}
         </Text>
       ) : null}
+      <UpdateSettingsRow />
     </Space>
   );
 };

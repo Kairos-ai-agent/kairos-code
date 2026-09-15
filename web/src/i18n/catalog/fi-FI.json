@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "Ajot",
   "trendPanel.tab.overview": "Yleiskatsaus",
   "trendPanel.tab.perCase": "Tapauskohtainen",
-  "trendPanel.title": "Trendi"
+  "trendPanel.title": "Trendi",
+  "updates.applied": "Ladattu ja vahvistettu — se korvaa itsensä, kun lopetat, ja käynnistyy sitten uudelleen.",
+  "updates.apply": "Päivitä nyt",
+  "updates.applyFailed": "Päivitys epäonnistui — yritä myöhemmin uudelleen tai lataa se julkaisusivulta.",
+  "updates.applying": "Ladataan ja vahvistetaan…",
+  "updates.available": "Versio {version} on saatavilla (sinulla on {current})",
+  "updates.notes": "Julkaisutiedot",
+  "updates.reason.checksumMismatch": "Tarkistussumma ei täsmää — keskeytetty, mitään ei muutettu.",
+  "updates.reason.macos": "macOS:lla lataa uusi koontiversio manuaalisesti (paikalla korvaaminen on estetty).",
+  "updates.reason.noAssetForPlatform": "Tässä julkaisussa ei ole koontiversiota tälle alustalle.",
+  "updates.reason.noChecksum": "Tämä julkaisu ei sisällä tarkistussummaa, joten se ei korvaa itseään.",
+  "updates.reason.notPackaged": "Tämä on lähdekoodi- tai pakettiasennus — päivitä gitillä tai pipillä.",
+  "updates.reason.readOnly": "Asennushakemisto ei ole kirjoitettavissa — lataa uusi koontiversio manuaalisesti.",
+  "updates.settings.check": "Tarkista päivitykset käynnistyksen yhteydessä",
+  "updates.settings.checkHint": "Yksi vain luku -haku, välimuistissa 12 tuntia. Lataus tapahtuu vain, kun napsautat Päivitä nyt.",
+  "updates.settings.checkNow": "Tarkista nyt",
+  "updates.settings.upToDate": "Sinulla on uusin versio.",
+  "updates.settings.version": "Versio {version}"
 }

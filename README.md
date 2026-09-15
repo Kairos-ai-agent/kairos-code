@@ -187,6 +187,32 @@ kairos serve --host 127.0.0.1 --port 8900
 Open http://127.0.0.1:8900 — the API serves the built UI, `/docs` has the
 interactive API reference.
 
+### Updating
+
+The packaged app checks GitHub for a newer release — a read-only lookup, cached
+for 12 hours, switched off entirely with `KAIROS_NO_UPDATE_CHECK=1` (or
+`"updates": {"check": false}` in `settings.json`). When one exists, a banner
+appears: **Update now** downloads the asset, verifies the SHA-256 that the same
+CI run published in `SHA256SUMS`, and hands the swap to a small helper that
+replaces the binary after you quit and starts it again.
+
+Self-replacement only happens where it can: the standalone binary on Windows and
+Linux, in a writable directory, when the release publishes a checksum. A release
+without one is never executed — the banner becomes a pointer to the release page
+instead. On macOS, and for package/source installs, it only notifies:
+
+```bash
+# wheel / pipx
+pipx upgrade kairos-code      # or: pip install -U kairos-code
+# source checkout
+git pull && pip install -e ".[dev]"
+# docker
+docker compose pull && docker compose up -d
+```
+
+Nothing is downloaded on startup, ever; the check is one cached lookup and the
+download only happens when you click.
+
 ### Optional extras
 
 Every one of these is imported lazily: the base install works without them.

@@ -30,6 +30,7 @@ from api.routes.websocket import router as ws_router
 from api.routes.memory import router as memory_router
 from api.routes.teams import router as teams_router
 from api.routes.checkpoints import router as checkpoints_router
+from api.routes.update import router as update_router
 from api.routes.traces import router as traces_router
 from api.routes.cloud import router as cloud_router
 from api.routes.cost import router as cost_router
@@ -277,6 +278,7 @@ app.include_router(feishu_routes.router, tags=["feishu"])
 # R38.6 §34: Borrowed features — Plan / Approval / Hooks / Skills /
 # Sandbox / Fork / IM / Memory / Providers
 app.include_router(borrowed_routes.router, tags=["borrowed"])
+app.include_router(update_router, prefix="/api/update", tags=["update"])
 # R38.6 §34: P2 features — Verification / Approval mode / Events /
 # Async / LSP / Trajectory / A2A
 from api.routes import p2_features as p2_features_routes

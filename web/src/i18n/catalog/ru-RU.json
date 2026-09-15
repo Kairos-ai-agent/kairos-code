@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "Запуски",
   "trendPanel.tab.overview": "Обзор",
   "trendPanel.tab.perCase": "По кейсам",
-  "trendPanel.title": "Тренд"
+  "trendPanel.title": "Тренд",
+  "updates.applied": "Скачано и проверено — заменится при выходе, затем перезапустится.",
+  "updates.apply": "Обновить",
+  "updates.applyFailed": "Не удалось обновить — попробуйте позже или скачайте со страницы релиза.",
+  "updates.applying": "Скачивание и проверка…",
+  "updates.available": "Доступна версия {version} (у вас {current})",
+  "updates.notes": "Заметки о релизе",
+  "updates.reason.checksumMismatch": "Несовпадение контрольной суммы — прервано, ничего не изменено.",
+  "updates.reason.macos": "В macOS скачайте новую сборку вручную (замена на месте заблокирована).",
+  "updates.reason.noAssetForPlatform": "В этом релизе нет сборки для данной платформы.",
+  "updates.reason.noChecksum": "В этом релизе нет контрольной суммы, поэтому самозамена невозможна.",
+  "updates.reason.notPackaged": "Это установка из исходников или пакета — обновляйте через git или pip.",
+  "updates.reason.readOnly": "Каталог установки недоступен для записи — скачайте новую сборку вручную.",
+  "updates.settings.check": "Проверять обновления при запуске",
+  "updates.settings.checkHint": "Один запрос только для чтения, кэшируется на 12 часов. Скачивание происходит только при нажатии «Обновить».",
+  "updates.settings.checkNow": "Проверить",
+  "updates.settings.upToDate": "У вас последняя версия.",
+  "updates.settings.version": "Версия {version}"
 }

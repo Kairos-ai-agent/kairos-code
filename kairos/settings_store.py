@@ -41,6 +41,16 @@ class VoiceSettings:
 
 
 @dataclass
+class UpdateSettings:
+    """R38.9: whether the app may ask GitHub for a newer release.
+
+    The *apply* step is never covered by this flag — it always needs an
+    explicit click — and the download only happens then either.
+    """
+    check: bool = True
+
+
+@dataclass
 class McpSettings:
     enabledServers: list = field(default_factory=lambda: ["filesystem"])
     permissionPrompt: bool = True
@@ -91,6 +101,7 @@ class Settings:
     mcp: McpSettings = field(default_factory=McpSettings)
     cloud: CloudSettings = field(default_factory=CloudSettings)
     metrics: MetricsSettings = field(default_factory=MetricsSettings)
+    updates: UpdateSettings = field(default_factory=UpdateSettings)
     ollama_base_url: str = ""          # http://127.0.0.1:11434 by default
     # New: free-form provider config keyed by model name. Used by
     # the cost / provider system to look up the API key env var.
@@ -315,6 +326,7 @@ def _to_dict(s: Settings) -> dict:
         },
         "cloud": asdict(s.cloud),
         "metrics": asdict(s.metrics),
+        "updates": asdict(s.updates),
         "ollama_base_url": s.ollama_base_url,
         "provider_env_map": dict(s.provider_env_map),
         "active_provider": s.active_provider,
@@ -349,6 +361,7 @@ def _from_dict(d: dict) -> Settings:
     )
     cloud = CloudSettings(**(d.get("cloud") or {}))
     metrics = MetricsSettings(**(d.get("metrics") or {}))
+    updates = UpdateSettings(**(d.get("updates") or {}))
     # Provider panel: prefer nested ``provider`` object; fall back to
     # the flat ``active_provider`` field (older settings.json files).
     nested_provider = d.get("provider") or {}
@@ -367,7 +380,7 @@ def _from_dict(d: dict) -> Settings:
         else (d.get("provider_anthropic") or {})
     )
     return Settings(
-        voice=voice, mcp=mcp, cloud=cloud, metrics=metrics,
+        voice=voice, mcp=mcp, cloud=cloud, metrics=metrics, updates=updates,
         ollama_base_url=str(d.get("ollama_base_url", "")),
         provider_env_map=dict(d.get("provider_env_map") or {}),
         active_provider=str(

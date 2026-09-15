@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "اجراها",
   "trendPanel.tab.overview": "نمای کلی",
   "trendPanel.tab.perCase": "به تفکیک مورد",
-  "trendPanel.title": "روند"
+  "trendPanel.title": "روند",
+  "updates.applied": "دانلود و تأیید شد — هنگام خروج خودش را جایگزین میکند، سپس دوباره راهاندازی میشود.",
+  "updates.apply": "اکنون بهروزرسانی کن",
+  "updates.applyFailed": "بهروزرسانی ناموفق بود — بعداً دوباره تلاش کنید یا آن را از صفحه انتشار دانلود کنید.",
+  "updates.applying": "در حال دانلود و تأیید…",
+  "updates.available": "نسخه {version} موجود است (شما {current} را دارید)",
+  "updates.notes": "یادداشتهای انتشار",
+  "updates.reason.checksumMismatch": "عدم تطابق checksum — لغو شد، هیچ چیزی تغییر نکرد.",
+  "updates.reason.macos": "در macOS، نسخه جدید را دستی دانلود کنید (جایگزینی درجا مسدود است).",
+  "updates.reason.noAssetForPlatform": "آن انتشار برای این پلتفرم نسخهای ندارد.",
+  "updates.reason.noChecksum": "آن انتشار هیچ checksumی منتشر نمیکند، بنابراین خودش را جایگزین نمیکند.",
+  "updates.reason.notPackaged": "این یک نصب از منبع یا بسته است — با git یا pip ارتقا دهید.",
+  "updates.reason.readOnly": "پوشه نصب قابل نوشتن نیست — نسخه جدید را دستی دانلود کنید.",
+  "updates.settings.check": "بررسی بهروزرسانیها هنگام شروع",
+  "updates.settings.checkHint": "یک جستجوی فقطخواندنی، به مدت ۱۲ ساعت کش میشود. دانلود فقط وقتی رخ میدهد که روی «اکنون بهروزرسانی کن» کلیک کنید.",
+  "updates.settings.checkNow": "اکنون بررسی کن",
+  "updates.settings.upToDate": "شما بهروز هستید.",
+  "updates.settings.version": "نسخه {version}"
 }

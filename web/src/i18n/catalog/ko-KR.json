@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "실행 횟수",
   "trendPanel.tab.overview": "개요",
   "trendPanel.tab.perCase": "케이스별",
-  "trendPanel.title": "추세"
+  "trendPanel.title": "추세",
+  "updates.applied": "다운로드 및 검증 완료 — 종료 시 자체 교체된 후 재시작됩니다.",
+  "updates.apply": "지금 업데이트",
+  "updates.applyFailed": "업데이트 실패 — 나중에 다시 시도하거나 릴리스 페이지에서 다운로드하세요.",
+  "updates.applying": "다운로드 및 검증 중…",
+  "updates.available": "버전 {version} 사용 가능 (현재 {current})",
+  "updates.notes": "릴리스 노트",
+  "updates.reason.checksumMismatch": "체크섬 불일치 — 중단되었으며 변경된 사항은 없습니다.",
+  "updates.reason.macos": "macOS에서는 새 빌드를 수동으로 다운로드하세요 (제자리 교체가 차단됨).",
+  "updates.reason.noAssetForPlatform": "해당 릴리스에는 이 플랫폼용 빌드가 없습니다.",
+  "updates.reason.noChecksum": "해당 릴리스는 체크섬을 게시하지 않으므로 자체 교체되지 않습니다.",
+  "updates.reason.notPackaged": "소스 또는 패키지 설치입니다 — git 또는 pip로 업그레이드하세요.",
+  "updates.reason.readOnly": "설치 디렉터리에 쓸 수 없습니다 — 새 빌드를 수동으로 다운로드하세요.",
+  "updates.settings.check": "시작 시 업데이트 확인",
+  "updates.settings.checkHint": "읽기 전용 조회 1회, 12시간 동안 캐시됩니다. 다운로드는 '지금 업데이트'를 클릭할 때만 발생합니다.",
+  "updates.settings.checkNow": "지금 확인",
+  "updates.settings.upToDate": "최신 버전입니다.",
+  "updates.settings.version": "버전 {version}"
 }

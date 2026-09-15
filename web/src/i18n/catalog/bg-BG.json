@@ -1104,5 +1104,22 @@
   "trendPanel.stat.runs": "Изпълнения",
   "trendPanel.tab.overview": "Преглед",
   "trendPanel.tab.perCase": "По случай",
-  "trendPanel.title": "Тенденция"
+  "trendPanel.title": "Тенденция",
+  "updates.applied": "Изтеглено и проверено — заменя се при изход, след което се рестартира.",
+  "updates.apply": "Обнови сега",
+  "updates.applyFailed": "Обновяването не успя — опитайте по-късно или го изтеглете от страницата с изданието.",
+  "updates.applying": "Изтегляне и проверка…",
+  "updates.available": "Налична е версия {version} (вие сте с {current})",
+  "updates.notes": "Бележки по изданието",
+  "updates.reason.checksumMismatch": "Несъвпадаща контролна сума — преустановено, нищо не е променено.",
+  "updates.reason.macos": "На macOS изтеглете новата версия ръчно (замяната на място е блокирана).",
+  "updates.reason.noAssetForPlatform": "Това издание няма версия за тази платформа.",
+  "updates.reason.noChecksum": "Това издание не публикува контролна сума, затова няма да се самоreplace.",
+  "updates.reason.notPackaged": "Това е инсталация от изходен код или пакет — надградете с git или pip.",
+  "updates.reason.readOnly": "Директорията за инсталация не е за запис — изтеглете новата версия ръчно.",
+  "updates.settings.check": "Проверка за обновления при стартиране",
+  "updates.settings.checkHint": "Една заявка само за четене, кеширана за 12 часа. Изтегляне се случва само когато натиснете Обнови сега.",
+  "updates.settings.checkNow": "Провери сега",
+  "updates.settings.upToDate": "Имате най-новата версия.",
+  "updates.settings.version": "Версия {version}"
 }

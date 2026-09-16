@@ -20,7 +20,7 @@ import { LANGS, tGlobal, useI18n, useT } from '../i18n';
 import { useSettingsStore, CoderMode, TtsProvider, SttProvider, LlmProvider, ProviderSettings } from '../stores/settingsStore';
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
-import { LLM_PRESETS, matchPreset, getPreset, CUSTOM_MODEL } from '../llm/presets';
+import { LLM_PRESETS, LLMPreset, matchPreset, getPreset, CUSTOM_MODEL } from '../llm/presets';
 import api from '../api/client';
 import { formatError } from '../utils/formatError';
 import { openFeedbackIssue } from '../utils/feedback';
@@ -442,6 +442,7 @@ const ProviderPanel: React.FC = () => {
       <div>
         <Text style={{ color: tokens.labelPrimary }}>{t('settings.activeProvider')}</Text>
         <Select
+          data-testid="llm-active-provider"
           style={{ width: '100%', marginTop: 4 }}
           value={provider.active}
           onChange={(v: LlmProvider) => setProvider({ active: v })}
@@ -498,6 +499,205 @@ const ProviderPanel: React.FC = () => {
     </Space>
   );
 };
+
+/**
+ * The model control: fetch the provider's list, pick from it, or type your own.
+ *
+ * Extracted because the two provider forms each grew their own copy and only one
+ * of them ever got the fetch button — selecting Anthropic showed a bare text
+ * input with no way to ask the endpoint what it serves. One implementation, one
+ * `protocol` argument, and the two cannot drift again.
+ *
+ * The list is re-fetched, never remembered: models from one endpoint bleeding
+ * into another provider's dropdown is worse than an empty dropdown.
+ */
+const ModelField: React.FC<{
+  value: { endpointUrl: string; apiKey: string; model: string };
+  onChange: (patch: Partial<{ model: string }>) => void;
+  protocol: 'openai' | 'anthropic';
+  preset: LLMPreset;
+}> = ({ value, onChange, protocol, preset }) => {
+  const t = useT();
+  const tokens = useThemeTokens();
+  const [fetchedModels, setFetchedModels] = useState<string[]>([]);
+  const [fetchingModels, setFetchingModels] = useState(false);
+  const [modelFetchError, setModelFetchError] = useState<string | null>(null);
+  const [lastFetchedKey, setLastFetchedKey] = useState<string>('');
+  // The saved model may not be in the fetched list (a fetch failed last time, or
+  // the user typed their own). Remember it so the Select still has something
+  // valid to display.
+  const [pinnedModel, setPinnedModel] = useState<string>(value.model);
+
+  // A different endpoint means a different catalogue: drop the old list rather
+  // than let one provider's models sit in another's dropdown.
+  useEffect(() => {
+    setFetchedModels([]);
+    setModelFetchError(null);
+    setLastFetchedKey('');
+  }, [value.endpointUrl]);
+
+  // The fetch endpoint appends "/models" itself, so the full URL is trimmed back
+  // to the root it should hang off — for either protocol.
+  const fetchBaseUrl = useMemo(() => {
+    const u = (value.endpointUrl || '').trim();
+    if (!u) return '';
+    return u
+      .replace(/\/chat\/completions\/?$/i, '')
+      .replace(/\/messages\/?$/i, '')
+      .replace(/\/$/, '');
+  }, [value.endpointUrl]);
+
+  const applyModel = (m: string) => {
+    if (m === CUSTOM_MODEL) {
+      // Switch to free-text, keeping the current value so it can be edited.
+      onChange({ model: pinnedModel || value.model });
+      return;
+    }
+    setPinnedModel(m);
+    onChange({ model: m });
+  };
+
+  const fetchModels = useCallback(async () => {
+    if (!fetchBaseUrl) {
+      setModelFetchError(t('settings.needEndpointUrl'));
+      return;
+    }
+    if (!value.apiKey.trim()) {
+      setModelFetchError(t('settings.needApiKey'));
+      return;
+    }
+    setFetchingModels(true);
+    setModelFetchError(null);
+    try {
+      const r = await api.post<{
+        models: Array<{ id: string; name?: string }>;
+        count: number;
+        error?: string;
+        note?: string;
+      }>('/config/models/custom/fetch', {
+        base_url: fetchBaseUrl,
+        api_key: value.apiKey || '',
+        // The protocol of the form this control lives in. It used to be the
+        // hardcoded string "openai", which is why an Anthropic endpoint was
+        // always asked the OpenAI way and never answered with a model list.
+        protocol,
+      });
+      const list = (r.data.models || []).map((m) => m.id).filter(Boolean);
+      setFetchedModels(list);
+      setLastFetchedKey(`${fetchBaseUrl}#${list.length}`);
+      // Surface the backend's reason (unreachable host, no /v1/models, …) so the
+      // click never silently does nothing. `note` is informational on success and
+      // the line under the Select already reports it — treating it as an error
+      // labelled a SUCCESSFUL fetch as a failure.
+      setModelFetchError(r.data.error || null);
+    } catch (e: any) {
+      setModelFetchError(String(formatError(e, '拉取失败')));
+    } finally {
+      setFetchingModels(false);
+    }
+  }, [fetchBaseUrl, value.apiKey, protocol, t]);
+
+  // Options: the fetched list, plus the current model (covers a failed fetch or a
+  // hand-typed id), plus the preset's default, plus the escape hatch. Deduped.
+  const modelOptions: Array<{ value: string; label: string }> = [];
+  const seen = new Set<string>();
+  const addOption = (id: string, label?: string) => {
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    modelOptions.push({ value: id, label: label || id });
+  };
+  fetchedModels.forEach((m) => addOption(m));
+  const current = pinnedModel || value.model;
+  addOption(current, current ? `${current} (当前)` : '');
+  addOption(preset.defaultModel,
+            preset.defaultModel ? `${preset.defaultModel} (默认)` : '');
+  addOption(CUSTOM_MODEL, 'Custom (自填 model)');
+  const modelSelectValue = value.model || undefined;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center',
+                    justifyContent: 'space-between', marginBottom: 6 }}>
+        <Text style={{ color: tokens.labelPrimary }}>{t('settings.model')}</Text>
+        <Button
+          size="small"
+          type="link"
+          data-testid="llm-fetch-models"
+          icon={<ReloadOutlined />}
+          loading={fetchingModels}
+          disabled={!fetchBaseUrl || !value.apiKey}
+          onClick={fetchModels}
+          style={{ padding: 0 }}
+        >
+          {fetchedModels.length > 0
+            ? t('settings.fetchModelsAgain', { n: fetchedModels.length })
+            : t('settings.fetchModels')}
+        </Button>
+      </div>
+      <Select
+        data-testid="llm-model-select"
+        style={{ width: '100%' }}
+        value={modelSelectValue}
+        onChange={applyModel}
+        showSearch
+        placeholder={
+          fetchedModels.length > 0
+            ? t('settings.fetchModelsPick')
+            : (preset.defaultModel || t('settings.fetchModelsFirst'))}
+        options={modelOptions}
+        onInputKeyDown={(e) => {
+          // Escape hatch when the fetch fails (backend down, a key without
+          // /models scope, an endpoint that has none): type the id, press Enter.
+          const el = e.currentTarget as unknown as HTMLInputElement;
+          const typed = (el?.value || '').trim();
+          if (e.key === 'Enter' && typed) {
+            e.preventDefault();
+            applyModel(typed);
+          }
+        }}
+        filterOption={(input, option) =>
+          (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
+        }
+        notFoundContent={
+          fetchedModels.length === 0
+            ? t('settings.fetchModelsCurrent')
+            : '无匹配'
+        }
+      />
+      {modelSelectValue === CUSTOM_MODEL && (
+        <Input
+          data-testid="llm-model-custom"
+          style={{ marginTop: 6 }}
+          value={value.model}
+          onChange={(e) => onChange({ model: e.target.value })}
+          placeholder={t('settings.typeAModelNotInTheListEGMyFineTune7b')}
+        />
+      )}
+      {modelFetchError && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginTop: 6 }}
+          message={t('settings.model')}
+          description={modelFetchError}
+        />
+      )}
+      {!modelFetchError && lastFetchedKey && (
+        <Text style={{ color: tokens.labelTertiary, fontSize: 11,
+                        display: 'block', marginTop: 4 }}>
+          {t('settings.label')} {fetchBaseUrl} {t('settings.label')} {fetchedModels.length} {t('settings.modelProviderEndpointURL')}
+        </Text>
+      )}
+      {!modelFetchError && !lastFetchedKey && (
+        <Text style={{ color: tokens.labelTertiary, fontSize: 11,
+                        display: 'block', marginTop: 4 }}>
+          {t('settings.endpointURLAPIKeyModelProviderModelModelCustomMo')}
+        </Text>
+      )}
+    </div>
+  );
+};
+
 
 const OpenAICompatForm: React.FC<{
   value: {
@@ -597,49 +797,18 @@ const OpenAICompatForm: React.FC<{
   // another's dropdown) and would also go stale the moment
   // any provider adds a new model. Live fetch is the only
   // source of truth.
-  const [fetchedModels, setFetchedModels] = useState<string[]>([]);
-  const [fetchingModels, setFetchingModels] = useState(false);
-  const [modelFetchError, setModelFetchError] = useState<string | null>(null);
-  const [lastFetchedKey, setLastFetchedKey] = useState<string>('');
-  // The model the user has saved may not be in the fetched
-  // list (e.g. fetch failed last time, or they typed a custom
-  // model). We remember it so the Select still has a valid
-  // value to display.
-  const [pinnedModel, setPinnedModel] = useState<string>(value.model);
-
-  // R38.6 §28.2: derive the base URL by stripping the
-  // "/chat/completions" suffix. The fetch endpoint expects
-  // just the base (it appends "/models" itself).
-  const fetchBaseUrl = useMemo(() => {
-    const u = (value.endpointUrl || '').trim();
-    if (!u) return '';
-    // Strip common suffixes so /models is appended to the root
-    return u
-      .replace(/\/chat\/completions\/?$/i, '')
-      .replace(/\/messages\/?$/i, '')
-      .replace(/\/$/, '');
-  }, [value.endpointUrl]);
-
   const applyPreset = (id: string) => {
     setPresetId(id);
-    setFetchedModels([]);  // clear — old list belonged to the
-                            // previous provider
-    setModelFetchError(null);
-    setLastFetchedKey('');
     if (id === 'custom') return;  // user fills in manually
     const p = getPreset(id);
     // Write into the slot the preset's protocol belongs to, AND switch the
-    // active provider to that slot. Going through the local `onChange` would
-    // be wrong here: each form binds it to its own slot
+    // active provider to that slot. Going through this form's `onChange` would
+    // be wrong: each form binds it to its own slot
     // (setProvider({ openai: {...} }) / { anthropic: {...} }), so an `active`
-    // key passed that way lands *inside* provider.openai as a stray field
-    // while provider.active stays put — the URL would show, the calls would
-    // keep going to the old provider.
+    // key passed that way lands *inside* provider.openai as a stray field while
+    // provider.active stays put — the URL would show and the calls would keep
+    // going to the old provider.
     const slot = p.protocol === 'anthropic' ? 'anthropic' : 'openai';
-    // Read the live store rather than this form's props: applyPreset is an
-    // event handler, and the slot it must write to is not necessarily the one
-    // this form is bound to (picking Anthropic while the OpenAI form is shown
-    // is the normal case).
     const snapshot = useSettingsStore.getState().provider;
     useSettingsStore.getState().setProvider({
       active: slot,
@@ -649,111 +818,9 @@ const OpenAICompatForm: React.FC<{
         model: p.defaultModel || snapshot[slot].model,
       },
     } as Partial<ProviderSettings>);
-    if (p.defaultModel) setPinnedModel(p.defaultModel);
   };
-
-  const applyModel = (m: string) => {
-    if (m === CUSTOM_MODEL) {
-      // Switch to free-text — keep current model so the user
-      // can edit it in place.
-      onChange({ model: pinnedModel || value.model });
-      return;
-    }
-    setPinnedModel(m);
-    onChange({ model: m });
-  };
-
-  const fetchModels = useCallback(async () => {
-    if (!fetchBaseUrl) {
-      setModelFetchError(t('settings.needEndpointUrl'));
-      return;
-    }
-    if (!value.apiKey.trim()) {
-      setModelFetchError(t('settings.needApiKey'));
-      return;
-    }
-    setFetchingModels(true);
-    setModelFetchError(null);
-    try {
-      const r = await api.post<{
-        models: Array<{ id: string; name?: string }>;
-        count: number;
-        error?: string;
-        note?: string;
-      }>('/config/models/custom/fetch', {
-        base_url: fetchBaseUrl,
-        api_key: value.apiKey || '',
-        // Was hardcoded 'openai', which is why the backend's Anthropic branch
-        // was unreachable: an Anthropic endpoint was always asked the OpenAI
-        // way and the answer was never a model list.
-        protocol: preset.protocol ?? 'openai',
-      });
-      const list = (r.data.models || []).map((m) => m.id).filter(Boolean);
-      setFetchedModels(list);
-      setLastFetchedKey(`${fetchBaseUrl}#${list.length}`);
-      // Surface the backend's failure reason (e.g. "ConnectTimeout"
-      // when the endpoint is unreachable) so the click never
-      // silently does nothing. `error` is set by
-      // /api/config/models/custom/fetch when the provider call
-      // failed; `note` is informational on success (e.g. "fetched 3
-      // models from https://api.deepseek.com/v1") and the success
-      // line under the Select already reports it — treating `note`
-      // as an error labelled a SUCCESSFUL fetch "拉取 model 列表失败".
-      setModelFetchError(r.data.error || null);
-      // If the current model is not in the fetched list and
-      // the Select is showing it, keep it (don't blow it
-      // away). The Select's options will list fetched + the
-      // current pinned value.
-    } catch (e: any) {
-      const msg = formatError(e, '拉取失败');
-      setModelFetchError(String(msg));
-    } finally {
-      setFetchingModels(false);
-    }
-  }, [fetchBaseUrl, value.apiKey]);
 
   const preset = getPreset(presetId);
-  // Build the Select's options: fetched list (if any) + the
-  // currently-saved model (in case it's not in the list) +
-  // Custom. De-duplicate so the same model isn't listed twice.
-  const modelOptions: Array<{ value: string; label: string }> = [];
-  const seen = new Set<string>();
-  const addOption = (id: string, label?: string) => {
-    if (!id || seen.has(id)) return;
-    seen.add(id);
-    modelOptions.push({ value: id, label: label || id });
-  };
-  fetchedModels.forEach((m) => addOption(m));
-  // The "current" / pinned model — show it even if not in the
-  // fetched list (covers "fetch failed last time" and
-  // "user typed a custom model").
-  addOption(pinnedModel || value.model,
-            pinnedModel || value.model
-              ? `${pinnedModel || value.model} (当前)`
-              : '');
-  // The preset's default model — shown when fetch hasn't
-  // happened yet so the user at least sees what we'd default
-  // to.
-  addOption(preset.defaultModel,
-            preset.defaultModel
-              ? `${preset.defaultModel} (默认)`
-              : '');
-  // Always offer Custom as the escape hatch.
-  addOption(CUSTOM_MODEL, 'Custom (自填 model)');
-
-  // The Select's current value:
-  //   - If user picked Custom → CUSTOM_MODEL
-  //   - If the saved model is in the options → show it
-  //   - Otherwise → fall back to the first fetched model, or
-  //     the preset default, or the saved model pinned.
-  const modelSelectValue = (() => {
-    if (!value.model) return undefined;
-    if (seen.has(value.model)) return value.model;
-    return value.model;  // still render it even if not in
-                          // seen — AntD Select allows arbitrary
-                          // values to display, the user can
-                          // switch to one in the list
-  })();
 
   return (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
@@ -874,89 +941,7 @@ const OpenAICompatForm: React.FC<{
           placeholder={t('settings.sk')}
         />
       </div>
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center',
-                      justifyContent: 'space-between', marginBottom: 6 }}>
-          <Text style={{ color: tokens.labelPrimary }}>{t('settings.model')}</Text>
-          <Button
-            size="small"
-            type="link"
-            data-testid="llm-fetch-models"
-            icon={<ReloadOutlined />}
-            loading={fetchingModels}
-            disabled={!fetchBaseUrl || !value.apiKey}
-            onClick={fetchModels}
-            style={{ padding: 0 }}
-          >
-            {fetchedModels.length > 0
-              ? t('settings.fetchModelsAgain', { n: fetchedModels.length })
-              : t('settings.fetchModels')}
-          </Button>
-        </div>
-        <Select
-          data-testid="llm-model-select"
-          style={{ width: '100%' }}
-          value={modelSelectValue}
-          onChange={applyModel}
-          showSearch
-          placeholder={
-            fetchedModels.length > 0
-              ? t('settings.fetchModelsPick')
-              : (preset.defaultModel || t('settings.fetchModelsFirst'))}
-          options={modelOptions}
-          onInputKeyDown={(e) => {
-            // Escape hatch when 「拉取 model 列表」 fails (backend down,
-            // key without /models scope, …): type the model id in the
-            // search box and press Enter to use it as-is.
-            const el = e.currentTarget as unknown as HTMLInputElement;
-            const typed = (el?.value || '').trim();
-            if (e.key === 'Enter' && typed) {
-              e.preventDefault();
-              applyModel(typed);
-            }
-          }}
-          filterOption={(input, option) =>
-            (option?.label as string ?? '')
-              .toLowerCase()
-              .includes(input.toLowerCase())
-          }
-          notFoundContent={
-            fetchedModels.length === 0
-              ? t('settings.fetchModelsCurrent')
-              : '无匹配'
-          }
-        />
-        {modelSelectValue === CUSTOM_MODEL && (
-          <Input
-            data-testid="llm-model-custom"
-            style={{ marginTop: 6 }}
-            value={value.model}
-            onChange={(e) => onChange({ model: e.target.value })}
-            placeholder={t('settings.typeAModelNotInTheListEGMyFineTune7b')}
-          />
-        )}
-        {modelFetchError && (
-          <Alert
-            type="warning"
-            showIcon
-            style={{ marginTop: 6 }}
-            message={t('settings.model')}
-            description={modelFetchError}
-          />
-        )}
-        {!modelFetchError && lastFetchedKey && (
-          <Text style={{ color: tokens.labelTertiary, fontSize: 11,
-                          display: 'block', marginTop: 4 }}>
-            {t('settings.label')} {fetchBaseUrl} {t('settings.label')} {fetchedModels.length} {t('settings.modelProviderEndpointURL')}
-          </Text>
-        )}
-        {!modelFetchError && !lastFetchedKey && (
-          <Text style={{ color: tokens.labelTertiary, fontSize: 11,
-                          display: 'block', marginTop: 4 }}>
-            {t('settings.endpointURLAPIKeyModelProviderModelModelCustomMo')}
-          </Text>
-        )}
-      </div>
+      <ModelField value={value} onChange={onChange} protocol="openai" preset={preset} />
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
         <Button
           data-testid="openai-test-connection"
@@ -1085,15 +1070,11 @@ const AnthropicCompatForm: React.FC<{
           placeholder={t('settings.skAnt')}
         />
       </div>
-      <div>
-        <Text style={{ color: tokens.labelPrimary }}>{t('settings.model2')}</Text>
-        <Input
-          style={{ marginTop: 4 }}
-          value={value.model}
-          onChange={(e) => onChange({ model: e.target.value })}
-          placeholder={t('settings.claude35SonnetLatestClaude3Opus')}
-        />
-      </div>
+      {/* The same control the OpenAI form uses. It was a bare text input here,
+          so an Anthropic endpoint could never be asked what it serves — the
+          fetch existed on the other form only. */}
+      <ModelField value={value} onChange={onChange} protocol="anthropic"
+                  preset={getPreset('anthropic')} />
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
         <Button
           data-testid="anthropic-test-connection"

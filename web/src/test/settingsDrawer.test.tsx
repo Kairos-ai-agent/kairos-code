@@ -18,12 +18,18 @@ function openModeTab() {
   fireEvent.click(screen.getByText('Mode'));
 }
 
+// The store is module-level, so anything a test leaves behind is the next
+// test's starting point. The reset below used to omit `provider`, which is how
+// one test's active provider (and its URL and key) leaked into the next.
+const INITIAL_PROVIDER = structuredClone(useSettingsStore.getState().provider);
+
 describe('SettingsDrawer', () => {
   beforeEach(() => {
     // reset the store between tests
     useSettingsStore.setState({
       drawerOpen: false,
       coderMode: 'default',
+      provider: structuredClone(INITIAL_PROVIDER),
       voice: {
         ttsProvider: 'edge',
         ttsVoice: 'en-US-AriaNeural',
@@ -121,5 +127,23 @@ describe('SettingsDrawer', () => {
     // provider.openai as a stray field and provider.active never changed.
     expect((p.openai as unknown as Record<string, unknown>).active).toBeUndefined();
     expect(p.openai.endpointUrl).toBe('https://api.openai.com/v1/chat/completions');
+  });
+
+  it('the Anthropic form can fetch a model list, not just be typed into', async () => {
+    // Reported by the user: selecting Anthropic in the LLM settings showed no
+    // way to fetch the endpoint's models. The fetch lived in the OpenAI form
+    // only — two forms, one implementation each, and only one of them grew the
+    // button. Both now render the same ModelField.
+    renderDrawer();
+    const provider = screen.getByTestId('llm-active-provider');
+    fireEvent.mouseDown(provider.querySelector('.ant-select-selector')!);
+    fireEvent.click(await screen.findByTitle('Anthropic'));
+
+    expect(useSettingsStore.getState().provider.active).toBe('anthropic');
+    // The control the user could not find.
+    expect(screen.getByTestId('llm-fetch-models')).toBeTruthy();
+    expect(screen.getByTestId('llm-model-select')).toBeTruthy();
+    // And it replaced the bare text input rather than sitting beside it.
+    expect(screen.queryByPlaceholderText(/claude-3-5-sonnet/i)).toBeNull();
   });
 });

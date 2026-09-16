@@ -1,6 +1,6 @@
 """Kairos Code - Multi-Agent Collaboration Platform for Software Development."""
 
-__version__ = "0.1.5"
+__version__ = "0.1.6"
 
 
 def __getattr__(name: str):  # pragma: no cover - trivial import shim

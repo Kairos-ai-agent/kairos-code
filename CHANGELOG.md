@@ -4,6 +4,49 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project aims at
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reaches 1.0.
 
+## [0.1.6] - 2026-09-17
+
+### Fixed
+
+- **The packaged app can start its MCP servers.** `mcp` is an optional extra, so
+  PyInstaller never followed an import to it and the frozen builds shipped
+  without it: the app came up, listed five bundled servers, and could not start
+  one — `ModuleNotFoundError: No module named 'mcp'`. Every start burned the
+  60-second budget on request timeouts before the UI was reachable, and the whole
+  MCP layer, including the HTTP transport added in 0.1.5, was dead in the
+  binaries and the wheel. The build now collects `mcp` and its submodules.
+
+- **The smoke test asks a server to answer instead of counting them.** The check
+  that should have caught that counted configured servers; it now launches two of
+  them and requires a real `initialize` reply, failing the build if they don't.
+  It probes only a frozen binary — a source install from core dependencies has no
+  `mcp` and that is correct, and `--mcp-serve` is a flag only the frozen launcher
+  understands.
+
+- **The Anthropic form can fetch its model list.** The fetch control had grown
+  inside the OpenAI form only, so selecting Anthropic in the LLM settings showed
+  a bare text input and no way to ask the endpoint what it serves. It is now one
+  component, rendered by both forms, so they cannot drift apart again. The
+  protocol comes from the form rather than a hardcoded "openai" — the same
+  hardcoding that made the backend's Anthropic branch unreachable and had it
+  answer any Anthropic endpoint with a list of MiniMax models.
+
+- **A test that only passed on Windows, and the CI that ran on Linux.** The
+  updater fixture defaulted to a `windows-x86_64` asset while the updater selects
+  with `platform_key()`, so on Linux it described a release with nothing this
+  machine could use and the assertions died with a `TypeError` that read like a
+  broken updater. The fixture now builds the asset for the platform it runs on,
+  and two tests state the intended behaviour for all three platform keys.
+
+- **One test's provider settings no longer leak into the next.** The drawer's
+  reset between tests omitted `provider`, so an active provider, its URL and its
+  key carried over.
+
+### Security
+
+- Nothing credential-shaped was imported from the other agents surveyed for
+  0.1.5: four candidate files were refused by the gate rather than copied.
+
 ## [0.1.5] - 2026-09-16
 
 ### Third-party content

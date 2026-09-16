@@ -48,6 +48,16 @@ jobs:
         # because a cancelled job keeps no logs. The log now names every file it
         # ran, its duration, and the one that blocked; the outer timeout keeps the
         # whole step inside the job limit so that log survives either way.
+        #
+        # tests/test_updater.py checks the updater against the *real* published
+        # release. Unauthenticated that API allows 60 requests an hour per IP, and
+        # a hosted runner shares its IP with the world — so the suite went red with
+        # a 403 the updater reports as "no assets", which reads like a product
+        # defect and is not one. It happened in both the v0.1.4 and the v0.1.5
+        # release windows. The default token raises the limit enough, and needs no
+        # new secret.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: timeout 2400 bash scripts/ci_shard.sh ${{ matrix.shard }} 6
 
       - name: "Zero-key demo (the 60-second first run)"

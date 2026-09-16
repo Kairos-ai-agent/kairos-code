@@ -153,7 +153,14 @@ jobs:
       - name: Install the project and PyInstaller
         run: |
           python -m pip install --upgrade pip
-          pip install . pyinstaller
+          # `.[mcp]`, not `.`: the binary ships five bundled MCP servers and the
+          # capability view lists them, so the package they are implemented with
+          # has to be inside the artefact. `mcp` is an optional extra, so a bare
+          # `pip install .` leaves it out — which is how v0.1.5 shipped a desktop
+          # app that listed servers it could not start and spent 60 seconds of
+          # every launch waiting for them to time out. It builds fine locally
+          # because a development venv usually has the extra already.
+          pip install ".[mcp]" pyinstaller
 
       - name: Freeze a standalone executable
         run: python scripts/build_binary.py --out dist

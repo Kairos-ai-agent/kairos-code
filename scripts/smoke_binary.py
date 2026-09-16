@@ -103,8 +103,14 @@ def check_bundled_mcp(binary: Path, frozen: bool = True) -> tuple[bool, str]:
             continue
         tried.append(name)
         if b'"serverInfo"' not in proc.stdout:
-            tail = (proc.stderr or b"").decode("utf-8", "replace").strip().splitlines()
-            failures.append(f"{name}: {tail[-1] if tail else 'no output'}")
+            # Print enough of stderr to actually diagnose it. Taking only the
+            # last line gave "Failed to execute script ... unhandled exception",
+            # which names neither the exception nor the file — the traceback was
+            # three lines above and thrown away. A smoke test that hides the
+            # reason is barely better than one that does not run.
+            err = (proc.stderr or b"").decode("utf-8", "replace").strip().splitlines()
+            tail = " | ".join(line.strip() for line in err[-6:])
+            failures.append(f"{name}: {tail or 'no output'}")
     if failures:
         return False, "bundled MCP server(s) did not answer: " + "; ".join(failures)
     return True, f"bundled MCP servers answer initialize ({', '.join(tried)})"

@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [0.1.5] - 2026-09-16
 
+### Third-party content
+
+This release ships skills that were imported from other agents installed on the
+author's machine; each carries `imported-from:` and a `source-path:`. Where the
+source was a licensed plugin, the upstream LICENSE and an `ATTRIBUTION.md` are
+included alongside it. Where it was another agent's own skill directory the
+licence is not stated upstream — review those before redistributing this tree:
+
+```bash
+grep -rl '^imported-from:' kairos/skills | wc -l          # how many
+grep -rh '^imported-from:' kairos/skills | sort | uniq -c # from where
+```
+
+Nothing read as a credential was imported: candidates containing a key-shaped
+string were skipped rather than copied.
+
 ### Security
 
 - **A credential gate guards the import.** Any candidate file containing a

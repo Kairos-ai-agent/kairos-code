@@ -1,6 +1,6 @@
 ---
 name: "feishu-cron-reminder"
-description: ">"
+description: "Create cron jobs that reliably deliver reminders to Feishu (飞书) chats. Use when the user asks to set up scheduled reminders, periodic notifications, or any recurring task that should send messages to a Feishu conversation. Triggers: '飞书定时提醒', '定时任务发飞书', 'cron reminder to feishu', '每小时提醒', 'scheduled feishu message'."
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/feishu-cron-reminder/SKILL.md"

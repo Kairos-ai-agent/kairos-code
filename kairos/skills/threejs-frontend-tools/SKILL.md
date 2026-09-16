@@ -1,6 +1,6 @@
 ---
 name: "threejs-frontend-tools"
-description: "|"
+description: "Build interactive 3D visualization tools in HTML/JS using Three.js — covers UMD vs ESM loading patterns (file:// protocol), humanoid character composition (Group primitives + GLB models), camera focal/FOV conversion, color-temperature lighting, walk-cycle animation, and LLM provider integration with auto-detection of OpenAI vs Anthropic styles plus CORS proxy fallback for cloud LLMs."
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/.archive/threejs-frontend-tools/SKILL.md"

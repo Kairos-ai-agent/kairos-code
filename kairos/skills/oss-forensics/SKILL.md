@@ -1,6 +1,6 @@
 ---
 name: "oss-forensics"
-description: "|"
+description: "Supply chain investigation, evidence recovery, and forensic analysis for GitHub repositories. Covers deleted commit recovery, force-push detection, IOC extraction, multi-source evidence collection, hypothesis formation/validation, and structured forensic reporting. Inspired by RAPTOR's 1800+ line OSS Forensics system."
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/oss-forensics/SKILL.md"

@@ -1,6 +1,6 @@
 ---
 name: "cl-system-patch-delivery"
-description: "|"
+description: '翔泰智造·成本中心管理系统 (E:\cl_system) 的内部 Flask + SQLite 系统。 当用户报告该系统的 bug、或要求在 cl_system 现有模块上"加一个新功能" (如"报告中心增加导出 Excel"、"询价单增加打印")需要打增量补丁时,使用此 skill —— 它覆盖完整的诊断 → 简化 → 种子数据验证 → 打包为 patch_vX.Y.Z_*.zip 的工作流。'
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/.archive/cl-system-patch-delivery/SKILL.md"

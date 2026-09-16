@@ -1,6 +1,6 @@
 ---
 name: "lightweight-ps-xlsx-app"
-description: ">-"
+description: "PowerShell-based self-contained applications that combine an embedded TcpListener HTTP server, xlsx files as primary data store (no external libs), and a single-file HTML frontend. Use when building or maintaining any PowerShell + Excel + light-weight browser UI tool for Chinese SMB / attendance / ERM-style workflows. Covers the server loop, JSON config conventions (schedule-{YYYYMM}.json + holidays.json + schedule.default.json), the standard mark legend (✘半天 ▲事假 △病假 ☆婚假 〇旷工 √公休 /出勤 公公出), six concrete PowerShell pitfalls, a browser-less verification recipe (curl + jsdom), and the user's strict UI preference: main page = employee × date data grid; calendar = a small inside-⚙ modal that toggles per-date overrides by clicking — never a text-input schedule form."
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/software-development/lightweight-ps-xlsx-app/SKILL.md"

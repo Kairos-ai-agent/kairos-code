@@ -1,6 +1,6 @@
 ---
 name: "glmv-prd-to-app"
-description: ">"
+description: "Build a complete, production-ready full-stack web application from PRD documents, prototype images, and resource files. Handles the entire pipeline: system design, database schema, seed data, backend API, frontend UI, visual verification against prototypes, and deployment script generation."
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/glmv-prd-to-app/SKILL.md"

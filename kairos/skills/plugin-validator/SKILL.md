@@ -1,6 +1,6 @@
 ---
 name: "plugin-validator"
-description: "|"
+description: "Use this agent when the user asks to \"validate my plugin\", \"check plugin structure\", \"verify plugin is correct\", \"validate plugin.json\", \"check plugin files\", or mentions plugin validation. Also trigger proactively after user creates or modifies plugin components. Examples:"
 priority: 0.5
 tools: ["Read", "Grep", "Glob", "Bash"]
 imported-from: "claude"

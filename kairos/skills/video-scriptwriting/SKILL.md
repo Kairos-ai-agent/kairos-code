@@ -1,6 +1,6 @@
 ---
 name: "video-scriptwriting"
-description: ">"
+description: "Use this skill when writing scripts for programmatic videos, planning scene structure and timing, creating storyboards in YAML format, calculating frame counts from duration, or interviewing users about video requirements. Triggers on video script, storyboard, scene planning, narration writing, video pacing, and structured video content planning."
 priority: 0.5
 version: "0.1.0"
 imported-from: "hermes"

@@ -1,6 +1,6 @@
 ---
 name: "hardware-failure-analysis"
-description: ">-"
+description: "Umbrella for hardware failure analysis, 8D report generation, and quality problem-solving. Covers: root cause analysis (Hi-Pot/ESD/surge/overvoltage), physics-based failure diagnosis, 8D report creation (D1-D8), PDF generation with Chinese fonts, fpdf2 patterns, PET insulation design, partial discharge analysis, engineering development process reports, and generic failure analysis methodology for hardware/electrical/software problems. Consolidated umbrella for: hardware-failure-analysis, 8d-report-generation, electronics-8d-report, failure-analysis, quality-8d-report, engineering-development-report."
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/hardware/hardware-failure-analysis/SKILL.md"

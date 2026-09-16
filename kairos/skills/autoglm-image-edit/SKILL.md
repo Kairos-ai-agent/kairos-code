@@ -1,6 +1,6 @@
 ---
 name: "autoglm-image-edit"
-description: ">"
+description: "使用 AutoGLM Image Edit 接口对图片进行编辑，例如添加文字、替换背景、修改元素、调整风格等。 当用户需要编辑图片、修改图片内容、在图上加字、P 图、局部改图等场景时使用此 skill。 Token 通过本地服务 http://127.0.0.1:18432/get_token 自动获取，无需手动配置环境变量。 若用户提供的是本地图片文件，必须先运行 upload-mix.py 将其上传并获取公网 URL，再传入本 skill。"
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/autoglm-image-edit/SKILL.md"

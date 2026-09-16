@@ -1,6 +1,6 @@
 ---
 name: "glmv-stock-analyst"
-description: ">"
+description: "股票分析与涨跌预测分析。 在用户表达分析、判断或预测意图时触发，如“分析一下腾讯”、“0700最近走势如何”、“XX能不能买”、“预测一下后续走势”、“生成一份分析报告”等； 支持港股、A股、美股，整合多源数据（包括新闻、基本面、技术面、资金流及宏观信息）进行多维综合分析，输出图文结合、包含可视化图表的结构化分析报告。 对于简单查询类需求（如“腾讯当前价格是多少”、“茅台代码是什么”）不触发本skill, 直接通过web_search 能力搜索并总结。 ⚠️ 需要多模态主模型支持（如 glm-5v-turbo），主模型需能读取图片。"
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/glmv-stock-analyst/SKILL.md"

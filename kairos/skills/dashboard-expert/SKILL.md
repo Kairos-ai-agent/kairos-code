@@ -1,6 +1,6 @@
 ---
 name: "dashboard-expert"
-description: ">-"
+description: 'Analyze, build, modify, and explain Mixpanel dashboards. Four modes — pick the one matching the user''s intent.'
 priority: 0.5
 imported-from: "codex"
 source-path: "imported"

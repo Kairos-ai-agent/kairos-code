@@ -1,6 +1,6 @@
 ---
 name: "autoglm-image-recognition"
-description: ">"
+description: "使用 AutoGLM Image Recognition 接口识别和描述图片内容。当用户需要分析图片、识别图片中的对象、场景、文字或获取图片描述时使用此 skill。 Token 通过本地服务 http://127.0.0.1:18432/get_token 自动获取，无需手动配置环境变量。 若用户提供的是本地图片文件，必须先运行 upload-mix.py 将其上传并获取公网 URL，再传入本 skill。"
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/autoglm-image-recognition/SKILL.md"

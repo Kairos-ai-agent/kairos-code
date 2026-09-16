@@ -1,6 +1,6 @@
 ---
 name: "huashu-md-to-pdf"
-description: "|"
+description: "将 Markdown 文档转换为专业的 PDF 白皮书，采用苹果设计风格。 支持完整的 Markdown 语法（代码块、表格、引用、列表等）。 自动生成封面、目录、页眉页脚。 使用场景：技术文档、白皮书、教程、报告等需要专业排版的 Markdown 文档。"
 priority: 0.5
 imported-from: "claude"
 source-path: "claude/skills/huashu-md-to-pdf/SKILL.md"

@@ -1,6 +1,6 @@
 ---
 name: "autoglm-browser-agent"
-description: ">-"
+description: "智能浏览器自动化代理,可执行任何需要浏览器的任务。 包括但不限于:打开网页、搜索信息(百度/谷歌/必应)、浏览社交媒体(微博/小红书/知乎/抖音/B站)、 点赞/评论/转发/收藏、发帖/发消息、登录网站、填写表单、截图、采集网页内容、 在线购物比价、查看新闻资讯、操作在线文档(飞书文档/腾讯文档等)。 当用户提到任何网站名称、网址URL、或需要在网页上执行操作时,使用此技能。"
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/autoglm-browser-agent/SKILL.md"

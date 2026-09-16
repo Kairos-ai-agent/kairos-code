@@ -1,6 +1,6 @@
 ---
 name: "chanjing-tts-voice-clone"
-description: ">-"
+description: "Use Chanjing TTS API to synthesize speech from text with a user-provided cloned voice (reference audio via public URL)."
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/openclaw-imports/chanjing-tts-voice-clone/SKILL.md"

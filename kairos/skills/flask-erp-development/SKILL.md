@@ -1,6 +1,6 @@
 ---
 name: "flask-erp-development"
-description: ">-"
+description: "Umbrella for Flask full-stack development: ERP/business management systems, API proxy tools, desktop packaging, and multi-agent collaboration. Consolidated umbrella for: flask-erp-development, flask-api-proxy-tool, flask-desktop-packager, flask-multi-agent-system."
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/software-development/flask-erp-development/SKILL.md"

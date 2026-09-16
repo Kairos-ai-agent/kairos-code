@@ -1,6 +1,6 @@
 ---
 name: "storyboard-previs"
-description: "|"
+description: "分镜白模视频（previs）生成工作流。当用户问\"分镜怎么做白模\"、\"previs 怎么做\"、\"分镜预览视频\"、\"白模视频\"、\"如何验证分镜\"、\"3D 镜头预览\"时使用。 输入：storyboard-gen v6 分镜剧本（单个 SEG / 单个镜头 / 多 SEG / 非标准笔记都行） 输出：浏览器内可看的 3D 白模镜头预览（Three.js MVP）或批量 mp4（Blender headless 生产级） 核心价值：在 AI 视频生成（Agnes / Seedance / Grok 等）前插入零成本验证关卡，避免烧 GPU 后才发现分镜有问题。"
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/storyboard-previs/SKILL.md"

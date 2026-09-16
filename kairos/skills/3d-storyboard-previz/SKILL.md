@@ -1,6 +1,6 @@
 ---
 name: "3d-storyboard-previz"
-description: "|"
+description: "Build browser-based 3D previz visualization from v6 storyboard scripts. Use when the user wants to preview storyboard shots as 3D scenes with camera/character/prop/lighting before actual AI video generation, or wants to validate that v6 storyboard fields (camera, actors, lighting, transition) translate to a coherent visual sequence. Three.js based, single HTML file, runs fully offline once assets are vendored."
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/.archive/3d-storyboard-previz/SKILL.md"

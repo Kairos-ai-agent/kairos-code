@@ -1,6 +1,6 @@
 ---
 name: "frontend-patching"
-description: ">-"
+description: "Umbrella for frontend web development: surgical editing, code embedding, localization/translation, and persistent media storage. Covers: patch-based editing for single-file web apps, base64 embedding/extraction, HTML/JS/CSS safe translation patterns, IndexedDB blob storage for media. Consolidated umbrella for: frontend-patching, frontend-code-embedding, html-js-translation, html-persistent-media, browser-llm-integration, ai-media-gen-ui. For building NEW multi-file SPAs from scratch, use `multi-file-spa` instead."
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/software-development/frontend-patching/SKILL.md"

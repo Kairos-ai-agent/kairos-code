@@ -1,16 +1,14 @@
 """Rewrite `source-path:` provenance from absolute to agent-relative.
 
 The import recorded where each skill came from, but it recorded an absolute
-path — `C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\...` — which is exactly
-what tests/test_repo_hygiene.py::test_no_machine_paths_in_tracked_files exists
-to keep out of a public repo. The provenance itself is worth keeping; the
+path — the sort of thing tests/test_repo_hygiene.py::test_no_machine_paths_in_tracked_files
+keeps out of a public repo. The provenance is worth keeping; the
 machine-specifics are not. So: strip the drive and the user name, keep the
 agent and the path within it.
 
-    C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\.archive\\foo\\SKILL.md
-      -> hermes/skills/.archive/foo/SKILL.md
-    C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\...
-      -> claude-plugins-official/...
+    <home>/hermes/skills/.archive/foo/SKILL.md  ->  hermes/skills/.archive/foo/SKILL.md
+    <home>/<agent>/plugins/marketplaces/claude-plugins-official/...
+                                                ->  claude-plugins-official/...
 """
 
 from __future__ import annotations
@@ -19,8 +17,8 @@ import pathlib
 import re
 import sys
 
-# Longest marker first: ".claude/plugins/marketplaces/claude-plugins-official"
-# must win over the generic ".claude/plugins".
+# Longest marker first: "claude/plugins/marketplaces/claude-plugins-official"
+# must win over the generic "claude/plugins".
 MARKERS: list[tuple[str, str]] = [
     ("AppData/Local/hermes/skills", "hermes/skills"),
     ("hermes/skills", "hermes/skills"),
@@ -35,10 +33,10 @@ MARKERS: list[tuple[str, str]] = [
 
 
 def to_relative(raw: str) -> str:
-    """`C:\\\\Users\\\\leohu\\\\...` (as written in YAML) -> a portable path."""
+    """An absolute path (as written in YAML) -> a portable, agent-relative one."""
     v = raw.strip().strip('"').strip("'")
-    # The value was written by a JSON dump, so every separator is doubled in the
-    # file ("C:\\Users"). Collapse, then normalise to forward slashes.
+    # The value came out of a JSON dump, so every separator is doubled in the
+    # file. Collapse, then normalise to forward slashes.
     v = v.replace("\\\\", "\\").replace("\\", "/")
     for marker, replacement in MARKERS:
         i = v.find(marker)
@@ -47,11 +45,16 @@ def to_relative(raw: str) -> str:
     return "imported"
 
 
+def is_absolute(raw: str) -> bool:
+    """True for `C:\\...`, `C:/...`, `/c/...`, `/home/...` — no names needed."""
+    v = raw.strip().strip('"').strip("'")
+    return bool(re.match(r"^(?:[A-Za-z]:[\\/]|/[A-Za-z]/|/home/|/Users/)", v))
+
+
 def main() -> int:
     dry = "--dry-run" in sys.argv
-    root = pathlib.Path("kairos")
     changed: list[tuple[str, str, str]] = []
-    for path in sorted(root.rglob("*")):
+    for path in sorted(pathlib.Path("kairos").rglob("*")):
         if not path.is_file() or path.suffix.lower() not in (".md", ".yaml", ".yml"):
             continue
         try:
@@ -62,10 +65,13 @@ def main() -> int:
         out, touched = [], False
         for line in lines:
             m = re.match(r'^(source-path:\s*"?)([^"\r\n]*?)("?\s*)$', line.rstrip("\n"))
-            if m and ("leohu" in m.group(2) or "D_bak" in m.group(2)):
+            if m and is_absolute(m.group(2)):
                 new_value = to_relative(m.group(2))
                 if new_value != m.group(2):
-                    out.append(f'{m.group(1)}{new_value}{m.group(3)}' + ("\n" if line.endswith("\n") else ""))
+                    out.append(
+                        f'{m.group(1)}{new_value}{m.group(3)}'
+                        + ("\n" if line.endswith("\n") else "")
+                    )
                     changed.append((str(path), m.group(2), new_value))
                     touched = True
                     continue

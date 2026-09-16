@@ -3,7 +3,7 @@ name: "m5-onboard"
 description: "End-to-end onboarding for a freshly-plugged-in M5Stack ESP32 device (Cardputer, Cardputer-Adv, Core, CoreS3, Stick) — detect on USB, flash UIFlow 2.0 firmware, and install the Claude Buddy MicroPython"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\cwc-makers\\skills\\m5-onboard\\SKILL.md"
+source-path: "claude-plugins-official/plugins/cwc-makers/skills/m5-onboard/SKILL.md"
 ---
 # M5Stack Onboarding
 

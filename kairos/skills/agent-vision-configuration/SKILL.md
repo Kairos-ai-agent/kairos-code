@@ -4,7 +4,7 @@ description: "Configure your Hermes agent to see and analyze images. Covers auxi
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\.archive\\agent-vision-configuration\\SKILL.md"
+source-path: "hermes/skills/.archive/agent-vision-configuration/SKILL.md"
 ---
 # Agent Vision Configuration
 

@@ -3,7 +3,7 @@ name: "glm-image-gen"
 description: "Official skill for generating high-quality images from text prompts using ZhiPu GLM-Image API."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\glm-image-gen\\SKILL.md"
+source-path: "hermes/skills/glm-image-gen/SKILL.md"
 ---
 # GLM-Image Generation Skill / GLM-Image 图片生成技能
 

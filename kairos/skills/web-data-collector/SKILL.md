@@ -3,7 +3,7 @@ name: "web-data-collector"
 description: "专业的网页数据收集与分析助手。当用户需要从网站抓取数据、处理分页内容、提取表格信息、收集列表数据，并将结果导出为Excel表格时使用此技能。支持多页数据自动采集、数据清洗整理、结构化数据导出等功能。触发关键词：数据收集、网页抓取、爬取、分页、Excel导出、数据提取、scrape、crawl、extract data、export excel"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\you\\.minimax\\skills\\web-data-collector\\SKILL.md"
+source-path: "minimax/skills/web-data-collector/SKILL.md"
 ---
 # 网页数据收集与Excel导出
 

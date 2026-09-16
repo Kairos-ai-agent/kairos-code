@@ -3,7 +3,7 @@ name: "glmv-pdf-to-web"
 description: "Convert a PDF (research paper, technical report, or project document) into a beautiful"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\glmv-pdf-to-web\\SKILL.md"
+source-path: "hermes/skills/glmv-pdf-to-web/SKILL.md"
 ---
 # PDF → Academic Project Website Skill
 

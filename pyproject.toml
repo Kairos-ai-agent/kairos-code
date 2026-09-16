@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kairos-code"
-version = "0.1.4"
+version = "0.1.5"
 description = "Self-hosted, model-agnostic multi-agent pipeline with enforced review gates and cost accounting"
 readme = "README.md"
 # SPDX (PEP 639). AGPL-3.0-or-later: anyone who runs a modified Kairos Code

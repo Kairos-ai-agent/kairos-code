@@ -3,7 +3,7 @@ name: "figma-generate-library"
 description: "Build or update a professional-grade design system in Figma from a codebase. Use when the user wants to create variables/tokens, build component libraries, create individual components with proper var"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\figma\\11c74d6b\\skills\\figma-generate-library\\SKILL.md"
+source-path: "imported"
 ---
 # Design System Builder — Figma MCP Skill
 

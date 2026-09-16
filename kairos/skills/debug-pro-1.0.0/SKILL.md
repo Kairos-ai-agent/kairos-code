@@ -3,7 +3,7 @@ name: "debug-pro-1.0.0"
 description: "Systematic debugging methodology and language-specific debugging commands, including browser event debugging for Chromium-specific issues."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\debug-pro-1.0.0\\SKILL.md"
+source-path: "hermes/skills/debug-pro-1.0.0/SKILL.md"
 ---
 # debug-pro
 

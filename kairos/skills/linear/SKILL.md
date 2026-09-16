@@ -4,7 +4,7 @@ description: "Linear: manage issues, projects, teams via GraphQL + curl."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\productivity\\linear\\SKILL.md"
+source-path: "hermes/skills/productivity/linear/SKILL.md"
 ---
 # Linear — Issue & Project Management
 

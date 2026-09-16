@@ -3,7 +3,7 @@ name: "backtest-expert-0.1.0"
 description: "Expert guidance for systematic backtesting of trading strategies. Use when developing, testing, stress-testing, or validating quantitative trading strategies. Covers \"beating ideas to death\" methodolo"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\backtest-expert-0.1.0\\SKILL.md"
+source-path: "hermes/skills/backtest-expert-0.1.0/SKILL.md"
 ---
 # Backtest Expert
 

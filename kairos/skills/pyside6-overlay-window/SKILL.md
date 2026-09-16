@@ -3,7 +3,7 @@ name: "pyside6-overlay-window"
 description: "Build Windows desktop overlay widgets with PySide6 — transparent frameless always-on-top windows with alpha masks, click-through on transparent regions, drag/throw physics, multi-monitor support, syst"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\.archive\\pyside6-overlay-window\\SKILL.md"
+source-path: "hermes/skills/.archive/pyside6-overlay-window/SKILL.md"
 ---
 # PySide6 Overlay Window
 

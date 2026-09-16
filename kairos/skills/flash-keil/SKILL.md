@@ -3,7 +3,7 @@ name: "flash-keil"
 description: "当需要通过 Keil MDK 内置调试器烧录固件到目标板时使用，利用工程中已配置的调试器和 Flash 算法执行下载。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\flash-keil\\SKILL.md"
+source-path: "hermes/skills/flash-keil/SKILL.md"
 ---
 # Keil MDK 烧录
 

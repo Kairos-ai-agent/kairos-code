@@ -4,7 +4,7 @@ description: "Configure, extend, or contribute to Hermes Agent."
 priority: 0.5
 version: "2.1.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\autonomous-ai-agents\\hermes-agent\\SKILL.md"
+source-path: "hermes/skills/autonomous-ai-agents/hermes-agent/SKILL.md"
 ---
 # Hermes Agent
 
@@ -813,7 +813,7 @@ suite.
 Git touches it`. Cosmetic — the repo's `.gitattributes` normalizes. Don't
 let editors auto-convert committed POSIX-newline files to CRLF.
 
-**Forward slashes work almost everywhere.** `C:/Users/...` is accepted by
+**Forward slashes work almost everywhere.** `~` is accepted by
 every Hermes tool and most Windows APIs. Prefer forward slashes in code
 and logs — avoids shell-escaping backslashes in bash.
 

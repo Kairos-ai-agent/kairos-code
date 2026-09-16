@@ -3,7 +3,7 @@ name: "oracle"
 description: "Use oracle CLI to bundle prompts and files for second-model debugging, refactor, design, or review checks."
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\you\\.agents\\skills\\oracle\\SKILL.md"
+source-path: "agents/skills/oracle/SKILL.md"
 ---
 # oracle — best use
 

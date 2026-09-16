@@ -3,7 +3,7 @@ name: "flash-idf"
 description: "当需要通过 ESP-IDF 工具链烧录固件到 ESP32 系列芯片，或启动调试会话时使用。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\flash-idf\\SKILL.md"
+source-path: "hermes/skills/flash-idf/SKILL.md"
 ---
 # ESP-IDF 烧录调试
 

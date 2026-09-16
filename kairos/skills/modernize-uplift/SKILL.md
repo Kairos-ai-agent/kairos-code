@@ -3,7 +3,7 @@ name: "modernize-uplift"
 description: "Same-stack version uplift (e.g. .NET Framework 4.8 → .NET 8) — preserve the code, fix the version deltas, prove equivalence by running one test suite on both runtimes"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\code-modernization\\commands\\modernize-uplift.md"
+source-path: "claude-plugins-official/plugins/code-modernization/commands/modernize-uplift.md"
 ---
 Uplift `legacy/$1` from **$2** to **$3** — same stack, newer version.
 

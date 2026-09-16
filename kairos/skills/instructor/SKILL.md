@@ -4,7 +4,7 @@ description: "Extract structured data from LLM responses with Pydantic validatio
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\instructor\\SKILL.md"
+source-path: "hermes/skills/instructor/SKILL.md"
 ---
 # Instructor: Structured LLM Outputs
 

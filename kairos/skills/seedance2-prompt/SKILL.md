@@ -4,7 +4,7 @@ description: "Generate production-ready video prompts for Seedance 2.0 (即梦) 
 priority: 0.5
 version: "2.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\creative\\seedance2-prompt\\SKILL.md"
+source-path: "hermes/skills/creative/seedance2-prompt/SKILL.md"
 ---
 # Seedance 2.0 视频 & 图片提示词生成器
 

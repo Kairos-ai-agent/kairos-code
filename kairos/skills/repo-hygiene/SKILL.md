@@ -3,7 +3,7 @@ name: "repo-hygiene"
 description: "Use when cleaning a repo or prepping it to publish."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\software-development\\repo-hygiene\\SKILL.md"
+source-path: "hermes/skills/software-development/repo-hygiene/SKILL.md"
 ---
 # 仓库卫生：清理无关目录 / 临时文件 / 发布前整理
 
@@ -55,7 +55,7 @@ source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\software-developme
    ```bash
    for c in $(git rev-list --all); do git grep -hIE "<密钥正则>" "$c"; done | sort -u
    ```
-   占位符（含 `here/xxx/your/example/fake/dummy/test` 等词）与真值要分开统计；「这把还在用吗」用**哈希比对**回答（`sha256[:12]` 与配置里当前值对比，**永不打印密钥本身**）。抹除用 `git filter-repo --force --replace-text <file>`，文件内容 `literal:<key>==>REDACTED`；**该文件自身含明文**，放在仓库外、用完立即 `rm`。同一办法可抹机器用户名（`literal:you==>user`，当前文件与全历史一起改）。历史里出现过的密钥仍建议轮换——抹除 ≠ 作废；重写前建的 bundle 含明文，删掉、重建一份干净的。
+   占位符（含 `here/xxx/your/example/fake/dummy/test` 等词）与真值要分开统计；「这把还在用吗」用**哈希比对**回答（`sha256[:12]` 与配置里当前值对比，**永不打印密钥本身**）。抹除用 `git filter-repo --force --replace-text <file>`，文件内容 `literal:<key>==>REDACTED`；**该文件自身含明文**，放在仓库外、用完立即 `rm`。同一办法可抹机器用户名（`literal:<user>==>user`，当前文件与全历史一起改）。历史里出现过的密钥仍建议轮换——抹除 ≠ 作废；重写前建的 bundle 含明文，删掉、重建一份干净的。
 8. **发布后必须在干净 clone 里跑一遍 CI 的命令**（`git clone` → 在 clone 里跑 `merge_i18n --strict` 之类的门禁脚本、demo、`pytest`）。工作树会掩盖四类缺陷：① `.gitignore` 未锚定的规则吞掉源码（裸 `settings.json` 连带匹配 `web/src/i18n/parts/settings.json` → 几百个源键从未入库，每个干净 clone 的严格校验全报 stale；规则一律写锚定形式）② vendored 第三方内容被提交成 gitlink(160000)（clone 只得到空目录；**两条都要看**：`git ls-files -s | awk '$1==160000'` **和** `git ls-tree -r HEAD | awk '$1==160000'`；每次 `filter-repo` 重写后重新确认；修法 `git rm --cached <p>` + `git add -f <p>`）③ 未声明依赖（本地 venv 里碰巧装过 → CI 里直接 collection error；比对顶层 import 与 pyproject 的 dependencies/extras，名字要先 `-`→`_` 归一化，否则 `prometheus-client` vs `prometheus_client` 全是假阳性）④ 工具在 CI 侧缺 `node_modules`（例如门禁脚本从 `web/node_modules` 解析 typescript → 该 job 必须先 `npm ci`）。
 9. **CI 时长先量再配，别把“被杀”当成“很慢”**：按本地耗时给分片定权重前，先拿 CI 自己的每种用例耗时（`--durations=0`）——本项目实测一个“跑 40 分钟”的分片，里面测试合计只有 **44 秒**，真因是**被 SIGKILL**（退出码 137，不是超时）✗；而 137 **不等于 OOM**：死时内存还剩几 GB，真因是 hook 超时 `killpg` 打到了自己的进程组（自杀式 SIGKILL）。分片 / 诊断 / 内存定位的完整做法（含退出码语义表、被杀与取消的 job 为什么没有日志、`scripts/ci_shard.sh` 逐文件模式）见 [`references/ci-failure-triage.md`](references/ci-failure-triage.md)。运行结论是 `cancelled` 时先看 job 的步骤时间线：**`cancelled` 不等于测试失败**——私有仓库的 Actions 免费额度耗尽会在运行中取消 job（public 仓库分钟数免费）。
 

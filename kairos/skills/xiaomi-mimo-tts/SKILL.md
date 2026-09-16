@@ -3,7 +3,7 @@ name: "xiaomi-mimo-tts"
 description: "Xiaomi MiMo V2.5 TTS API integration. Covers all 3 models (standard, voice-design, voice-clone), correct request format, voice list, and pitfalls. Use when building TTS features, voice synthesis, or i"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\software-development\\gen-api-integration\\references\\xiaomi-mimo-tts\\SKILL.md"
+source-path: "hermes/skills/software-development/gen-api-integration/references/xiaomi-mimo-tts/SKILL.md"
 ---
 # Xiaomi MiMo V2.5 TTS API
 

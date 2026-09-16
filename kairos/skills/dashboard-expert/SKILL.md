@@ -3,7 +3,7 @@ name: "dashboard-expert"
 description: ">-"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\mixpanel-headless\\11c74d6b\\skills\\dashboard-expert\\SKILL.md"
+source-path: "imported"
 ---
 # Dashboard Expert
 

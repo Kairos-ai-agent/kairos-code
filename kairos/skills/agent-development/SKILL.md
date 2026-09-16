@@ -4,7 +4,7 @@ description: "This skill should be used when the user asks to \"create an agent\
 priority: 0.5
 version: "0.1.0"
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\plugin-dev\\skills\\agent-development\\SKILL.md"
+source-path: "claude-plugins-official/plugins/plugin-dev/skills/agent-development/SKILL.md"
 ---
 # Agent Development for Claude Code Plugins
 

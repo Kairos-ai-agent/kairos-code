@@ -3,7 +3,7 @@ name: "frontend-app-builder"
 description: "Use for new frontend applications, dashboards, games, creative websites, hero sections, and visually driven UI from scratch, or when the user explicitly asks for a redesign/restyle/modernization. Buil"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\build-web-apps\\11c74d6b\\skills\\frontend-app-builder\\SKILL.md"
+source-path: "imported"
 ---
 # Frontend App Builder
 

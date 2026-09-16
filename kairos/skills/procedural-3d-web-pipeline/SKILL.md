@@ -4,7 +4,7 @@ description: "Generate 3D meshes headlessly via Blender Python and display them 
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\procedural-3d-web-pipeline\\SKILL.md"
+source-path: "hermes/skills/procedural-3d-web-pipeline/SKILL.md"
 ---
 ## When to Use
 

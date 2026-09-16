@@ -4,7 +4,7 @@ description: "Delegate coding to OpenAI Codex CLI (features, PRs)."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\autonomous-ai-agents\\codex\\SKILL.md"
+source-path: "hermes/skills/autonomous-ai-agents/codex/SKILL.md"
 ---
 # Codex CLI
 
@@ -419,7 +419,7 @@ model = "deepseek-v4-flash"
 - **mimo2codex is running but model list is wrong / missing expected models**: The proxy was started with a `--model` flag that restricts visible models. Either restart without `--model` (relying on `MIMO2CODEX_DEFAULT_PROVIDER` in `.env` instead), or use `--model both` to show all available providers.
 - **Starting mimo2codex from terminal — skip .bat wrappers**: Calling `.bat` scripts (even via `cmd.exe /c start-mimo2codex-bg.bat`) from the Hermes terminal tool is unreliable — the window opens and closes without the proxy starting. Instead, start the proxy directly by calling `node.exe cli.js` with `terminal(background=true)`:
   ```bash
-  terminal(command="\"C:/Users/you/AppData/Local/hermes/node/node.exe\" \"C:/Users/you/AppData/Local/hermes/node/node_modules/mimo2codex/dist/cli.js\"", background=true)
+  terminal(command="\"~/AppData/Local/hermes/node/node.exe\" \"~/AppData/Local/hermes/node/node_modules/mimo2codex/dist/cli.js\"", background=true)
   ```
   This avoids cmd.exe wrapper issues and gives Hermes proper process tracking.
 - **Check actual runtime config**: `hermes config show` reveals the effective model/provider/base_url, which may differ from config.yaml if session overrides are active. Always check runtime config when debugging.

@@ -3,7 +3,7 @@ name: "excel-expert-assistant"
 description: "专业的Excel文件处理专家。当用户需要修改Excel文件、调整格式、处理数据、添加公式、创建图表或进行任何Excel相关操作时，使用此技能。具备完善的复核机制，确保输出成果准确无误。触发关键词：Excel, xlsx, spreadsheet, 表格, 单元格, 公式, 图表, openpyxl, pandas"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\you\\.minimax\\skills\\excel-expert-assistant\\SKILL.md"
+source-path: "minimax/skills/excel-expert-assistant/SKILL.md"
 ---
 # Excel专家助手
 

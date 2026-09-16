@@ -3,7 +3,7 @@ name: "aminer-open-academic-1.0.5"
 description: ">"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\aminer-open-academic-1.0.5\\SKILL.md"
+source-path: "hermes/skills/aminer-open-academic-1.0.5/SKILL.md"
 ---
 # AMiner 开放平台学术数据查询
 

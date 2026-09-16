@@ -3,7 +3,7 @@ name: "figma-generate-design"
 description: "Use this skill alongside figma-use when the task involves translating an application page, view, or multi-section layout into Figma. Triggers: 'write to Figma', 'create in Figma from code', 'push page"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\figma\\11c74d6b\\skills\\figma-generate-design\\SKILL.md"
+source-path: "imported"
 ---
 # Build / Update Screens and Views from Design System
 

@@ -4,7 +4,7 @@ description: "vLLM: high-throughput LLM serving, OpenAI API, quantization."
 priority: 0.5
 version: "1.0.1"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\mlops\\inference\\serving-llms-vllm\\SKILL.md"
+source-path: "hermes/skills/mlops/inference/serving-llms-vllm/SKILL.md"
 ---
 # vLLM - High-Performance LLM Serving
 

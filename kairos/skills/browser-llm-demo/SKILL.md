@@ -3,7 +3,7 @@ name: "browser-llm-demo"
 description: "|"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\.archive\\browser-llm-demo\\SKILL.md"
+source-path: "hermes/skills/.archive/browser-llm-demo/SKILL.md"
 ---
 # Browser-based LLM Demo
 

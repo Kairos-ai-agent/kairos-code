@@ -3,7 +3,7 @@ name: "higgsfield-fashion-lookbook"
 description: "Generate fashion lookbook, model showcase, and style video prompts for Seedance 2.0 on Higgsfield. Use whenever the user wants fashion video content, lookbook videos, model walks, outfit showcases, st"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\creative\\higgsfield-fashion-lookbook\\SKILL.md"
+source-path: "hermes/skills/creative/higgsfield-fashion-lookbook/SKILL.md"
 ---
 # Seedance 2.0 on Higgsfield Fashion Lookbook Skill
 

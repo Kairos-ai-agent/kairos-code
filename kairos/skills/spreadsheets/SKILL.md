@@ -3,7 +3,7 @@ name: "spreadsheets"
 description: "Create, edit, analyze, and verify standalone spreadsheet files or Google Sheets-ready workbooks, including .xlsx, .xls, .csv, and .tsv. Do not use for live controlling Microsoft Excel app or a live Ex"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-primary-runtime\\spreadsheets\\26.805.11740\\skills\\spreadsheets\\SKILL.md"
+source-path: "imported"
 ---
 # Spreadsheets skill (Create • Edit • Analyze • Visualize)
 Use this skill when you need to work with spreadsheets (.xlsx, .csv, .tsv) to do any of the following:

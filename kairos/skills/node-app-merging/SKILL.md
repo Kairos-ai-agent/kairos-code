@@ -3,7 +3,7 @@ name: "node-app-merging"
 description: "Merge two or more similar Node.js web apps into a single unified application with shared config, tab-based UI, and organized output. Use when the user has multiple small standalone tools (e.g. separat"
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\you\\.agents\\skills\\software-development\\node-app-merging\\SKILL.md"
+source-path: "agents/skills/software-development/node-app-merging/SKILL.md"
 ---
 # Node.js App Merging
 

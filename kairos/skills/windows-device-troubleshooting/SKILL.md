@@ -3,7 +3,7 @@ name: "windows-device-troubleshooting"
 description: "Diagnose and fix Windows hardware device issues — printers, USB peripherals, and other connected devices showing offline, not detected, or not working. Covers PowerShell diagnostics, WMI queries, driv"
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\you\\.agents\\skills\\software-development\\windows-device-troubleshooting\\SKILL.md"
+source-path: "agents/skills/software-development/windows-device-troubleshooting/SKILL.md"
 ---
 # Windows Device Troubleshooting
 

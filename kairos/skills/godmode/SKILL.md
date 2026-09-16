@@ -4,7 +4,7 @@ description: "Jailbreak LLMs: Parseltongue, GODMODE, ULTRAPLINIAN."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\red-teaming\\godmode\\SKILL.md"
+source-path: "hermes/skills/red-teaming/godmode/SKILL.md"
 ---
 # G0DM0D3 Jailbreaking Skill
 

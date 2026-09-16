@@ -3,7 +3,7 @@ name: "mixpanel-auth"
 description: "Manage Mixpanel Headless authentication: check session state, list/add/use accounts, run OAuth login, switch projects/workspaces, manage targets, and check bridge credentials."
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\mixpanel-headless\\11c74d6b\\skills\\mixpanel-auth\\SKILL.md"
+source-path: "imported"
 ---
 # Mixpanel Authentication Management
 

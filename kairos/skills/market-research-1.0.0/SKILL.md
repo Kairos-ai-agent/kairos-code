@@ -3,7 +3,7 @@ name: "market-research-1.0.0"
 description: "Size markets, analyze competitors, and validate opportunities with practical frameworks and free data sources."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\market-research-1.0.0\\SKILL.md"
+source-path: "hermes/skills/market-research-1.0.0/SKILL.md"
 ---
 ## Core Framework
 

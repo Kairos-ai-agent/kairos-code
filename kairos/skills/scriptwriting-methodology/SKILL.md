@@ -3,7 +3,7 @@ name: "scriptwriting-methodology"
 description: "Direct response copywriting frameworks for video scripts. Includes DR formula, PAS, AIDA, hook formulas, CTA best practices, and conversion optimization. Auto-activates when writing scripts, sponsored"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\openclaw-imports\\scriptwriting-methodology\\SKILL.md"
+source-path: "hermes/skills/openclaw-imports/scriptwriting-methodology/SKILL.md"
 ---
 # Scriptwriting Methodology for Sponsored Content
 

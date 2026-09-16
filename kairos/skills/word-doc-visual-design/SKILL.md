@@ -3,7 +3,7 @@ name: "word-doc-visual-design"
 description: "Word 文档视觉设计与紧凑化打磨 — 从\"能动 docx\"升级到\"企业级 VI 物料水准\"，或对现有 docx 做不动文字的密度/专业度美化。涵盖：(1) 设计层：配色 token 系统、字号体系、栅格对齐、Logo 单色化、页眉页脚三层结构、装饰元素；(2) 打磨层：扫盘 → 美化 pass（强制 H1/H2 显式样式 + 表格 zebra + 警示色块）→ 紧凑化 pass（删除幽灵空段 +"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\word-doc-visual-design\\SKILL.md"
+source-path: "hermes/skills/word-doc-visual-design/SKILL.md"
 ---
 # Word 文档视觉设计
 

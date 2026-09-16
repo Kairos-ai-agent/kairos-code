@@ -3,7 +3,7 @@ name: "healthcheck"
 description: "Audit and harden hosts running OpenClaw for SSH, firewall, updates, exposure, cron checks, and risk posture."
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\you\\.agents\\skills\\healthcheck\\SKILL.md"
+source-path: "agents/skills/healthcheck/SKILL.md"
 ---
 # OpenClaw Host Hardening
 

@@ -3,7 +3,7 @@ name: "wechat-mini-game"
 description: "Build any WeChat mini-game (微信小游戏) project. Covers standard project layout (project.config.json + game.json + game.js + js/ modules), Canvas 2D rendering via wx.createCanvas, touch input via wx.onTouc"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\.archive\\wechat-mini-game\\SKILL.md"
+source-path: "hermes/skills/.archive/wechat-mini-game/SKILL.md"
 ---
 # WeChat Mini-Game Development
 

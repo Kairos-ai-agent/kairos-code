@@ -3,7 +3,7 @@ name: "figma-use-slides"
 description: "This skill helps agents use Figma's use_figma MCP tool in the Slides context. Can be used alongside figma-use which has foundational context for using the use_figma tool."
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\figma\\11c74d6b\\skills\\figma-use-slides\\SKILL.md"
+source-path: "imported"
 ---
 # use_figma — Figma Plugin API Skill for Slides
 

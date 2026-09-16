@@ -4,7 +4,7 @@ description: "|"
 priority: 0.5
 tools: ["Read", "Grep", "Glob"]
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\plugin-dev\\agents\\skill-reviewer.md"
+source-path: "claude-plugins-official/plugins/plugin-dev/agents/skill-reviewer.md"
 ---
 You are an expert skill architect specializing in reviewing and improving Claude Code skills for maximum effectiveness and reliability.
 

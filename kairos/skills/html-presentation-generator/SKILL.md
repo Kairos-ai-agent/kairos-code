@@ -3,7 +3,7 @@ name: "html-presentation-generator"
 description: "Generate professional multi-page HTML presentations (PPT). Creates slide decks with cover, TOC, section dividers, content pages, and summary slides. Supports export to PDF/PPTX. TRIGGERS: PPT, 演示文稿, p"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\you\\.minimax\\skills\\html-presentation-generator\\SKILL.md"
+source-path: "minimax/skills/html-presentation-generator/SKILL.md"
 ---
 # HTML Presentation Generator
 

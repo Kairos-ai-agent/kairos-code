@@ -3,7 +3,7 @@ name: "ai-storyboard-artist"
 description: "AI驱动的分镜与故事板创作工作流。将文字剧本转化为可视化分镜、生成关键帧prompt、设计镜头语言。适用于短剧、漫剧、TVC、电影故事板。与ComfyUI/Flux 2 Klein 4B集成生成关键帧图像。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\creative\\ai-storyboard-artist\\SKILL.md"
+source-path: "hermes/skills/creative/ai-storyboard-artist/SKILL.md"
 ---
 # AI分镜师 · AI Storyboard Artist
 

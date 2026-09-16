@@ -3,7 +3,7 @@ name: "ascii-video"
 description: "ASCII video: convert video/audio to colored ASCII MP4/GIF."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\creative\\ascii-video\\SKILL.md"
+source-path: "hermes/skills/creative/ascii-video/SKILL.md"
 ---
 # ASCII Video Production Pipeline
 

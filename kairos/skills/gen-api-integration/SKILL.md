@@ -4,7 +4,7 @@ description: "Use when integrating any third-party generation API (image, video,
 priority: 0.5
 version: "1.0.1"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\software-development\\gen-api-integration\\SKILL.md"
+source-path: "hermes/skills/software-development/gen-api-integration/SKILL.md"
 ---
 # Integrating third-party generation APIs
 

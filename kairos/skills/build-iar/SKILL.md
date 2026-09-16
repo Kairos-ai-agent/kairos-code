@@ -3,7 +3,7 @@ name: "build-iar"
 description: "当需要通过 IAR Embedded Workbench 命令行编译嵌入式工程，调用自带脚本解析工程文件、执行构建并定位固件产物时使用。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\build-iar\\SKILL.md"
+source-path: "hermes/skills/build-iar/SKILL.md"
 ---
 # 构建 IAR Embedded Workbench 工程
 

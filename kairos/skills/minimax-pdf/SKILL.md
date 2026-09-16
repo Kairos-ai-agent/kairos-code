@@ -3,7 +3,7 @@ name: "minimax-pdf"
 description: ">"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\you\\.minimax\\skills\\minimax-pdf\\SKILL.md"
+source-path: "minimax/skills/minimax-pdf/SKILL.md"
 ---
 # minimax-pdf
 

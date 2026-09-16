@@ -4,7 +4,7 @@ description: "Use when reviewing code for security vulnerabilities, implementing
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\security-auditor-1.0.0\\SKILL.md"
+source-path: "hermes/skills/security-auditor-1.0.0/SKILL.md"
 ---
 # Security Auditor
 

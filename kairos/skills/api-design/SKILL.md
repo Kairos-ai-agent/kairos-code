@@ -3,7 +3,7 @@ name: "api-design"
 description: "API设计全流程。涵盖RESTful API设计、GraphQL Schema设计、gRPC服务定义、OpenAPI/Swagger规范、认证授权方案、错误处理规范、版本策略。触发器：设计API、写OpenAPI规范、定接口、评审API方案。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\software-development\\api-design\\SKILL.md"
+source-path: "hermes/skills/software-development/api-design/SKILL.md"
 ---
 # API设计 · API Design
 

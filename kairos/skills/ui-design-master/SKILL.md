@@ -3,7 +3,7 @@ name: "ui-design-master"
 description: "专业的UI/UX设计专家技能。提供界面设计、配色方案、设计系统构建、动效设计、响应式布局、仪表盘设计、落地页设计、移动应用设计、图标设计等全方位设计指导与代码实现。触发关键词：UI设计、UX设计、界面设计、配色、设计系统、组件库、落地页、仪表盘、移动应用、图标、动效、响应式、Tailwind CSS"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\you\\.minimax\\skills\\ui-design-master\\SKILL.md"
+source-path: "minimax/skills/ui-design-master/SKILL.md"
 ---
 # UI设计大师
 

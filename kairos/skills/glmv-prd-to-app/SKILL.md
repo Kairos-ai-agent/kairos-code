@@ -3,7 +3,7 @@ name: "glmv-prd-to-app"
 description: ">"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\glmv-prd-to-app\\SKILL.md"
+source-path: "hermes/skills/glmv-prd-to-app/SKILL.md"
 ---
 # GLM-V PRD-to-App: Full-Stack Application Builder
 

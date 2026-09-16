@@ -4,7 +4,7 @@ description: "Review Kanban handoffs and route verified outcomes."
 priority: 0.5
 version: "1.1.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\devops\\sdlc-review\\SKILL.md"
+source-path: "hermes/skills/devops/sdlc-review/SKILL.md"
 ---
 # SDLC Review Skill
 

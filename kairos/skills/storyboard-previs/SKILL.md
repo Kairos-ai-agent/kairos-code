@@ -3,7 +3,7 @@ name: "storyboard-previs"
 description: "|"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\storyboard-previs\\SKILL.md"
+source-path: "hermes/skills/storyboard-previs/SKILL.md"
 ---
 # 白模视频（Storyboard Previs）
 
@@ -312,5 +312,5 @@ Sibling references for the GLB character path: `references/3d-glb-parser.md` (mi
 This umbrella subsumes the following previously-separate skills (now in `.archive/`):
 
 - **`3d-storyboard-previz`** — procedural GLB character library, headless-Blender generation pipeline, v6-schema-bridge mapping, built-in 80-line GLB parser, walking animation via Group traversal. All references in `references/3d-*.md`, all templates in `templates/3d-*.{sh,py,html}`. Live demo: `D:\AI_work\previs\storyboard-previs.html`.
-- **`storyboard-preview-tool`** — 3-tier browser rendering (3D / 2D / Ken Burns), free-form script parser, 6-move camera vocabulary. References in `references/3tier-*.md`, samples in `templates/3tier-sample-scripts.md`. Live demos at `C:\Users\you\D\ImageGen\storyboard-3d.html`, `storyboard-2d.html`, `storyboard-kenburns.html`.
+- **`storyboard-preview-tool`** — 3-tier browser rendering (3D / 2D / Ken Burns), free-form script parser, 6-move camera vocabulary. References in `references/3tier-*.md`, samples in `templates/3tier-sample-scripts.md`. Live demos at `<projects>\ImageGen\storyboard-3d.html`, `storyboard-2d.html`, `storyboard-kenburns.html`.
 - **`threejs-frontend-tools`** — narrow Three.js quick-start recipe (UMD loading, character composition, FOV conversion, walk-cycle amplitude, LLM provider adapter). All of its content already lives here under the umbrella's own body and the absorbed `references/3d-*.md` + `llm-browser-gateway/references/demo-*.md`. The standalone `templates/storyboard-previs-skeleton.html` is a smaller variant of `templates/3d-storyboard-previs-skeleton.html`.

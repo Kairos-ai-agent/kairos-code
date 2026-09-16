@@ -3,7 +3,7 @@ name: "firmware-reverse-engineering"
 description: "Reverse engineer NOR flash firmware dumps from embedded SoCs (ITE IT9866E / SMEDIA02, ARM-based MCU firmware, Allwinner BROM boot, Rockchip boot blobs, ESP32 partitions, etc.). Trigger when the user p"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\software-development\\firmware-reverse-engineering\\SKILL.md"
+source-path: "hermes/skills/software-development/firmware-reverse-engineering/SKILL.md"
 ---
 # Firmware Reverse Engineering
 

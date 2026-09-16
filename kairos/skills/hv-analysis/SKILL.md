@@ -3,7 +3,7 @@ name: "hv-analysis"
 description: "|"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\hv-analysis\\SKILL.md"
+source-path: "hermes/skills/hv-analysis/SKILL.md"
 ---
 # 横纵分析法深度研究
 

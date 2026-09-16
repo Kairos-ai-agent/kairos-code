@@ -4,7 +4,7 @@ description: "p5.js sketches: gen art, shaders, interactive, 3D."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\creative\\p5js\\SKILL.md"
+source-path: "hermes/skills/creative/p5js/SKILL.md"
 ---
 # p5.js Production Pipeline
 

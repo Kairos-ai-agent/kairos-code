@@ -3,7 +3,7 @@ name: "frontend-design-3-0.1.0"
 description: "Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when building web components, pages, or applications. Generates creative, polished code that avoids ge"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\frontend-design-3-0.1.0\\SKILL.md"
+source-path: "hermes/skills/frontend-design-3-0.1.0/SKILL.md"
 ---
 # Frontend Design
 

@@ -3,7 +3,7 @@ name: "image-to-code-skill"
 description: "Elite website image-to-code skill for Codex. For visually important web tasks, it must first generate the design image(s) itself, deeply analyze them, then implement the website to match them as close"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\taste-skill\\skills\\image-to-code-skill\\SKILL.md"
+source-path: "claude/plugins/marketplaces/taste-skill/skills/image-to-code-skill/SKILL.md"
 ---
 # CORE DIRECTIVE: IMAGE-FIRST WEBSITE DESIGN TO CODE
 You are an elite web design art director and implementation strategist.

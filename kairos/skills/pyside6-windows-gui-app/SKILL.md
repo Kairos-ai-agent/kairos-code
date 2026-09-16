@@ -3,7 +3,7 @@ name: "pyside6-windows-gui-app"
 description: "Build a Windows desktop GUI app with PySide6 — transparent frameless windows with click-through masks, system tray, multi-monitor, mouse-drag state machines, and a smart .bat launcher that handles mul"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\.archive\\pyside6-windows-gui-app\\SKILL.md"
+source-path: "hermes/skills/.archive/pyside6-windows-gui-app/SKILL.md"
 ---
 # PySide6 Windows GUI App
 

@@ -3,7 +3,7 @@ name: "chinese-game-market-research"
 description: "Research the Chinese mobile game market — WeChat mini-games, mobile games, mini-programs, top products by category, top publishers, MAU data, IAP/IAA splits. Use when the user asks about Chinese gamin"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\research\\chinese-game-market-research\\SKILL.md"
+source-path: "hermes/skills/research/chinese-game-market-research/SKILL.md"
 ---
 # Chinese Game Market Research
 

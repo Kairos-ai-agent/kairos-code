@@ -4,7 +4,7 @@ description: "Debug Python: pdb REPL + debugpy remote (DAP)."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\software-development\\python-debugpy\\SKILL.md"
+source-path: "hermes/skills/software-development/python-debugpy/SKILL.md"
 ---
 # Python Debugger (pdb + debugpy)
 

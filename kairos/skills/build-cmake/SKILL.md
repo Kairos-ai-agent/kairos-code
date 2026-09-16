@@ -3,7 +3,7 @@ name: "build-cmake"
 description: "当需要配置或构建基于 CMake 的嵌入式固件工程，调用自带脚本执行构建并定位固件产物时使用。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\build-cmake\\SKILL.md"
+source-path: "hermes/skills/build-cmake/SKILL.md"
 ---
 # 构建 CMake 工程
 

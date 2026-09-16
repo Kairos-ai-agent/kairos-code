@@ -4,7 +4,7 @@ description: "Gmail, Calendar, Drive, Docs, Sheets via gws CLI or Python."
 priority: 0.5
 version: "1.1.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\productivity\\google-workspace\\SKILL.md"
+source-path: "hermes/skills/productivity/google-workspace/SKILL.md"
 ---
 # Google Workspace
 

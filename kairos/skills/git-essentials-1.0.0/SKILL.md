@@ -3,7 +3,7 @@ name: "git-essentials-1.0.0"
 description: "Essential Git commands and workflows for version control, branching, and collaboration."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\git-essentials-1.0.0\\SKILL.md"
+source-path: "hermes/skills/git-essentials-1.0.0/SKILL.md"
 ---
 # Git Essentials
 

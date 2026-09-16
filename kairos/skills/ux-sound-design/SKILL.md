@@ -3,7 +3,7 @@ name: "ux-sound-design"
 description: "Create functional and emotionally resonant audio for digital products using Audio UX methodology—from notification sounds to complete sonic systems. Use when: Designing notification sounds for an app;"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\openclaw-imports\\ux-sound-design\\SKILL.md"
+source-path: "hermes/skills/openclaw-imports/ux-sound-design/SKILL.md"
 ---
 # UX Sound Design
 

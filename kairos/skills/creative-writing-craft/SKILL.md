@@ -3,7 +3,7 @@ name: "creative-writing-craft"
 description: "Craft compelling fiction and creative nonfiction with attention to structure, voice, prose style, and revision. Supports short stories, novel chapters, essays, and hybrid forms. Triggers on creative w"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\openclaw-imports\\creative-writing-craft\\SKILL.md"
+source-path: "hermes/skills/openclaw-imports/creative-writing-craft/SKILL.md"
 ---
 # Creative Writing Craft
 

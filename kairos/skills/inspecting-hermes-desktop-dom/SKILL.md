@@ -4,7 +4,7 @@ description: "Read the live Hermes desktop DOM/CSS over CDP."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\software-development\\inspecting-hermes-desktop-dom\\SKILL.md"
+source-path: "hermes/skills/software-development/inspecting-hermes-desktop-dom/SKILL.md"
 ---
 # Inspecting the live Hermes desktop DOM
 

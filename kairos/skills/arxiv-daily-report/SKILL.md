@@ -3,7 +3,7 @@ name: "arxiv-daily-report"
 description: "生成 arXiv 学术论文日报或针对具体问题进行学术调研。当用户提到\"arXiv日报\"、\"论文日报\"、\"学术日报\"、\"生成日报\"、\"论文速递\"、\"arxiv daily\"、\"论文摘要\"、\"帮我看看最近有什么论文\"、\"最近有什么论文\"、\"arxiv上有没有研究xxx的论文\"、\"xxx领域最近进展\"、\"我想知道xxx\"等涉及学术/论文检索的问题时自动触发。平台固定为 arXiv，支持用户自定义日期范围"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\arxiv-daily-report\\SKILL.md"
+source-path: "hermes/skills/arxiv-daily-report/SKILL.md"
 ---
 # arXiv 学术日报生成器
 

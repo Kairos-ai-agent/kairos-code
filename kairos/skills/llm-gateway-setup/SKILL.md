@@ -3,7 +3,7 @@ name: "llm-gateway-setup"
 description: "|"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\.archive\\llm-gateway-setup\\SKILL.md"
+source-path: "hermes/skills/.archive/llm-gateway-setup/SKILL.md"
 ---
 # LLM Gateway / Aggregator Setup
 

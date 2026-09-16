@@ -3,7 +3,7 @@ name: "frontend-patching"
 description: ">-"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\software-development\\frontend-patching\\SKILL.md"
+source-path: "hermes/skills/software-development/frontend-patching/SKILL.md"
 ---
 # Frontend Patching
 
@@ -689,11 +689,11 @@ const c=fs.readFileSync('file.html','utf-8');
 const start=c.indexOf('<script>')+8;
 const end=c.lastIndexOf('</script>');
 const script=c.substring(start,end).replace(/\r/g,'');
-fs.writeFileSync('C:/Users/you/_check.js',script,'utf-8');
-" && node --check "C:\\Users\\you\\_check.js"
+fs.writeFileSync('~/_check.js',script,'utf-8');
+" && node --check "~\\_check.js"
 ```
 
-⚠️ **Windows**: `/tmp/` doesn't exist — write to `C:/Users/you/` instead.
+⚠️ **Windows**: `/tmp/` doesn't exist — write to `~/` instead.
 
 **Binary search for error location** when `node --check` doesn't give a clear line:
 ```javascript
@@ -1313,14 +1313,14 @@ with open('app.html', 'r', encoding='utf-8') as f:
 # Adjust the regex if the script tag has attributes
 m = re.search(r'<script>(.*?)</script>', html, re.DOTALL)
 if m:
-    with open('C:/Users/you/_check.js', 'w', encoding='utf-8') as f:
+    with open('~/_check.js', 'w', encoding='utf-8') as f:
         f.write(m.group(1))
     print('Extracted, line count:', m.group(1).count(chr(10)))
 else:
     print('NO <script> block found')
 \"
 # 2. Run Node syntax check (Windows path — Linux: /tmp/_check.js)
-node --check C:/Users/you/_check.js
+node --check ~/_check.js
 ```
 
 `node --check` gives the EXACT line number and a clear error. The browser's confusing error message becomes unambiguous. Always run this after ANY edit to inline `<script>` content — add it to your edit-then-verify ritual.
@@ -1669,7 +1669,7 @@ onclick="views.detail.copyPrompt('${escJS(p.content)}')"
 - **Buttons must visually sink to the bottom of flexible-height nodes**: If a node body has variable content above the buttons, apply flex column to the body container and `margin-top:auto` to the button row. Don't leave buttons inline-floating.
 - **User "I rolled it back" means: work with what's there, not what you remember**: When the user says "我自己回滚了画布" (I rolled back the canvas myself) or similar, they reverted the file to a known-good baseline and want your next change to apply to that version, NOT the version that has your prior work in it. Don't re-add features you think should be there — start from the current state and apply only what's asked. Re-read the file to confirm what's actually present before patching.
 - **Main view = the Product, not the Tool** (severe, repeat-offender): The user will repeatedly correct you if you make a tool (calendar, config form, settings panel) the main view of a tool-app. The main view should be the thing the app *produces* — stats grid, generated output, content the user came here for. Tools (calendar grid, settings forms, file management) go in modals, drawers, or behind a clear button. Promote a tool to main view only when explicitly told to. Verify before making a tool the page's primary content. See `ui-ux-pro-max` "Tool vs. Product Hierarchy" for full rationale.
-- **Verify rendered UI before declaring it works**: When you write or overhaul UI, don't trust user reports that it "looks messy" — open the page via Playwright (the `playwright` module ships under `C:\Users\you\AppData\Local\hermes\node\node_modules\playwright`), screenshot it, and inspect what actually rendered. A `vision_analyze` of the screenshot catches layout/wrap/overflow/truncation bugs that textual descriptions miss. For server-returned JSON, also parse it with Python first to check the structure before debugging the JS layer that consumes it.
+- **Verify rendered UI before declaring it works**: When you write or overhaul UI, don't trust user reports that it "looks messy" — open the page via Playwright (the `playwright` module ships under `~\AppData\Local\hermes\node\node_modules\playwright`), screenshot it, and inspect what actually rendered. A `vision_analyze` of the screenshot catches layout/wrap/overflow/truncation bugs that textual descriptions miss. For server-returned JSON, also parse it with Python first to check the structure before debugging the JS layer that consumes it.
 - **Tool-app main page = the Product, not the Tool**: When refactoring a "工具型 SPA" (attendance, scheduling, inventory, ERP), the main page is **stats + primary data table + result files**. Configuration / tools / uploads / sub-forms live in modals or a sticky side panel. Never make a calendar / schedule grid / settings form the main view — the user will reject it. See `references/business-output-dashboard-pattern.md` for the canonical dashboard layout (1 main card + 4 alert cards + sticky sidebar + settings dropdown) and patch-tool pitfalls when rewriting nested HTML blocks.
 - **Ship code first, narrate after**: When the user asks for a non-trivial edit/feature, START THE WORK immediately (backup → patch → verify → run). Do NOT write a multi-step "I'll do A then B then C" plan and stop before touching the file — the user reads that as "you did nothing." A user reply like "你这是啥也没改" / "加好了吗?" / "等下你做了吗?" means the prior turn described intent without applying it. The fix is to do the work in the same turn, or split across turns with each turn producing real file output. If you must explain a multi-step plan first, do it in ≤3 lines and then immediately patch in the same response.
 

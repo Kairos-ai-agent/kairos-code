@@ -3,7 +3,7 @@ name: "xurl"
 description: "Use xurl for authenticated X API posts, replies, search, DMs, media upload, followers, or raw v2 calls."
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\you\\.agents\\skills\\xurl\\SKILL.md"
+source-path: "agents/skills/xurl/SKILL.md"
 ---
 # xurl — Agent Skill Reference
 

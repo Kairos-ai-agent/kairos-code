@@ -3,7 +3,7 @@ name: "gh-address-comments"
 description: "Address actionable GitHub pull request review feedback. Use when the user wants to inspect unresolved review threads, requested changes, or inline review comments on a PR, then implement selected fixe"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\github\\11c74d6b\\skills\\gh-address-comments\\SKILL.md"
+source-path: "imported"
 ---
 # GitHub PR Comment Handler
 

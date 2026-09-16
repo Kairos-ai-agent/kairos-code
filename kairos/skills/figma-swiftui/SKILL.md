@@ -3,7 +3,7 @@ name: "figma-swiftui"
 description: "SwiftUI ↔ Figma translation. Use whenever the user mentions Swift, SwiftUI, iOS, iPhone, or iPad — in EITHER direction — translating a Figma design into SwiftUI (design → code), or pushing SwiftUI vie"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\figma\\11c74d6b\\skills\\figma-swiftui\\SKILL.md"
+source-path: "imported"
 ---
 # Figma ↔ SwiftUI
 

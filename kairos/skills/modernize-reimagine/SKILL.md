@@ -3,7 +3,7 @@ name: "modernize-reimagine"
 description: "Multi-agent greenfield rebuild — extract specs from legacy, design AI-native, scaffold & validate with HITL"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\code-modernization\\commands\\modernize-reimagine.md"
+source-path: "claude-plugins-official/plugins/code-modernization/commands/modernize-reimagine.md"
 ---
 The first token of `$ARGUMENTS` is the system dir (`$1`); **everything
 after it is the target vision** — it is usually multiple words, so do not

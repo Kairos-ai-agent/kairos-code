@@ -3,7 +3,7 @@ name: "feature-dev"
 description: "Guided feature development with codebase understanding and architecture focus"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\feature-dev\\commands\\feature-dev.md"
+source-path: "claude-plugins-official/plugins/feature-dev/commands/feature-dev.md"
 ---
 # Feature Development
 

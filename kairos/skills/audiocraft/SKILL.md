@@ -4,7 +4,7 @@ description: "AudioCraft: MusicGen text-to-music, AudioGen text-to-sound."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\mlops\\models\\audiocraft\\SKILL.md"
+source-path: "hermes/skills/mlops/models/audiocraft/SKILL.md"
 ---
 # AudioCraft: Audio Generation
 

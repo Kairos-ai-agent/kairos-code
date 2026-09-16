@@ -4,7 +4,7 @@ description: "OpenAI's model connecting vision and language. Enables zero-shot i
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\clip\\SKILL.md"
+source-path: "hermes/skills/clip/SKILL.md"
 ---
 # CLIP - Contrastive Language-Image Pre-Training
 

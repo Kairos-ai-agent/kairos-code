@@ -4,7 +4,7 @@ description: "Produces clean reusable raster assets from approved Impeccable moc
 priority: 0.5
 tools: "Read, Write, Edit, Bash, Glob, Grep"
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\impeccable\\skill\\agents\\impeccable-asset-producer.md"
+source-path: "claude/plugins/marketplaces/impeccable/skill/agents/impeccable-asset-producer.md"
 ---
 # Impeccable Asset Producer
 

@@ -4,7 +4,7 @@ description: "Design one-off HTML artifacts (landing, deck, prototype)."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\creative\\claude-design\\SKILL.md"
+source-path: "hermes/skills/creative/claude-design/SKILL.md"
 ---
 # Claude Design for CLI/API Agents
 

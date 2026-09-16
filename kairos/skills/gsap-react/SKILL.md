@@ -3,7 +3,7 @@ name: "gsap-react"
 description: "Official GSAP skill for React — useGSAP hook, refs, gsap.context(), cleanup. Use when the user wants animation in React or Next.js, or asks about GSAP with React, useGSAP, or cleanup on unmount. Recom"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\gsap-skills\\skills\\gsap-react\\SKILL.md"
+source-path: "claude/plugins/marketplaces/gsap-skills/skills/gsap-react/SKILL.md"
 ---
 # GSAP with React
 

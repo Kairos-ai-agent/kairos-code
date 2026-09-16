@@ -4,7 +4,7 @@ description: "Himalaya CLI: IMAP/SMTP email from terminal."
 priority: 0.5
 version: "1.1.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\email\\himalaya\\SKILL.md"
+source-path: "hermes/skills/email/himalaya/SKILL.md"
 ---
 # Himalaya Email CLI
 

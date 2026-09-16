@@ -4,7 +4,7 @@ description: "Web scraping with Scrapling - HTTP fetching, stealth browser autom
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\scrapling\\SKILL.md"
+source-path: "hermes/skills/scrapling/SKILL.md"
 ---
 # Scrapling
 

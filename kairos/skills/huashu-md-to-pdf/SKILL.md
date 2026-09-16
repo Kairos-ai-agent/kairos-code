@@ -3,7 +3,7 @@ name: "huashu-md-to-pdf"
 description: "|"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\skills\\huashu-md-to-pdf\\SKILL.md"
+source-path: "claude/skills/huashu-md-to-pdf/SKILL.md"
 ---
 # Markdown to PDF Skill
 

@@ -3,7 +3,7 @@ name: "game-design-polish"
 description: "为游戏系统设计文档和策划案提供专业润色和优化服务，包括结构优化、文本润色、功能细化和策划指导；当用户需要优化游戏策划文档、提升文档专业度、或需要基于同类型产品获取优化建议时使用"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\you\\.minimax\\skills\\game-design-polish\\SKILL.md"
+source-path: "minimax/skills/game-design-polish/SKILL.md"
 ---
 # 游戏策划文档润色
 

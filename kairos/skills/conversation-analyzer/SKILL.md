@@ -4,7 +4,7 @@ description: "Use this agent when analyzing conversation transcripts to find beh
 priority: 0.5
 tools: ["Read", "Grep"]
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\hookify\\agents\\conversation-analyzer.md"
+source-path: "claude-plugins-official/plugins/hookify/agents/conversation-analyzer.md"
 ---
 You are a conversation analysis specialist that identifies problematic behaviors in Claude Code sessions that could be prevented with hooks.
 

@@ -3,7 +3,7 @@ name: "grok-imagine-prompt"
 description: "Grok Imagine 图生视频/文生视频提示词写作工作流。涵盖五要素提示词结构、图生视频克制原则、角色一致性、产品/海报动画、短剧/漫剧场景的实用模板和限制须知。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\creative\\grok-imagine-prompt\\SKILL.md"
+source-path: "hermes/skills/creative/grok-imagine-prompt/SKILL.md"
 ---
 # Grok Imagine 视频提示词写作指南
 

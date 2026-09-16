@@ -3,7 +3,7 @@ name: "visualize"
 description: "Create visualizations and interactive tools directly in conversation. Use when asked to show how something works, make simulators or labs, maps, plots, charts or graphs, comparisons, UI mockups, scena"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-bundled\\visualize\\1.0.16\\skills\\visualize\\SKILL.md"
+source-path: "imported"
 ---
 # Visualize
 

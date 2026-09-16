@@ -3,7 +3,7 @@ name: "build-platformio"
 description: "当需要通过 PlatformIO 命令行编译嵌入式工程，调用自带脚本解析环境配置、执行构建并定位固件产物时使用。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\build-platformio\\SKILL.md"
+source-path: "hermes/skills/build-platformio/SKILL.md"
 ---
 # 构建 PlatformIO 工程
 

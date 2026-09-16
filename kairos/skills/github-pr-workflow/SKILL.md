@@ -4,7 +4,7 @@ description: "GitHub PR lifecycle: branch, commit, open, CI, merge."
 priority: 0.5
 version: "1.1.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\github\\github-pr-workflow\\SKILL.md"
+source-path: "hermes/skills/github/github-pr-workflow/SKILL.md"
 ---
 # GitHub Pull Request Workflow
 

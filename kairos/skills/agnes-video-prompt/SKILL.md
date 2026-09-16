@@ -4,7 +4,7 @@ description: "Write production-ready prompts for the AIGC_agent project's Agnes 
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\software-development\\gen-api-integration\\references\\agnes-video-prompt\\SKILL.md"
+source-path: "hermes/skills/software-development/gen-api-integration/references/agnes-video-prompt/SKILL.md"
 ---
 # Agnes agnes-video-v2.0 video prompt writing
 

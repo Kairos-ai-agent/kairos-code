@@ -3,7 +3,7 @@ name: "setup"
 description: "This skill installs mixpanel_headless, pandas, numpy, matplotlib, seaborn, networkx, anytree, scipy (and pyarrow on Python 3.11+), then verifies Mixpanel credentials. It should be invoked when setting"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\mixpanel-headless\\11c74d6b\\skills\\setup\\SKILL.md"
+source-path: "imported"
 ---
 # mixpanel-headless — Setup
 

@@ -3,7 +3,7 @@ name: "glmv-pdf-to-ppt"
 description: "Convert a PDF (research paper, report, or any document) into a polished multi-slide"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\glmv-pdf-to-ppt\\SKILL.md"
+source-path: "hermes/skills/glmv-pdf-to-ppt/SKILL.md"
 ---
 # PDF → HTML PPT Skill
 

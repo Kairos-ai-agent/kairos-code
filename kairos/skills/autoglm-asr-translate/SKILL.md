@@ -3,7 +3,7 @@ name: "autoglm-asr-translate"
 description: ">"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\autoglm-asr-translate\\SKILL.md"
+source-path: "hermes/skills/autoglm-asr-translate/SKILL.md"
 ---
 # AutoGLM ASR Translate Skill
 

@@ -3,7 +3,7 @@ name: "elevenlabs-music"
 description: "ElevenLabs AI music generation - create original music from text prompts via inference.sh CLI. Capabilities: text-to-music, custom duration up to 10 minutes, genre/mood/instrument control, royalty-fre"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\openclaw-imports\\elevenlabs-music\\SKILL.md"
+source-path: "hermes/skills/openclaw-imports/elevenlabs-music/SKILL.md"
 ---
 # ElevenLabs Music Generation
 

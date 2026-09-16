@@ -3,7 +3,7 @@ name: "wechat-mini-game-dev"
 description: "Build, debug, and ship WeChat mini-games (微信小游戏) using vanilla JS + Canvas 2D, no external engine. Triggers on requests involving 微信小游戏, 小游戏开发, wx APIs, game.json, 微信开发者工具 debugging, or \"导入小游戏项目\"."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\software-development\\wechat-mini-game-dev\\SKILL.md"
+source-path: "hermes/skills/software-development/wechat-mini-game-dev/SKILL.md"
 ---
 # WeChat Mini-Game Development (vanilla JS path)
 

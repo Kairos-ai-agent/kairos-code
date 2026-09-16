@@ -3,7 +3,7 @@ name: "quantitative-finance-expert"
 description: "全方位量化金融专家技能。涵盖股票分析、市场数据研究、量化交易策略开发、技术分析、基本面分析、投资组合优化、风险管理、金融数据处理、回测分析、量化金融教育与职业指导、实操项目引导。触发关键词：股票分析、量化策略、回测、技术指标、基本面、投资组合、风险管理、VaR、夏普比率、均线策略、MACD、RSI、布林带、DCF估值、马科维茨优化。"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\you\\.minimax\\skills\\quantitative-finance-expert\\SKILL.md"
+source-path: "minimax/skills/quantitative-finance-expert/SKILL.md"
 ---
 # 量化金融专家
 

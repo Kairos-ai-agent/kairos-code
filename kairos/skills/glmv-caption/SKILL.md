@@ -3,7 +3,7 @@ name: "glmv-caption"
 description: "Generate captions (descriptions) for images, videos, and documents using ZhiPu"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\glmv-caption\\SKILL.md"
+source-path: "hermes/skills/glmv-caption/SKILL.md"
 ---
 # GLM-V Caption Skill
 

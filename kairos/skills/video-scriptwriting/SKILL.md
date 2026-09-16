@@ -4,7 +4,7 @@ description: ">"
 priority: 0.5
 version: "0.1.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\openclaw-imports\\video-scriptwriting\\SKILL.md"
+source-path: "hermes/skills/openclaw-imports/video-scriptwriting/SKILL.md"
 ---
 When this skill is activated, always start your first response with the :pencil: emoji.
 

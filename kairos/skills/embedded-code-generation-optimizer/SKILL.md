@@ -3,7 +3,7 @@ name: "embedded-code-generation-optimizer"
 description: "当用户要求优化嵌入式代码、减少代码大小、降低功耗、提升实时性能、减少内存占用、优化中断处理或生成高效的嵌入式驱动时使用。支持的芯片包括ST(STM32)、GD(兆易创新)、ESP32、NXP、TI(TMS320/MSP430)、Nordic、Renesas、Realtek等MCU系列，以及树莓派、 BeagleBone、IMX6/IMX8等嵌入式Linux平台。触发短语包括\"优化嵌入式代码\"、\"S"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\you\\.minimax\\skills\\embedded-code-generation-optimizer\\SKILL.md"
+source-path: "minimax/skills/embedded-code-generation-optimizer/SKILL.md"
 ---
 # Embedded Code Generation Optimizer
 

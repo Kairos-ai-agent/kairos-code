@@ -3,7 +3,7 @@ name: "ui-ux-pro-max"
 description: "UI/UX design intelligence and implementation guidance for building polished interfaces. Use when the user asks for UI design, UX flows, information architecture, visual style direction, design systems"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\ui-ux-pro-max\\SKILL.md"
+source-path: "hermes/skills/ui-ux-pro-max/SKILL.md"
 ---
 Follow these steps to deliver high-quality UI/UX output with minimal back-and-forth.
 

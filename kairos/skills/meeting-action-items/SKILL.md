@@ -4,7 +4,7 @@ description: "Turn meeting notes into cited decisions, owners, tickets."
 priority: 0.5
 version: "0.1.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\productivity\\meeting-action-items\\SKILL.md"
+source-path: "hermes/skills/productivity/meeting-action-items/SKILL.md"
 ---
 # Meeting Action Items
 

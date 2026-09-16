@@ -4,7 +4,7 @@ description: "Animate a local image into a short mp4 video through Hermes Web UI
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\grok-image-to-video\\SKILL.md"
+source-path: "hermes/skills/grok-image-to-video/SKILL.md"
 ---
 # Grok Image To Video
 

@@ -3,7 +3,7 @@ name: "hermes-evolution"
 description: "审慎地把用户纠正、明确偏好、可复用工作流和高成本踩坑沉淀为经用户审批的 AGENTS.md、TOOLS.md、MEMORY.md 或 managed SKILL.md 更新。仅在主会话的重大轮次结束时触发，默认大多数轮次都应跳过。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\hermes-evolution\\SKILL.md"
+source-path: "hermes/skills/hermes-evolution/SKILL.md"
 ---
 # Hermes-Evolution
 

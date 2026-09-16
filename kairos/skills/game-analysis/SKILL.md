@@ -3,7 +3,7 @@ name: "game-analysis"
 description: "游戏拆解技能，用于深度分析游戏设计。当用户要求拆解游戏、分析游戏机制、理解游戏系统时使用。可以根据HIT游戏库的标签体系进行分类和标注。"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\you\\.minimax\\skills\\game-analysis\\SKILL.md"
+source-path: "minimax/skills/game-analysis/SKILL.md"
 ---
 # 游戏拆解专家
 

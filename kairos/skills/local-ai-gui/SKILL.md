@@ -3,7 +3,7 @@ name: "local-ai-gui"
 description: "Package local AI models (Flux, SD, LLMs) as standalone GUI apps with Gradio. Covers Windows setup, GPU memory optimization, China mirror config, batch launcher scripts, and smart environment bootstrap"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\software-development\\pyinstaller-desktop-packaging\\references\\local-ai-gui\\SKILL.md"
+source-path: "hermes/skills/software-development/pyinstaller-desktop-packaging/references/local-ai-gui/SKILL.md"
 ---
 # Local AI Model GUI Packaging
 

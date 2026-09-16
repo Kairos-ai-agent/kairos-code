@@ -3,7 +3,7 @@ name: "cloudflare-worker-fullstack"
 description: "|"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\.archive\\cloudflare-worker-fullstack\\SKILL.md"
+source-path: "hermes/skills/.archive/cloudflare-worker-fullstack/SKILL.md"
 ---
 # Cloudflare Worker Full-Stack App
 

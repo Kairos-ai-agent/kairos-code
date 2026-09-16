@@ -3,7 +3,7 @@ name: "business-analytics-reporter"
 description: "This skill should be used when analyzing business sales and revenue data from CSV files to identify weak areas, generate statistical insights, and provide strategic improvement recommendations. Use wh"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\skills\\business-analytics-reporter\\SKILL.md"
+source-path: "claude/skills/business-analytics-reporter/SKILL.md"
 ---
 # Business Analytics Reporter
 

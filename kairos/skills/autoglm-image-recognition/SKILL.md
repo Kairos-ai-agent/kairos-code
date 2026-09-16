@@ -3,7 +3,7 @@ name: "autoglm-image-recognition"
 description: ">"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\autoglm-image-recognition\\SKILL.md"
+source-path: "hermes/skills/autoglm-image-recognition/SKILL.md"
 ---
 # AutoGLM Image Recognition Skill
 

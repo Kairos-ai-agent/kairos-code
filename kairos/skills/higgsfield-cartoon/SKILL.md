@@ -3,7 +3,7 @@ name: "higgsfield-cartoon"
 description: "Generate cartoon and animation style video prompts for Seedance 2.0 on Higgsfield. Use whenever the user wants cartoon, 2D animation, cel-shaded, hand-drawn, illustrated, flat animation, or motion gra"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\creative\\higgsfield-cartoon\\SKILL.md"
+source-path: "hermes/skills/creative/higgsfield-cartoon/SKILL.md"
 ---
 # Seedance 2.0 on Higgsfield — Cartoon & Animation Prompt Generator
 

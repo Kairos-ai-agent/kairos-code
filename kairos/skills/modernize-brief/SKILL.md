@@ -3,7 +3,7 @@ name: "modernize-brief"
 description: "Generate a phased Modernization Brief — the approved plan that transformation agents will execute against"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\code-modernization\\commands\\modernize-brief.md"
+source-path: "claude-plugins-official/plugins/code-modernization/commands/modernize-brief.md"
 ---
 Synthesize everything in `analysis/$1/` into a **Modernization Brief** — the
 single document a steering committee approves and engineering executes.

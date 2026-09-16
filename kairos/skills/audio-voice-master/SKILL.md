@@ -3,7 +3,7 @@ name: "audio-voice-master"
 description: "专业音频配音助手，能够分析文案内容，识别不同角色，为每个角色智能分配最合适的声音进行配音，同时可以生成氛围音效和背景音乐。适用于有声读物、广告配音、多角色对话配音、教育内容、短视频旁白等场景。关键词：配音、声音、音频、角色、旁白、音效、背景音乐、有声读物、TTS"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\you\\.minimax\\skills\\audio-voice-master\\SKILL.md"
+source-path: "minimax/skills/audio-voice-master/SKILL.md"
 ---
 # 音频配音大师
 

@@ -3,7 +3,7 @@ name: "web-3d-asset-pipeline"
 description: "Prepare and optimize browser-game 3D assets. Use when the user asks for GLB or glTF shipping work, including Blender cleanup and export, collision or LOD setup, compression, texture packaging, and run"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\game-studio\\11c74d6b\\skills\\web-3d-asset-pipeline\\SKILL.md"
+source-path: "imported"
 ---
 # Web 3D Asset Pipeline
 

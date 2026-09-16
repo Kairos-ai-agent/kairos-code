@@ -4,7 +4,7 @@ description: "Applies leased Impeccable live manual copy-edit batches to source 
 priority: 0.5
 tools: "Read, Write, Edit, Bash, Glob, Grep"
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\impeccable\\skill\\agents\\impeccable-manual-edit-applier.md"
+source-path: "claude/plugins/marketplaces/impeccable/skill/agents/impeccable-manual-edit-applier.md"
 ---
 # Impeccable Manual Edit Applier
 

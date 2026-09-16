@@ -3,7 +3,7 @@ name: "felo-superagent"
 description: "Felo SuperAgent API: AI conversation with real-time SSE streaming on a persistent LiveDoc canvas. Use when users want SuperAgent chat, continuous conversation, logo/branding design, or e-commerce prod"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\felo-superagent\\SKILL.md"
+source-path: "hermes/skills/felo-superagent/SKILL.md"
 ---
 # Felo SuperAgent Skill
 

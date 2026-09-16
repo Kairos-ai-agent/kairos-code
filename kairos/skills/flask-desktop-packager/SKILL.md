@@ -3,7 +3,7 @@ name: "flask-desktop-packager"
 description: "Package Flask+SQLite web apps as native Windows desktop applications using pywebview + PyInstaller. Use when the user wants to convert a Flask web app into a desktop app, build an .exe, or deploy with"
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\you\\.agents\\skills\\software-development\\flask-desktop-packager\\SKILL.md"
+source-path: "agents/skills/software-development/flask-desktop-packager/SKILL.md"
 ---
 # Flask Desktop Packager
 

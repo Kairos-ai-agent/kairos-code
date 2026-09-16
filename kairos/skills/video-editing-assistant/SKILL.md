@@ -3,7 +3,7 @@ name: "video-editing-assistant"
 description: "专业视频剪辑助手，使用FFmpeg对视频进行智能剪辑处理。支持自动分析视频内容确定剪辑方案，也支持用户自定义剪辑参数（时长、比例、风格、特效）。触发词：剪辑视频、裁剪视频、视频剪切、调整时长、添加转场、视频格式转换、video edit、video trim、video cut"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\you\\.minimax\\skills\\video-editing-assistant\\SKILL.md"
+source-path: "minimax/skills/video-editing-assistant/SKILL.md"
 ---
 # 视频剪辑助手
 

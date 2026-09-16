@@ -3,7 +3,7 @@ name: "help"
 description: "Get help with the hookify plugin"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\hookify\\commands\\help.md"
+source-path: "claude-plugins-official/plugins/hookify/commands/help.md"
 ---
 # Hookify Plugin Help
 

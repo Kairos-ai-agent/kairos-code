@@ -3,7 +3,7 @@ name: "zh-cn"
 description: "为 Seedance 2.0（Higgsfield）生成房地产、建筑和室内设计展示视频提示。在用户想要财产巡览、房地产清单、建筑展示、室内设计视频、家居登台内容、财产营销、虚拟巡览、施工揭示或任何房地产/建筑视频时使用。在以下情况下触发：房地产、财产、房屋、公寓、建筑、室内设计、房屋巡览、清单视频、财产营销、虚拟巡览、建筑、施工、翻新、家居登台或任何房地产/建筑视频请求。即使是\"为我的清单制作视频"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\creative\\higgsfield-real-estate\\zh-CN\\SKILL.md"
+source-path: "hermes/skills/creative/higgsfield-real-estate/zh-CN/SKILL.md"
 ---
 # 房地产和建筑展示视频 — Seedance 2.0（Higgsfield）
 

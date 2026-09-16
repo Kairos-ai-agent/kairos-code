@@ -3,7 +3,7 @@ name: "xyq-skill"
 description: "通过小云雀的 AI 能力进行综合创作，支持生成和编辑图片/视频，并在用户明确要求图片或视频模型直出、指定图片或视频模型或直接调用 CLI 时使用 pippit-tool-cli generate-image / generate-video；用户要求视频超分、提升视频清晰度、擦字幕或去字幕时，使用 video-super-resolution / erase-video-subtitle。覆盖文生"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\skills\\xyq-skill\\SKILL.md"
+source-path: "claude/skills/xyq-skill/SKILL.md"
 ---
 # 小云雀创作、图片/视频模型直出与视频处理
 

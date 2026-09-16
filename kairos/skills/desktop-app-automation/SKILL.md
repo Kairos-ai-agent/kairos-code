@@ -3,7 +3,7 @@ name: "desktop-app-automation"
 description: "Use when assessing agent control of desktop apps."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\software-development\\desktop-app-automation\\SKILL.md"
+source-path: "hermes/skills/software-development/desktop-app-automation/SKILL.md"
 ---
 # 让 agent 操作桌面软件：能力分层与选型
 

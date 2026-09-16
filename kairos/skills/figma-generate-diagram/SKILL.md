@@ -3,7 +3,7 @@ name: "figma-generate-diagram"
 description: "MANDATORY prerequisite — load this skill BEFORE every `generate_diagram` tool call. NEVER call `generate_diagram` directly without loading this skill first. Trigger whenever the user asks to create, g"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\figma\\11c74d6b\\skills\\figma-generate-diagram\\SKILL.md"
+source-path: "imported"
 ---
 # generate-diagram
 

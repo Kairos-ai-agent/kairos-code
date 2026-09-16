@@ -3,7 +3,7 @@ name: "sound-design-film"
 description: "Apply Walter Murch's legendary film sound principles to marketing video, creating emotionally resonant audio that audiences feel without consciously noticing. Use when: Designing sound for brand films"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\openclaw-imports\\sound-design-film\\SKILL.md"
+source-path: "hermes/skills/openclaw-imports/sound-design-film/SKILL.md"
 ---
 # Sound Design (Murch Method)
 

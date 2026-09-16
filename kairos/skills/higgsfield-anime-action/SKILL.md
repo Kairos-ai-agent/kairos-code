@@ -3,7 +3,7 @@ name: "higgsfield-anime-action"
 description: "Generate anime-style video prompts for Seedance 2.0 on Higgsfield. Use whenever the user wants anime, Japanese animation style, shonen action, seinen drama, magical girl, mecha, isekai, slice-of-life"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\creative\\higgsfield-anime-action\\SKILL.md"
+source-path: "hermes/skills/creative/higgsfield-anime-action/SKILL.md"
 ---
 # Anime-Style Video Generation for Seedance 2.0 on Higgsfield
 

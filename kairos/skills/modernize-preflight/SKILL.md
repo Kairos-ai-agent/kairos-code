@@ -3,7 +3,7 @@ name: "modernize-preflight"
 description: "Environment readiness check — analysis tools, build toolchain, source completeness, telemetry access"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\code-modernization\\commands\\modernize-preflight.md"
+source-path: "claude-plugins-official/plugins/code-modernization/commands/modernize-preflight.md"
 ---
 Check whether this environment is ready to analyze — and eventually
 transform — `legacy/$1`, and tell the user exactly what to fix before the

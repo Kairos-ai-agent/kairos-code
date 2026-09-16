@@ -3,7 +3,7 @@ name: "hardware-design-review"
 description: "Review embedded hardware designs by comparing technical PDFs against production files (PCB coordinates, BOMs). Diagnose firmware/algorithm issues. Use when user provides hardware design documents, PCB"
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\you\\.agents\\skills\\software-development\\hardware-design-review\\SKILL.md"
+source-path: "agents/skills/software-development/hardware-design-review/SKILL.md"
 ---
 # Hardware Design Review
 

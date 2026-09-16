@@ -3,7 +3,7 @@ name: "hardware-failure-analysis"
 description: ">-"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\hardware\\hardware-failure-analysis\\SKILL.md"
+source-path: "hermes/skills/hardware/hardware-failure-analysis/SKILL.md"
 ---
 # Hardware Failure Analysis & 8D Report Generation
 

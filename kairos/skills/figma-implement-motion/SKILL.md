@@ -3,7 +3,7 @@ name: "figma-implement-motion"
 description: "Translates Figma motion and animations into production-ready application code. Use when implementing animation/motion from a Figma design — user mentions \"implement this motion\", \"add animation from F"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\figma\\11c74d6b\\skills\\figma-implement-motion\\SKILL.md"
+source-path: "imported"
 ---
 # Implement Motion
 

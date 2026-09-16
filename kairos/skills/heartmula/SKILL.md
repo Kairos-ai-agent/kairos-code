@@ -4,7 +4,7 @@ description: "HeartMuLa: Suno-like song generation from lyrics + tags."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\media\\heartmula\\SKILL.md"
+source-path: "hermes/skills/media/heartmula/SKILL.md"
 ---
 # HeartMuLa - Open-Source Music Generation
 

@@ -3,7 +3,7 @@ name: "seo-geo-optimizer"
 description: "SEO & GEO optimization expert. Use when user needs keyword research, content optimization, SEO audits, competitor analysis, technical SEO checks, AI citation optimization (GEO), Schema markup generati"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\you\\.minimax\\skills\\seo-geo-optimizer\\SKILL.md"
+source-path: "minimax/skills/seo-geo-optimizer/SKILL.md"
 ---
 # SEO & GEO Optimization Expert
 

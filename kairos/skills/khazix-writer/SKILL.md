@@ -3,7 +3,7 @@ name: "khazix-writer"
 description: "|"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\khazix-writer\\SKILL.md"
+source-path: "hermes/skills/khazix-writer/SKILL.md"
 ---
 # 卡兹克公众号长文写作
 

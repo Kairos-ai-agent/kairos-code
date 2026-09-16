@@ -4,7 +4,7 @@ description: "Operate the Teams meeting summary pipeline via Hermes CLI — summ
 priority: 0.5
 version: "1.1.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\productivity\\teams-meeting-pipeline\\SKILL.md"
+source-path: "hermes/skills/productivity/teams-meeting-pipeline/SKILL.md"
 ---
 # Teams Meeting Pipeline
 

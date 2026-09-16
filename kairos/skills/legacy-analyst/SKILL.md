@@ -4,7 +4,7 @@ description: "Deep-reads legacy codebases (COBOL, Java, .NET, Node, anything) to
 priority: 0.5
 tools: "Read, Glob, Grep, Bash"
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\code-modernization\\agents\\legacy-analyst.md"
+source-path: "claude-plugins-official/plugins/code-modernization/agents/legacy-analyst.md"
 ---
 You are a senior legacy systems analyst with 20 years of experience reading
 code nobody else wants to read — COBOL, JCL, RPG, classic ASP, EJB 2,

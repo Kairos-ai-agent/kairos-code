@@ -3,7 +3,7 @@ name: "windows-python-venv-troubleshooting"
 description: "Diagnose and fix Windows Python venv issues that don't reproduce consistently across shells — MSYS symlink vs NTFS junction, pyvenv.cfg home path, uv link-mode, \"No Python at\" launcher errors. Trigger"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\.archive\\windows-python-venv-troubleshooting\\SKILL.md"
+source-path: "hermes/skills/.archive/windows-python-venv-troubleshooting/SKILL.md"
 ---
 # Windows Python venv Troubleshooting
 
@@ -45,7 +45,7 @@ A class of bugs unique to Windows where a Python virtualenv fails to launch from
 4. **Verify python.exe reachable from each shell**
    ```bash
    # bash → resolves MSYS symlink → works
-   "C:\Users\u\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\python.exe" --version
+   "~\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\python.exe" --version
    # powershell → may not resolve MSYS symlink → fails
    & 'C:\...\cpython-3.11-windows-x86_64-none\python.exe' --version
    ```

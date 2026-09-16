@@ -3,7 +3,7 @@ name: "ai-client-model-injection"
 description: ">-"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\.archive\\ai-client-model-injection\\SKILL.md"
+source-path: "hermes/skills/.archive/ai-client-model-injection/SKILL.md"
 ---
 # AI Client Model Injection
 

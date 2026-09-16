@@ -3,7 +3,7 @@ name: "social-content-generator-0.1.0"
 description: "When the user wants help creating, scheduling, or optimizing social media content for LinkedIn, Twitter/X, Instagram, TikTok, Facebook, or other platforms. Also use when the user mentions 'LinkedIn po"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\social-content-generator-0.1.0\\SKILL.md"
+source-path: "hermes/skills/social-content-generator-0.1.0/SKILL.md"
 ---
 # Social Content
 

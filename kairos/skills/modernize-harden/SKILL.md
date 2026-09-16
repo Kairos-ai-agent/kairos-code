@@ -3,7 +3,7 @@ name: "modernize-harden"
 description: "Security vulnerability scan with a reviewable remediation patch — OWASP, CWE, CVE, secrets, injection"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\code-modernization\\commands\\modernize-harden.md"
+source-path: "claude-plugins-official/plugins/code-modernization/commands/modernize-harden.md"
 ---
 Run a **security hardening pass** on the legacy system: find
 vulnerabilities, rank them, and produce a reviewable patch for the

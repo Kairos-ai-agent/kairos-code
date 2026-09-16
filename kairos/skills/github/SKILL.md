@@ -3,7 +3,7 @@ name: "github"
 description: "Triage and orient GitHub repository, pull request, and issue work through the connected GitHub app. Use when the user asks for general GitHub help, wants PR or issue summaries, or needs repository con"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\github\\11c74d6b\\skills\\github\\SKILL.md"
+source-path: "imported"
 ---
 # GitHub
 

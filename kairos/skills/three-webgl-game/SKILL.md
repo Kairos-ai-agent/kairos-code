@@ -3,7 +3,7 @@ name: "three-webgl-game"
 description: "Implement browser-game runtimes with plain Three.js. Use when the user wants imperative scene control in TypeScript or Vite with GLB assets, loaders, physics, and low-level WebGL debugging."
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\game-studio\\11c74d6b\\skills\\three-webgl-game\\SKILL.md"
+source-path: "imported"
 ---
 # Three WebGL Game
 

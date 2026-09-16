@@ -3,7 +3,7 @@ name: "storyboard-gen"
 description: "|"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\storyboard-gen\\SKILL.md"
+source-path: "hermes/skills/storyboard-gen/SKILL.md"
 ---
 ## 集成到 AI 视频流水线 (v6 → 视频模型)
 

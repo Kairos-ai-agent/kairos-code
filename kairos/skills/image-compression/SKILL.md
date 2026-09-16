@@ -3,7 +3,7 @@ name: "image-compression"
 description: "Compress JPEG/PNG images to a target file size (KB/MB) using Python/Pillow. Includes binary-search quality tuning, metadata stripping, progressive JPEG, and Windows-friendly paths."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\media\\image-compression\\SKILL.md"
+source-path: "hermes/skills/media/image-compression/SKILL.md"
 ---
 # Image Compression
 
@@ -78,6 +78,6 @@ For request-response flow, write a self-contained Python script:
 
 ## On Windows
 
-- File paths: use raw strings `r"C:\Users\..."` or escaped backslashes
+- File paths: use raw strings `r"~"` or escaped backslashes
 - MEDIA: paths work in Hermes to send images back to the user
-- Output to user's Desktop: `r"C:\Users\<user>\Desktop\compressed.jpg"`
+- Output to user's Desktop: `r"~\Desktop\compressed.jpg"`

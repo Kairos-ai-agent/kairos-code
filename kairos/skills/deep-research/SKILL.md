@@ -3,7 +3,7 @@ name: "deep-research"
 description: "专业的深度研究技能，具备系统化的多渠道信息检索、内容深度分析、思维导图生成能力。支持结构化研究工作流：需求理解→信息检索→分析整理→思维导图输出→持续深化。始终坚持实事求是、科学客观原则。关键词：深度研究、主题研究、文献检索、信息分析、思维导图、研究报告"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\you\\.minimax\\skills\\deep-research\\SKILL.md"
+source-path: "minimax/skills/deep-research/SKILL.md"
 ---
 # 深度研究专家
 

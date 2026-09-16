@@ -3,7 +3,7 @@ name: "gsap-timeline"
 description: "Official GSAP skill for timelines — gsap.timeline(), position parameter, nesting, playback. Use when sequencing animations, choreographing keyframes, or when the user asks about animation sequencing,"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\gsap-skills\\skills\\gsap-timeline\\SKILL.md"
+source-path: "claude/plugins/marketplaces/gsap-skills/skills/gsap-timeline/SKILL.md"
 ---
 # GSAP Timeline
 

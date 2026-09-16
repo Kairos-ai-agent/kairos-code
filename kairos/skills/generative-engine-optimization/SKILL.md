@@ -3,7 +3,7 @@ name: "generative-engine-optimization"
 description: "Generate Engine Optimization (生成式引擎优化) — optimize content for AI search engines (豆包, DeepSeek, 元宝, Kimi, 通义千问). Covers JSON-LD structured data, FAQPage schema, natural language question expansion, met"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\research\\generative-engine-optimization\\SKILL.md"
+source-path: "hermes/skills/research/generative-engine-optimization/SKILL.md"
 ---
 # Generative Engine Optimization (GEO)
 

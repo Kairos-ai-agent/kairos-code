@@ -3,7 +3,7 @@ name: "frontend-testing-debugging"
 description: "Use when testing, debugging, or making targeted improvements to rendered frontend apps through the Build Web Apps or web dev plugin: local dev servers, UI regressions, interaction bugs, console errors"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\build-web-apps\\11c74d6b\\skills\\frontend-testing-debugging\\SKILL.md"
+source-path: "imported"
 ---
 # Frontend Testing Debugging
 

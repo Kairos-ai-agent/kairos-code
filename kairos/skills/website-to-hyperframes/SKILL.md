@@ -3,7 +3,7 @@ name: "website-to-hyperframes"
 description: "|"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\hyperframes\\11c74d6b\\skills\\website-to-hyperframes\\SKILL.md"
+source-path: "imported"
 ---
 # Website to HyperFrames
 

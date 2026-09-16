@@ -3,7 +3,7 @@ name: "ci-pipeline-debugging"
 description: "Use when CI hangs, dies without logs, or fails only on CI."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\ci-pipeline-debugging\\SKILL.md"
+source-path: "hermes/skills/ci-pipeline-debugging/SKILL.md"
 ---
 # Debugging CI pipelines
 

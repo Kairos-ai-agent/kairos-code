@@ -3,7 +3,7 @@ name: "control-in-app-browser"
 description: "Control the in-app Browser for opening, navigating, inspecting visible or interactive page state, clicking, typing, screenshots, and local web testing. It can have existing signed-in sessions. For sem"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-bundled\\browser\\26.727.40816\\skills\\control-in-app-browser\\SKILL.md"
+source-path: "imported"
 ---
 # Browser
 ## Stop: choose the right surface before any browser action

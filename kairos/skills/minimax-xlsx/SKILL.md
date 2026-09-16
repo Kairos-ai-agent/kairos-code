@@ -3,7 +3,7 @@ name: "minimax-xlsx"
 description: "Open, create, read, analyze, edit, or validate Excel/spreadsheet files (.xlsx, .xlsm, .csv, .tsv). Use when the user asks to create, build, modify, analyze, read, validate, or format any Excel spreads"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\you\\.minimax\\skills\\minimax-xlsx\\SKILL.md"
+source-path: "minimax/skills/minimax-xlsx/SKILL.md"
 ---
 # MiniMax XLSX Skill
 

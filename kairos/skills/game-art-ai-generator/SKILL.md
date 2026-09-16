@@ -3,7 +3,7 @@ name: "game-art-ai-generator"
 description: "游戏美术AI生成器。当用户要求生成游戏美术素材、创建像素艺术、设计游戏UI、生成游戏图标、匹配游戏音效时使用。与Construct3项目编辑器插件(c3p-project-auto-editor)和TikTok开发者API插件(tiktok-dev-api-auto-integrator)无缝协同，形成\"美术生成-项目修改-上线变现\"全自动化闭环。"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\you\\.minimax\\skills\\game-art-ai-generator\\SKILL.md"
+source-path: "minimax/skills/game-art-ai-generator/SKILL.md"
 ---
 # Game Art AI Generator - 游戏美术AI生成器
 

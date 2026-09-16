@@ -3,7 +3,7 @@ name: "ponytail"
 description: ">"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\ponytail\\skills\\ponytail\\SKILL.md"
+source-path: "claude/plugins/marketplaces/ponytail/skills/ponytail/SKILL.md"
 ---
 # Ponytail
 

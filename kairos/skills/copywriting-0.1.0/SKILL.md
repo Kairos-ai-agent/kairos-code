@@ -3,7 +3,7 @@ name: "copywriting-0.1.0"
 description: "Write persuasive copy for landing pages, emails, ads, sales pages, and marketing materials. Use when you need to write headlines, CTAs, product descriptions, ad copy, email sequences, or any text mean"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\copywriting-0.1.0\\SKILL.md"
+source-path: "hermes/skills/copywriting-0.1.0/SKILL.md"
 ---
 # Copywriting
 

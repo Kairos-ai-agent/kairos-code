@@ -3,7 +3,7 @@ name: "project-artifact"
 description: "Generate and publish a project status artifact — an opinionated, tabbed status page for a project too big for one update (overview & success criteria, the workstream sequence, next steps, plus backgro"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\project-artifact\\skills\\project-artifact\\SKILL.md"
+source-path: "claude-plugins-official/plugins/project-artifact/skills/project-artifact/SKILL.md"
 ---
 # project-artifact — an opinionated project status page
 

@@ -3,7 +3,7 @@ name: "database-schema-design"
 description: "数据库设计全流程。涵盖数据建模、ER图、SQL schema设计、范式化、索引策略、迁移方案。适用于关系型和非关系型数据库。触发器：设计数据库表结构、建表、优化查询、做数据迁移。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\software-development\\database-schema-design\\SKILL.md"
+source-path: "hermes/skills/software-development/database-schema-design/SKILL.md"
 ---
 # 数据库设计 · Database Schema Design
 

@@ -3,7 +3,7 @@ name: "windows-proxy-cleanup"
 description: "Use when Windows startup proxy breaks network. Remove it."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\software-development\\windows-proxy-cleanup\\SKILL.md"
+source-path: "hermes/skills/software-development/windows-proxy-cleanup/SKILL.md"
 ---
 # Windows 启动代理排查与清除
 

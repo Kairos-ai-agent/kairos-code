@@ -4,7 +4,7 @@ description: "HuggingFace hf CLI: search/download/upload models, datasets."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\mlops\\huggingface-hub\\SKILL.md"
+source-path: "hermes/skills/mlops/huggingface-hub/SKILL.md"
 ---
 # Hugging Face CLI (`hf`) Reference Guide
 

@@ -3,7 +3,7 @@ name: "ai-coder"
 description: "一站式全栈开发专家（Full-stack development expert）。支持 Vue3/React/Angular/SpringBoot/Node.js/Python 等主流技术栈，覆盖需求分析、架构设计、代码实现、代码审查、UI/UX设计全流程。Trigger keywords: 全栈开发, code review, 代码审查, UI设计, 需求分析, 架构设计, full-stack"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\you\\.minimax\\skills\\ai-coder\\SKILL.md"
+source-path: "minimax/skills/ai-coder/SKILL.md"
 ---
 # AI Coder — 全栈开发·代码审查·UI/UX设计 一站式专家
 

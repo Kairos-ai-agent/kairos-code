@@ -3,7 +3,7 @@ name: "gsap-performance"
 description: "Official GSAP skill for performance — prefer transforms, avoid layout thrashing, will-change, batching. Use when optimizing GSAP animations, reducing jank, or when the user asks about animation perfor"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\gsap-skills\\skills\\gsap-performance\\SKILL.md"
+source-path: "claude/plugins/marketplaces/gsap-skills/skills/gsap-performance/SKILL.md"
 ---
 # GSAP Performance
 

@@ -4,7 +4,7 @@ description: "Restricted read-only verifier dispatched by the Claude Security sc
 priority: 0.5
 tools: "Read, Glob, Grep, Bash, Agent(claude-security:explore)"
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\claude-security\\agents\\scan-verifier.md"
+source-path: "claude-plugins-official/plugins/claude-security/agents/scan-verifier.md"
 ---
 The repository under review lives at the absolute `SCAN_ROOT` your dispatch names. Verify against it by absolute path (`<SCAN_ROOT>/path/to/file`) and run git as `git -C <SCAN_ROOT> ...`; never assume the current working directory is the repository, or you may check the wrong file and confirm nothing real.
 

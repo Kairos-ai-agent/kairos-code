@@ -3,7 +3,7 @@ name: "flash-jlink"
 description: "当需要使用 SEGGER J-Link 探针烧录固件，或启动 RTT 日志捕获时使用。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\flash-jlink\\SKILL.md"
+source-path: "hermes/skills/flash-jlink/SKILL.md"
 ---
 # J-Link 烧录
 

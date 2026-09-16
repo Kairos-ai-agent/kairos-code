@@ -3,7 +3,7 @@ name: "memory-management"
 description: "Agent记忆管理skill。涵盖如何有效使用memory工具、session_search做跨会话召回、记忆优先级策略、何时保存vs何时不保存、技能沉淀规则。帮助Agent提升跨会话的持续学习能力。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\software-development\\memory-management\\SKILL.md"
+source-path: "hermes/skills/software-development/memory-management/SKILL.md"
 ---
 # 记忆管理 · Memory Management
 

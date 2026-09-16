@@ -4,7 +4,7 @@ description: "OSINT username search across 400+ social networks. Hunt down socia
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\sherlock\\SKILL.md"
+source-path: "hermes/skills/sherlock/SKILL.md"
 ---
 # Sherlock OSINT Username Search
 

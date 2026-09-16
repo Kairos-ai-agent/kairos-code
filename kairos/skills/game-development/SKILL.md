@@ -4,7 +4,7 @@ description: "Design and ship browser-playable games from no-build Three.js prot
 priority: 0.5
 version: "1.0.0"
 imported-from: "minimax"
-source-path: "C:\\Users\\you\\.minimax\\skills\\game-development\\SKILL.md"
+source-path: "minimax/skills/game-development/SKILL.md"
 ---
 ## Setup
 

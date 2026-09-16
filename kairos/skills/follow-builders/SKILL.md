@@ -3,7 +3,7 @@ name: "follow-builders"
 description: "AI builders digest — monitors top AI builders on X and YouTube podcasts, remixes their content into digestible summaries. Use when the user wants AI industry insights, builder updates, or invokes /ai."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\follow-builders\\SKILL.md"
+source-path: "hermes/skills/follow-builders/SKILL.md"
 ---
 # Follow Builders, Not Influencers
 

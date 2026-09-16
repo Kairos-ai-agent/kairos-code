@@ -4,9 +4,30 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project aims at
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reaches 1.0.
 
-## [Unreleased]
+## [0.1.5] - 2026-09-16
+
+### Security
+
+- **A credential gate guards the import.** Any candidate file containing a
+  key-shaped string is skipped and logged rather than copied. Four were refused.
+- **No machine-specific paths in the release.** A repo-hygiene test caught 46
+  lines across 11 skills that carried drive letters, a user name, or notes about
+  private projects (including the filenames of private secret files). The notes
+  about this particular machine were dropped from the repo — their originals are
+  untouched — and the reusable ones were rewritten. The public tree now carries
+  no drive letters and no user names.
 
 ### Added
+
+- **The skills, plugins and MCP servers the other agents already have.** A
+  survey of every agent installed on this machine found 1941 distinct skill
+  names. The 554 that are genuinely written to the SKILL.md spec — real content,
+  a declared description — now ship with the app, each recording the agent it
+  came from. Five plugins from the Claude Code marketplace (Apache-2.0 / MIT,
+  verified before copying, upstream LICENSE and an ATTRIBUTION.md included)
+  became bundled plugins, and the vendor-published MCP servers from that
+  marketplace are in the registry: off by default, one line to enable, because
+  each needs a runtime this build does not ship.
 
 - **The capability view has a screen: Tools → Capabilities.** It shows what the
   agent actually has in the current project — skills with their scope, priority

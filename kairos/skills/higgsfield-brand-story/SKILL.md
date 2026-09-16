@@ -3,7 +3,7 @@ name: "higgsfield-brand-story"
 description: "Generate brand storytelling and narrative video prompts for Seedance 2.0 on Higgsfield. Use whenever the user wants to create a brand story video, company origin story, mission video, about us video,"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\creative\\higgsfield-brand-story\\SKILL.md"
+source-path: "hermes/skills/creative/higgsfield-brand-story/SKILL.md"
 ---
 # Brand Storytelling & Narrative Video Content for Seedance 2.0 on Higgsfield
 

@@ -3,7 +3,7 @@ name: "drawio-skill"
 description: "Create and edit draw.io diagrams through the configured drawio MCP server, including flowcharts, architecture diagrams, ML model diagrams, Chinese labels, animated connectors, and svg export."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\drawio-skill\\SKILL.md"
+source-path: "hermes/skills/drawio-skill/SKILL.md"
 ---
 # Draw.io Skill
 

@@ -3,7 +3,7 @@ name: "pyinstaller-desktop-packaging"
 description: "Build and distribute Windows desktop apps with PyInstaller — Flask/FastAPI backend (uvicorn) + WebView or browser, bundled into a single .exe. Covers onefile vs onedir tradeoffs, the COLLECT wipes-dat"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\software-development\\pyinstaller-desktop-packaging\\SKILL.md"
+source-path: "hermes/skills/software-development/pyinstaller-desktop-packaging/SKILL.md"
 ---
 # PyInstaller Desktop App Packaging
 

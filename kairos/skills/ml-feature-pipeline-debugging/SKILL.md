@@ -3,7 +3,7 @@ name: "ml-feature-pipeline-debugging"
 description: "Use when a ready ML model returns 0 recs—dropped features."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\software-development\\ml-feature-pipeline-debugging\\SKILL.md"
+source-path: "hermes/skills/software-development/ml-feature-pipeline-debugging/SKILL.md"
 ---
 # ML Feature-Pipeline Debugging
 

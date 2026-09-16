@@ -4,7 +4,7 @@ description: "Triage an inbox: prioritize threads, draft replies safely."
 priority: 0.5
 version: "0.1.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\email\\email-inbox-triage\\SKILL.md"
+source-path: "hermes/skills/email/email-inbox-triage/SKILL.md"
 ---
 # Email Inbox Triage
 

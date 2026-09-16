@@ -3,7 +3,7 @@ name: "hyperframes"
 description: "Create video compositions, animations, title cards, overlays, captions, voiceovers, audio-reactive visuals, and scene transitions in HyperFrames HTML. Use when asked to build any HTML-based video cont"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\hyperframes\\11c74d6b\\skills\\hyperframes\\SKILL.md"
+source-path: "imported"
 ---
 # HyperFrames
 

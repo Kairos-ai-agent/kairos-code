@@ -3,7 +3,7 @@ name: "feishu-cron-reminder"
 description: ">"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\feishu-cron-reminder\\SKILL.md"
+source-path: "hermes/skills/feishu-cron-reminder/SKILL.md"
 ---
 # Feishu Cron Reminder
 

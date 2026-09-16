@@ -4,7 +4,7 @@ description: "Use when a Hermes Kanban worker wants to run Codex CLI as an isola
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\autonomous-ai-agents\\kanban-codex-lane\\SKILL.md"
+source-path: "hermes/skills/autonomous-ai-agents/kanban-codex-lane/SKILL.md"
 ---
 # Kanban Codex Lane
 

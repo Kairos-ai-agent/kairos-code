@@ -3,7 +3,7 @@ name: "taste-skill"
 description: "Anti-slop frontend skill for landing pages, portfolios, and redesigns. The agent reads the brief, infers the right design direction, and ships interfaces that do not look templated. Real design system"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\taste-skill\\skills\\taste-skill\\SKILL.md"
+source-path: "claude/plugins/marketplaces/taste-skill/skills/taste-skill/SKILL.md"
 ---
 # tasteskill: Anti-Slop Frontend Skill
 

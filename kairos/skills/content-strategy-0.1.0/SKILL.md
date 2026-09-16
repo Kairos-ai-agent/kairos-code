@@ -3,7 +3,7 @@ name: "content-strategy-0.1.0"
 description: "Build and execute a content marketing strategy for a solopreneur business. Use when planning what content to create, deciding on content formats and channels, building a content calendar, measuring co"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\content-strategy-0.1.0\\SKILL.md"
+source-path: "hermes/skills/content-strategy-0.1.0/SKILL.md"
 ---
 # Content Strategy
 

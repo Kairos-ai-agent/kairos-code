@@ -3,7 +3,7 @@ name: "architecture-designer-0.1.0"
 description: "Use when designing new system architecture, reviewing existing designs, or making architectural decisions. Invoke for system design, architecture review, design patterns, ADRs, scalability planning."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\architecture-designer-0.1.0\\SKILL.md"
+source-path: "hermes/skills/architecture-designer-0.1.0/SKILL.md"
 ---
 # Architecture Designer
 

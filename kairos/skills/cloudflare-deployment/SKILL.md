@@ -3,7 +3,7 @@ name: "cloudflare-deployment"
 description: "Deploy and operate Cloudflare Workers + D1 + R2 + KV projects — covers Pages (Upload assets) vs Workers (API deploy) paths, project setup, API Token management, deploy scripts, JS syntax validation, c"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\.archive\\cloudflare-deployment\\SKILL.md"
+source-path: "hermes/skills/.archive/cloudflare-deployment/SKILL.md"
 ---
 # Cloudflare Deployment + Runtime Diagnostics
 
@@ -50,7 +50,7 @@ curl -s -X POST \
 
 ### Where to Find Account/DB/Token
 
-User's projects (e.g. `C:\Users\you\D\ImageGen\`, `C:\Users\you\D\ShortDramaForge\`) all have a `deploy.py` or `deploy_full.py` near the root. Inside it you'll find:
+User's projects (e.g. `<projects>\ImageGen\`, `<projects>\ShortDramaForge\`) all have a `deploy.py` or `deploy_full.py` near the root. Inside it you'll find:
 
 ```python
 ACCOUNT = "94b83b469095b52dae264ddacbb10d1c"        # CF Account ID
@@ -71,7 +71,7 @@ Concrete failure mode (recurring): user says "I can't log in to test-toplist.com
 
 ```bash
 # 1. Map domain → project
-cd /c/Users/you/D
+cd ~/D
 grep -rEn "test-toplist\.com|imagegen-forge|empty-fog-b746|shortdrama-forge|shortdrama\.com" ImageGen/ ShortDramaForge/ 2>/dev/null | head -10
 ```
 
@@ -110,7 +110,7 @@ The platform redacts any token-like substring (`cfat_...`, `Bearer `, `sk-...`, 
 
 ```python
 import os, json, urllib.request
-PROJ = r'C:\Users\you\D\ImageGen'
+PROJ = r'<projects>\ImageGen'
 with open(os.path.join(PROJ, '.deploy_token')) as f:
     TOKEN = f.read().strip()
 # Use TOKEN in the same script — never written to a file/env var.

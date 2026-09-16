@@ -3,7 +3,7 @@ name: "serial-shell"
 description: "当需要通过串口与嵌入式设备建立交互式 Shell 会话、执行单条命令或批量脚本时使用。"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\skills\\serial-shell\\SKILL.md"
+source-path: "claude/skills/serial-shell/SKILL.md"
 ---
 # 串口 Shell 交互
 

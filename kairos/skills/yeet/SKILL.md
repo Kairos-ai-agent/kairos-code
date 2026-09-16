@@ -3,7 +3,7 @@ name: "yeet"
 description: "Publish local changes to GitHub by confirming scope, committing intentionally, pushing the branch, and opening a draft PR through the GitHub app from this plugin, with `gh` used only as a fallback whe"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\github\\11c74d6b\\skills\\yeet\\SKILL.md"
+source-path: "imported"
 ---
 # GitHub Publish Changes
 

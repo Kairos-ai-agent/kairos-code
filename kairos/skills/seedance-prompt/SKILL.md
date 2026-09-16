@@ -4,7 +4,7 @@ description: "This skill should be used when the user asks to \"generate video p
 priority: 0.5
 version: "2.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\.archive\\seedance-prompt\\SKILL.md"
+source-path: "hermes/skills/.archive/seedance-prompt/SKILL.md"
 ---
 # Seedance 2.0 视频提示词生成器
 

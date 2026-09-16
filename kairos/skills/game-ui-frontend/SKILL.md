@@ -3,7 +3,7 @@ name: "game-ui-frontend"
 description: "Design UI surfaces for browser games. Use when the user asks for HUDs, menus, overlays, responsive layouts, or visual direction that must protect the playfield."
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\game-studio\\11c74d6b\\skills\\game-ui-frontend\\SKILL.md"
+source-path: "imported"
 ---
 # Game UI Frontend
 

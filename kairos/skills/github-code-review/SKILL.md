@@ -4,7 +4,7 @@ description: "Review PRs: diffs, inline comments via gh or REST."
 priority: 0.5
 version: "1.1.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\github\\github-code-review\\SKILL.md"
+source-path: "hermes/skills/github/github-code-review/SKILL.md"
 ---
 # GitHub Code Review
 

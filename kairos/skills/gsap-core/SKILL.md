@@ -3,7 +3,7 @@ name: "gsap-core"
 description: "Official GSAP skill for the core API — gsap.to(), from(), fromTo(), easing, duration, stagger, defaults, gsap.matchMedia() (responsive, prefers-reduced-motion). Use when the user asks for a JavaScript"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\gsap-skills\\skills\\gsap-core\\SKILL.md"
+source-path: "claude/plugins/marketplaces/gsap-skills/skills/gsap-core/SKILL.md"
 ---
 # GSAP Core
 

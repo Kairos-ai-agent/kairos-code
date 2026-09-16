@@ -3,7 +3,7 @@ name: "automation-workflows-0.1.0"
 description: "Design and implement automation workflows to save time and scale operations as a solopreneur. Use when identifying repetitive tasks to automate, building workflows across tools, setting up triggers an"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\automation-workflows-0.1.0\\SKILL.md"
+source-path: "hermes/skills/automation-workflows-0.1.0/SKILL.md"
 ---
 # Automation Workflows
 

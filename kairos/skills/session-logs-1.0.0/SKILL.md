@@ -3,7 +3,7 @@ name: "session-logs-1.0.0"
 description: "Search and analyze your own session logs (older/parent conversations) using jq."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\session-logs-1.0.0\\SKILL.md"
+source-path: "hermes/skills/session-logs-1.0.0/SKILL.md"
 ---
 # session-logs
 

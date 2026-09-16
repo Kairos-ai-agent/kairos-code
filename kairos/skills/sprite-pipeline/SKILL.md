@@ -3,7 +3,7 @@ name: "sprite-pipeline"
 description: "Generate and normalize 2D sprite animations. Use when the user asks for full-strip generation from approved source frames, consistent anchor and scale normalization, or preview assets for browser-game"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\game-studio\\11c74d6b\\skills\\sprite-pipeline\\SKILL.md"
+source-path: "imported"
 ---
 # Sprite Pipeline
 

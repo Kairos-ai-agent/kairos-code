@@ -3,7 +3,7 @@ name: "canva"
 description: "Use when creating professional graphics, designs, and visual content for Xiaohongshu posts, stories, banners, or marketing materials without advanced design skills"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\openclaw-imports\\canva\\SKILL.md"
+source-path: "hermes/skills/openclaw-imports/canva/SKILL.md"
 ---
 # Canva (Canva可画)
 

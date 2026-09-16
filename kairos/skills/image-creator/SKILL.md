@@ -3,7 +3,7 @@ name: "image-creator"
 description: "Curated image generation assistant covering 17 styles across 4 categories: character figures, scenes, products, and style transforms. Triggers on: 手办, figure, portrait, chibi, diorama, city, landmark,"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\you\\.minimax\\skills\\image-creator\\SKILL.md"
+source-path: "minimax/skills/image-creator/SKILL.md"
 ---
 # 图像创作 — Curated Image Generation
 

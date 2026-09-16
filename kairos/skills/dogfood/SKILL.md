@@ -4,7 +4,7 @@ description: "Exploratory QA of web apps: find bugs, evidence, reports."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\dogfood\\SKILL.md"
+source-path: "hermes/skills/dogfood/SKILL.md"
 ---
 # Dogfood: Systematic Web Application QA Testing
 

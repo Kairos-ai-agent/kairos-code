@@ -4,7 +4,7 @@ description: "OpenAI's general-purpose speech recognition model. Supports 99 lan
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\whisper\\SKILL.md"
+source-path: "hermes/skills/whisper/SKILL.md"
 ---
 # Whisper - Robust Speech Recognition
 

@@ -3,7 +3,7 @@ name: "figma-use"
 description: "**MANDATORY prerequisite** — you MUST invoke this skill BEFORE every `use_figma` tool call. NEVER call `use_figma` directly without loading this skill first. Skipping it causes common, hard-to-debug f"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\figma\\11c74d6b\\skills\\figma-use\\SKILL.md"
+source-path: "imported"
 ---
 # use_figma — Figma Plugin API Skill
 

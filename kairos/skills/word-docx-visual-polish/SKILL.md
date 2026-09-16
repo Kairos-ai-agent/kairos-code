@@ -3,7 +3,7 @@ name: "word-docx-visual-polish"
 description: "Polish an existing Word .docx for visual density and professionalism WITHOUT changing any text. Triggers when user uploads a .docx and asks to 美化/优化排版/配色/排版 or complains about 空白太多/不够紧凑. Covers two pa"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\.archive\\word-docx-visual-polish\\SKILL.md"
+source-path: "hermes/skills/.archive/word-docx-visual-polish/SKILL.md"
 ---
 # Word docx — Visual Polish (no-text-change)
 

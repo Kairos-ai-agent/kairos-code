@@ -2,7 +2,7 @@
 description: "Use this agent when you need to review code for adherence to project guidelines, style guides, and best practices. This agent should be used proactively after writing or modifying code, especially bef"
 priority: 0.6
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\pr-review-toolkit\\agents\\code-reviewer.md"
+source-path: "claude-plugins-official/plugins/pr-review-toolkit/agents/code-reviewer.md"
 name: code-reviewer
 when:
   keyword: ['code', 'review', 'automation', 'typescript', 'javascript', 'python']

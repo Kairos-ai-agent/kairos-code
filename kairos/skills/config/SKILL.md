@@ -3,7 +3,7 @@ name: "config"
 description: "Optimize CircleCI configuration for speed, reliability, and maintainability. Use when users ask to improve `.circleci/config.yml`, reduce CI runtime, tune caching/workspaces/parallelism, remove pipeli"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\circleci\\11c74d6b\\skills\\config\\SKILL.md"
+source-path: "imported"
 ---
 # CircleCI Config
 

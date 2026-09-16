@@ -3,7 +3,7 @@ name: "pr-test-analyzer"
 description: "Use this agent when you need to review a pull request for test coverage quality and completeness. This agent should be invoked after a PR is created or updated to ensure tests adequately cover new fun"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\pr-review-toolkit\\agents\\pr-test-analyzer.md"
+source-path: "claude-plugins-official/plugins/pr-review-toolkit/agents/pr-test-analyzer.md"
 ---
 You are an expert test coverage analyst specializing in pull request review. Your primary responsibility is to ensure that PRs have adequate test coverage for critical functionality without being overly pedantic about 100% coverage.
 

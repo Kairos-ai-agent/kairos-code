@@ -4,7 +4,7 @@ description: "Generate images, video, and audio with ComfyUI — install, launch
 priority: 0.5
 version: "5.1.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\creative\\comfyui\\SKILL.md"
+source-path: "hermes/skills/creative/comfyui/SKILL.md"
 ---
 # ComfyUI
 

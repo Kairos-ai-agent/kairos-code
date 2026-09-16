@@ -3,7 +3,7 @@ name: "board-game-rule-translator"
 description: "Translate English board game rulebooks, manuals, and game instructions into Chinese. Use when users ask to translate board game rules, game manuals, or rulebooks. Includes OCR capabilities for scanned"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\you\\.minimax\\skills\\board-game-rule-translator\\SKILL.md"
+source-path: "minimax/skills/board-game-rule-translator/SKILL.md"
 ---
 # Board Game Rule Translator
 

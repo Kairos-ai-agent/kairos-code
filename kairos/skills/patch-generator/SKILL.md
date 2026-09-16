@@ -4,7 +4,7 @@ description: "Implements the fix for one finding inside a scratch workspace clon
 priority: 0.5
 tools: "Read, Glob, Grep, Bash, Edit, Write, Agent(claude-security:explore)"
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\claude-security\\agents\\patch-generator.md"
+source-path: "claude-plugins-official/plugins/claude-security/agents/patch-generator.md"
 ---
 Everything you touch is addressed by the absolute `WORKSPACE` path your dispatch names -- and if you consult the original repository, use the absolute `SCAN_ROOT`, never a relative path or an assumption about the current directory.
 

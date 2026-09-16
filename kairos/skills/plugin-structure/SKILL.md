@@ -4,7 +4,7 @@ description: "This skill should be used when the user asks to \"create a plugin\
 priority: 0.5
 version: "0.1.0"
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\plugin-dev\\skills\\plugin-structure\\SKILL.md"
+source-path: "claude-plugins-official/plugins/plugin-dev/skills/plugin-structure/SKILL.md"
 ---
 # Plugin Structure for Claude Code
 

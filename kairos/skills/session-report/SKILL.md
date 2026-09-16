@@ -3,7 +3,7 @@ name: "session-report"
 description: "Generate an explorable HTML report of Claude Code session usage (tokens, cache, subagents, skills, expensive prompts) from ~/.claude/projects transcripts."
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\session-report\\skills\\session-report\\SKILL.md"
+source-path: "claude-plugins-official/plugins/session-report/skills/session-report/SKILL.md"
 ---
 # Session Report
 

@@ -3,7 +3,7 @@ name: "ai-gateway"
 description: ">-"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\ai-gateway\\SKILL.md"
+source-path: "hermes/skills/ai-gateway/SKILL.md"
 ---
 # AI Model Gateway
 

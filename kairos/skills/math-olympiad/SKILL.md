@@ -4,7 +4,7 @@ description: "Solve competition math problems (IMO, Putnam, USAMO, AIME) with ad
 priority: 0.5
 version: "0.1.0"
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\math-olympiad\\skills\\math-olympiad\\SKILL.md"
+source-path: "claude-plugins-official/plugins/math-olympiad/skills/math-olympiad/SKILL.md"
 ---
 # Math Olympiad Solver
 

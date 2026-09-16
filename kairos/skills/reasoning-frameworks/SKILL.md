@@ -3,7 +3,7 @@ name: "reasoning-frameworks"
 description: "结构化思维与推理框架集。涵盖第一性原理、MECE、逆向思维、费曼技巧、思维导图、决策矩阵、SWOT分析、5Whys根因分析。帮助Agent更系统化地分析问题和做出决策。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\software-development\\reasoning-frameworks\\SKILL.md"
+source-path: "hermes/skills/software-development/reasoning-frameworks/SKILL.md"
 ---
 # 推理框架 · Reasoning Frameworks
 

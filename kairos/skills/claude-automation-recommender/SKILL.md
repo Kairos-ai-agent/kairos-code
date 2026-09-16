@@ -4,7 +4,7 @@ description: "Analyze a codebase and recommend Claude Code automations (hooks, s
 priority: 0.5
 tools: "Read, Glob, Grep, Bash"
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\claude-code-setup\\skills\\claude-automation-recommender\\SKILL.md"
+source-path: "claude-plugins-official/plugins/claude-code-setup/skills/claude-automation-recommender/SKILL.md"
 ---
 # Claude Automation Recommender
 

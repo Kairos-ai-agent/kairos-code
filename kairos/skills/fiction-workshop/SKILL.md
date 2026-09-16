@@ -3,7 +3,7 @@ name: "fiction-workshop"
 description: "Use when writing or editing novels, short stories, or any fiction manuscript. Trigger on: 'write fiction', 'edit my novel', 'developmental edit', 'line edit', 'character voice', 'plot hole', 'brainsto"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\openclaw-imports\\fiction-workshop\\SKILL.md"
+source-path: "hermes/skills/openclaw-imports/fiction-workshop/SKILL.md"
 ---
 # Fiction Workshop
 

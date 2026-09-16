@@ -3,7 +3,7 @@ name: "windows-peripheral-troubleshooting"
 description: ">-"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\.archive\\windows-peripheral-troubleshooting\\SKILL.md"
+source-path: "hermes/skills/.archive/windows-peripheral-troubleshooting/SKILL.md"
 ---
 # Windows Peripheral Troubleshooting
 

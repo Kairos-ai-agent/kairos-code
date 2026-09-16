@@ -4,7 +4,7 @@ description: "This skill should be used when the user asks to \"create a slash c
 priority: 0.5
 version: "0.2.0"
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\plugin-dev\\skills\\command-development\\SKILL.md"
+source-path: "claude-plugins-official/plugins/plugin-dev/skills/command-development/SKILL.md"
 ---
 # Command Development for Claude Code
 

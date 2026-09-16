@@ -3,7 +3,7 @@ name: "writing-plans-0.1.0"
 description: "Use when you have a spec or requirements for a multi-step task, before touching code"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\writing-plans-0.1.0\\SKILL.md"
+source-path: "hermes/skills/writing-plans-0.1.0/SKILL.md"
 ---
 # Writing Plans
 

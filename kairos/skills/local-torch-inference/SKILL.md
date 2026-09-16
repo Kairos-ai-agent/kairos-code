@@ -4,7 +4,7 @@ description: "Deploy custom PyTorch AI pipelines on constrained Windows hardware
 priority: 0.5
 version: "1.0.0"
 imported-from: "agents"
-source-path: "C:\\Users\\you\\.agents\\skills\\mlops\\local-torch-inference\\SKILL.md"
+source-path: "agents/skills/mlops/local-torch-inference/SKILL.md"
 ---
 # Local PyTorch Inference on Constrained Windows Hardware
 

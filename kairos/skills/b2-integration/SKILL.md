@@ -3,7 +3,7 @@ name: "b2-integration"
 description: "Backblaze B2 API v3 integration patterns for Cloudflare Workers. Two-step auth, file upload with SHA1, dynamic download URLs, and env-var-based configuration."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\devops\\b2-integration\\SKILL.md"
+source-path: "hermes/skills/devops/b2-integration/SKILL.md"
 ---
 ## When to Use
 

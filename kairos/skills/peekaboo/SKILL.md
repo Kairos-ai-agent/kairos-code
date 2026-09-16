@@ -3,7 +3,7 @@ name: "peekaboo"
 description: "Capture and automate macOS UI with the Peekaboo CLI."
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\you\\.agents\\skills\\peekaboo\\SKILL.md"
+source-path: "agents/skills/peekaboo/SKILL.md"
 ---
 # Peekaboo
 

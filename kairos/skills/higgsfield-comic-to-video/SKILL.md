@@ -3,7 +3,7 @@ name: "higgsfield-comic-to-video"
 description: "Convert comic book panels, manga pages, webtoons, and illustrated storyboards into animated video using Seedance 2.0 on Higgsfield. Use whenever the user wants to animate comics, bring illustrations t"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\creative\\higgsfield-comic-to-video\\SKILL.md"
+source-path: "hermes/skills/creative/higgsfield-comic-to-video/SKILL.md"
 ---
 # Seedance 2.0 on Higgsfield — Comic Book to Video Prompt Generator
 

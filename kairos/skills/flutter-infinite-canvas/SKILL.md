@@ -3,7 +3,7 @@ name: "flutter-infinite-canvas"
 description: "Learn how to build an infinite, multi-touch canvas in Flutter using InteractiveViewer and CustomMultiChildLayout for a flexible and interactive user experience."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\openclaw-imports\\flutter-infinite-canvas\\SKILL.md"
+source-path: "hermes/skills/openclaw-imports/flutter-infinite-canvas/SKILL.md"
 ---
 # Flutter Infinite Canvas
 

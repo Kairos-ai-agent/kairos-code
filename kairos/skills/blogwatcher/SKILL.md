@@ -4,7 +4,7 @@ description: "Monitor blogs and RSS/Atom feeds via blogwatcher-cli tool."
 priority: 0.5
 version: "2.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\research\\blogwatcher\\SKILL.md"
+source-path: "hermes/skills/research/blogwatcher/SKILL.md"
 ---
 # Blogwatcher
 

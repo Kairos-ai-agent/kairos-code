@@ -4,7 +4,7 @@ description: "Generate real meme images by picking a template and overlaying tex
 priority: 0.5
 version: "2.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\meme-generation\\SKILL.md"
+source-path: "hermes/skills/meme-generation/SKILL.md"
 ---
 # Meme Generation
 

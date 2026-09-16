@@ -3,7 +3,7 @@ name: "construct3-addictive-game-generator"
 description: "Construct3高成瘾性游戏生成技能。当用户要求创建Construct3游戏、制作休闲游戏、生成成瘾性游戏、设计游戏机制时使用。自动完成高成瘾性游戏策划、Construct3可视化制作、逻辑调试、成品导出全流程。"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\you\\.minimax\\skills\\construct3-addictive-game-generator\\SKILL.md"
+source-path: "minimax/skills/construct3-addictive-game-generator/SKILL.md"
 ---
 # Construct3高成瘾性游戏生成插件
 

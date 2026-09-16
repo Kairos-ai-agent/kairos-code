@@ -4,7 +4,7 @@ description: "Airtable REST API via curl. Records CRUD, filters, upserts."
 priority: 0.5
 version: "1.1.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\productivity\\airtable\\SKILL.md"
+source-path: "hermes/skills/productivity/airtable/SKILL.md"
 ---
 # Airtable — Bases, Tables & Records
 

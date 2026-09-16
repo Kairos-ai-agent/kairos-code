@@ -3,7 +3,7 @@ name: "mixpanelyst"
 description: "This skill should be used when the user asks about Mixpanel product analytics, event data, funnel analysis, retention curves, cohort analysis, segmentation queries, user behavior, conversion rates, ch"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\plugins\\cache\\openai-api-curated\\mixpanel-headless\\11c74d6b\\skills\\mixpanelyst\\SKILL.md"
+source-path: "imported"
 ---
 # mixpanel_headless API Reference
 

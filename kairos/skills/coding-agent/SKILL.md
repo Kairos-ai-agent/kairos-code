@@ -3,7 +3,7 @@ name: "coding-agent"
 description: "Delegate coding tasks to Codex, Claude Code, OpenCode, or Pi agents via immediate background processes. Use when: (1) building or creating features/apps, (2) reviewing PRs in a temp clone/worktree, (3"
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\you\\.agents\\skills\\coding-agent\\SKILL.md"
+source-path: "agents/skills/coding-agent/SKILL.md"
 ---
 # Coding Agent (always backgrounded)
 

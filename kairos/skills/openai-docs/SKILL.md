@@ -3,7 +3,7 @@ name: "openai-docs"
 description: "Use when the user asks how to build with OpenAI products or APIs, asks about Codex itself or choosing Codex surfaces, needs up-to-date official documentation with citations, help choosing the latest m"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\you\\.codex\\skills\\.system\\openai-docs\\SKILL.md"
+source-path: "codex/skills/.system/openai-docs/SKILL.md"
 ---
 # OpenAI Docs
 

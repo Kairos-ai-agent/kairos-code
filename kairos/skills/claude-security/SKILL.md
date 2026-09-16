@@ -3,7 +3,7 @@ name: "claude-security"
 description: "The Claude Security menu — pick a job: scan the codebase (the whole repository or a scoped part of it), scan changes (this branch's or a pull request's diff, or one commit), or suggest patches (findin"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\claude-security\\skills\\claude-security\\SKILL.md"
+source-path: "claude-plugins-official/plugins/claude-security/skills/claude-security/SKILL.md"
 ---
 # Claude Security
 

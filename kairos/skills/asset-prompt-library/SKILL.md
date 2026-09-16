@@ -3,7 +3,7 @@ name: "asset-prompt-library"
 description: "Extract assets (角色/场景/道具) from a剧本 and generate HTML prompt library using B版母版 (B-template) formats. Use when user has three B版母版 markdown files (角色定妆图 / 场景设计图 / 道具设计图) + a complete剧本, and requests HT"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\.archive\\asset-prompt-library\\SKILL.md"
+source-path: "hermes/skills/.archive/asset-prompt-library/SKILL.md"
 ---
 # 资产提示词库生成 (Asset Prompt Library)
 

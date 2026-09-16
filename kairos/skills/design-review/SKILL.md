@@ -3,7 +3,7 @@ name: "design-review"
 description: "Generate complete .md review reports for multi-version design documents (hardware/software/architecture). Use when user asks to \"评审\" (review) a design document (V0.X, V1.X), upload a new version of a"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\.archive\\design-review\\SKILL.md"
+source-path: "hermes/skills/.archive/design-review/SKILL.md"
 ---
 # Design Review Skill
 

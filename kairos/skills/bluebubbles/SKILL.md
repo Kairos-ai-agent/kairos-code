@@ -3,7 +3,7 @@ name: "bluebubbles"
 description: "Send and manage iMessages via BlueBubbles, including attachments, tapbacks, edits, replies, and groups."
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\you\\.agents\\skills\\bluebubbles\\SKILL.md"
+source-path: "agents/skills/bluebubbles/SKILL.md"
 ---
 # BlueBubbles Actions
 

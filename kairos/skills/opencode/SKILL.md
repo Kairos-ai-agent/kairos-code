@@ -4,7 +4,7 @@ description: "Delegate coding to OpenCode CLI (features, PR review)."
 priority: 0.5
 version: "1.2.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\.archive\\opencode\\SKILL.md"
+source-path: "hermes/skills/.archive/opencode/SKILL.md"
 ---
 # OpenCode CLI
 

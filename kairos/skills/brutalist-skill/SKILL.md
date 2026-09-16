@@ -3,7 +3,7 @@ name: "brutalist-skill"
 description: "Raw mechanical interfaces fusing Swiss typographic print with military terminal aesthetics. Rigid grids, extreme type scale contrast, utilitarian color, analog degradation effects. For data-heavy dash"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\you\\.claude\\plugins\\marketplaces\\taste-skill\\skills\\brutalist-skill\\SKILL.md"
+source-path: "claude/plugins/marketplaces/taste-skill/skills/brutalist-skill/SKILL.md"
 ---
 # SKILL: Industrial Brutalism & Tactical Telemetry UI
 

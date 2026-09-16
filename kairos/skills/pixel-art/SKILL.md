@@ -4,7 +4,7 @@ description: "Pixel art w/ era palettes (NES, Game Boy, PICO-8)."
 priority: 0.5
 version: "2.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\creative\\pixel-art\\SKILL.md"
+source-path: "hermes/skills/creative/pixel-art/SKILL.md"
 ---
 # Pixel Art
 

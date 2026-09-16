@@ -3,7 +3,7 @@ name: "feishu-doc-1.2.7"
 description: "Fetch content from Feishu (Lark) Wiki, Docs, Sheets, and Bitable. Automatically resolves Wiki URLs to real entities and converts content to Markdown."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\feishu-doc-1.2.7\\SKILL.md"
+source-path: "hermes/skills/feishu-doc-1.2.7/SKILL.md"
 ---
 # Feishu Doc Skill
 

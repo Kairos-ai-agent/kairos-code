@@ -3,7 +3,7 @@ name: "ai-voice-cloning"
 description: "AI voice generation, text-to-speech, and voice synthesis via inference.sh CLI. Models: Inworld TTS-2 (100+ languages, emotion/non-verbal steering), Inworld TTS 1.5 (ultra-low latency), ElevenLabs (22+"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\openclaw-imports\\ai-voice-cloning\\SKILL.md"
+source-path: "hermes/skills/openclaw-imports/ai-voice-cloning/SKILL.md"
 ---
 > **Install the belt CLI skill:** `npx skills add belt-sh/cli`
 

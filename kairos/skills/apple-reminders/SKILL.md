@@ -3,7 +3,7 @@ name: "apple-reminders"
 description: "List, add, edit, complete, or delete Apple Reminders and reminder lists via remindctl."
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\you\\.agents\\skills\\apple-reminders\\SKILL.md"
+source-path: "agents/skills/apple-reminders/SKILL.md"
 ---
 # Apple Reminders CLI (remindctl)
 

@@ -3,7 +3,7 @@ name: "obsidian-ontology-sync-1.0.1"
 description: "Bidirectional sync between Obsidian PKM (human-friendly notes) and structured ontology (machine-queryable graph). Automatically extracts entities and relationships from markdown, maintains ontology gr"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\obsidian-ontology-sync-1.0.1\\SKILL.md"
+source-path: "hermes/skills/obsidian-ontology-sync-1.0.1/SKILL.md"
 ---
 # Obsidian-Ontology Sync
 

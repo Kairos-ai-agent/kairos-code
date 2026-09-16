@@ -3,7 +3,7 @@ name: "pokemon-player"
 description: "Play Pokemon via headless emulator + RAM reads."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\gaming\\pokemon-player\\SKILL.md"
+source-path: "hermes/skills/gaming/pokemon-player/SKILL.md"
 ---
 # Pokemon Player
 

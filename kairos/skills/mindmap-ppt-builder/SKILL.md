@@ -3,7 +3,7 @@ name: "mindmap-ppt-builder"
 description: "Create or update content for the agegr/mindmap-ppt static presentation project from a prose draft, article, speech, report, or notes. Use when Codex needs to turn a written document into the project's"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\you\\AppData\\Local\\hermes\\skills\\openclaw-imports\\mindmap-ppt-builder\\SKILL.md"
+source-path: "hermes/skills/openclaw-imports/mindmap-ppt-builder/SKILL.md"
 ---
 # Mindmap PPT Builder
 

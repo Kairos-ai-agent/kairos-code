@@ -67,6 +67,41 @@ def terminate_tree(proc: subprocess.Popen) -> None:
         proc.kill()
 
 
+def check_bundled_mcp(binary: Path) -> tuple[bool, str]:
+    """A bundled server is only shipped if it can actually answer.
+
+    The content check below counts what is inside the binary, and it passed on a
+    build where the ``mcp`` package had never been frozen in: five servers were
+    listed, none could start (ModuleNotFoundError: No module named 'mcp'), every
+    start burned a request timeout, and the whole MCP layer — including the HTTP
+    transport — was unreachable in the packaged app. Counting is not running.
+    """
+    initialize = (
+        b'{"jsonrpc":"2.0","id":1,"method":"initialize","params":'
+        b'{"protocolVersion":"2024-11-05","capabilities":{},'
+        b'"clientInfo":{"name":"smoke","version":"0"}}}\n'
+    )
+    tried, failures = [], []
+    for name in ("time", "filesystem"):
+        args = [str(binary), "--mcp-serve", name]
+        if name == "filesystem":
+            args += ["--root", str(binary.parent)]
+        try:
+            proc = subprocess.run(args, input=initialize, capture_output=True,
+                                  timeout=90)
+        except subprocess.TimeoutExpired:
+            failures.append(f"{name}: no answer within 90s")
+            tried.append(name)
+            continue
+        tried.append(name)
+        if b'"serverInfo"' not in proc.stdout:
+            tail = (proc.stderr or b"").decode("utf-8", "replace").strip().splitlines()
+            failures.append(f"{name}: {tail[-1] if tail else 'no output'}")
+    if failures:
+        return False, "bundled MCP server(s) did not answer: " + "; ".join(failures)
+    return True, f"bundled MCP servers answer initialize ({', '.join(tried)})"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="smoke_binary.py")
     parser.add_argument("binary", help="path to the frozen kairos-code executable, "
@@ -169,6 +204,14 @@ def main() -> int:
         if mcp < 5:
             return report(
                 f"only {mcp} MCP servers configured — the bundled plugin is not packaged")
+
+        # Counting what is inside is not the same as running it. Ask two of the
+        # bundled servers to answer an ``initialize`` over stdio — this is the
+        # check that was missing when 0.1.5 shipped with the mcp package absent.
+        ok, detail = check_bundled_mcp(binary)
+        print(f"[smoke] {detail}")
+        if not ok:
+            return report(detail)
 
         print("PASS: the frozen binary serves the UI and its API")
         return 0

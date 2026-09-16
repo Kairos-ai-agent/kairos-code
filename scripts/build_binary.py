@@ -153,6 +153,16 @@ def main() -> int:
     cmd += [
         "--collect-submodules", "kairos",
         "--collect-submodules", "api",
+        # The bundled MCP servers and the HTTP transport import ``mcp.*`` lazily,
+        # so if the package is not frozen in the servers cannot start at all —
+        # and the failure is invisible until you run the packaged app: the app
+        # itself comes up, then each server burns its request timeout, which is
+        # a 60s wait on every start and a dead MCP layer everywhere else.
+        # ``mcp`` is an optional extra, so PyInstaller will not find it by
+        # following imports either.
+        "--collect-submodules", "mcp",
+        "--collect-submodules", "mcp.server",
+        "--collect-submodules", "mcp.client",
         "--collect-data", "kairos",
         LAUNCHER.name,
     ]

@@ -1,0 +1,9 @@
+name: frontend-design
+version: 1.0.0
+description: >-
+  Frontend design skill for UI/UX implementation
+author: Anthropic
+capabilities: [skills]
+compatible: ">=0.1.0"
+enabled: true
+source: claude-plugins-official/frontend-design

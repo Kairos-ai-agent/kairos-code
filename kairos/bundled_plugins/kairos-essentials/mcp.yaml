@@ -73,3 +73,47 @@ mcp_servers:
 #     headers:
 #       Authorization: "Bearer ${MY_TOKEN}"
 #     enabled: true
+
+# ---------------------------------------------------------------------------
+# Vendor-published servers, taken from the Claude Code plugin marketplace.
+# They are OFF until you ask: each needs a runtime we do not ship (Node,
+# bun, php, docker) or one of your own accounts. Copy the one you want into
+# ~/.kairos/mcp.yaml, put the credential in the environment, set enabled: true.
+#
+# context7:
+#   transport: http
+#   url: https://mcp.context7.com/mcp
+  # 需要: CONTEXT7_API_KEY:-
+#   headers:
+#     Authorization: ${CONTEXT7_API_KEY:-}
+#   enabled: true
+#
+# discord:  bun run --cwd ${CLAUDE_PLUGIN_ROOT} --shell=bun --silent start
+  # 需要: GITHUB_PERSONAL_ACCESS_TOKEN
+#   headers:
+#     Authorization: Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}
+#   enabled: true
+#
+# gitlab:
+#   transport: http
+#   url: https://gitlab.com/api/v4/mcp
+  # 需要: 登录/授权
+#   enabled: true
+#
+# greptile:
+#   transport: http
+#   url: https://api.greptile.com/mcp
+  # 需要: GREPTILE_API_KEY
+#   headers:
+#     Authorization: Bearer ${GREPTILE_API_KEY}
+#   enabled: true
+#
+# imessage:  bun run --cwd ${CLAUDE_PLUGIN_ROOT} --shell=bun --silent start
+  # 需要: 登录/授权
+#   enabled: true
+#
+# playwright:  npx @playwright/mcp@latest
+#
+# serena:  uvx --from git+https://github.com/oraios/serena serena start-mcp-server
+#
+# telegram:  bun run --cwd ${CLAUDE_PLUGIN_ROOT} --shell=bun --silent start

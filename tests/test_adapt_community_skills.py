@@ -207,15 +207,24 @@ def test_prefix_is_community():
 
 
 def test_r34_skills_in_production():
-    """The 3 R34 community skills must be in the production kairos/skills/ dir."""
-    from pathlib import Path
-    kairos_skills = Path("kairos/skills")
+    """The 3 R34 community skills must be loaded, wherever they live.
+
+    R38.12: skills shipped twice — a flat ``community__<name>.md`` carrying the
+    trigger metadata and sometimes a ``<name>/SKILL.md`` carrying the body — and
+    the loader keys by name, so one silently replaced the other. The merge
+    removed the duplicates, which left these three in two different layouts, so
+    ask the loader where each one is instead of assuming a path.
+    """
+    from kairos.skills import SkillsLoader
+    from pathlib import Path  # local: this module only imports it elsewhere
+    by_name = {s.name: s for s in SkillsLoader().discover()}
     for name in ("senior-architect", "tdd-guide", "code-reviewer"):
-        p = kairos_skills / f"community__{name}.md"
-        assert p.exists(), f"{p} should exist after R34 adaptation"
-        text = p.read_text(encoding="utf-8")
+        assert name in by_name, f"{name} should be loaded"
+        text = Path(str(by_name[name].source_path)).read_text(encoding="utf-8")
         assert "priority: 0.6" in text
         assert "Adapted from alirezarezvani/claude-skills" in text
+        # The trigger is what makes the skill fire; a merge must not lose it.
+        assert "when:" in text, f"{name} lost its trigger in the merge"
 
 
 def test_r34_skills_discoverable_by_loader():

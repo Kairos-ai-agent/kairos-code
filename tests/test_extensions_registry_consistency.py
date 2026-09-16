@@ -51,11 +51,26 @@ def test_every_record_has_a_known_status():
 
 
 def test_the_mcp_registry_keeps_its_shape():
+    """Every entry must be launchable or reachable — one or the other.
+
+    The original version of this test assumed stdio throughout ("every entry has
+    a command"). The registry now legitimately carries remote servers published
+    by vendors (github, linear, context7 …), which have a url and no command at
+    all, so the contract is spelled out per transport instead of assumed.
+    """
     d = json.loads((REG / "mcps.json").read_text(encoding="utf-8"))
     assert isinstance(d["servers"], list) and len(d["servers"]) >= 20
     for s in d["servers"]:
-        assert s["name"] and s["command"] and isinstance(s["args"], list)
+        assert s["name"], s
+        transport = s.get("transport") or "stdio"
+        if transport in ("http", "sse"):
+            # A remote entry is an endpoint, and must not pretend to be a command.
+            assert s.get("url"), f"{s['name']}: remote entry without a url"
+            assert not s.get("command"), f"{s['name']}: remote entry with a command"
+        else:
+            assert s.get("command"), f"{s['name']}: stdio entry without a command"
+            assert isinstance(s.get("args") or [], list), s
         # A bundled entry must name something we can actually launch locally.
         if s.get("bundled"):
             assert s["name"] in ("filesystem", "git", "sqlite", "time", "fetch")
-            assert s.get("needsNetwork") in (True, False)
+            assert s.get("needsNetwork") in (True, False, None)

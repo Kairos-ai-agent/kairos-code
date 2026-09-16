@@ -1,0 +1,9 @@
+name: feature-dev
+version: 1.0.0
+description: >-
+  Comprehensive feature development workflow with specialized agents for codebase exploration, architecture design, and quality review
+author: Anthropic
+capabilities: [agents, commands]
+compatible: ">=0.1.0"
+enabled: true
+source: claude-plugins-official/feature-dev

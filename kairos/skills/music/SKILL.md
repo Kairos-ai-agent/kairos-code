@@ -1,6 +1,6 @@
 ---
 name: "music"
-description: "|"
+description: "Generate AI music or create covers from reference audio. Triggers on: \"音乐\", \"music\", \"生成音乐\", \"generate music\", \"翻唱\", \"cover\", \"作曲\", \"compose\", \"create a song\", \"做一首歌\"."
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/openclaw-imports/music/SKILL.md"

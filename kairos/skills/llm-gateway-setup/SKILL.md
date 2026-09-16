@@ -1,6 +1,6 @@
 ---
 name: "llm-gateway-setup"
-description: "|"
+description: "Setting up and operating local LLM gateway / aggregator / router services that route coding CLIs (Claude Code, Codex, Cursor, Cline, OpenCode) across multiple LLM providers and free-tier pools. Covers OmniRoute, LiteLLM proxy, OpenRouter self-host, Portkey, mimocode2api, and similar tools. Trigger when user mentions any of: OmniRoute, LiteLLM, OpenRouter, Portkey, mimocode2api, \"LLM gateway/router/proxy/aggregator\", \"free LLM tiers\", \"fallback chain\", \"quota-aware routing\"; OR asks which installer file is right for their OS, how to launch a local gateway, how to wire it into a coding CLI, or why the gateway won't start."
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/.archive/llm-gateway-setup/SKILL.md"

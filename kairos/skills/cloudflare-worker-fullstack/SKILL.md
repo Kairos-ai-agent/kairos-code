@@ -1,6 +1,6 @@
 ---
 name: "cloudflare-worker-fullstack"
-description: "|"
+description: "Build and deploy full-stack web applications on Cloudflare Workers — Workers + D1 + R2 + Pages-style SPA frontend bundled inline. Covers vanilla-JS SPA pattern, D1 schema migrations, custom OAuth (Google/GitHub), custom domain setup, PayPal orders, BYOK image-gen providers, deployment via direct CF REST API (no wrangler CLI), and the token-scope / route gotchas that bite every first deploy."
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/.archive/cloudflare-worker-fullstack/SKILL.md"

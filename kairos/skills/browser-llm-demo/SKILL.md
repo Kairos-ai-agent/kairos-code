@@ -1,6 +1,6 @@
 ---
 name: "browser-llm-demo"
-description: "|"
+description: "Build single-HTML browser demos that call cloud LLM APIs directly (no backend required). Covers the 4-step pattern: API-style auto-detection (OpenAI Chat Completions vs Anthropic Messages), local CORS proxy for cloud LLMs that don't expose browser CORS, local vendor/ for big deps to avoid CDN flake, multi-step progress status to catch silent failures."
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/.archive/browser-llm-demo/SKILL.md"

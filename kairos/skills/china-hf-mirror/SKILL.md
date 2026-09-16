@@ -1,6 +1,6 @@
 ---
 name: "china-hf-mirror"
-description: ">-"
+description: "Umbrella for China GFW network configuration: HuggingFace mirrors, npm/pnpm mirrors, GitHub proxy downloads, native module compilation, and Open WebUI deployment. Covers: HF_ENDPOINT configuration, hardcoded URL patching, pnpm registry setup, VS Build Tools installation, exFAT drive handling, and Open WebUI installation/lifecycle. Consolidated umbrella for: china-hf-mirror, open-webui."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"

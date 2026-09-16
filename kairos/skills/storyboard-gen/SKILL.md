@@ -1,6 +1,6 @@
 ---
 name: "storyboard-gen"
-description: "|"
+description: "分镜剧本输出格式样板 v6（最终沉淀版）。 本文件是 storyboard-gen skill 的输出格式权威定义——直接照抄即可。"
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/storyboard-gen/SKILL.md"

@@ -1,6 +1,6 @@
 ---
 name: "llm-browser-gateway"
-description: "|"
+description: "浏览器前端直连 LLM API 的端到端方案。当用户说\"前端调大模型\"、\"浏览器接 LLM\"、\"CORS 错误 Failed to fetch\"、\"前端用 LLM 解析文本\"、\"前端接入 OpenAI/Anthropic/MiniMax\"等时使用。 覆盖：(a) 跨平台 API 风格自动适配（OpenAI Chat Completions vs Anthropic Messages vs MiniMax Anthropic-compatible）；(b) 通用 CORS proxy 模板（FastAPI 10 行）；(c) 浏览器 fetch 写法模板；(d) 调试 / 错误诊断（完整 URL + 状态码 + 响应 body）。 不覆盖：后端 server-side 调用（用 OpenAI / Anthropic Python SDK 即可，无 CORS 问题）。不覆盖：流式响应 / function calling / tools schema（这些是更高阶用法，按需扩展）。"
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/.archive/llm-browser-gateway/SKILL.md"

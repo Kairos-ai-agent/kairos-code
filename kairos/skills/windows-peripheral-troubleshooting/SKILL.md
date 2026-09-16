@@ -1,6 +1,6 @@
 ---
 name: "windows-peripheral-troubleshooting"
-description: ">-"
+description: "Diagnose and fix Windows peripherals that appear offline / not responding — printers, USB devices, webcams, scanners, Bluetooth adapters. Covers the PnP source of truth vs high-level status discrepancy, common CM_PROB_* error codes, the Hermes admin boundary (unprivileged terminal + UAC elevation via Start-Process -Verb RunAs), and the physical fallback boundary (when no software command can recover a dead USB endpoint)."
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/.archive/windows-peripheral-troubleshooting/SKILL.md"

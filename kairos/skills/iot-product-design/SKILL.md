@@ -1,6 +1,6 @@
 ---
 name: "iot-product-design"
-description: ">"
+description: "IoT/传感器产品方案设计工作流。覆盖需求分析、可行性论证、传感器选型、 安装结构设计、硬件电路设计、嵌入式固件设计、模拟测试报告。 当用户需要设计基于传感器的智能硬件产品方案时使用。"
 priority: 0.5
 imported-from: "agents"
 source-path: "agents/skills/software-development/iot-product-design/SKILL.md"

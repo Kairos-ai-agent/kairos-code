@@ -1,6 +1,6 @@
 ---
 name: "autoglm-asr-translate"
-description: ">"
+description: "使用 AutoGLM ASR Translate 接口将音频文件转录为文字。所有音频统一通过 ffmpeg 按 25s 分块， 再并发转录（并发数 5）、结果合并。无需 pydub，不依赖文件大小判断。 Token 通过本地服务 http://127.0.0.1:18432/get_token 自动获取，无需手动配置环境变量。 触发词：语音识别、ASR、转录、音频转文字、长音频转录。"
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/autoglm-asr-translate/SKILL.md"

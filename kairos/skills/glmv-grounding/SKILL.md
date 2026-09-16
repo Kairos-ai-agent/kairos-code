@@ -1,6 +1,6 @@
 ---
 name: "glmv-grounding"
-description: ">"
+description: "A skill that uses GLM-V native grounding capabilities for coordinate conversion, bounding-box visualization, and more. GLM-V native grounding can locate any target specified by the prompt in an image and output relative coordinates normalized to 0-1000 based on image size. Coordinate formats include 2D bounding box (default), 2D points, and 3D bounding box. GLM-V also supports spatiotemporal localization and tracking of multiple prompt-specified targets in videos, outputting 2D bounding boxes per second."
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/glmv-grounding/SKILL.md"

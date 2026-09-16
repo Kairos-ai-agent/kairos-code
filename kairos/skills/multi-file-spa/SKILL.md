@@ -1,6 +1,6 @@
 ---
 name: "multi-file-spa"
-description: ">-"
+description: "Scaffold and develop multi-file vanilla HTML/CSS/JS single-page applications. Covers project structure, hash routing, IndexedDB persistence, i18n, file upload, dark theme, responsive design, and browser validation. Use when building a new client-side web app from scratch (not patching an existing single-file app). Consolidated umbrella for: multi-file-spa, spa-scaffold, vanilla-spa-dev. For editing existing single-file web apps, use `frontend-patching` instead."
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/.archive/multi-file-spa/SKILL.md"

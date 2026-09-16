@@ -1,6 +1,6 @@
 ---
 name: "glmv-web-replication"
-description: ">"
+description: "Frontend visual replication skill. Explores a target website’s publicly visible pages via Playwright MCP or agent-browser, captures screenshots and layout information, then generates a static or client-side frontend replica that approximates the original’s visual appearance and page structure. This skill replicates FRONTEND PRESENTATION ONLY — it does not reproduce backend logic, server-side behavior, databases, or any non-public content. The user is responsible for ensuring they have proper authorization (ownership, license, or explicit permission) before replicating any website."
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/glmv-web-replication/SKILL.md"

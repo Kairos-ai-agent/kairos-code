@@ -1,6 +1,6 @@
 ---
 name: "daw-music"
-description: "|"
+description: "Digital Audio Workstation usage, music composition, interactive music systems, and game audio implementation for immersive soundscapes."
 priority: 0.5
 version: "2.0.0"
 imported-from: "hermes"

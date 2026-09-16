@@ -1,6 +1,6 @@
 ---
 name: "flask-api-proxy-tool"
-description: "|"
+description: "Build custom web tools with Flask backend + HTML/JS frontend for proxying external APIs. Covers OpenAI-compatible API integration, async task polling, config management, and dark-theme UI. Use when: (1) Creating a standalone web tool that wraps an external API, (2) Building a Flask proxy for API calls with frontend controls, (3) Creating tools with async polling (video/image generation), (4) Building custom AI tool interfaces. Triggers: \"做一个XXX的HTML工具\", \"图生视频\", \"文生图\", \"API代理\", \"后台服务\", \"Flask工具\", \"web工具\", \"proxy tool\", \"build a tool for\""
 priority: 0.5
 imported-from: "agents"
 source-path: "agents/skills/software-development/flask-api-proxy-tool/SKILL.md"

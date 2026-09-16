@@ -1,6 +1,6 @@
 ---
 name: "website-to-hyperframes"
-description: "|"
+description: 'Capture a website, then produce a professional video from it — a product launch video, a social ad, or a product tour.'
 priority: 0.5
 imported-from: "codex"
 source-path: "imported"

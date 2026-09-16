@@ -1,6 +1,6 @@
 ---
 name: "ai-client-model-injection"
-description: ">-"
+description: "Inject third-party / custom LLM models into closed AI desktop clients (ChatGPT desktop, Codex CLI, Claude Code, Cursor, Cline) by redirecting their openai_base_url to a local proxy/gateway. Class-level playbook for \"I want model X in client Y where Y hardcodes its own API endpoint\" — covers the openai_base_url technique, reference implementations (OmniRoute, DSCodex), provider API endpoint catalog (MiniMax, DeepSeek, etc.), Responses API vs Chat Completions protocol selection, and the gotchas that turn 5-minute tasks into 5-hour ones."
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/.archive/ai-client-model-injection/SKILL.md"

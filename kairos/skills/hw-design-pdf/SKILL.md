@@ -1,6 +1,6 @@
 ---
 name: "hw-design-pdf"
-description: ">-"
+description: "Umbrella for hardware design document generation, PCB design review, fabrication workflows, and formal multi-version design review reports. Covers: HTML→Edge→PDF pipeline, SVG block diagrams, fpdf2 Chinese PDF generation, hardware design document creation, design revision from evaluation feedback, Gerber/PCB coordinate parsing, PCB fabrication export (KiCad), PDF annotation, and complete .md review reports (评审意见) with score tables / signature blocks / action items for hardware/software/architecture design docs. Consolidated umbrella for: hw-design-pdf, hardware-design-document, hardware-design-review, hardware-design-revision, kicad-pcb-automation, iot-product-design, design-review."
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/hardware/hw-design-pdf/SKILL.md"

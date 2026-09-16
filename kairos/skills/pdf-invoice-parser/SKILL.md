@@ -1,6 +1,6 @@
 ---
 name: "pdf-invoice-parser"
-description: ">"
+description: "Extract structured data from Chinese tax invoices (增值税发票) PDFs using pdfplumber + regex. No external OCR API needed. Use when processing Chinese invoices, extracting invoice fields from PDF, or building invoice automation."
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/data-science/pdf-invoice-parser/SKILL.md"

@@ -1,6 +1,6 @@
 ---
 name: "ai-gateway"
-description: ">-"
+description: "Build a local AI model unified management backend — a single FastAPI service that lets you centrally configure LLM/Image/Video/TTS models (API key, base URL, model name, parameters), exposes transparent proxy endpoints for client apps to call, and ships with an admin UI for CRUD + connection test. Class-level template applicable to any \"I have many AI model providers and want to manage them in one place\" workflow."
 priority: 0.5
 imported-from: "hermes"
 source-path: "hermes/skills/ai-gateway/SKILL.md"

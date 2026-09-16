@@ -147,7 +147,12 @@ def test_the_check_picks_the_asset_for_this_platform(monkeypatch, tmp_path):
     for key in ("windows-x86_64", "linux-x86_64", "macos-arm64"):
         release, sha, name, _ = _release(key=key)
         monkeypatch.setattr(u, "platform_key", lambda k=key: k)
-        info = u.check_for_update(data_dir=tmp_path, current="0.1.4",
+        # A fresh data_dir per platform: check_for_update caches its resolved
+        # answer there for 12 hours, so sharing tmp_path across iterations made
+        # every round after the first read the first round's answer (and the
+        # first round is this machine's own key). That is what made this test
+        # fail while the fixture and the updater were both correct.
+        info = u.check_for_update(data_dir=tmp_path / key, current="0.1.4",
                                   fetch=FakeFetch(release, f"{sha}  {name}\n"))
         assert info["hasUpdate"] is True, key
         assert info["asset"] is not None, f"{key}: no asset matched"

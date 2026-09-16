@@ -21,7 +21,14 @@ from kairos import updater as u
 # ---------------------------------------------------------------------------
 
 def _release(version="0.1.5", *, with_sums=True, with_asset=True,
-             digest=None, key="windows-x86_64"):
+             digest=None, key=None):
+    # Default to the asset name *this* platform's updater would look for. It was
+    # hardcoded to "windows-x86_64", so the fixture only described a release an
+    # author on Windows could pick up: everywhere else check_for_update() found
+    # no matching asset, returned asset=None, and the assertions died with
+    # "TypeError: 'NoneType' object is not subscriptable" — in CI, for weeks,
+    # on a working updater.
+    key = key or u.platform_key() or "windows-x86_64"
     suffix = ".zip" if key.startswith("windows") else ".tar.gz"
     name = f"kairos-code-{version}-{key}{suffix}"
     body = f"payload-{version}".encode()
@@ -125,6 +132,39 @@ def test_check_marks_a_release_without_checksums(tmp_path):
     assert info["hasUpdate"] is True
     assert info["asset"]["sha256"] == ""
     assert info["reason"] == "no-checksum-published"
+
+
+def test_the_check_picks_the_asset_for_this_platform(monkeypatch, tmp_path):
+    """Answers for every platform, not only the one it was written on.
+
+    _release() used to hardcode a windows-x86_64 asset while check_for_update()
+    selects with platform_key(): on Linux the fixture described a release with
+    nothing this machine could use, `asset` came back None, and two assertions
+    died with "'NoneType' object is not subscriptable" — which reads like a
+    broken updater and was a broken fixture. This walks all three platform keys
+    the release pipeline publishes.
+    """
+    for key in ("windows-x86_64", "linux-x86_64", "macos-arm64"):
+        release, sha, name, _ = _release(key=key)
+        monkeypatch.setattr(u, "platform_key", lambda k=key: k)
+        info = u.check_for_update(data_dir=tmp_path, current="0.1.4",
+                                  fetch=FakeFetch(release, f"{sha}  {name}\n"))
+        assert info["hasUpdate"] is True, key
+        assert info["asset"] is not None, f"{key}: no asset matched"
+        assert info["asset"]["name"] == name, key
+        assert info["asset"]["sha256"] == sha, key
+
+
+def test_a_release_with_nothing_for_this_platform_is_reported_not_crashed(
+        monkeypatch, tmp_path):
+    """The behaviour the fixture accidentally hid: no asset is a normal answer."""
+    release, _, _, _ = _release(key="windows-x86_64")
+    monkeypatch.setattr(u, "platform_key", lambda: "linux-x86_64")
+    info = u.check_for_update(data_dir=tmp_path, current="0.1.4",
+                              fetch=FakeFetch(release))
+    assert info["hasUpdate"] is True
+    assert info["asset"] is None
+    assert info["reason"] == "no-asset-for-platform"
 
 
 def test_check_is_cached_within_the_ttl(tmp_path):

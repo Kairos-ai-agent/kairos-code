@@ -3,7 +3,7 @@ name: "autoglm-deepresearch"
 description: ">"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\autoglm-deepresearch\\SKILL.md"
+source-path: "hermes/skills/autoglm-deepresearch/SKILL.md"
 ---
 # AutoGLM DeepResearch Skill
 

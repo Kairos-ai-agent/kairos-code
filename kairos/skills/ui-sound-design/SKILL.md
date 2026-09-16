@@ -3,7 +3,7 @@ name: "ui-sound-design"
 description: "Programmatic UI sound design using Web Audio API and Tone.js. Use when creating click sounds, notification chimes, toggle feedback, hover sounds, success/error audio, whoosh effects, or building a sou"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\openclaw-imports\\ui-sound-design\\SKILL.md"
+source-path: "hermes/skills/openclaw-imports/ui-sound-design/SKILL.md"
 ---
 ```
   ▁ ▃ ▅ ▇ ▅ ▃ ▁     ▁ ▃ ▅ ▇ ▅ ▃ ▁     ▁ ▃ ▅ ▇ ▅ ▃ ▁

@@ -3,7 +3,7 @@ name: "clawdefender-1"
 description: "Security scanner and input sanitizer for AI agents. Detects prompt injection, command injection, SSRF, credential exfiltration, and path traversal attacks. Use when (1) installing new skills from Claw"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\clawdefender-1\\SKILL.md"
+source-path: "hermes/skills/clawdefender-1/SKILL.md"
 ---
 # ClawDefender
 

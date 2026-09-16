@@ -4,7 +4,7 @@ description: "Generate project ideas via creative constraints."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\creative-ideation\\SKILL.md"
+source-path: "hermes/skills/creative/creative-ideation/SKILL.md"
 ---
 # Creative Ideation
 

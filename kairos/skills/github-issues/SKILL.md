@@ -4,7 +4,7 @@ description: "Create, triage, label, assign GitHub issues via gh or REST."
 priority: 0.5
 version: "1.1.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\github\\github-issues\\SKILL.md"
+source-path: "hermes/skills/github/github-issues/SKILL.md"
 ---
 # GitHub Issues Management
 

@@ -4,7 +4,7 @@ description: "Ground answers and documents in cited, verifiable sources."
 priority: 0.5
 version: "1.1.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\research\\grounded-citations\\SKILL.md"
+source-path: "hermes/skills/research/grounded-citations/SKILL.md"
 ---
 # Grounded Citations
 

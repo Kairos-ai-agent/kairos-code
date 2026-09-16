@@ -3,7 +3,7 @@ name: "presentations"
 description: "Read, create or edit PowerPoint or Google Slides decks. Use for presentation, slide deck, PowerPoint, PPT, PPTX, or Google Slides requests."
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\leohu\\.codex\\plugins\\cache\\openai-primary-runtime\\presentations\\26.805.11740\\skills\\presentations\\SKILL.md"
+source-path: "imported"
 ---
 ## Google Slides Routing
 

@@ -3,7 +3,7 @@ name: "hermes-auxiliary-vision"
 description: "Configure Hermes Agent's auxiliary vision system for image recognition in chat. Covers provider setup, Chinese domestic providers (Alibaba DashScope, Zhipu GLM), troubleshooting, and fallback strategi"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\.archive\\hermes-auxiliary-vision\\SKILL.md"
+source-path: "hermes/skills/.archive/hermes-auxiliary-vision/SKILL.md"
 ---
 # Hermes Auxiliary Vision Configuration
 

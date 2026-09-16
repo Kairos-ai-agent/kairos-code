@@ -3,7 +3,7 @@ name: "logo-icon-design"
 description: "Professional Logo and icon design expert. Helps with brand visual design, vector icon creation, app icon design, and trademark design. Supports the complete design flow from concept ideation to final"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\leohu\\.minimax\\skills\\logo-icon-design\\SKILL.md"
+source-path: "minimax/skills/logo-icon-design/SKILL.md"
 ---
 # Logo & Icon Design Expert
 

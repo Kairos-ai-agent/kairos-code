@@ -3,7 +3,7 @@ name: "ffmpeg-video-editor-1.0.0"
 description: "Generate FFmpeg commands from natural language video editing requests - cut, trim, convert, compress, change aspect ratio, extract audio, and more."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\ffmpeg-video-editor-1.0.0\\SKILL.md"
+source-path: "hermes/skills/ffmpeg-video-editor-1.0.0/SKILL.md"
 ---
 # FFmpeg Video Editor
 

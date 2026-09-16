@@ -3,7 +3,7 @@ name: "review-pr"
 description: "Comprehensive PR review using specialized agents"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\pr-review-toolkit\\commands\\review-pr.md"
+source-path: "claude-plugins-official/plugins/pr-review-toolkit/commands/review-pr.md"
 ---
 # Comprehensive PR Review
 

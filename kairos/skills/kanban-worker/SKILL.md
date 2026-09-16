@@ -4,7 +4,7 @@ description: "Pitfalls, examples, and edge cases for Hermes Kanban workers. The 
 priority: 0.5
 version: "2.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\devops\\kanban-worker\\SKILL.md"
+source-path: "hermes/skills/devops/kanban-worker/SKILL.md"
 ---
 # Kanban Worker — Pitfalls and Examples
 

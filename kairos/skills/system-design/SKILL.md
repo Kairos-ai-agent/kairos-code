@@ -3,7 +3,7 @@ name: "system-design"
 description: "Deep system design workflow—requirements, capacity, APIs, data, consistency, failure modes, trade-offs, and evolution. Use when preparing interviews, RFCs, greenfield systems, or major redesigns (micr"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\system-design\\SKILL.md"
+source-path: "hermes/skills/system-design/SKILL.md"
 ---
 # System Design (Deep Workflow)
 

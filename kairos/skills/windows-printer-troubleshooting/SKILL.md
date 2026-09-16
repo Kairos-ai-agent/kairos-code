@@ -3,7 +3,7 @@ name: "windows-printer-troubleshooting"
 description: "Diagnose and fix Windows printer issues — offline status, USB detection failures, stopped print services, driver problems. Use when the user reports printer not working, showing offline, not connectin"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\.archive\\windows-printer-troubleshooting\\SKILL.md"
+source-path: "hermes/skills/.archive/windows-printer-troubleshooting/SKILL.md"
 ---
 # Windows Printer Troubleshooting
 

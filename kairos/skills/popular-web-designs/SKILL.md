@@ -4,7 +4,7 @@ description: "54 real design systems (Stripe, Linear, Vercel) as HTML/CSS."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\.archive\\popular-web-designs\\SKILL.md"
+source-path: "hermes/skills/.archive/popular-web-designs/SKILL.md"
 ---
 # Popular Web Designs
 

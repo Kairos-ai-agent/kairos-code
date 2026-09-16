@@ -3,7 +3,7 @@ name: "documents"
 description: "Create, edit, redline, and comment on `.docx`, Word, and Google Docs-targeted document artifacts inside the container, with a strict render-and-verify workflow. Use `render_docx.py` to generate page P"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\leohu\\.codex\\plugins\\cache\\openai-primary-runtime\\documents\\26.805.11740\\skills\\documents\\SKILL.md"
+source-path: "imported"
 ---
 # Documents Skill (Read • Create • Edit • Redline • Comment)
 

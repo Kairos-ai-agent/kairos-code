@@ -3,7 +3,7 @@ name: "iot-product-design"
 description: ">"
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\leohu\\.agents\\skills\\software-development\\iot-product-design\\SKILL.md"
+source-path: "agents/skills/software-development/iot-product-design/SKILL.md"
 ---
 # IoT/传感器产品方案设计
 

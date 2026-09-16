@@ -4,7 +4,7 @@ description: "Article illustrations: type × style × palette consistency."
 priority: 0.5
 version: "1.57.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\baoyu-article-illustrator\\SKILL.md"
+source-path: "hermes/skills/creative/baoyu-article-illustrator/SKILL.md"
 ---
 # Article Illustrator
 

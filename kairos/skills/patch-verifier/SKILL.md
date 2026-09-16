@@ -4,7 +4,7 @@ description: "The single verifier per fix round — reviews the workspace's stag
 priority: 0.5
 tools: "Read, Glob, Grep, Bash, Agent(claude-security:explore)"
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\claude-security\\agents\\patch-verifier.md"
+source-path: "claude-plugins-official/plugins/claude-security/agents/patch-verifier.md"
 ---
 Address everything by absolute path: the `WORKSPACE` your dispatch names, and -- if you consult the original repository -- the absolute `SCAN_ROOT`, never a relative path or an assumption about the current directory.
 

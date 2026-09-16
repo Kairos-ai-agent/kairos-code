@@ -4,7 +4,7 @@ description: "Generate production-ready prompts for MiniMax H3 video generation 
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\software-development\\gen-api-integration\\references\\minimax-h3-prompt\\SKILL.md"
+source-path: "hermes/skills/software-development/gen-api-integration/references/minimax-h3-prompt/SKILL.md"
 ---
 # MiniMax H3 视频提示词生成器
 

@@ -3,7 +3,7 @@ description: "Pre-commit review: security scan, quality gates, auto-fix."
 priority: 0.8
 version: "2.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\software-development\\requesting-code-review\\SKILL.md"
+source-path: "hermes/skills/software-development/requesting-code-review/SKILL.md"
 name: requesting-code-review
 when:
   keyword: ['completing', 'tasks', 'implementing', 'major', 'features', 'merging']

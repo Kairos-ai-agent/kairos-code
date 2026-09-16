@@ -4,7 +4,7 @@ description: "Control a running TouchDesigner instance via twozero MCP — creat
 priority: 0.5
 version: "1.1.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\touchdesigner-mcp\\SKILL.md"
+source-path: "hermes/skills/creative/touchdesigner-mcp/SKILL.md"
 ---
 # TouchDesigner Integration (twozero MCP)
 

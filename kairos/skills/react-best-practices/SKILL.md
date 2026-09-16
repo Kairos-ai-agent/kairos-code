@@ -3,7 +3,7 @@ name: "react-best-practices"
 description: "React and Next.js performance optimization guidelines from Vercel Engineering. This skill should be used when writing, reviewing, or refactoring React/Next.js code to ensure optimal performance patter"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\leohu\\.codex\\plugins\\cache\\openai-api-curated\\build-web-apps\\11c74d6b\\skills\\react-best-practices\\SKILL.md"
+source-path: "imported"
 ---
 # Vercel React Best Practices
 

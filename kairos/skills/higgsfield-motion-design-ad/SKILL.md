@@ -3,7 +3,7 @@ name: "higgsfield-motion-design-ad"
 description: "Generate motion design advertisement video prompts for software and tech companies using Seedance 2.0 on Higgsfield. Use whenever the user wants to create a software product ad, SaaS promo, app launch"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\higgsfield-motion-design-ad\\SKILL.md"
+source-path: "hermes/skills/creative/higgsfield-motion-design-ad/SKILL.md"
 ---
 # Seedance 2.0 on Higgsfield Motion Design Ad Generator
 

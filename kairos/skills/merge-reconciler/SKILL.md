@@ -4,7 +4,7 @@ description: "Neutral third-party resolution of agent merge conflicts."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\autonomous-ai-agents\\merge-reconciler\\SKILL.md"
+source-path: "hermes/skills/autonomous-ai-agents/merge-reconciler/SKILL.md"
 ---
 # Merge Reconciler
 

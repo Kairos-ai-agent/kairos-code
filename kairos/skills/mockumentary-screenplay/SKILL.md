@@ -3,7 +3,7 @@ name: "mockumentary-screenplay"
 description: "Write mockumentary screenplays in Fountain format with proper documentary conventions, talking head formatting, and comedic dialogue. Use when user needs to write screenplay pages, format talking head"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\openclaw-imports\\mockumentary-screenplay\\SKILL.md"
+source-path: "hermes/skills/openclaw-imports/mockumentary-screenplay/SKILL.md"
 ---
 # Mockumentary Screenplay Writing
 

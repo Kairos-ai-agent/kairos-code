@@ -3,7 +3,7 @@ name: "modernize-extract-rules"
 description: "Mine business logic from legacy code into testable, human-readable rule specifications"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\code-modernization\\commands\\modernize-extract-rules.md"
+source-path: "claude-plugins-official/plugins/code-modernization/commands/modernize-extract-rules.md"
 ---
 Extract the **business rules** embedded in `legacy/$1` into a structured,
 testable specification — the institutional knowledge that's currently locked

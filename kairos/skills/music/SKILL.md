@@ -3,7 +3,7 @@ name: "music"
 description: "|"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\openclaw-imports\\music\\SKILL.md"
+source-path: "hermes/skills/openclaw-imports/music/SKILL.md"
 ---
 ## When to Use
 

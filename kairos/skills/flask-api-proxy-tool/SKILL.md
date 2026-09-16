@@ -3,7 +3,7 @@ name: "flask-api-proxy-tool"
 description: "|"
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\leohu\\.agents\\skills\\software-development\\flask-api-proxy-tool\\SKILL.md"
+source-path: "agents/skills/software-development/flask-api-proxy-tool/SKILL.md"
 ---
 # Flask API Proxy Tool
 

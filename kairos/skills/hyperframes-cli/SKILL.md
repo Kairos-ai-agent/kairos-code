@@ -3,7 +3,7 @@ name: "hyperframes-cli"
 description: "HyperFrames CLI tool — hyperframes init, lint, inspect, preview, render, transcribe, tts, doctor, browser, info, upgrade, compositions, docs, benchmark. Use when scaffolding a project, linting, valida"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\leohu\\.codex\\plugins\\cache\\openai-api-curated\\hyperframes\\11c74d6b\\skills\\hyperframes-cli\\SKILL.md"
+source-path: "imported"
 ---
 # HyperFrames CLI
 

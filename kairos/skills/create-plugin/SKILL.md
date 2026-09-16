@@ -3,7 +3,7 @@ name: "create-plugin"
 description: "Guided end-to-end plugin creation workflow with component design, implementation, and validation"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\plugin-dev\\commands\\create-plugin.md"
+source-path: "claude-plugins-official/plugins/plugin-dev/commands/create-plugin.md"
 ---
 # Plugin Creation Workflow
 

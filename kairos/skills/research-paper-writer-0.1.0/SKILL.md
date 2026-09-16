@@ -3,7 +3,7 @@ name: "research-paper-writer-0.1.0"
 description: "Creates formal academic research papers following IEEE/ACM formatting standards with proper structure, citations, and scholarly writing style. Use when the user asks to write a research paper, academi"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\research-paper-writer-0.1.0\\SKILL.md"
+source-path: "hermes/skills/research-paper-writer-0.1.0/SKILL.md"
 ---
 # Research Paper Writer
 

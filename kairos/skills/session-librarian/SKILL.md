@@ -4,7 +4,7 @@ description: "Organize sessions by prompt: find, rename, archive, prune."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\productivity\\session-librarian\\SKILL.md"
+source-path: "hermes/skills/productivity/session-librarian/SKILL.md"
 ---
 # Session Librarian
 

@@ -3,7 +3,7 @@ name: "imagegen-frontend-web"
 description: "Elite frontend image-direction skill for generating premium, conversion-aware website design references. CRITICAL OUTPUT RULE — generate ONE separate horizontal image FOR EVERY section. A landing page"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\taste-skill\\skills\\imagegen-frontend-web\\SKILL.md"
+source-path: "claude/plugins/marketplaces/taste-skill/skills/imagegen-frontend-web/SKILL.md"
 ---
 # HARD OUTPUT RULE — READ FIRST
 

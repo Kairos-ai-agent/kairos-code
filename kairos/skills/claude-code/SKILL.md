@@ -4,7 +4,7 @@ description: "Delegate coding to Claude Code CLI (features, PRs)."
 priority: 0.5
 version: "2.2.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\autonomous-ai-agents\\claude-code\\SKILL.md"
+source-path: "hermes/skills/autonomous-ai-agents/claude-code/SKILL.md"
 ---
 # Claude Code — Hermes Orchestration Guide
 

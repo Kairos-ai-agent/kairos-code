@@ -3,7 +3,7 @@ name: "self-improving-agent"
 description: "自我提升代理。当用户要求进行持续改进、自我反思、技能进化、能力提升、举一反三、萃取经验、吸取教训、实现持续优化和迭代时使用。支持通过任务探索、反馈收集、经验萃取、教训吸取来实现技能的自我优化。"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\leohu\\.minimax\\skills\\self-improving-agent\\SKILL.md"
+source-path: "minimax/skills/self-improving-agent/SKILL.md"
 ---
 # 自我提升代理
 

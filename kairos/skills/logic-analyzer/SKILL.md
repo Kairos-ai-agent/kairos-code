@@ -3,7 +3,7 @@ name: "logic-analyzer"
 description: "当需要用 Saleae 逻辑分析仪在线采集数字波形并解码 I2C/SPI/UART/CAN 时使用，通过 Logic 2 自动化服务驱动硬件采集、添加协议解码器并导出数据。"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\skills\\logic-analyzer\\SKILL.md"
+source-path: "claude/skills/logic-analyzer/SKILL.md"
 ---
 # 逻辑分析仪采集（Saleae）
 

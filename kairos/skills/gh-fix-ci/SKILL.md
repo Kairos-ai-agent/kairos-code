@@ -3,7 +3,7 @@ name: "gh-fix-ci"
 description: "Use when a user asks to debug or fix failing GitHub PR checks that run in GitHub Actions. Use the GitHub app from this plugin for PR metadata and patch context, and use `gh` for Actions check and log"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\leohu\\.codex\\plugins\\cache\\openai-api-curated\\github\\11c74d6b\\skills\\gh-fix-ci\\SKILL.md"
+source-path: "imported"
 ---
 # GitHub Actions CI Fix
 

@@ -3,7 +3,7 @@ name: "glmv-stock-analyst"
 description: ">"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\glmv-stock-analyst\\SKILL.md"
+source-path: "hermes/skills/glmv-stock-analyst/SKILL.md"
 ---
 # stock-analyst v3.2
 

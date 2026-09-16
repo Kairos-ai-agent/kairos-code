@@ -3,7 +3,7 @@ name: "shadcn-best-practices"
 description: "Manages shadcn components and projects — adding, searching, fixing, debugging, styling, and composing UI. Provides project context, component docs, and usage examples. Applies when working with shadcn"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\leohu\\.codex\\plugins\\cache\\openai-api-curated\\build-web-apps\\11c74d6b\\skills\\shadcn-best-practices\\SKILL.md"
+source-path: "imported"
 ---
 # shadcn/ui
 

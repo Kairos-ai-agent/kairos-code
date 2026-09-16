@@ -3,7 +3,7 @@ name: "configure"
 description: "Set up the Discord channel — save the bot token and review access policy. Use when the user pastes a Discord bot token, asks to configure Discord, asks \"how do I set this up\" or \"who can reach me,\" or"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\external_plugins\\discord\\skills\\configure\\SKILL.md"
+source-path: "claude-plugins-official/external_plugins/discord/skills/configure/SKILL.md"
 ---
 # /discord:configure — Discord Channel Setup
 

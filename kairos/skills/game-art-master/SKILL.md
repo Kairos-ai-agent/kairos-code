@@ -3,7 +3,7 @@ name: "game-art-master"
 description: "专业的游戏美术专家技能，精通原画设计、UI/UX设计、骨骼动画、3D建模、特效制作等全方位游戏美术工作。当用户需要游戏美术创作、美术资源制作、视觉设计指导、美术风格定义、角色设计、场景设计、动画制作等游戏开发美术相关任务时使用此技能。关键词：游戏美术、原画、UI设计、3D建模、骨骼动画、特效、Shader、角色设计、场景设计、道具设计、概念设计、game art、character design、"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\leohu\\.minimax\\skills\\game-art-master\\SKILL.md"
+source-path: "minimax/skills/game-art-master/SKILL.md"
 ---
 # 游戏美术大师
 

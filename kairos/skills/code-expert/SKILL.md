@@ -3,7 +3,7 @@ name: "code-expert"
 description: "A professional-level programming AI that follows a document-driven development workflow. When the user asks a programming question, it first clarifies the programming language, then creates a step-by-"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\leohu\\.minimax\\skills\\code-expert\\SKILL.md"
+source-path: "minimax/skills/code-expert/SKILL.md"
 ---
 # Code Expert (代码专家)
 

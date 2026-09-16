@@ -4,7 +4,7 @@ description: "Geocode, POIs, routes, timezones via OpenStreetMap/OSRM."
 priority: 0.5
 version: "1.2.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\productivity\\maps\\SKILL.md"
+source-path: "hermes/skills/productivity/maps/SKILL.md"
 ---
 # Maps Skill
 

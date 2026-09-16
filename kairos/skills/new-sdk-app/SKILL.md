@@ -3,7 +3,7 @@ name: "new-sdk-app"
 description: "Create and setup a new Claude Agent SDK application"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\agent-sdk-dev\\commands\\new-sdk-app.md"
+source-path: "claude-plugins-official/plugins/agent-sdk-dev/commands/new-sdk-app.md"
 ---
 You are tasked with helping the user create a new Claude Agent SDK application. Follow these steps carefully:
 

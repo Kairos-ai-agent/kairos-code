@@ -4,7 +4,7 @@ description: "Carry a GitHub issue to a verified PR with honest CI state."
 priority: 0.5
 version: "0.1.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\github\\github-issue-to-pr\\SKILL.md"
+source-path: "hermes/skills/github/github-issue-to-pr/SKILL.md"
 ---
 # GitHub Issue to Pull Request
 

@@ -3,7 +3,7 @@ name: "serial-monitor"
 description: "当需要识别正确串口、调用自带脚本抓取日志，并分析嵌入式固件运行状态时使用。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\serial-monitor\\SKILL.md"
+source-path: "hermes/skills/serial-monitor/SKILL.md"
 ---
 # 串口监视
 

@@ -4,7 +4,7 @@ description: "Extract text from PDFs/scans (pymupdf, marker-pdf)."
 priority: 0.5
 version: "2.3.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\productivity\\ocr-and-documents\\SKILL.md"
+source-path: "hermes/skills/productivity/ocr-and-documents/SKILL.md"
 ---
 # PDF & Document Extraction
 

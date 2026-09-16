@@ -3,7 +3,7 @@ name: "modernize-status"
 description: "Where am I in the modernization workflow — artifact inventory, staleness, secrets hygiene, next step"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\code-modernization\\commands\\modernize-status.md"
+source-path: "claude-plugins-official/plugins/code-modernization/commands/modernize-status.md"
 ---
 Report where the modernization of `$1` stands, in one screen. This is a
 read-only command — inspect, never modify.

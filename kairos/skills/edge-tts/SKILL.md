@@ -3,7 +3,7 @@ name: "edge-tts"
 description: "Text-to-speech conversion using `uvx edge-tts` for generating audio from text. Use when (1) User requests audio/voice output with the \"tts\" trigger or keyword. (2) Content needs to be spoken rather th"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\openclaw-imports\\edge-tts\\SKILL.md"
+source-path: "hermes/skills/openclaw-imports/edge-tts/SKILL.md"
 ---
 # Edge-TTS
 

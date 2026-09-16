@@ -3,7 +3,7 @@ name: "ai-media-gen-ui"
 description: "Build frontend UIs and backend proxies for AI image/video generation tools. Covers 4-mode pattern (txt2img/img2img/txt2vid/img2vid), client-side async polling, adaptive settings, model classification,"
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\leohu\\.agents\\skills\\software-development\\ai-media-gen-ui\\SKILL.md"
+source-path: "agents/skills/software-development/ai-media-gen-ui/SKILL.md"
 ---
 # AI Media Generation UI
 

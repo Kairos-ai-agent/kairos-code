@@ -4,7 +4,7 @@ description: "Debug empty/stale/wrong results in data pipelines."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\software-development\\data-pipeline-debugging\\SKILL.md"
+source-path: "hermes/skills/software-development/data-pipeline-debugging/SKILL.md"
 ---
 # Data-Pipeline Debugging
 

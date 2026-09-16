@@ -3,7 +3,7 @@ name: "llm-browser-gateway"
 description: "|"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\.archive\\llm-browser-gateway\\SKILL.md"
+source-path: "hermes/skills/.archive/llm-browser-gateway/SKILL.md"
 ---
 # 浏览器 LLM Gateway · 前端直连 LLM 完整方案
 

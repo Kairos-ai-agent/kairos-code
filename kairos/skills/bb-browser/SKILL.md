@@ -3,7 +3,7 @@ name: "bb-browser"
 description: "Turn any website into a CLI command. 36 platforms, 103 commands — Twitter, Reddit, GitHub, YouTube, Zhihu, Bilibili, Weibo, and more. Uses OpenClaw's browser directly, no extra extension needed."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\bb-browser\\SKILL.md"
+source-path: "hermes/skills/bb-browser/SKILL.md"
 ---
 # bb-browser sites — The web as CLI
 

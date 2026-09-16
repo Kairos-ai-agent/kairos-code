@@ -4,7 +4,7 @@ description: "Extract cited obligations, deadlines, tasks from documents."
 priority: 0.5
 version: "0.1.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\productivity\\document-to-action-items\\SKILL.md"
+source-path: "hermes/skills/productivity/document-to-action-items/SKILL.md"
 ---
 # Document to Action Items
 

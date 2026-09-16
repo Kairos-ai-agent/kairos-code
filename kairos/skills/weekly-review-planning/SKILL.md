@@ -4,7 +4,7 @@ description: "Weekly reset: commitments, stalled work, next-week plan."
 priority: 0.5
 version: "0.1.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\productivity\\weekly-review-planning\\SKILL.md"
+source-path: "hermes/skills/productivity/weekly-review-planning/SKILL.md"
 ---
 # Weekly Review and Planning
 

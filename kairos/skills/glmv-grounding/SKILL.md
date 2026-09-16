@@ -3,7 +3,7 @@ name: "glmv-grounding"
 description: ">"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\glmv-grounding\\SKILL.md"
+source-path: "hermes/skills/glmv-grounding/SKILL.md"
 ---
 # GLMV-Grounding Skill
 

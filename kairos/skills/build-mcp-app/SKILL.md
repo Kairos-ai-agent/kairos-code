@@ -4,7 +4,7 @@ description: "This skill should be used when the user wants to build an \"MCP ap
 priority: 0.5
 version: "0.1.0"
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\mcp-server-dev\\skills\\build-mcp-app\\SKILL.md"
+source-path: "claude-plugins-official/plugins/mcp-server-dev/skills/build-mcp-app/SKILL.md"
 ---
 # Build an MCP App (Interactive UI Widgets)
 

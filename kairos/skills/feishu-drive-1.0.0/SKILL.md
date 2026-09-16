@@ -3,7 +3,7 @@ name: "feishu-drive-1.0.0"
 description: "飞书云空间文件管理 Skill。上传/下载/移动/搜索文件、创建文件夹、获取元数据等。当需要管理飞书云空间中的文件和文件夹时使用此 Skill。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\feishu-drive-1.0.0\\SKILL.md"
+source-path: "hermes/skills/feishu-drive-1.0.0/SKILL.md"
 ---
 # 飞书云空间文件管理
 

@@ -3,7 +3,7 @@ name: "story-video-generator"
 description: "从图片或文字描述自动生成完整视频故事。支持灵活输入（1-N张图片/纯文字/混合），可选时长和风格。关键词：故事视频、视频生成、图片转视频、文字转视频、story video、video generation"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\leohu\\.minimax\\skills\\story-video-generator\\SKILL.md"
+source-path: "minimax/skills/story-video-generator/SKILL.md"
 ---
 # 故事视频生成助手
 

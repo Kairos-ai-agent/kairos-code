@@ -3,7 +3,7 @@ name: "design-skills"
 description: "External GitHub design skill landscape — curated map of UI/UX, anti-slop, motion, design-system, and critique skills for AI agents. Use when user asks to find design skills, wants anti-AI-slop UI qual"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\design-skills\\SKILL.md"
+source-path: "hermes/skills/design-skills/SKILL.md"
 ---
 # Design Skills — GitHub Landscape Map
 

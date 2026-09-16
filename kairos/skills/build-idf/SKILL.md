@@ -3,7 +3,7 @@ name: "build-idf"
 description: "当需要配置或构建基于 ESP-IDF 的固件工程，调用自带脚本执行 idf.py build 并定位固件产物时使用。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\build-idf\\SKILL.md"
+source-path: "hermes/skills/build-idf/SKILL.md"
 ---
 # ESP-IDF 编译
 

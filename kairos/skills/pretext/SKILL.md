@@ -4,7 +4,7 @@ description: "Use when building creative browser demos with @chenglou/pretext â€
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\pretext\\SKILL.md"
+source-path: "hermes/skills/creative/pretext/SKILL.md"
 ---
 # Pretext Creative Demos
 

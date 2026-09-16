@@ -3,7 +3,7 @@ name: "autoglm-browser-agent"
 description: ">-"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\autoglm-browser-agent\\SKILL.md"
+source-path: "hermes/skills/autoglm-browser-agent/SKILL.md"
 ---
 # Browser Automation Agent
 
@@ -320,7 +320,7 @@ text: pg one
 
 ### 本地文件自动上传
 
-当 task 文本中包含本地文件路径（如 `C:\Users\me\photo.jpg`、`%USERPROFILE%\Documents\report.pdf`）时,服务会**自动检测并上传到 OSS**,将路径替换为在线 URL 后再执行任务。**无需手动处理文件上传。**
+当 task 文本中包含本地文件路径（如 `~\photo.jpg`、`%USERPROFILE%\Documents\report.pdf`）时,服务会**自动检测并上传到 OSS**,将路径替换为在线 URL 后再执行任务。**无需手动处理文件上传。**
 
 支持的路径格式:
 - Windows 绝对路径: `C:\path\to\file.jpg`
@@ -832,12 +832,12 @@ autoglm run --task "用户敏感操作同意与否说明。<原始/剩余任务>
 
 **示例**:
 ```
-用户原始指令:"帮我在小红书发一个帖子,配图用 C:\Users\me\photo.jpg"
+用户原始指令:"帮我在小红书发一个帖子,配图用 ~\photo.jpg"
 
 直接调用:
-autoglm run --task "帮我在小红书发一个帖子,配图用 C:\Users\me\photo.jpg" --start-url "https://www.xiaohongshu.com"
+autoglm run --task "帮我在小红书发一个帖子,配图用 ~\photo.jpg" --start-url "https://www.xiaohongshu.com"
 
-服务内部自动:检测到 C:\Users\me\photo.jpg → 上传到 OSS → 替换为 oss_url → 执行任务
+服务内部自动:检测到 ~\photo.jpg → 上传到 OSS → 替换为 oss_url → 执行任务
 ```
 
 > **直接把包含本地文件路径的 task 原样传给 `autoglm run` 即可**,服务会自动处理文件上传。

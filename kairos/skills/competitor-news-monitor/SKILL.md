@@ -4,7 +4,7 @@ description: "Watch named companies for material news; cited digests."
 priority: 0.5
 version: "0.1.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\research\\competitor-news-monitor\\SKILL.md"
+source-path: "hermes/skills/research/competitor-news-monitor/SKILL.md"
 ---
 # Competitor News Monitor
 

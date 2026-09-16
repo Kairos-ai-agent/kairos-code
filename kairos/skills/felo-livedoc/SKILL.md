@@ -3,7 +3,7 @@ name: "felo-livedoc"
 description: "Manage Felo LiveDocs (knowledge bases) and their resources. Use when users want to create, manage, or query knowledge bases, upload documents, add URLs, or perform semantic retrieval over a knowledge"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\felo-livedoc\\SKILL.md"
+source-path: "hermes/skills/felo-livedoc/SKILL.md"
 ---
 # Felo LiveDoc Skill
 

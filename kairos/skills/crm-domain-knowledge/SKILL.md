@@ -3,7 +3,7 @@ name: "crm-domain-knowledge"
 description: "CRM domain knowledge covering sales pipeline, customer management, lead/opportunity tracking, quotation management, and after-sales service. Use when building CRM features, designing sales workflows,"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\erp\\crm-domain-knowledge\\SKILL.md"
+source-path: "hermes/skills/erp/crm-domain-knowledge/SKILL.md"
 ---
 # CRM Domain Knowledge
 

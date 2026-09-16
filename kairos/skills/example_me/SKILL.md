@@ -3,7 +3,7 @@ name: "example_me"
 description: "小北（示例），25岁，产品经理，上海"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\create-yourself\\selves\\example_me\\SKILL.md"
+source-path: "hermes/skills/create-yourself/selves/example_me/SKILL.md"
 ---
 # 小北（示例）
 

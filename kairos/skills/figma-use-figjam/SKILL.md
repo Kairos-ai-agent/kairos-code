@@ -3,7 +3,7 @@ name: "figma-use-figjam"
 description: "This skill helps agents use Figma's use_figma MCP tool in the FigJam context. Can be used alongside figma-use which has foundational context for using the use_figma tool."
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\leohu\\.codex\\plugins\\cache\\openai-api-curated\\figma\\11c74d6b\\skills\\figma-use-figjam\\SKILL.md"
+source-path: "imported"
 ---
 # use_figma — Figma Plugin API Skill for FigJam
 

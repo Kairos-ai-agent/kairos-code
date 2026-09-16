@@ -3,7 +3,7 @@ name: "session-logs"
 description: "Search and analyze your own session logs (older/parent conversations) using jq."
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\leohu\\.agents\\skills\\session-logs\\SKILL.md"
+source-path: "agents/skills/session-logs/SKILL.md"
 ---
 # session-logs
 

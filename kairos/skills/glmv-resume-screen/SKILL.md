@@ -3,7 +3,7 @@ name: "glmv-resume-screen"
 description: "Screen and evaluate resumes against criteria using ZhiPu GLM-V multimodal model."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\glmv-resume-screen\\SKILL.md"
+source-path: "hermes/skills/glmv-resume-screen/SKILL.md"
 ---
 # GLM-V Resume Screening Skill
 

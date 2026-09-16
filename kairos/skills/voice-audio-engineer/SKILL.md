@@ -3,7 +3,7 @@ name: "voice-audio-engineer"
 description: "Expert in voice synthesis, TTS, voice cloning, podcast production, speech processing, and voice UI design via ElevenLabs integration. Specializes in vocal clarity, loudness standards (LUFS),"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\openclaw-imports\\voice-audio-engineer\\SKILL.md"
+source-path: "hermes/skills/openclaw-imports/voice-audio-engineer/SKILL.md"
 ---
 # Voice & Audio Engineer: Voice Synthesis, TTS & Speech Processing
 

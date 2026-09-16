@@ -4,7 +4,7 @@ description: "Coding workflow with planning, implementation, verification, and t
 priority: 0.5
 version: "1.0.5"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\code-1.0.4\\SKILL.md"
+source-path: "hermes/skills/code-1.0.4/SKILL.md"
 ---
 ## When to Use
 

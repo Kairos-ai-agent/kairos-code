@@ -3,7 +3,7 @@ name: "build-keil"
 description: "当需要通过 Keil MDK 命令行编译嵌入式工程，调用自带脚本解析工程文件、执行构建并定位固件产物时使用。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\build-keil\\SKILL.md"
+source-path: "hermes/skills/build-keil/SKILL.md"
 ---
 # 构建 Keil MDK 工程
 

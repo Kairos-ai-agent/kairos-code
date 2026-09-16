@@ -3,7 +3,7 @@ name: "binary-analysis"
 description: "Techniques for analyzing compiled Windows/Linux binaries to understand their internal logic, API structure, subscription/premium models, encryption, and authentication flow. Covers PE/ELF identificati"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\software-development\\firmware-reverse-engineering\\references\\binary-analysis\\SKILL.md"
+source-path: "hermes/skills/software-development/firmware-reverse-engineering/references/binary-analysis/SKILL.md"
 ---
 # Binary Analysis
 

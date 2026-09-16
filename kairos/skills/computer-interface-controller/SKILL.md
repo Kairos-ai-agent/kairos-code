@@ -3,7 +3,7 @@ name: "computer-interface-controller"
 description: "电脑界面自主操控技能。当用户要求操控电脑界面、自动化桌面操作、进行GUI自动化、点击按钮、输入文字、分析屏幕、填写表单、管理文件、控制浏览器时使用。支持本地和远程环境。"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\leohu\\.minimax\\skills\\computer-interface-controller\\SKILL.md"
+source-path: "minimax/skills/computer-interface-controller/SKILL.md"
 ---
 # Computer Interface Controller
 

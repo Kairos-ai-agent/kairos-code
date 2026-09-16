@@ -3,7 +3,7 @@ name: "autoglm-stock-analysis"
 description: "股票分析技能（AutoGLM 版）。当用户提到任何股票、证券、基金、市场行情分析需求时必须使用此技能，包括：分析某只股票、研究公司基本面、查财报数据、评估买入卖出时机、对比多只股票、分析行业板块、解读财经新闻对股价影响等。只要涉及股票投资研究、行情解读、估值判断或综合分析，都应触发此技能。获取股票信息时，可同时组合使用 `websearch`、`open-link`、`yfinance` 三种方式"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\autoglm-stock-analysis\\SKILL.md"
+source-path: "hermes/skills/autoglm-stock-analysis/SKILL.md"
 ---
 # autoglm-stock-analysis
 

@@ -3,7 +3,7 @@ name: "excel-live-control"
 description: "Control an open or active Microsoft Excel workbook through the ChatGPT add-in or connected session. Use when the user tags the Microsoft Excel app in Codex or follows up on an established live Excel t"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\leohu\\.codex\\plugins\\cache\\openai-primary-runtime\\spreadsheets\\26.805.11740\\skills\\excel-live-control\\SKILL.md"
+source-path: "imported"
 ---
 # Excel Live Control
 

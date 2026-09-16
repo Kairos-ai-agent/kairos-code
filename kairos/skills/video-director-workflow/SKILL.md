@@ -3,7 +3,7 @@ name: "video-director-workflow"
 description: "短视频/短剧导演全流程工作流。覆盖从前期筹备到后期交付的完整导演职责：选角、场面调度、摄影指导、镜头语言设计、剪辑指导、调色、审核。适用于短剧导演、信息流广告导演、TVC导演。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\video-director-workflow\\SKILL.md"
+source-path: "hermes/skills/creative/video-director-workflow/SKILL.md"
 ---
 # 视频导演工作流 · Video Director Workflow
 

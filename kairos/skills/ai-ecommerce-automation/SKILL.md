@@ -3,7 +3,7 @@ name: "ai-ecommerce-automation"
 description: "AI Agent驱动的跨境电商自动化。覆盖平台选型（TikTok Shop/Shopee/Shopify）、一件代发供应商对接（CJ Dropshipping/1688）、Agent自动化架构设计、API集成、选品/上架/履约/客服全流程。当用户讨论跨境电商、dropshipping、一件代发、AI电商运营、平台开店时使用。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\productivity\\ai-ecommerce-automation\\SKILL.md"
+source-path: "hermes/skills/productivity/ai-ecommerce-automation/SKILL.md"
 ---
 # AI Agent 跨境电商自动化
 

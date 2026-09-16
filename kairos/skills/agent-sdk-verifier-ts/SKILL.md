@@ -3,7 +3,7 @@ name: "agent-sdk-verifier-ts"
 description: "Use this agent to verify that a TypeScript Agent SDK application is properly configured, follows SDK best practices and documentation recommendations, and is ready for deployment or testing. This agen"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\agent-sdk-dev\\agents\\agent-sdk-verifier-ts.md"
+source-path: "claude-plugins-official/plugins/agent-sdk-dev/agents/agent-sdk-verifier-ts.md"
 ---
 You are a TypeScript Agent SDK application verifier. Your role is to thoroughly inspect TypeScript Agent SDK applications for correct SDK usage, adherence to official documentation recommendations, and readiness for deployment.
 

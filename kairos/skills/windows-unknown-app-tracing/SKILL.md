@@ -3,7 +3,7 @@ name: "windows-unknown-app-tracing"
 description: "溯源/取证用户电脑上\"不知道哪里来的\"程序（\"我电脑里有个 X 软件哪里来的？\" / \"X 安全吗？\" / \"X 是什么时候装的？\"）。多维度调查方法：文件系统搜索（中文名+拼音缩写+英文名）、PE VersionInfo 元数据（含 PowerShell GBK 编码 workaround）、注册表 Uninstall 项（HKLM vs WOW6432Node）、应用配置/日志（DelayPi"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\.archive\\windows-unknown-app-tracing\\SKILL.md"
+source-path: "hermes/skills/.archive/windows-unknown-app-tracing/SKILL.md"
 ---
 # Windows Unknown App Tracing
 

@@ -3,7 +3,7 @@ name: "minecraft-modpack-server"
 description: "Host modded Minecraft servers (CurseForge, Modrinth)."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\gaming\\minecraft-modpack-server\\SKILL.md"
+source-path: "hermes/skills/gaming/minecraft-modpack-server/SKILL.md"
 ---
 # Minecraft Modpack Server Setup
 

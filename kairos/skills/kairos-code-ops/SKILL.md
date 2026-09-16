@@ -3,11 +3,11 @@ name: "kairos-code-ops"
 description: "Troubleshoot Kairos_code: chat silent, 500s, restart"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\software-development\\kairos-code-ops\\SKILL.md"
+source-path: "hermes/skills/software-development/kairos-code-ops/SKILL.md"
 ---
 # Kairos_code 运维 / 排障
 
-Repo: `E:\D_bak\software_bak\Kairos_code` (was on D:, moved to E:). FastAPI backend on **9527**, vite frontend on **3000**.
+Repo: `<repo>` (was on D:, moved to E:). FastAPI backend on **9527**, vite frontend on **3000**.
 
 ## 运行结构（先记住这几点）
 
@@ -96,7 +96,7 @@ PID 会被 Windows **复用** ✓ —— 用几小时前抓的 PID 列表 `taskk
 - LLM 配置：`data/settings.json` → `provider.openai.{model,endpointUrl,baseUrl,apiKey}`（还有一份 legacy `provider_openai`，改模型要**两处一起改**）。备份写 `data/settings.json.bak-<ts>`。
 - 聊天：`POST /api/projects/{id}/chat` body `{message, agent_role}`（`agent_role` 填 `coder`）→ 内部走 `project.coder.chat()` → `KairosAgent._chat_impl`（`kairos/agents/base.py`）。回复经 message bus 的 `agent.chat` 落库，聊天页从 `GET /api/projects/{id}/chat-messages?chat_only=true&limit=N` 重新水合（用户消息 topic 是 `user.chat`）。
 - 排查用的只读 DB 查询：`data/kairos.db`，表 `messages(project_id, sender, topic, content, timestamp)`；curl 请求体里的中文用 `--data-binary @file.json`，避免 MSYS 引号/编码坑。
-- 临时脚本放 `.agn_tmp/`（已 gitignore），跑仓库内脚本要 `PYTHONPATH=E:/D_bak/software_bak/Kairos_code`。
+- 临时脚本放 `.agn_tmp/`（已 gitignore），跑仓库内脚本要 `PYTHONPATH=<repo>`。
 
 ## Playbook: “普通 chat 没有回复任何消息”
 
@@ -290,7 +290,7 @@ for c in $(git rev-list --all); do git grep -hIE "sk-[A-Za-z0-9_-]{20,}" "$c"; d
 #    sha256(key)[:12] 与 data/settings.json 里的值对比
 # 4. 抹除（保留提交，只替换字符串）：文件放仓库外，事后立刻删
 git-filter-repo --force --replace-text /tmp/redact.txt   # 内容：literal:<key>==>REDACTED
-#    同样的办法可抹机器用户名：literal:leohu==>user（当前文件 + 全历史一起改）
+#    同样的办法可抹机器用户名：literal:<user>==>user（当前文件 + 全历史一起改）
 ```
 
 配套要点：
@@ -329,7 +329,7 @@ git-filter-repo --force --replace-text /tmp/redact.txt   # 内容：literal:<key
 
 - 后端端口：`start_backend.bat` 设 `KAIROS_PORT=9527` + `KAIROS_SKIP_WORKTREES=1`，再用绝对路径的 venv python 跑 `-m kairos.main`。**git-bash 里 `cmd //c xxx.bat` 会被 MSYS 拆坏**（变成交互式 cmd），要起后端就直接 `KAIROS_PORT=9527 KAIROS_SKIP_WORKTREES=1 .venv/Scripts/python.exe -m kairos.main`（日志 `>> logs/backend_out.log`）。不设 `KAIROS_PORT` 会跑在默认 8900。
 - **`kairos/cli.py::main()` 有个 legacy 守卫**：`argv[0]` 不在白名单里就当成 "serve" 启动服务器。新增子命令（gate/demo…）必须同步加进那个 tuple，否则 `kairos 新命令` 会静默变成起服务。
-- 历史瘦身：`.git` 曾 731MB，其中 **`_codex56.rar` 一个文件 640MB**（还有 `_dsh_extract/` 7530 文件、`build/` 45MB）。已用 `git filter-repo --invert-paths --path ...` 剔除 → **31MB**。备份 bundle 在 `E:/D_bak/software_bak/_kairos_code_git_backup.bundle`（759MB，`git clone <bundle>` 可还原）。想再瘦身先 `git rev-list --objects --all | git cat-file --batch-check=...` 找大 blob。
+- 历史瘦身：`.git` 曾 731MB，其中 **`_codex56.rar` 一个文件 640MB**（还有 `_dsh_extract/` 7530 文件、`build/` 45MB）。已用 `git filter-repo --invert-paths --path ...` 剔除 → **31MB**。备份 bundle 在 `<outside>/<a bundle outside the repo>`（759MB，`git clone <bundle>` 可还原）。想再瘦身先 `git rev-list --objects --all | git cat-file --batch-check=...` 找大 blob。
 - `logs/` 已从 git 取消跟踪（运行时输出，永远脏）；`.gitignore` 覆盖 `_dsh_extract/_dsh_pkg/build/.agn_tmp/logs/.kairos/web/dist/` 等。
 - i18n：`en-US` 是**源语言**（无 catalog），`merge_i18n.py --coverage` 里它显示 0% 是正常的；改了 en 文案要**先把该键从 61 个 catalog 里删掉**再跑 `translate_i18n.py --all`，否则旧译文会被保留。
 - `check_i18n.mjs` 会抓两类真 bug：JSX 里的 `//` 注释（会被当文本渲染 → 必须写 `{/* */}`），以及函数实参里的文案。

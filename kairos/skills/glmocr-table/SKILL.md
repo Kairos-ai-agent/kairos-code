@@ -3,7 +3,7 @@ name: "glmocr-table"
 description: "Official skill for recognizing and extracting tables from images and PDFs into Markdown format using"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\glmocr-table\\SKILL.md"
+source-path: "hermes/skills/glmocr-table/SKILL.md"
 ---
 # GLM-OCR Table Recognition Skill / GLM-OCR 表格识别技能
 

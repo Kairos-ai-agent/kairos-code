@@ -3,7 +3,7 @@ name: "flash-openocd"
 description: "当需要使用已探测或显式指定的产物与探针配置，调用自带脚本通过 OpenOCD 烧录嵌入式固件时使用。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\flash-openocd\\SKILL.md"
+source-path: "hermes/skills/flash-openocd/SKILL.md"
 ---
 # OpenOCD 烧录
 

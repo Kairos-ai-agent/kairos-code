@@ -3,7 +3,7 @@ name: "game-portrait-generator"
 description: "Generate realistic, high-resolution studio portrait photos for game face module development. Use when users request game character face reference photos, frontal portraits, studio portrait photos, or"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\leohu\\.minimax\\skills\\game-portrait-generator\\SKILL.md"
+source-path: "minimax/skills/game-portrait-generator/SKILL.md"
 ---
 # Game Portrait Generator
 

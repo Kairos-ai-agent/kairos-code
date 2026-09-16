@@ -4,7 +4,7 @@ description: "lm-eval-harness: benchmark LLMs (MMLU, GSM8K, etc.)."
 priority: 0.5
 version: "1.0.1"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\mlops\\evaluation\\evaluating-llms-harness\\SKILL.md"
+source-path: "hermes/skills/mlops/evaluation/evaluating-llms-harness/SKILL.md"
 ---
 # lm-evaluation-harness - LLM Benchmarking
 

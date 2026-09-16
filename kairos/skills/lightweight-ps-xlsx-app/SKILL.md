@@ -3,7 +3,7 @@ name: "lightweight-ps-xlsx-app"
 description: ">-"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\software-development\\lightweight-ps-xlsx-app\\SKILL.md"
+source-path: "hermes/skills/software-development/lightweight-ps-xlsx-app/SKILL.md"
 ---
 # Lightweight PowerShell + xlsx Apps
 

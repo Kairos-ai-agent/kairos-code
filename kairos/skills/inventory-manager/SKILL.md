@@ -3,7 +3,7 @@ name: "inventory-manager"
 description: "Track inventory levels, manage stock, forecast demand, and optimize replenishment. Use when building inventory management features, stock tracking, or demand planning systems."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\erp\\inventory-manager\\SKILL.md"
+source-path: "hermes/skills/erp/inventory-manager/SKILL.md"
 ---
 # Inventory Manager
 

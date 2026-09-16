@@ -3,7 +3,7 @@ name: "glmv-web-replication"
 description: ">"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\glmv-web-replication\\SKILL.md"
+source-path: "hermes/skills/glmv-web-replication/SKILL.md"
 ---
 # Website Frontend Visual Replication
 

@@ -3,7 +3,7 @@ name: "debug-jlink"
 description: "当需要通过 J-Link GDB Server 启动或附着 GDB 会话，完成固件下载、在线调试或崩溃现场检查时使用。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\debug-jlink\\SKILL.md"
+source-path: "hermes/skills/debug-jlink/SKILL.md"
 ---
 # J-Link GDB 调试
 

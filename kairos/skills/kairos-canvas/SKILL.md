@@ -3,7 +3,7 @@ name: "kairos-canvas"
 description: "Build and maintain Kairos Canvas — an infinite canvas SPA (single HTML) with node-based visual workflows for AI content generation (LLM, image, video, TTS, storyboarding). Use when modifying Kairos Ca"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\kairos-canvas\\SKILL.md"
+source-path: "hermes/skills/creative/kairos-canvas/SKILL.md"
 ---
 # Kairos Canvas — Consolidated Skill
 

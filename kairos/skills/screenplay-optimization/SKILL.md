@@ -3,7 +3,7 @@ name: "screenplay-optimization"
 description: "Screenplay optimization, structural diagnosis, and production packaging for AI filmmaking. Covers: expanding summaries to full shot tables, format normalization, structural evaluation, pacing analysis"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\screenplay-optimization\\SKILL.md"
+source-path: "hermes/skills/creative/screenplay-optimization/SKILL.md"
 ---
 # Screenplay Optimization · 剧本优化与AI制作包装
 

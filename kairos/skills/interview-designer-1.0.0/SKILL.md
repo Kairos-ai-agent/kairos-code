@@ -3,7 +3,7 @@ name: "interview-designer-1.0.0"
 description: "Analyze resumes and design interview strategies using evidence-based methodology. Transforms interview prep from \"read resume → ask questions\" into \"define standard → forensic evidence → future simula"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\interview-designer-1.0.0\\SKILL.md"
+source-path: "hermes/skills/interview-designer-1.0.0/SKILL.md"
 ---
 # Interview Designer Skill
 

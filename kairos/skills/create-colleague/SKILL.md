@@ -4,7 +4,7 @@ description: "Distill a colleague into an AI Skill. Auto-collect Feishu/DingTalk
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\create-colleague\\SKILL.md"
+source-path: "hermes/skills/create-colleague/SKILL.md"
 ---
 > **Language / 语言**: This skill supports both English and Chinese. Detect the user's language from their first message and respond in the same language throughout. Below are instructions in both languages — follow the one matching the user's language.
 >

@@ -3,7 +3,7 @@ name: "things-mac"
 description: "Add, update, list, search, or inspect Things 3 todos, inbox, today, projects, areas, and tags on macOS."
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\leohu\\.agents\\skills\\things-mac\\SKILL.md"
+source-path: "agents/skills/things-mac/SKILL.md"
 ---
 # Things 3 CLI
 

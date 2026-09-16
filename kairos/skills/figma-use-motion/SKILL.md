@@ -3,7 +3,7 @@ name: "figma-use-motion"
 description: "Motion / animation context for the `use_figma` MCP tool — animating Figma nodes via manual keyframes, animation styles, easing, and timeline duration. Load alongside figma-use whenever a task involves"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\leohu\\.codex\\plugins\\cache\\openai-api-curated\\figma\\11c74d6b\\skills\\figma-use-motion\\SKILL.md"
+source-path: "imported"
 ---
 # use_figma — Figma Plugin API Skill for Motion
 

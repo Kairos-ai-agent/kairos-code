@@ -3,7 +3,7 @@ name: "modernize-transform"
 description: "Transform one legacy module to the target stack — idiomatic rewrite with behavior-equivalence tests"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\code-modernization\\commands\\modernize-transform.md"
+source-path: "claude-plugins-official/plugins/code-modernization/commands/modernize-transform.md"
 ---
 Transform `legacy/$1` module **`$2`** into **$3**, with proof of behavioral
 equivalence.

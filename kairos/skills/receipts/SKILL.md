@@ -3,7 +3,7 @@ name: "receipts"
 description: "Generate a personal Claude Code usage & impact report (\"receipts\") from this machine's local session transcripts — for justifying Claude Code usage/spend to a manager, self-review, or \"what have I bee"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\receipts\\skills\\receipts\\SKILL.md"
+source-path: "claude-plugins-official/plugins/receipts/skills/receipts/SKILL.md"
 ---
 # /receipts — personal Claude Code impact report
 

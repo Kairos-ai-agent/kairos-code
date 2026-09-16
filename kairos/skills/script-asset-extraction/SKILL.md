@@ -3,7 +3,7 @@ name: "script-asset-extraction"
 description: "从完整剧本中系统提取所有视觉资产（角色、场景、道具），生成AI图像生成提示词。适用于短剧、漫剧、TVC、电影等剧本到视觉制作的前期准备。覆盖：全剧资产盘点、角色一致性描述、场景风格统一、道具清单、提示词批量生成。"
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\leohu\\.agents\\skills\\creative\\script-asset-extraction\\SKILL.md"
+source-path: "agents/skills/creative/script-asset-extraction/SKILL.md"
 ---
 # 剧本视觉资产提取 · Script-to-Visual Asset Extraction
 

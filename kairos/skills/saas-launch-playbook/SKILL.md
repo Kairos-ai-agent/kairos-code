@@ -3,7 +3,7 @@ name: "saas-launch-playbook"
 description: "Multi-channel cold-start launch playbook for small SaaS products — diagnose first (real user count, geo, sources, revenue), fix data foundation (add missing schema fields, capture request.cf.country),"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\saas-launch-playbook\\SKILL.md"
+source-path: "hermes/skills/saas-launch-playbook/SKILL.md"
 ---
 # SaaS Cold-Start Launch Playbook
 

@@ -3,7 +3,7 @@ name: "threejs-frontend-tools"
 description: "|"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\.archive\\threejs-frontend-tools\\SKILL.md"
+source-path: "hermes/skills/.archive/threejs-frontend-tools/SKILL.md"
 ---
 # Three.js Frontend Tools
 

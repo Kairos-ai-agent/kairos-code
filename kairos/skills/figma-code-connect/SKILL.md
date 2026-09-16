@@ -3,7 +3,7 @@ name: "figma-code-connect"
 description: "Creates and maintains Figma Code Connect template files that map Figma components to code snippets. Use when the user mentions Code Connect, Figma component mapping, design-to-code translation, or ask"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\leohu\\.codex\\plugins\\cache\\openai-api-curated\\figma\\11c74d6b\\skills\\figma-code-connect\\SKILL.md"
+source-path: "imported"
 ---
 # Code Connect
 

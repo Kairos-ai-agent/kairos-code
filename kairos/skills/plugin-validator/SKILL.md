@@ -4,7 +4,7 @@ description: "|"
 priority: 0.5
 tools: ["Read", "Grep", "Glob", "Bash"]
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\plugin-dev\\agents\\plugin-validator.md"
+source-path: "claude-plugins-official/plugins/plugin-dev/agents/plugin-validator.md"
 ---
 You are an expert plugin validator specializing in comprehensive validation of Claude Code plugin structure, configuration, and components.
 

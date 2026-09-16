@@ -4,7 +4,7 @@ description: "SEO specialist agent with site audits, content writing, keyword re
 priority: 0.5
 version: "1.0.3"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\seo-1.0.3\\SKILL.md"
+source-path: "hermes/skills/seo-1.0.3/SKILL.md"
 ---
 ## Setup
 

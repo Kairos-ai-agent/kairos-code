@@ -3,7 +3,7 @@ name: "fal-music"
 description: "Generate music and audio using AI. Use when the user asks to create, generate, or make music, songs, audio, melodies, tracks, or beats. Supports text-to-music with multiple models (Stable Audio, Beato"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\openclaw-imports\\fal-music\\SKILL.md"
+source-path: "hermes/skills/openclaw-imports/fal-music/SKILL.md"
 ---
 # FAL Music - AI Music Generation
 

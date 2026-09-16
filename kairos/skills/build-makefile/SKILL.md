@@ -3,7 +3,7 @@ name: "build-makefile"
 description: "当需要编译基于裸 Makefile 的嵌入式固件工程（无 CMake/IDE），调用自带脚本解析 Makefile、执行 make 并定位固件产物时使用。"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\skills\\build-makefile\\SKILL.md"
+source-path: "claude/skills/build-makefile/SKILL.md"
 ---
 # 构建 Makefile 工程
 

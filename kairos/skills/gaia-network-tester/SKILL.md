@@ -3,7 +3,7 @@ name: "gaia-network-tester"
 description: "为 GaiaNetworkTester（D:\\AI_work\\GaiaNetworkTester\\）开发和维护前端页面。Node.js 服务端、多页面前端、图像/视频生成 API 测试工具。覆盖新增页面、修改配置、模型列表分类、常见坑。Consolidated umbrella for gaia-network-tester-frontend and gaia-video-factory-home"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\.archive\\gaia-network-tester\\SKILL.md"
+source-path: "hermes/skills/.archive/gaia-network-tester/SKILL.md"
 ---
 # GaiaNetworkTester 前端开发指南
 

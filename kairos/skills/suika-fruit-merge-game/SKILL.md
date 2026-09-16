@@ -3,7 +3,7 @@ name: "suika-fruit-merge-game"
 description: "Creates Suika Game-style fruit merge games. Trigger phrases: \"make a merge game\", \"Suika Game\", \"fruit merge\", \"合成大西瓜\", \"连连看游戏\", \"做个合成游戏\"."
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\leohu\\.minimax\\skills\\suika-fruit-merge-game\\SKILL.md"
+source-path: "minimax/skills/suika-fruit-merge-game/SKILL.md"
 ---
 # 西瓜合成游戏生成器
 

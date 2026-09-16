@@ -3,7 +3,7 @@ name: "minimalist-skill"
 description: "Clean editorial-style interfaces. Warm monochrome palette, typographic contrast, flat bento grids, muted pastels. No gradients, no heavy shadows."
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\taste-skill\\skills\\minimalist-skill\\SKILL.md"
+source-path: "claude/plugins/marketplaces/taste-skill/skills/minimalist-skill/SKILL.md"
 ---
 # Protocol: Premium Utilitarian Minimalism UI Architect
 

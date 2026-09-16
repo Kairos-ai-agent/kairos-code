@@ -3,7 +3,7 @@ name: "type-design-analyzer"
 description: "Use this agent when you need expert analysis of type design in your codebase. Specifically use it (1) when introducing a new type to ensure it follows best practices for encapsulation and invariant ex"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\pr-review-toolkit\\agents\\type-design-analyzer.md"
+source-path: "claude-plugins-official/plugins/pr-review-toolkit/agents/type-design-analyzer.md"
 ---
 You are a type design expert with extensive experience in large-scale software architecture. Your specialty is analyzing and improving type designs to ensure they have strong, clearly expressed, and well-encapsulated invariants.
 

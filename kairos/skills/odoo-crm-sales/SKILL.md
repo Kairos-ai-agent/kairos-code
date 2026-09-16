@@ -3,7 +3,7 @@ name: "odoo-crm-sales"
 description: "Odoo CRM and Sales module development guide. Use when building Odoo CRM features, customizing sales workflows, or extending Odoo's customer/opportunity management."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\erp\\odoo-crm-sales\\SKILL.md"
+source-path: "hermes/skills/erp/odoo-crm-sales/SKILL.md"
 ---
 # Odoo CRM & Sales Module Development
 

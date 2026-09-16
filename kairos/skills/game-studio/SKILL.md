@@ -3,7 +3,7 @@ name: "game-studio"
 description: "Route early browser-game work. Use when the user needs stack selection and workflow planning across design, implementation, assets, and playtesting before moving to a specialist skill."
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\leohu\\.codex\\plugins\\cache\\openai-api-curated\\game-studio\\11c74d6b\\skills\\game-studio\\SKILL.md"
+source-path: "imported"
 ---
 # Game Studio
 

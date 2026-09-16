@@ -3,7 +3,7 @@ name: "web-game-foundations"
 description: "Set browser-game architecture before implementation. Use when the user needs engine choice, simulation and render boundaries, input model, asset organization, or save/debug/performance strategy."
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\leohu\\.codex\\plugins\\cache\\openai-api-curated\\game-studio\\11c74d6b\\skills\\web-game-foundations\\SKILL.md"
+source-path: "imported"
 ---
 # Web Game Foundations
 

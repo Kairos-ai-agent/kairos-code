@@ -4,7 +4,7 @@ description: "Manim CE animations: 3Blue1Brown math/algo videos."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\manim-video\\SKILL.md"
+source-path: "hermes/skills/creative/manim-video/SKILL.md"
 ---
 # Manim Video Production Pipeline
 

@@ -3,7 +3,7 @@ name: "3d-storyboard-previz"
 description: "|"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\.archive\\3d-storyboard-previz\\SKILL.md"
+source-path: "hermes/skills/.archive/3d-storyboard-previz/SKILL.md"
 ---
 # 3D Storyboard Previz
 

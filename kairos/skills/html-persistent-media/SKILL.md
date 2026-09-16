@@ -3,7 +3,7 @@ name: "html-persistent-media"
 description: "Add persistent video/image media storage to browser-based HTML applications using IndexedDB. Covers blob storage setup, clipboard paste of media files, drag-and-drop, in-app video playback, and export"
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\leohu\\.agents\\skills\\software-development\\html-persistent-media\\SKILL.md"
+source-path: "agents/skills/software-development/html-persistent-media/SKILL.md"
 ---
 # HTML Persistent Media Storage (IndexedDB)
 

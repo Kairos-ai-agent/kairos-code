@@ -4,7 +4,7 @@ description: "Build, test, inspect, install, and deploy MCP servers with FastMCP
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\fastmcp\\SKILL.md"
+source-path: "hermes/skills/fastmcp/SKILL.md"
 ---
 # FastMCP
 

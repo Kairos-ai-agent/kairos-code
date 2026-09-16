@@ -3,7 +3,7 @@ name: "release-engineering"
 description: "Use when publishing release artifacts and verifying them."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\release-engineering\\SKILL.md"
+source-path: "hermes/skills/release-engineering/SKILL.md"
 ---
 # 发布工程：把产物真正发出去并验证
 

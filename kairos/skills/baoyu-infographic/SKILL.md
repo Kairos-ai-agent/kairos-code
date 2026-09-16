@@ -4,7 +4,7 @@ description: "Infographics: 21 layouts x 21 styles (信息图, 可视化)."
 priority: 0.5
 version: "1.56.1"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\baoyu-infographic\\SKILL.md"
+source-path: "hermes/skills/creative/baoyu-infographic/SKILL.md"
 ---
 # Infographic Generator
 

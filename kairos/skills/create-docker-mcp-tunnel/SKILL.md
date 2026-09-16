@@ -3,7 +3,7 @@ name: "create-docker-mcp-tunnel"
 description: "Stand up an Anthropic MCP tunnel locally with Docker Compose so Claude can call a private MCP server (manual-credentials quickstart)."
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\mcp-tunnels\\commands\\create-docker-mcp-tunnel.md"
+source-path: "claude-plugins-official/plugins/mcp-tunnels/commands/create-docker-mcp-tunnel.md"
 ---
 # Create a Docker MCP tunnel
 

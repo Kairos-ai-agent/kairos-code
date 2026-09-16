@@ -3,7 +3,7 @@ name: "gsap-plugins"
 description: "Official GSAP skill for GSAP plugins — registration, ScrollToPlugin, ScrollSmoother, Flip, Draggable, Inertia, Observer, SplitText, ScrambleText, SVG and physics plugins, CustomEase, EasePack, CustomW"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\gsap-skills\\skills\\gsap-plugins\\SKILL.md"
+source-path: "claude/plugins/marketplaces/gsap-skills/skills/gsap-plugins/SKILL.md"
 ---
 # GSAP Plugins
 

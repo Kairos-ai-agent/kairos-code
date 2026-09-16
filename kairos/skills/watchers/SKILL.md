@@ -4,7 +4,7 @@ description: "Poll RSS, JSON APIs, and GitHub with watermark dedup."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\watchers\\SKILL.md"
+source-path: "hermes/skills/watchers/SKILL.md"
 ---
 # Watchers
 

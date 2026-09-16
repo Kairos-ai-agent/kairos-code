@@ -3,7 +3,7 @@ name: "windows-binary-analysis"
 description: "Reverse-engineer Windows PE executables to understand business logic, membership/pricing systems, API endpoints, and service architecture. Covers Flutter/Dart AOT apps, .NET apps, and native PE binari"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\.archive\\windows-binary-analysis\\SKILL.md"
+source-path: "hermes/skills/.archive/windows-binary-analysis/SKILL.md"
 ---
 # Windows Binary Analysis
 

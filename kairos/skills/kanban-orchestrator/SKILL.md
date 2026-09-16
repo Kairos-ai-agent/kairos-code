@@ -4,7 +4,7 @@ description: "Decomposition playbook + anti-temptation rules for an orchestrator
 priority: 0.5
 version: "3.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\devops\\kanban-orchestrator\\SKILL.md"
+source-path: "hermes/skills/devops/kanban-orchestrator/SKILL.md"
 ---
 # Kanban Orchestrator — Decomposition Playbook
 

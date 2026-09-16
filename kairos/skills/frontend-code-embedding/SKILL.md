@@ -3,7 +3,7 @@ name: "frontend-code-embedding"
 description: "Embed single-page frontend code inside a Node.js server as base64 to prevent source file theft, and extract it back when needed."
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\leohu\\.agents\\skills\\software-development\\frontend-code-embedding\\SKILL.md"
+source-path: "agents/skills/software-development/frontend-code-embedding/SKILL.md"
 ---
 # Frontend Code Embedding (base64 in Node.js)
 

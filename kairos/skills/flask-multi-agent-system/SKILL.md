@@ -4,7 +4,7 @@ description: "Build multi-agent collaboration management systems with Flask+SQLi
 priority: 0.5
 version: "1.0.0"
 imported-from: "agents"
-source-path: "C:\\Users\\leohu\\.agents\\skills\\flask-multi-agent-system\\SKILL.md"
+source-path: "agents/skills/flask-multi-agent-system/SKILL.md"
 ---
 # Flask Multi-Agent System Skill
 

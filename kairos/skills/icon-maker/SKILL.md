@@ -3,7 +3,7 @@ name: "icon-maker"
 description: "Professional icon generator. Creates high-quality icons for Apps, websites, desktop software, games, brand logos, social avatars, and more. Supports 20+ styles (Minimal, Clay 3D, Neon, Glassmorphism,"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\leohu\\.minimax\\skills\\icon-maker\\SKILL.md"
+source-path: "minimax/skills/icon-maker/SKILL.md"
 ---
 # Icon Maker
 

@@ -4,7 +4,7 @@ description: "Periodic self-reflection on recent sessions. Analyzes what went we
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\agent-self-reflection-1.0.0\\SKILL.md"
+source-path: "hermes/skills/agent-self-reflection-1.0.0/SKILL.md"
 ---
 # Self-Reflection Skill
 

@@ -3,7 +3,7 @@ name: "windows-proxy-config"
 description: "Configure Clash for Windows (CFW) and similar proxy clients on Windows 10/11. Covers config directory structure, YAML formatting, subscription vs inline proxies, API usage, and troubleshooting."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\.archive\\windows-proxy-config\\SKILL.md"
+source-path: "hermes/skills/.archive/windows-proxy-config/SKILL.md"
 ---
 # Windows 代理客户端配置
 

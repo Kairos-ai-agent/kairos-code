@@ -3,7 +3,7 @@ name: "canvas"
 description: "Visual layer of the wiki. Add images, text cards, PDFs, and wiki pages to Obsidian canvas files with auto-positioning inside zones. Integrates with /banana for image capture. Triggers on: /canvas, can"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\openclaw-imports\\canvas\\SKILL.md"
+source-path: "hermes/skills/openclaw-imports/canvas/SKILL.md"
 ---
 # canvas: Visual Reference Layer
 

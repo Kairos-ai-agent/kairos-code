@@ -3,7 +3,7 @@ name: "tmux-1.0.0"
 description: "Remote-control tmux sessions for interactive CLIs by sending keystrokes and scraping pane output."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\tmux-1.0.0\\SKILL.md"
+source-path: "hermes/skills/tmux-1.0.0/SKILL.md"
 ---
 # tmux Skill (Clawdbot)
 

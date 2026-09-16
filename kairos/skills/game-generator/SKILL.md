@@ -3,7 +3,7 @@ name: "game-generator"
 description: "No-code interactive game generator expert. Create playable HTML5 games instantly from simple descriptions. Use when users need casual games, puzzle games, adventure games, or text-based games. Trigger"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\leohu\\.minimax\\skills\\game-generator\\SKILL.md"
+source-path: "minimax/skills/game-generator/SKILL.md"
 ---
 # Zero-Code Interactive Game Generator
 

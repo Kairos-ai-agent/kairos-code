@@ -4,7 +4,7 @@ description: "Generate or edit images through Hermes Web UI using the selected/r
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\apikey-image-gen\\SKILL.md"
+source-path: "hermes/skills/apikey-image-gen/SKILL.md"
 ---
 # APIKEY Image Generation
 

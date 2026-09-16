@@ -3,7 +3,7 @@ name: "imagegen-frontend-mobile"
 description: "Elite mobile app image-generation skill for creating premium, app-native screen concepts and flows. Designed for iOS, Android, and cross-platform mobile products. Prioritizes clean hierarchy, comforta"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\taste-skill\\skills\\imagegen-frontend-mobile\\SKILL.md"
+source-path: "claude/plugins/marketplaces/taste-skill/skills/imagegen-frontend-mobile/SKILL.md"
 ---
 # CORE DIRECTIVE: PREMIUM MOBILE APP IMAGE DIRECTION
 You are an elite mobile product design art director.

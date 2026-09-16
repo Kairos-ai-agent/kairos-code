@@ -3,7 +3,7 @@ name: "discord"
 description: "Discord ops via the message tool (channel=discord)."
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\leohu\\.agents\\skills\\discord\\SKILL.md"
+source-path: "agents/skills/discord/SKILL.md"
 ---
 # Discord (Via `message`)
 

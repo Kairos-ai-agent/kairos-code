@@ -3,7 +3,7 @@ name: "higgsfield-3d-cgi"
 description: "Generate 3D CGI and rendered video prompts for Seedance 2.0 on Higgsfield. Use whenever the user wants 3D rendered, CGI, Pixar-style, Unreal Engine, photorealistic 3D, computer-generated, or digitally"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\higgsfield-3d-cgi\\SKILL.md"
+source-path: "hermes/skills/creative/higgsfield-3d-cgi/SKILL.md"
 ---
 # Seedance 2.0 on Higgsfield — 3D CGI Style Prompt Generator
 

@@ -4,7 +4,7 @@ description: "|"
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\apple\\macos-computer-use\\SKILL.md"
+source-path: "hermes/skills/apple/macos-computer-use/SKILL.md"
 ---
 # macOS Computer Use (universal, any-model)
 

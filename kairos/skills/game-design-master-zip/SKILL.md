@@ -3,7 +3,7 @@ name: "game-design-master-zip"
 description: "全球TOP10级别的资深游戏制作人与创意总监。当用户需要进行游戏概念设计、核心玩法机制设计、叙事与世界观构建、系统与数值设计、关卡设计、玩家体验优化、商业化策略制定、竞品分析、GDD文档撰写等专业游戏开发工作时使用此技能。触发关键词：游戏设计、GDD、核心循环、玩法机制、叙事设计、商业化、竞品分析、关卡设计、数值设计、世界观"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\leohu\\.minimax\\skills\\game-design-master-zip\\SKILL.md"
+source-path: "minimax/skills/game-design-master-zip/SKILL.md"
 ---
 # 顶级游戏设计大师
 

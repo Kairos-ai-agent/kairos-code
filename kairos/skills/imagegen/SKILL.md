@@ -3,7 +3,7 @@ name: "imagegen"
 description: "Generate or edit raster images when the task benefits from AI-created bitmap visuals such as photos, illustrations, textures, sprites, mockups, or transparent-background cutouts. Use when Codex should"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\leohu\\.codex\\skills\\.system\\imagegen\\SKILL.md"
+source-path: "codex/skills/.system/imagegen/SKILL.md"
 ---
 # Image Generation Skill
 

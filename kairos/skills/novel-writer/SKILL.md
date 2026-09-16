@@ -3,7 +3,7 @@ name: "novel-writer"
 description: "AI 小说创作专家。当用户想写小说（武侠、玄幻、都市、言情、科幻等类型）、扩展创意、续写作品、优化章节质量时使用此技能。支持断点续写、自动扩缩、疲软检测、创意强化等高级功能。触发关键词：写小说、创作、章节、续写、扩写、改写、小说生成"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\leohu\\.minimax\\skills\\novel-writer\\SKILL.md"
+source-path: "minimax/skills/novel-writer/SKILL.md"
 ---
 # 小说创作专家
 

@@ -3,7 +3,7 @@ name: "higgsfield-real-estate"
 description: "Generate real estate, architecture, and interior design showcase video prompts for Seedance 2.0 on Higgsfield. Use whenever the user wants property tours, real estate listings, architecture showcases,"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\higgsfield-real-estate\\SKILL.md"
+source-path: "hermes/skills/creative/higgsfield-real-estate/SKILL.md"
 ---
 # Real Estate & Architecture Showcase Videos — Seedance 2.0 on Higgsfield
 

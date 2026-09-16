@@ -2,7 +2,7 @@
 description: "Use when starting any conversation - establishes how to find and use skills, requiring Skill tool invocation before ANY response including clarifying questions"
 priority: 0.8
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\using-superpowers\\SKILL.md"
+source-path: "hermes/skills/using-superpowers/SKILL.md"
 name: using-superpowers
 when:
   keyword: ['starting', 'conversation', 'establishes', 'how', 'find', 'skills']

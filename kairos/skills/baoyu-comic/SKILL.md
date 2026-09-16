@@ -4,7 +4,7 @@ description: "Knowledge comics (知识漫画): educational, biography, tutorial.
 priority: 0.5
 version: "1.56.1"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\baoyu-comic\\SKILL.md"
+source-path: "hermes/skills/creative/baoyu-comic/SKILL.md"
 ---
 # Knowledge Comic Creator
 

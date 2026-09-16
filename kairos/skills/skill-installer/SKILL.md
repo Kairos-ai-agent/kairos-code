@@ -3,7 +3,7 @@ name: "skill-installer"
 description: "Install Codex skills into $CODEX_HOME/skills from a curated list or a GitHub repo path. Use when a user asks to list installable skills, install a curated skill, or install a skill from another repo ("
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\leohu\\.codex\\skills\\.system\\skill-installer\\SKILL.md"
+source-path: "codex/skills/.system/skill-installer/SKILL.md"
 ---
 # Skill Installer
 

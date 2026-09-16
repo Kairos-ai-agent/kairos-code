@@ -3,7 +3,7 @@ name: "higgsfield-food-beverage"
 description: "Generate food and beverage video prompts for Seedance 2.0 on Higgsfield. Use whenever the user wants food videos, recipe content, restaurant promos, beverage ads, cooking videos, food ASMR, menu showc"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\higgsfield-food-beverage\\SKILL.md"
+source-path: "hermes/skills/creative/higgsfield-food-beverage/SKILL.md"
 ---
 # Food & Beverage Video Mastery for Seedance 2.0 on Higgsfield
 

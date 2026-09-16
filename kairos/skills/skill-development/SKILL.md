@@ -4,7 +4,7 @@ description: "This skill should be used when the user wants to \"create a skill\
 priority: 0.5
 version: "0.1.0"
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\plugin-dev\\skills\\skill-development\\SKILL.md"
+source-path: "claude-plugins-official/plugins/plugin-dev/skills/skill-development/SKILL.md"
 ---
 # Skill Development for Claude Code Plugins
 

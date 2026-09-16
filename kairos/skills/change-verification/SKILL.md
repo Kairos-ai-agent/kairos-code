@@ -4,7 +4,7 @@ description: "Prove fixes with evidence; triage pre-existing failures."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\software-development\\change-verification\\SKILL.md"
+source-path: "hermes/skills/software-development/change-verification/SKILL.md"
 ---
 # Change Verification & Baseline Triage
 

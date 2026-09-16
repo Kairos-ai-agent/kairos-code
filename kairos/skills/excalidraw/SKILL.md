@@ -4,7 +4,7 @@ description: "Hand-drawn Excalidraw JSON diagrams (arch, flow, seq)."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\excalidraw\\SKILL.md"
+source-path: "hermes/skills/creative/excalidraw/SKILL.md"
 ---
 # Excalidraw Diagram Skill
 

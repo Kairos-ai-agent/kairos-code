@@ -4,7 +4,7 @@ description: "Generate video and images by calling the official Vidu API via vid
 priority: 0.5
 version: "1.3.1"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\vidu-skills\\SKILL.md"
+source-path: "hermes/skills/vidu-skills/SKILL.md"
 ---
 # Vidu Video and Image Generation Skill (Vidu 音视频/图像生成技能)
 

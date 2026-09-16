@@ -3,7 +3,7 @@ name: "hookify"
 description: "Create hooks to prevent unwanted behaviors from conversation analysis or explicit instructions"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\hookify\\commands\\hookify.md"
+source-path: "claude-plugins-official/plugins/hookify/commands/hookify.md"
 ---
 # Hookify - Create Hooks from Unwanted Behaviors
 

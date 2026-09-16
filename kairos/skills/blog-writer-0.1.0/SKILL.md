@@ -3,7 +3,7 @@ name: "blog-writer-0.1.0"
 description: "This skill should be used when writing blog posts, articles, or long-form content in the writer's distinctive writing style. It produces authentic, opinionated content that matches the writer's voice—"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\blog-writer-0.1.0\\SKILL.md"
+source-path: "hermes/skills/blog-writer-0.1.0/SKILL.md"
 ---
 # Blog Writer
 

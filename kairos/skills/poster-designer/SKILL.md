@@ -3,7 +3,7 @@ name: "poster-designer"
 description: "专业的海报设计智能助手。当用户需要设计海报、宣传单页、活动海报、商业海报、艺术海报，或需要海报排版建议、配色方案、字体选择等设计相关帮助时，使用此技能。关键词：海报、poster、宣传单、设计、排版、配色"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\leohu\\.minimax\\skills\\poster-designer\\SKILL.md"
+source-path: "minimax/skills/poster-designer/SKILL.md"
 ---
 # 海报设计师
 

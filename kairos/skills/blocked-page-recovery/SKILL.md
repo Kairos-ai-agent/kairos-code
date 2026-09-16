@@ -4,7 +4,7 @@ description: "Use when a fetch fails: 403/429, paywall, WAF, bot wall."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\web\\blocked-page-recovery\\SKILL.md"
+source-path: "hermes/skills/web/blocked-page-recovery/SKILL.md"
 ---
 # Blocked-Page Recovery
 

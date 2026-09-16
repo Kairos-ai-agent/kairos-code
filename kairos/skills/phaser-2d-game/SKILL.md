@@ -3,7 +3,7 @@ name: "phaser-2d-game"
 description: "Implement 2D browser games with Phaser. Use when the user wants a Phaser, TypeScript, and Vite stack for scenes, gameplay systems, cameras, sprite animation, and DOM-overlay HUD patterns."
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\leohu\\.codex\\plugins\\cache\\openai-api-curated\\game-studio\\11c74d6b\\skills\\phaser-2d-game\\SKILL.md"
+source-path: "imported"
 ---
 # Phaser 2D Game
 

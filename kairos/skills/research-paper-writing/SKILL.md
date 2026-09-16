@@ -4,7 +4,7 @@ description: "Write ML papers for NeurIPS/ICML/ICLR: design→submit."
 priority: 0.5
 version: "1.1.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\research\\research-paper-writing\\SKILL.md"
+source-path: "hermes/skills/research/research-paper-writing/SKILL.md"
 ---
 # Research Paper Writing Pipeline
 

@@ -4,7 +4,7 @@ description: "Large Language and Vision Assistant. Enables visual instruction tu
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\llava\\SKILL.md"
+source-path: "hermes/skills/llava/SKILL.md"
 ---
 # LLaVA - Large Language and Vision Assistant
 

@@ -3,7 +3,7 @@ name: "higgsfield-ecommerce-ad"
 description: "Generate e-commerce product advertisement video prompts for Seedance 2.0 on Higgsfield. Use whenever the user wants product ads, e-commerce videos, product showcases, unboxing, product demos, shopping"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\higgsfield-ecommerce-ad\\SKILL.md"
+source-path: "hermes/skills/creative/higgsfield-ecommerce-ad/SKILL.md"
 ---
 # E-Commerce Product Advertisement Videos with Seedance 2.0 on Higgsfield
 

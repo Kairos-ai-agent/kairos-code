@@ -3,7 +3,7 @@ name: "node-connect"
 description: "Diagnose OpenClaw Android, iOS, or macOS node pairing, QR/setup code, route, auth, and connection failures."
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\leohu\\.agents\\skills\\node-connect\\SKILL.md"
+source-path: "agents/skills/node-connect/SKILL.md"
 ---
 # Node Connect
 

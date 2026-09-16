@@ -4,7 +4,7 @@ description: "Author in-repo SKILL.md: frontmatter, validator, structure."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\software-development\\hermes-agent-skill-authoring\\SKILL.md"
+source-path: "hermes/skills/software-development/hermes-agent-skill-authoring/SKILL.md"
 ---
 # Authoring Hermes-Agent Skills (in-repo)
 

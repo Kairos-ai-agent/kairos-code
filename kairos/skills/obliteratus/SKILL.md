@@ -4,7 +4,7 @@ description: "OBLITERATUS: abliterate LLM refusals (diff-in-means)."
 priority: 0.5
 version: "2.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\mlops\\inference\\obliteratus\\SKILL.md"
+source-path: "hermes/skills/mlops/inference/obliteratus/SKILL.md"
 ---
 # OBLITERATUS Skill
 

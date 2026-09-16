@@ -3,7 +3,7 @@ name: "game-idea-dev"
 description: "Game idea development skill. Used when users propose game ideas, creative concepts, or need help refining game design documents. Guides users through multi-round conversations to refine core experienc"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\leohu\\.minimax\\skills\\game-idea-dev\\SKILL.md"
+source-path: "minimax/skills/game-idea-dev/SKILL.md"
 ---
 # Game Idea Development Expert
 

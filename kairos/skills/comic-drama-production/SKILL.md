@@ -3,7 +3,7 @@ name: "comic-drama-production"
 description: "漫剧制作全流程工作流。漫剧是介于漫画和短剧之间的新形态——用AI生成的高质量静态图/动态图配配音和音乐来讲故事。涵盖剧本改编、分镜设计、角色设定、背景生成、配音配乐、剪辑合成。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\comic-drama-production\\SKILL.md"
+source-path: "hermes/skills/creative/comic-drama-production/SKILL.md"
 ---
 # 漫剧制作工作流 · Comic Drama Production
 

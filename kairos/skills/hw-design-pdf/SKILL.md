@@ -3,7 +3,7 @@ name: "hw-design-pdf"
 description: ">-"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\hardware\\hw-design-pdf\\SKILL.md"
+source-path: "hermes/skills/hardware/hw-design-pdf/SKILL.md"
 ---
 # Hardware Design PDF Generation (Windows + Edge)
 

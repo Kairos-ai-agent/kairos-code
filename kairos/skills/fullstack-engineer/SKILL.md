@@ -3,7 +3,7 @@ name: "fullstack-engineer"
 description: "全栈工程师专家技能。当用户要求进行网站开发、软件开发、小程序开发，或请求创建 Web 应用、移动应用、桌面应用、小程序项目时触发。涵盖前端开发、后端开发、数据库设计、API 开发、部署运维等全栈技术栈。"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\leohu\\.minimax\\skills\\fullstack-engineer\\SKILL.md"
+source-path: "minimax/skills/fullstack-engineer/SKILL.md"
 ---
 # 全栈工程师专家
 

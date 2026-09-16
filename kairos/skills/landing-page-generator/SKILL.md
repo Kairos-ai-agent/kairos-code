@@ -3,7 +3,7 @@ name: "landing-page-generator"
 description: "Professional high-end Landing Page generation tool. Creates visually stunning, Awwwards-level web pages with cinematic hero sections, modern animations, and automatic deployment. Trigger keywords: lan"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\leohu\\.minimax\\skills\\landing-page-generator\\SKILL.md"
+source-path: "minimax/skills/landing-page-generator/SKILL.md"
 ---
 # Landing Page Generator
 

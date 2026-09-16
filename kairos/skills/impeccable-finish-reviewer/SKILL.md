@@ -4,7 +4,7 @@ description: "Reviews a finished Impeccable build against its direction contract
 priority: 0.5
 tools: "Read, Bash, Glob, Grep"
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\impeccable\\skill\\agents\\impeccable-finish-reviewer.md"
+source-path: "claude/plugins/marketplaces/impeccable/skill/agents/impeccable-finish-reviewer.md"
 ---
 # Impeccable Finish Reviewer
 

@@ -3,7 +3,7 @@ name: "clawdbot"
 description: "全能型个人AI智能体，覆盖开发编程、文件管理、网页自动化、多媒体处理、定时任务调度、信息搜索研究等全场景。当用户需要执行系统命令、处理文件、编写代码、搜索信息、生成图像/视频/音频、网页操作、定时任务、数据分析等任务时触发。关键词：执行、开发、代码、文件、搜索、图像、视频、音频、定时、抓取、自动化、部署、报告"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\leohu\\.minimax\\skills\\clawdbot\\SKILL.md"
+source-path: "minimax/skills/clawdbot/SKILL.md"
 ---
 # Clawdbot 智能助手
 

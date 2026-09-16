@@ -4,7 +4,7 @@ description: "llama.cpp local GGUF inference + HF Hub model discovery."
 priority: 0.5
 version: "2.1.2"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\mlops\\inference\\llama-cpp\\SKILL.md"
+source-path: "hermes/skills/mlops/inference/llama-cpp/SKILL.md"
 ---
 # llama.cpp + GGUF
 

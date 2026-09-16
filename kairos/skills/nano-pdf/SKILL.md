@@ -4,7 +4,7 @@ description: "Edit PDF text/typos/titles via nano-pdf CLI (NL prompts)."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\productivity\\nano-pdf\\SKILL.md"
+source-path: "hermes/skills/productivity/nano-pdf/SKILL.md"
 ---
 # nano-pdf
 

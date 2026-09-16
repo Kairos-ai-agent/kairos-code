@@ -4,7 +4,7 @@ description: "Watch product, flight, or listing prices; alert on target."
 priority: 0.5
 version: "0.1.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\productivity\\product-price-monitor\\SKILL.md"
+source-path: "hermes/skills/productivity/product-price-monitor/SKILL.md"
 ---
 # Product Price Monitor
 

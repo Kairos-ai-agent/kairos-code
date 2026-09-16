@@ -3,7 +3,7 @@ name: "glmocr"
 description: "Extract text from images using GLM-OCR API. Supports images and PDFs with"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\glmocr\\SKILL.md"
+source-path: "hermes/skills/glmocr/SKILL.md"
 ---
 # GLM-OCR Text Extraction Skill
 

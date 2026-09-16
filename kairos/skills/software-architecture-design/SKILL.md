@@ -3,7 +3,7 @@ name: "software-architecture-design"
 description: "软件架构设计全流程。涵盖系统设计、架构模式选型、C4模型、架构决策记录(ADR)、微服务设计、模块拆分、接口契约。触发器：设计系统架构、做技术选型、写ADR、画架构图、评审架构方案。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\software-development\\software-architecture-design\\SKILL.md"
+source-path: "hermes/skills/software-development/software-architecture-design/SKILL.md"
 ---
 # 软件架构设计 · Software Architecture Design
 

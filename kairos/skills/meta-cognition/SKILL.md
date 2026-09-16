@@ -3,7 +3,7 @@ name: "meta-cognition"
 description: "Agent元认知与自我进化skill。涵盖错误复盘、知识萃取、能力自评、刻意练习、学习闭环。帮助Agent在每次交互中持续迭代、变得更聪明。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\software-development\\meta-cognition\\SKILL.md"
+source-path: "hermes/skills/software-development/meta-cognition/SKILL.md"
 ---
 # 元认知与自我进化 · Meta-Cognition & Self Evolution
 

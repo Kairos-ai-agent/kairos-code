@@ -4,7 +4,7 @@ description: "W&B: log ML experiments, sweeps, model registry, dashboards."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\mlops\\evaluation\\weights-and-biases\\SKILL.md"
+source-path: "hermes/skills/mlops/evaluation/weights-and-biases/SKILL.md"
 ---
 # Weights & Biases: ML Experiment Tracking & MLOps
 

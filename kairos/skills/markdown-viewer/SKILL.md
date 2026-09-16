@@ -4,7 +4,7 @@ description: "Create rich diagrams, data visualizations, technical architecture 
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\markdown-viewer\\SKILL.md"
+source-path: "hermes/skills/markdown-viewer/SKILL.md"
 ---
 # Markdown Viewer
 

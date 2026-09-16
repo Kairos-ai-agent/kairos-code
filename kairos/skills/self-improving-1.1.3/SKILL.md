@@ -4,7 +4,7 @@ description: "Self-reflection + Self-criticism + learning from corrections. Agen
 priority: 0.5
 version: "1.1.3"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\self-improving-1.1.3\\SKILL.md"
+source-path: "hermes/skills/self-improving-1.1.3/SKILL.md"
 ---
 ## When to Use
 

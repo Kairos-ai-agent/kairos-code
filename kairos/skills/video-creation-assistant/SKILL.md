@@ -3,7 +3,7 @@ name: "video-creation-assistant"
 description: "智能视频生成助手，支持通过文字描述或图片生成15秒高质量视频。涵盖脚本撰写、分镜绘制、音频设计、视频合成全流程。关键词：视频生成、文字转视频、图片转视频、分镜、视频创作、video generation"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\leohu\\.minimax\\skills\\video-creation-assistant\\SKILL.md"
+source-path: "minimax/skills/video-creation-assistant/SKILL.md"
 ---
 # 视频创作助手
 

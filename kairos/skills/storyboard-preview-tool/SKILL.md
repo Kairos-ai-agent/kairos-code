@@ -3,7 +3,7 @@ name: "storyboard-preview-tool"
 description: "Build browser-based storyboard animation preview tools — programmatic 3D / 2D game-engine / Ken Burns style previews that simulate motion from a storyboard script without rendering real video. Trigger"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\.archive\\storyboard-preview-tool\\SKILL.md"
+source-path: "hermes/skills/.archive/storyboard-preview-tool/SKILL.md"
 ---
 # Browser Storyboard Animation Preview
 
@@ -24,7 +24,7 @@ All three share:
 | **2D** | Pixi.js 7.4+ | ~300 KB | Parallax sprite layers, RPG-style | Quick pacing check, mobile-friendly, light previews |
 | **Ken Burns** | Pure CSS + SVG | <50 KB | Pan/zoom on procedural gradient backgrounds | Documentary style, ultra-lightweight, fastest to load |
 
-**Working references**: `C:\Users\leohu\D\ImageGen\storyboard-3d.html`, `storyboard-2d.html`, `storyboard-kenburns.html` — three independent single-file implementations. Always offer all three, never pick for the user.
+**Working references**: `<projects>\ImageGen\storyboard-3d.html`, `storyboard-2d.html`, `storyboard-kenburns.html` — three independent single-file implementations. Always offer all three, never pick for the user.
 
 ## Critical Pitfalls (Hard-Won This Session)
 

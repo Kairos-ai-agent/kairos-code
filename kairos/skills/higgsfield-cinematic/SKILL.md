@@ -3,7 +3,7 @@ name: "higgsfield-cinematic"
 description: "Generate cinematic film-style video prompts for Seedance 2.0 on Higgsfield. Use whenever the user wants cinematic, film-like, movie-quality, Hollywood-style, dramatic, or professional film-quality AI"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\higgsfield-cinematic\\SKILL.md"
+source-path: "hermes/skills/creative/higgsfield-cinematic/SKILL.md"
 ---
 # Seedance 2.0 on Higgsfield — Cinematic Film-Style Prompt Generator
 

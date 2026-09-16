@@ -3,7 +3,7 @@ name: "brandkit"
 description: "Premium brand-kit image generation skill for creating high-end brand-guidelines boards, logo systems, identity decks, and visual-world presentations. Trained for minimalist, cinematic, editorial, dark"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\taste-skill\\skills\\brandkit\\SKILL.md"
+source-path: "claude/plugins/marketplaces/taste-skill/skills/brandkit/SKILL.md"
 ---
 # BRANDKIT IMAGE GENERATION SKILL
 

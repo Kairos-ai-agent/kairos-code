@@ -3,7 +3,7 @@ name: "figma-design-to-code"
 description: "Use this skill when implementing a Figma design as code (design → code) — the read-FROM-Figma direction. Triggers: 'implement this Figma design', 'build this screen from Figma', 'turn this Figma into"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\leohu\\.codex\\plugins\\cache\\openai-api-curated\\figma\\11c74d6b\\skills\\figma-design-to-code\\SKILL.md"
+source-path: "imported"
 ---
 # Implement a Figma Design as Code (Design → Code)
 

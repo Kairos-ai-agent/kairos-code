@@ -3,7 +3,7 @@ name: "modernize-map"
 description: "Dependency & topology mapping — call graphs, data lineage, batch flows, rendered as navigable diagrams"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\code-modernization\\commands\\modernize-map.md"
+source-path: "claude-plugins-official/plugins/code-modernization/commands/modernize-map.md"
 ---
 Build a **dependency and topology map** of `legacy/$1` and render it visually.
 

@@ -3,7 +3,7 @@ name: "gsap-utils"
 description: "Official GSAP skill for gsap.utils — clamp, mapRange, normalize, interpolate, random, snap, toArray, wrap, pipe. Use when the user asks about gsap.utils, clamp, mapRange, random, snap, toArray, wrap,"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\gsap-skills\\skills\\gsap-utils\\SKILL.md"
+source-path: "claude/plugins/marketplaces/gsap-skills/skills/gsap-utils/SKILL.md"
 ---
 # gsap.utils
 

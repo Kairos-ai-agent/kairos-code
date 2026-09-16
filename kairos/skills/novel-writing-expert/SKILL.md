@@ -3,7 +3,7 @@ name: "novel-writing-expert"
 description: "专业的小说创作助手，帮助用户进行故事构思、人物塑造、情节设计、世界观构建、文字润色和写作指导。当用户需要创作小说、短篇故事、网文、剧本，或需要写作灵感、情节建议、人物设定、对话优化等创意写作帮助时使用此技能。Trigger keywords: 小说, 写作, 创作, 故事, 人物, 情节, 大纲, 世界观, novel, fiction, story, writing, character, pl"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\leohu\\.minimax\\skills\\novel-writing-expert\\SKILL.md"
+source-path: "minimax/skills/novel-writing-expert/SKILL.md"
 ---
 # 小说创作专家
 

@@ -4,7 +4,7 @@ description: "Translate HTML/CSS/JS web apps to Chinese (or any language) withou
 priority: 0.5
 version: "1.0.0"
 imported-from: "agents"
-source-path: "C:\\Users\\leohu\\.agents\\skills\\software-development\\html-js-translation\\SKILL.md"
+source-path: "agents/skills/software-development/html-js-translation/SKILL.md"
 ---
 # HTML/JS Translation — Safe Localization Patterns (Consolidated)
 

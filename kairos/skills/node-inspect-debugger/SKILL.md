@@ -4,7 +4,7 @@ description: "Debug Node.js via --inspect + Chrome DevTools Protocol CLI."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\software-development\\node-inspect-debugger\\SKILL.md"
+source-path: "hermes/skills/software-development/node-inspect-debugger/SKILL.md"
 ---
 # Node.js Inspect Debugger
 

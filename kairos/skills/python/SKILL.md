@@ -3,7 +3,7 @@ name: "python"
 description: "资深Python爬虫与数据工程专家。当用户需要设计网络爬虫系统、构建数据采集管道、设计数据库模型(SQLAlchemy ORM)、实现反爬虫策略（代理池、断点续传、重试机制）、异步并发编程(asyncio/aiohttp)、或进行数据清洗时，使用此技能。关键词：爬虫、crawler、scraper、数据采集、代理池、断点续传、SQLAlchemy、aiohttp"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\leohu\\.minimax\\skills\\python\\SKILL.md"
+source-path: "minimax/skills/python/SKILL.md"
 ---
 # Python 爬虫架构师
 

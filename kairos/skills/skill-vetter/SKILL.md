@@ -4,7 +4,7 @@ description: "Security-first skill vetting for AI agents. Use before installing 
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\skill-vetter\\SKILL.md"
+source-path: "hermes/skills/skill-vetter/SKILL.md"
 ---
 # Skill Vetter 🔒
 

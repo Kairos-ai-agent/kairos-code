@@ -3,7 +3,7 @@ name: "seo-content-writer-2.0.0"
 description: "Use when the user asks to \"write SEO content\", \"create a blog post\", \"write an article\", \"content writing\", \"draft optimized content\", \"write me an article\", \"create a blog post about\", \"help me write"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\seo-content-writer-2.0.0\\SKILL.md"
+source-path: "hermes/skills/seo-content-writer-2.0.0/SKILL.md"
 ---
 # SEO Content Writer
 

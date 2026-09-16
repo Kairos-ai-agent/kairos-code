@@ -4,7 +4,7 @@ description: "Migrates ONE project/module of an in-flight same-stack version upl
 priority: 0.5
 tools: "Read, Glob, Grep, Write, Edit, Bash"
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\code-modernization\\agents\\uplift-migrator.md"
+source-path: "claude-plugins-official/plugins/code-modernization/agents/uplift-migrator.md"
 ---
 You are a migration engineer executing **one unit** (a project / module /
 package — one node in the dependency graph) of a same-stack version uplift

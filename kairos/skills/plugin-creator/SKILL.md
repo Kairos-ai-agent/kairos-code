@@ -3,7 +3,7 @@ name: "plugin-creator"
 description: "Create and scaffold plugin directories for Codex with a required `.codex-plugin/plugin.json`, optional plugin folders/files, valid manifest defaults, and personal-marketplace entries by default. Use w"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\leohu\\.codex\\skills\\.system\\plugin-creator\\SKILL.md"
+source-path: "codex/skills/.system/plugin-creator/SKILL.md"
 ---
 # Plugin Creator
 

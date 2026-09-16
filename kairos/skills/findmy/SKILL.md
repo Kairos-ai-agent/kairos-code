@@ -4,7 +4,7 @@ description: "Track Apple devices/AirTags via FindMy.app on macOS."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\apple\\findmy\\SKILL.md"
+source-path: "hermes/skills/apple/findmy/SKILL.md"
 ---
 # Find My (Apple)
 

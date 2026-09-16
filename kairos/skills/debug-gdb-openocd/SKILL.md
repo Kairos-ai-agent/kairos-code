@@ -3,7 +3,7 @@ name: "debug-gdb-openocd"
 description: "当需要通过 OpenOCD 启动或附着 GDB 会话，调用自带脚本完成固件下载、在线调试或崩溃现场检查时使用。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\debug-gdb-openocd\\SKILL.md"
+source-path: "hermes/skills/debug-gdb-openocd/SKILL.md"
 ---
 # GDB OpenOCD 调试
 

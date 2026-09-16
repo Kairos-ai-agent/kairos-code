@@ -3,7 +3,7 @@ name: "modernize-assess"
 description: "Full discovery & portfolio analysis of a legacy system — inventory, complexity, debt, relative scale"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\code-modernization\\commands\\modernize-assess.md"
+source-path: "claude-plugins-official/plugins/code-modernization/commands/modernize-assess.md"
 ---
 **Mode select.** If `$ARGUMENTS` starts with `--portfolio`, run **Portfolio
 mode** against the directory that follows. Otherwise run **Single-system

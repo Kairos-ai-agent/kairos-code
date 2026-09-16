@@ -3,7 +3,7 @@ name: "gsap"
 description: "GSAP animation reference for HyperFrames. Covers gsap.to(), from(), fromTo(), easing, stagger, defaults, timelines (gsap.timeline(), position parameter, labels, nesting, playback), and performance (tr"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\leohu\\.codex\\plugins\\cache\\openai-api-curated\\hyperframes\\11c74d6b\\skills\\gsap\\SKILL.md"
+source-path: "imported"
 ---
 # GSAP
 

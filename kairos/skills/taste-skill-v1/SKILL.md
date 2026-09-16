@@ -3,7 +3,7 @@ name: "taste-skill-v1"
 description: "The original v1 taste-skill, preserved for projects depending on its exact behavior. The current default is `design-taste-frontend` (v2 experimental), which is a substantial rewrite. Use this v1 insta"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\taste-skill\\skills\\taste-skill-v1\\SKILL.md"
+source-path: "claude/plugins/marketplaces/taste-skill/skills/taste-skill-v1/SKILL.md"
 ---
 # High-Agency Frontend Skill
 

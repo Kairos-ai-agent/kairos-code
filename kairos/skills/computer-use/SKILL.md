@@ -4,7 +4,7 @@ description: "Drive the desktop in the background without stealing focus."
 priority: 0.5
 version: "2.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\autonomous-ai-agents\\computer-use\\SKILL.md"
+source-path: "hermes/skills/autonomous-ai-agents/computer-use/SKILL.md"
 ---
 # Computer Use (universal, any-model, cross-platform)
 

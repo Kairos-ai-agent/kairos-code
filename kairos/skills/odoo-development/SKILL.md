@@ -3,7 +3,7 @@ name: "odoo-development"
 description: "Expert guidance for Odoo ERP development with Python ORM, XML views, and module architecture. Use when developing Odoo modules, customizing views, or building ERP extensions."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\erp\\odoo-development\\SKILL.md"
+source-path: "hermes/skills/erp/odoo-development/SKILL.md"
 ---
 # Odoo Development
 

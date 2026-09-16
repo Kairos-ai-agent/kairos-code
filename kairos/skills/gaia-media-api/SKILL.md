@@ -3,7 +3,7 @@ name: "gaia-media-api"
 description: "Gaia Video Factory API integration patterns — image/video generation, async polling, model quirks, and reference image handling."
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\leohu\\.agents\\skills\\media-api\\gaia-media-api\\SKILL.md"
+source-path: "agents/skills/media-api/gaia-media-api/SKILL.md"
 ---
 # Gaia Media API Integration
 

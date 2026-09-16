@@ -4,7 +4,7 @@ description: "Karpathy's LLM Wiki: build/query interlinked markdown KB."
 priority: 0.5
 version: "2.1.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\research\\llm-wiki\\SKILL.md"
+source-path: "hermes/skills/research/llm-wiki/SKILL.md"
 ---
 # Karpathy's LLM Wiki
 

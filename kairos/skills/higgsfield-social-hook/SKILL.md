@@ -3,7 +3,7 @@ name: "higgsfield-social-hook"
 description: "Generate viral social media hook video prompts for TikTok, Instagram Reels, and YouTube Shorts using Seedance 2.0 on Higgsfield. Use whenever the user wants to create scroll-stopping hooks, viral shor"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\higgsfield-social-hook\\SKILL.md"
+source-path: "hermes/skills/creative/higgsfield-social-hook/SKILL.md"
 ---
 # The Art of the Viral Hook: Master Guide to Scroll-Stopping Social Media Videos
 

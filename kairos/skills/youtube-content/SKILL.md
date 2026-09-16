@@ -3,7 +3,7 @@ name: "youtube-content"
 description: "YouTube transcripts to summaries, threads, blogs."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\media\\youtube-content\\SKILL.md"
+source-path: "hermes/skills/media/youtube-content/SKILL.md"
 ---
 # YouTube Content Tool
 

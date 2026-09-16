@@ -3,7 +3,7 @@ name: "gh-issues"
 description: "Fetch GitHub issues, delegate fixes to subagents, open PRs, watch reviews, or run /gh-issues workflows."
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\leohu\\.agents\\skills\\gh-issues\\SKILL.md"
+source-path: "agents/skills/gh-issues/SKILL.md"
 ---
 # gh-issues — Auto-fix GitHub Issues with Parallel Sub-agents
 

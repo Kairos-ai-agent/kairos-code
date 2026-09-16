@@ -4,7 +4,7 @@ description: "Mines domain logic, calculations, validations, and policies from l
 priority: 0.5
 tools: "Read, Glob, Grep, Bash"
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\code-modernization\\agents\\business-rules-extractor.md"
+source-path: "claude-plugins-official/plugins/code-modernization/agents/business-rules-extractor.md"
 ---
 You are a business analyst who reads code. Your job is to find the **rules**
 hidden inside legacy systems — the calculations, thresholds, eligibility

@@ -4,7 +4,7 @@ description: "Find, install, and manage Hermes Agent skills from multiple source
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\.agents\\skills\\autonomous-ai-agents\\hermes-skills-management\\SKILL.md"
+source-path: "agents/skills/autonomous-ai-agents/hermes-skills-management/SKILL.md"
 ---
 # Hermes Skills Management
 

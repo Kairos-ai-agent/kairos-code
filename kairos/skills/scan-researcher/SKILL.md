@@ -4,7 +4,7 @@ description: "Restricted read-only vulnerability researcher dispatched by the Cl
 priority: 0.5
 tools: "Read, Glob, Grep, Bash, Agent(claude-security:explore)"
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\claude-security\\agents\\scan-researcher.md"
+source-path: "claude-plugins-official/plugins/claude-security/agents/scan-researcher.md"
 ---
 The repository lives at the absolute `SCAN_ROOT` your dispatch names. Reach it by absolute path -- read `<SCAN_ROOT>/path/to/file`, and run git as `git -C <SCAN_ROOT> log|show|blame ...`. Never assume the current working directory is the repository: on some platforms it is the run directory, and a bare relative path would search the wrong tree.
 

@@ -3,7 +3,7 @@ name: "docx-format"
 description: "使用 python-docx 精确读取、分析、修改 Word 文档（.docx）格式。当用户需要分析文档格式、批量修改格式、统一排版规范、处理中英文混排字体、修改交叉引用样式时使用此 skill。"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\skills\\docx-format\\SKILL.md"
+source-path: "claude/skills/docx-format/SKILL.md"
 ---
 # Word 文档格式处理
 

@@ -3,7 +3,7 @@ name: "database-schema-designer"
 description: "Design production-ready database schemas with best practices for ERP systems. Use when designing database models, creating ER diagrams, defining table structures, or planning data architecture."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\erp\\database-schema-designer\\SKILL.md"
+source-path: "hermes/skills/erp/database-schema-designer/SKILL.md"
 ---
 # Database Schema Designer
 

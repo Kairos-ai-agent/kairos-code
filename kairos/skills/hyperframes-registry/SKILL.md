@@ -3,7 +3,7 @@ name: "hyperframes-registry"
 description: "Install and wire registry blocks and components into HyperFrames compositions. Use when running hyperframes add, installing a block or component, wiring an installed item into index.html, or working w"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\leohu\\.codex\\plugins\\cache\\openai-api-curated\\hyperframes\\11c74d6b\\skills\\hyperframes-registry\\SKILL.md"
+source-path: "imported"
 ---
 # HyperFrames Registry
 

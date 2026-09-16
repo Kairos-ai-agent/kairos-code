@@ -3,7 +3,7 @@ name: "soft-skill"
 description: "Teaches the AI to design like a high-end agency. Defines the exact fonts, spacing, shadows, card structures, and animations that make a website feel expensive. Blocks all the common defaults that make"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\taste-skill\\skills\\soft-skill\\SKILL.md"
+source-path: "claude/plugins/marketplaces/taste-skill/skills/soft-skill/SKILL.md"
 ---
 # Agent Skill: Principal UI/UX Architect & Motion Choreographer (Awwwards-Tier)
 

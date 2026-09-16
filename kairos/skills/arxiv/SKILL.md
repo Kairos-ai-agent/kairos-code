@@ -4,7 +4,7 @@ description: "Search arXiv papers by keyword, author, category, or ID."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\research\\arxiv\\SKILL.md"
+source-path: "hermes/skills/research/arxiv/SKILL.md"
 ---
 # arXiv Research
 

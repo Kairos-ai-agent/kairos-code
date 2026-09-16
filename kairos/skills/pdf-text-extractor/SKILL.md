@@ -3,7 +3,7 @@ name: "pdf-text-extractor"
 description: "Extract text from PDFs with OCR support. Perfect for digitizing documents, processing invoices, or analyzing content. Zero dependencies required."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\pdf-text-extractor\\SKILL.md"
+source-path: "hermes/skills/pdf-text-extractor/SKILL.md"
 ---
 # PDF-Text-Extractor - Extract Text from PDFs
 

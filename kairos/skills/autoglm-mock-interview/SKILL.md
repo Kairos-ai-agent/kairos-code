@@ -3,7 +3,7 @@ name: "autoglm-mock-interview"
 description: "模拟求职面试技能。当用户提供简历（文件或文字）并希望进行模拟面试、面试练习、面试准备时使用此技能。触发场景包括：用户说\"帮我模拟面试\"、\"我想练习面试\"、\"根据我的简历面试我\"、\"扮演面试官\"、上传简历文件并提到面试等。支持所有岗位类型（技术、产品、管理、设计等）。即使用户只是说\"我想练习面试\"而没有上传简历，也应触发此技能并引导用户提供简历。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\autoglm-mock-interview\\SKILL.md"
+source-path: "hermes/skills/autoglm-mock-interview/SKILL.md"
 ---
 # 模拟面试 Skill
 

@@ -3,7 +3,7 @@ name: "browser-llm-integration"
 description: "Add OpenAI-compatible LLM API calls to vanilla HTML/JS browser applications. Covers fetch-based chat completions, URL path construction, parameter handling, settings persistence, and UI patterns for e"
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\leohu\\.agents\\skills\\software-development\\browser-llm-integration\\SKILL.md"
+source-path: "agents/skills/software-development/browser-llm-integration/SKILL.md"
 ---
 # Browser LLM Integration
 

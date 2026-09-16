@@ -3,7 +3,7 @@ name: "autoglm-image-edit"
 description: ">"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\autoglm-image-edit\\SKILL.md"
+source-path: "hermes/skills/autoglm-image-edit/SKILL.md"
 ---
 # AutoGLM Image Edit Skill
 

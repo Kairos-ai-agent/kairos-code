@@ -4,7 +4,7 @@ description: "Humanize text: strip AI-isms and add real voice."
 priority: 0.5
 version: "2.5.1"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\humanizer\\SKILL.md"
+source-path: "hermes/skills/creative/humanizer/SKILL.md"
 ---
 # Humanizer: Remove AI Writing Patterns
 

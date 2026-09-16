@@ -3,7 +3,7 @@ name: "cl-system-patch-delivery"
 description: "|"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\.archive\\cl-system-patch-delivery\\SKILL.md"
+source-path: "hermes/skills/.archive/cl-system-patch-delivery/SKILL.md"
 ---
 # cl-system-patch-delivery
 

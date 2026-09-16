@@ -3,7 +3,7 @@ name: "frontend-slides"
 description: "Create stunning, animation-rich HTML presentations from scratch or by converting PowerPoint files. Use when the user wants to build a presentation, convert a PPT/PPTX to web, or create slides for a ta"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\frontend-slides\\SKILL.md"
+source-path: "hermes/skills/frontend-slides/SKILL.md"
 ---
 # Frontend Slides
 

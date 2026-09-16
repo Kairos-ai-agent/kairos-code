@@ -4,7 +4,7 @@ description: "Throwaway experiments to validate an idea before build."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\software-development\\spike\\SKILL.md"
+source-path: "hermes/skills/software-development/spike/SKILL.md"
 ---
 # Spike
 

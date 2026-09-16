@@ -3,7 +3,7 @@ name: "figma-create-new-file"
 description: "**MANDATORY prerequisite** — you MUST invoke this skill BEFORE every `create_new_file` tool call. NEVER call `create_new_file` directly without loading this skill first. Trigger whenever the user want"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\leohu\\.codex\\plugins\\cache\\openai-api-curated\\figma\\11c74d6b\\skills\\figma-create-new-file\\SKILL.md"
+source-path: "imported"
 ---
 # create_new_file — Create a New Figma File
 

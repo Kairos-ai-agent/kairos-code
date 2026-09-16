@@ -3,7 +3,7 @@ name: "short-drama-platform"
 description: "Build collaborative short drama sharing platforms — script/image/video sharing with community voting. Use when creating websites for creative collaboration on short dramas, scripts, or video content w"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\.archive\\short-drama-platform\\SKILL.md"
+source-path: "hermes/skills/.archive/short-drama-platform/SKILL.md"
 ---
 # 短剧共创平台 · Short Drama Co-Creation Platform
 

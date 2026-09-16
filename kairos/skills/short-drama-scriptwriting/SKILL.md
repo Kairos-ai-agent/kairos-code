@@ -3,7 +3,7 @@ name: "short-drama-scriptwriting"
 description: "短剧/竖屏短剧/小程序短剧剧本创作全流程。包含爽文结构、付费点设计、反转技巧、对话节奏、角色套路。适用于甜宠、赘婿、战神、穿越、重生、逆袭等热题材。触发场景：写短剧剧本、设计付费卡点、规划反转、搭建短剧故事框架。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\short-drama-scriptwriting\\SKILL.md"
+source-path: "hermes/skills/creative/short-drama-scriptwriting/SKILL.md"
 ---
 # 短剧剧本创作 · Short Drama Scriptwriting
 

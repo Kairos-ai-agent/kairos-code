@@ -3,7 +3,7 @@ name: "fund-manager"
 description: "基金日常管理：基金实时估值、行业涨幅、集合竞价数据整理、涨跌幅预警、持仓增删。当用户提及以下内容时触发：基金收益、基金日报、实时估值、盘中估值、更新基金、基金净值、行业涨幅、行业表现、集合竞价、竞价数据、添加持仓、删除持仓、基金预警、涨跌幅提醒、复盘总结。也适用于：帮我看看基金、今天基金怎么样、更新一下收益、行业表现如何、早盘数据、今天复盘一下。"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\fund-manager\\SKILL.md"
+source-path: "hermes/skills/fund-manager/SKILL.md"
 ---
 # 基金日常管理
 

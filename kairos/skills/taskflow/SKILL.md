@@ -3,7 +3,7 @@ name: "taskflow"
 description: "Coordinate multi-step detached tasks as one durable TaskFlow job with owner context, state, waits, and child tasks."
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\leohu\\.agents\\skills\\taskflow\\SKILL.md"
+source-path: "agents/skills/taskflow/SKILL.md"
 ---
 # TaskFlow
 

@@ -3,7 +3,7 @@ name: "glmv-prompt-gen"
 description: "Analyze images/videos and generate professional prompts for text-to-image and"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\glmv-prompt-gen\\SKILL.md"
+source-path: "hermes/skills/glmv-prompt-gen/SKILL.md"
 ---
 # GLM-V Prompt Generation Skill
 

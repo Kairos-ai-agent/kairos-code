@@ -4,7 +4,7 @@ description: "Yuanbao (元宝) groups: @mention users, query info/members."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\yuanbao\\SKILL.md"
+source-path: "hermes/skills/yuanbao/SKILL.md"
 ---
 # Yuanbao Group Interaction
 

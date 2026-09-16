@@ -3,7 +3,7 @@ name: "gsap-scrolltrigger"
 description: "Official GSAP skill for ScrollTrigger — scroll-linked animations, pinning, scrub, triggers. Use when building or recommending scroll-based animation, parallax, pinned sections, or when the user asks a"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\gsap-skills\\skills\\gsap-scrolltrigger\\SKILL.md"
+source-path: "claude/plugins/marketplaces/gsap-skills/skills/gsap-scrolltrigger/SKILL.md"
 ---
 # GSAP ScrollTrigger
 

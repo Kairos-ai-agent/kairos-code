@@ -3,7 +3,7 @@ name: "higgsfield-music-video"
 description: "Generate music video and beat-synced visual content prompts for Seedance 2.0 on Higgsfield. Use whenever the user wants to create a music video, lyric video, beat-synced visuals, performance video, co"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\higgsfield-music-video\\SKILL.md"
+source-path: "hermes/skills/creative/higgsfield-music-video/SKILL.md"
 ---
 # Seedance 2.0 on Higgsfield Music Video Director's Guide
 

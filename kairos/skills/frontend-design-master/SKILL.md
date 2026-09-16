@@ -3,7 +3,7 @@ name: "frontend-design-master"
 description: "前端设计大师技能，专注于创建具有独特风格、生产级品质的前端界面。当用户需要构建网站、落地页、仪表盘、React 组件、HTML/CSS 布局、Web UI、海报或任何前端页面时触发。关键词：website, landing page, dashboard, component, UI, 网页, 页面, 前端, 组件, 界面设计, 落地页, 仪表盘"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\leohu\\.minimax\\skills\\frontend-design-master\\SKILL.md"
+source-path: "minimax/skills/frontend-design-master/SKILL.md"
 ---
 # 前端设计大师 Frontend Design Master
 

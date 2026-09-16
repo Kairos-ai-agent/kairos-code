@@ -3,7 +3,7 @@ name: "songwriting-and-ai-music"
 description: "Songwriting craft and Suno AI music prompts."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\songwriting-and-ai-music\\SKILL.md"
+source-path: "hermes/skills/creative/songwriting-and-ai-music/SKILL.md"
 ---
 # Songwriting & AI Music Generation
 

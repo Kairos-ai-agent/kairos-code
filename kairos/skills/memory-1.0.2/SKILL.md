@@ -4,7 +4,7 @@ description: "Infinite organized memory that complements your agent's built-in m
 priority: 0.5
 version: "1.0.2"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\memory-1.0.2\\SKILL.md"
+source-path: "hermes/skills/memory-1.0.2/SKILL.md"
 ---
 # Memory 🧠
 

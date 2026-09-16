@@ -4,7 +4,7 @@ description: "|"
 priority: 0.5
 version: "2.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\openclaw-imports\\daw-music\\SKILL.md"
+source-path: "hermes/skills/openclaw-imports/daw-music/SKILL.md"
 ---
 # DAW & Music Composition
 

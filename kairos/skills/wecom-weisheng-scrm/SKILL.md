@@ -4,7 +4,7 @@ description: "当用户需要查询或管理微盛企微管家（企业微信）
 priority: 0.5
 version: "1.0.3"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\wecom-weisheng-scrm\\SKILL.md"
+source-path: "hermes/skills/wecom-weisheng-scrm/SKILL.md"
 ---
 # 微盛企微管家SCRM
 

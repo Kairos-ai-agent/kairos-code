@@ -3,7 +3,7 @@ name: "oss-forensics"
 description: "|"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\oss-forensics\\SKILL.md"
+source-path: "hermes/skills/oss-forensics/SKILL.md"
 ---
 # OSS Security Forensics Skill
 

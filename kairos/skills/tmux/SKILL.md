@@ -3,7 +3,7 @@ name: "tmux"
 description: "Remote-control tmux sessions for interactive CLIs by sending keystrokes and scraping pane output."
 priority: 0.5
 imported-from: "agents"
-source-path: "C:\\Users\\leohu\\.agents\\skills\\tmux\\SKILL.md"
+source-path: "agents/skills/tmux/SKILL.md"
 ---
 # tmux Session Control
 

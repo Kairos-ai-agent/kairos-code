@@ -3,7 +3,7 @@ name: "template-creator"
 description: "Create or update a reusable personal Codex artifact-template skill. Use when the user invokes $template-creator or asks in natural language to create a reusable template from a reference document, pre"
 priority: 0.5
 imported-from: "codex"
-source-path: "C:\\Users\\leohu\\.codex\\plugins\\cache\\openai-primary-runtime\\template-creator\\26.805.11740\\skills\\template-creator\\SKILL.md"
+source-path: "imported"
 ---
 # Template Creator
 

@@ -3,7 +3,7 @@ name: "stock-research-toolkit"
 description: "Stock analysis toolkit. Use when picking, screening, or scoring stocks."
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\stock-research-toolkit\\SKILL.md"
+source-path: "hermes/skills/stock-research-toolkit/SKILL.md"
 ---
 # Stock Research Toolkit
 

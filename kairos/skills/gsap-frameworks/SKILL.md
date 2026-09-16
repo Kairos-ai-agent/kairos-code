@@ -3,7 +3,7 @@ name: "gsap-frameworks"
 description: "Official GSAP skill for Vue, Svelte, and other non-React frameworks — lifecycle, scoping selectors, cleanup on unmount. Use when the user wants animation in Vue, Nuxt, Svelte, SvelteKit, or asks about"
 priority: 0.5
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\gsap-skills\\skills\\gsap-frameworks\\SKILL.md"
+source-path: "claude/plugins/marketplaces/gsap-skills/skills/gsap-frameworks/SKILL.md"
 ---
 # GSAP with Vue, Svelte, and Other Frameworks
 

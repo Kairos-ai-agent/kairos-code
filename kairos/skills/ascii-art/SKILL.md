@@ -4,7 +4,7 @@ description: "ASCII art: pyfiglet, cowsay, boxes, image-to-ascii."
 priority: 0.5
 version: "4.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\ascii-art\\SKILL.md"
+source-path: "hermes/skills/creative/ascii-art/SKILL.md"
 ---
 # ASCII Art Skill
 

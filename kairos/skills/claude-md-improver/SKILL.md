@@ -4,7 +4,7 @@ description: "Audit and improve CLAUDE.md files in repositories. Use when user a
 priority: 0.5
 tools: "Read, Glob, Grep, Bash, Edit"
 imported-from: "claude"
-source-path: "C:\\Users\\leohu\\.claude\\plugins\\marketplaces\\claude-plugins-official\\plugins\\claude-md-management\\skills\\claude-md-improver\\SKILL.md"
+source-path: "claude-plugins-official/plugins/claude-md-management/skills/claude-md-improver/SKILL.md"
 ---
 # CLAUDE.md Improver
 

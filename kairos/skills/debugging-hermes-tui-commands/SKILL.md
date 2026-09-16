@@ -4,7 +4,7 @@ description: "Debug Hermes TUI slash commands: Python, gateway, Ink UI."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\software-development\\debugging-hermes-tui-commands\\SKILL.md"
+source-path: "hermes/skills/software-development/debugging-hermes-tui-commands/SKILL.md"
 ---
 # Debugging Hermes TUI Slash Commands
 

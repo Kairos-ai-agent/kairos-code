@@ -4,7 +4,7 @@ description: "Read Reddit: subreddits, search, threads, users. No browser."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\social-media\\reddit-reading\\SKILL.md"
+source-path: "hermes/skills/social-media/reddit-reading/SKILL.md"
 ---
 # Reddit Reading Skill
 

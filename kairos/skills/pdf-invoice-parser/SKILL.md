@@ -3,7 +3,7 @@ name: "pdf-invoice-parser"
 description: ">"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\data-science\\pdf-invoice-parser\\SKILL.md"
+source-path: "hermes/skills/data-science/pdf-invoice-parser/SKILL.md"
 ---
 # Chinese Invoice PDF Parser
 

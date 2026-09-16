@@ -3,7 +3,7 @@ name: "multi-file-spa"
 description: ">-"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\.archive\\multi-file-spa\\SKILL.md"
+source-path: "hermes/skills/.archive/multi-file-spa/SKILL.md"
 ---
 # Multi-File Vanilla SPA Development
 

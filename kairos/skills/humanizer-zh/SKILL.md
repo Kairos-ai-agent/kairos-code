@@ -3,7 +3,7 @@ name: "humanizer-zh"
 description: "|"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\humanizer-zh\\SKILL.md"
+source-path: "hermes/skills/humanizer-zh/SKILL.md"
 ---
 # Humanizer-zh: 去除 AI 写作痕迹
 

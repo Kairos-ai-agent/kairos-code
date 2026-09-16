@@ -3,7 +3,7 @@ name: "higgsfield-product-360"
 description: "Generate product 360° turntable, multi-angle showcase, and product reveal video prompts for Seedance 2.0 on Higgsfield. Use whenever the user wants a product rotation video, turntable showcase, produc"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\higgsfield-product-360\\SKILL.md"
+source-path: "hermes/skills/creative/higgsfield-product-360/SKILL.md"
 ---
 # Product 360° Turntable & Multi-Angle Showcase — Seedance 2.0 on Higgsfield
 

@@ -3,7 +3,7 @@ name: "minimax-music-2-5"
 description: "MiniMax Music 2.5音乐生成专家，提供从需求分析到最终交付的全流程音乐创作指导。涵盖作曲编曲、歌词创作、提示词优化、人声合成、质量保证和官网平台使用。支持流行、摇滚、民谣、电子、古典、爵士、R&B、嘻哈等多种风格。关键词：音乐生成、作曲、作词、编曲、提示词、MiniMax Music"
 priority: 0.5
 imported-from: "minimax"
-source-path: "C:\\Users\\leohu\\.minimax\\skills\\minimax-music-2-5\\SKILL.md"
+source-path: "minimax/skills/minimax-music-2-5/SKILL.md"
 ---
 # MiniMax Music 2.5 音乐生成专家
 

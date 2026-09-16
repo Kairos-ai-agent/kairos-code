@@ -4,7 +4,7 @@ description: "Author/validate/export Google's DESIGN.md token spec files."
 priority: 0.5
 version: "1.0.0"
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\design-md\\SKILL.md"
+source-path: "hermes/skills/creative/design-md/SKILL.md"
 ---
 # DESIGN.md Skill
 

@@ -3,7 +3,7 @@ name: "higgsfield-fight-scenes"
 description: "Generate intense fight scene and action sequence video prompts for Seedance 2.0 on Higgsfield. Use whenever the user wants fight scenes, combat, martial arts, battles, action choreography, sword fight"
 priority: 0.5
 imported-from: "hermes"
-source-path: "C:\\Users\\leohu\\AppData\\Local\\hermes\\skills\\creative\\higgsfield-fight-scenes\\SKILL.md"
+source-path: "hermes/skills/creative/higgsfield-fight-scenes/SKILL.md"
 ---
 # Seedance 2.0 on Higgsfield — Fight Scene & Action Prompt Generator
 

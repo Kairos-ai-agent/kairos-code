@@ -67,7 +67,7 @@ def terminate_tree(proc: subprocess.Popen) -> None:
         proc.kill()
 
 
-def check_bundled_mcp(binary: Path) -> tuple[bool, str]:
+def check_bundled_mcp(binary: Path, frozen: bool = True) -> tuple[bool, str]:
     """A bundled server is only shipped if it can actually answer.
 
     The content check below counts what is inside the binary, and it passed on a
@@ -75,7 +75,15 @@ def check_bundled_mcp(binary: Path) -> tuple[bool, str]:
     listed, none could start (ModuleNotFoundError: No module named 'mcp'), every
     start burned a request timeout, and the whole MCP layer — including the HTTP
     transport — was unreachable in the packaged app. Counting is not running.
+
+    Only a frozen build is asked to answer. ``--installed`` exercises a source
+    install built from core dependencies, where ``mcp`` is an optional extra and
+    its absence is correct rather than a defect — and ``--mcp-serve`` is a flag
+    only the frozen launcher has.
     """
+    if not frozen:
+        return True, ("bundled MCP servers not probed: this is a source install, "
+                      "and mcp is an optional extra")
     initialize = (
         b'{"jsonrpc":"2.0","id":1,"method":"initialize","params":'
         b'{"protocolVersion":"2024-11-05","capabilities":{},'
@@ -208,7 +216,7 @@ def main() -> int:
         # Counting what is inside is not the same as running it. Ask two of the
         # bundled servers to answer an ``initialize`` over stdio — this is the
         # check that was missing when 0.1.5 shipped with the mcp package absent.
-        ok, detail = check_bundled_mcp(binary)
+        ok, detail = check_bundled_mcp(binary, frozen=not args.installed)
         print(f"[smoke] {detail}")
         if not ok:
             return report(detail)

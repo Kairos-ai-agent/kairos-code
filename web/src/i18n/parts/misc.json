@@ -1,91 +1,358 @@
 {
-  "project.page.loadFailed": { "zh": "项目加载失败", "en": "Failed to load projects" },
-  "project.page.created": { "zh": "项目已创建", "en": "Project created" },
-  "project.page.createFailed": { "zh": "项目创建失败", "en": "Failed to create project" },
-  "project.page.started": { "zh": "项目已启动！请查看“协作”标签页。", "en": "Project started! Check the Collaboration tab." },
-  "project.page.startFailed": { "zh": "项目启动失败：{detail}", "en": "Failed to start project: {detail}" },
-  "project.page.deleted": { "zh": "项目已删除", "en": "Project deleted" },
-  "project.page.deleteFailed": { "zh": "项目删除失败", "en": "Failed to delete project" },
-  "project.page.deleteTitle": { "zh": "删除项目", "en": "Delete Project" },
-  "project.page.deleteConfirm": { "zh": "确定要删除“{name}”吗？", "en": "Are you sure you want to delete \"{name}\"?" },
-  "project.page.new": { "zh": "新建项目", "en": "New Project" },
-
-  "project.table.description": { "zh": "描述", "en": "Description" },
-  "project.table.workDir": { "zh": "工作目录", "en": "Work Dir" },
-  "project.table.default": { "zh": "默认", "en": "default" },
-  "project.table.tasks": { "zh": "任务", "en": "Tasks" },
-  "project.table.files": { "zh": "参考资料", "en": "Reference files" },
-  "project.table.fileCount": { "zh": "{n} 个文件", "en": "{n} files" },
-
-  "project.status.active": { "zh": "就绪", "en": "Ready" },
-  "project.status.working": { "zh": "运行中", "en": "Running" },
-  "project.status.done": { "zh": "已完成", "en": "Done" },
-
-  "project.create.title": { "zh": "创建新项目", "en": "Create New Project" },
-  "project.form.name": { "zh": "项目名称", "en": "Project Name" },
-  "project.form.namePlaceholder": { "zh": "例如：电商平台", "en": "e.g., E-commerce Platform" },
-  "project.form.description": { "zh": "描述", "en": "Description" },
-  "project.form.descriptionPlaceholder": { "zh": "描述您想构建的内容……", "en": "Describe what you want to build..." },
-  "project.form.workDir": { "zh": "工作目录", "en": "Work Directory" },
-  "project.form.workDirPlaceholder": { "zh": "例如：D:\\projects\\my-app（可选，留空则使用默认目录）", "en": "e.g., D:\\projects\\my-app (optional, leave empty for default)" },
-
-  "project.start.title": { "zh": "开始开发：{name}", "en": "Start Development: {name}" },
-  "project.start.ok": { "zh": "开始开发", "en": "Start Development" },
-  "project.start.injectNote": { "zh": "将自动注入 {n} 个参考文件到 Coder 的 prompt：", "en": "Will auto-inject {n} reference file(s) into the Coder prompt:" },
-  "project.start.requirements": { "zh": "需求", "en": "Requirements" },
-  "project.start.requirementsPlaceholder": { "zh": "请详细描述您的需求。Team Leader 会分析并拆分任务，再分派给团队成员。", "en": "Describe your requirements in detail. The Team Leader will analyze this and delegate tasks to the team." },
-
-  "project.files.title": { "zh": "参考资料：{name}", "en": "Reference files: {name}" },
-  "project.files.help": { "zh": "支持上传 PDF、markdown、txt、yaml 等任意格式。Loop 启动时，文件会作为“参考资料”段落注入 Coder 的首轮 prompt（小文件全文，大文件摘要）。单文件最多 5 MB，数量不限。", "en": "Upload PDF, markdown, txt, yaml or any other format. When the Loop starts, the files are injected as a “reference files” section into the Coder's first prompt (full text for small files, summary for large ones). Max 5 MB per file, no limit on the count." },
-  "project.files.dragText": { "zh": "点击或拖拽文件到这里上传", "en": "Click or drag files here to upload" },
-  "project.files.dragHint": { "zh": "支持任意格式，单文件不超过 5 MB", "en": "Any format supported, up to 5 MB per file" },
-  "project.files.empty": { "zh": "暂无参考文件", "en": "No reference files yet" },
-  "project.files.uploadedAt": { "zh": "上传时间", "en": "Uploaded at" },
-  "project.files.loadFailed": { "zh": "参考文件加载失败", "en": "Failed to load reference files" },
-  "project.files.tooLarge": { "zh": "文件过大（单个文件最大 5 MB）", "en": "File too large (max 5 MB)" },
-  "project.files.uploadFailed": { "zh": "上传失败：{detail}", "en": "Upload failed: {detail}" },
-  "project.files.uploaded": { "zh": "已上传 {name}", "en": "Uploaded {name}" },
-  "project.files.removed": { "zh": "已移除", "en": "Removed" },
-  "project.files.deleteFailed": { "zh": "删除失败", "en": "Delete failed" },
-
-  "mermaid.renderer.renderError": { "zh": "Mermaid 渲染出错：{error}", "en": "Mermaid render error: {error}" },
-  "mermaid.renderer.renderFailed": { "zh": "Mermaid 渲染失败", "en": "mermaid render failed" },
-  "mermaid.renderer.noBrowser": { "zh": "Mermaid 需要浏览器环境", "en": "mermaid requires a browser environment" },
-  "mermaid.renderer.missingGlobal": { "zh": "Mermaid 脚本已加载，但全局对象缺失", "en": "mermaid script loaded but global is missing" },
-  "mermaid.renderer.cdnFailed": { "zh": "Mermaid CDN 脚本加载失败", "en": "mermaid CDN script failed to load" },
-
-  "preset.openai.label": { "zh": "OpenAI", "en": "OpenAI" },
-  "preset.openai.hint": { "zh": "GPT-4o / GPT-4.1 / o1 / o3 / o4", "en": "GPT-4o / GPT-4.1 / o1 / o3 / o4" },
-  "preset.deepseek.label": { "zh": "DeepSeek", "en": "DeepSeek" },
-  "preset.deepseek.hint": { "zh": "国内首选 · 极致性价比", "en": "Top pick in China · unbeatable value" },
-  "preset.qwen.label": { "zh": "Qwen（Dashscope）", "en": "Qwen (Dashscope)" },
-  "preset.qwen.hint": { "zh": "qwen-max / qwen-plus / qwen-coder — 阿里云", "en": "qwen-max / qwen-plus / qwen-coder — Alibaba Cloud" },
-  "preset.glm.label": { "zh": "GLM（智谱）", "en": "GLM (Zhipu)" },
-  "preset.glm.hint": { "zh": "glm-4-plus / glm-4-flash — 智谱 AI", "en": "glm-4-plus / glm-4-flash — Zhipu AI" },
-  "preset.moonshot.label": { "zh": "Moonshot（Kimi）", "en": "Moonshot (Kimi)" },
-  "preset.moonshot.hint": { "zh": "moonshot-v1 / kimi-k2 — 长上下文", "en": "moonshot-v1 / kimi-k2 — long context" },
-  "preset.doubao.label": { "zh": "Doubao（火山方舟）", "en": "Doubao (Volcano Ark)" },
-  "preset.doubao.hint": { "zh": "豆包 — 字节跳动", "en": "Doubao — ByteDance" },
-  "preset.ollamaCloud.label": { "zh": "Ollama（本地）", "en": "Ollama (local)" },
-  "preset.ollamaCloud.hint": { "zh": "localhost:11434 — 本地离线", "en": "localhost:11434 — local, offline" },
-  "preset.openrouter.label": { "zh": "OpenRouter", "en": "OpenRouter" },
-  "preset.openrouter.hint": { "zh": "统一接口访问 200+ 模型", "en": "One API for 200+ models" },
-  "preset.custom.label": { "zh": "自定义（任意 OpenAI 兼容 API）", "en": "Custom (any OpenAI-compatible API)" },
-  "preset.custom.hint": { "zh": "自填 endpoint URL 和 model", "en": "Fill in endpoint URL and model yourself" },
-  "preset.ollamaLocal.label": { "zh": "Ollama（本地）", "en": "Ollama (local)" },
-  "preset.ollamaLocal.hint": { "zh": "localhost:11434 — 本地离线", "en": "localhost:11434 — local, offline" },
-  "preset.groq.label": { "zh": "Groq", "en": "Groq" },
-  "preset.groq.hint": { "zh": "LPU 极速推理 · 免费额度", "en": "Ultra-fast LPU inference · free tier" },
-  "preset.together.label": { "zh": "Together.ai", "en": "Together.ai" },
-  "preset.together.hint": { "zh": "开源模型 API · 大免费额度", "en": "Open-model API · generous free tier" },
-  "preset.fireworks.label": { "zh": "Fireworks.ai", "en": "Fireworks.ai" },
-  "preset.fireworks.hint": { "zh": "极速开源推理 · $1 免费额度", "en": "Fast open-model inference · $1 free" },
-  "preset.mistral.label": { "zh": "Mistral AI", "en": "Mistral AI" },
-  "preset.mistral.hint": { "zh": "Codestral / Mistral-Large", "en": "Codestral / Mistral-Large" },
-  "preset.xai.label": { "zh": "xAI (Grok)", "en": "xAI (Grok)" },
-  "preset.xai.hint": { "zh": "Grok-2 / Grok-2-mini", "en": "Grok-2 / Grok-2-mini" },
-  "preset.perplexity.label": { "zh": "Perplexity", "en": "Perplexity" },
-  "preset.perplexity.hint": { "zh": "联网增强搜索 · 实时", "en": "Web-grounded search · real-time" },
-  "preset.cohere.label": { "zh": "Cohere", "en": "Cohere" },
-  "preset.cohere.hint": { "zh": "Command-R / Command-R+", "en": "Command-R / Command-R+" }
+  "project.page.loadFailed": {
+    "zh": "项目加载失败",
+    "en": "Failed to load projects"
+  },
+  "project.page.created": {
+    "zh": "项目已创建",
+    "en": "Project created"
+  },
+  "project.page.createFailed": {
+    "zh": "项目创建失败",
+    "en": "Failed to create project"
+  },
+  "project.page.started": {
+    "zh": "项目已启动！请查看“协作”标签页。",
+    "en": "Project started! Check the Collaboration tab."
+  },
+  "project.page.startFailed": {
+    "zh": "项目启动失败：{detail}",
+    "en": "Failed to start project: {detail}"
+  },
+  "project.page.deleted": {
+    "zh": "项目已删除",
+    "en": "Project deleted"
+  },
+  "project.page.deleteFailed": {
+    "zh": "项目删除失败",
+    "en": "Failed to delete project"
+  },
+  "project.page.deleteTitle": {
+    "zh": "删除项目",
+    "en": "Delete Project"
+  },
+  "project.page.deleteConfirm": {
+    "zh": "确定要删除“{name}”吗？",
+    "en": "Are you sure you want to delete \"{name}\"?"
+  },
+  "project.page.new": {
+    "zh": "新建项目",
+    "en": "New Project"
+  },
+  "project.table.description": {
+    "zh": "描述",
+    "en": "Description"
+  },
+  "project.table.workDir": {
+    "zh": "工作目录",
+    "en": "Work Dir"
+  },
+  "project.table.default": {
+    "zh": "默认",
+    "en": "default"
+  },
+  "project.table.tasks": {
+    "zh": "任务",
+    "en": "Tasks"
+  },
+  "project.table.files": {
+    "zh": "参考资料",
+    "en": "Reference files"
+  },
+  "project.table.fileCount": {
+    "zh": "{n} 个文件",
+    "en": "{n} files"
+  },
+  "project.status.active": {
+    "zh": "就绪",
+    "en": "Ready"
+  },
+  "project.status.working": {
+    "zh": "运行中",
+    "en": "Running"
+  },
+  "project.status.done": {
+    "zh": "已完成",
+    "en": "Done"
+  },
+  "project.create.title": {
+    "zh": "创建新项目",
+    "en": "Create New Project"
+  },
+  "project.form.name": {
+    "zh": "项目名称",
+    "en": "Project Name"
+  },
+  "project.form.namePlaceholder": {
+    "zh": "例如：电商平台",
+    "en": "e.g., E-commerce Platform"
+  },
+  "project.form.description": {
+    "zh": "描述",
+    "en": "Description"
+  },
+  "project.form.descriptionPlaceholder": {
+    "zh": "描述您想构建的内容……",
+    "en": "Describe what you want to build..."
+  },
+  "project.form.workDir": {
+    "zh": "工作目录",
+    "en": "Work Directory"
+  },
+  "project.form.workDirPlaceholder": {
+    "zh": "例如：D:\\projects\\my-app（可选，留空则使用默认目录）",
+    "en": "e.g., D:\\projects\\my-app (optional, leave empty for default)"
+  },
+  "project.start.title": {
+    "zh": "开始开发：{name}",
+    "en": "Start Development: {name}"
+  },
+  "project.start.ok": {
+    "zh": "开始开发",
+    "en": "Start Development"
+  },
+  "project.start.injectNote": {
+    "zh": "将自动注入 {n} 个参考文件到 Coder 的 prompt：",
+    "en": "Will auto-inject {n} reference file(s) into the Coder prompt:"
+  },
+  "project.start.requirements": {
+    "zh": "需求",
+    "en": "Requirements"
+  },
+  "project.start.requirementsPlaceholder": {
+    "zh": "请详细描述您的需求。Team Leader 会分析并拆分任务，再分派给团队成员。",
+    "en": "Describe your requirements in detail. The Team Leader will analyze this and delegate tasks to the team."
+  },
+  "project.files.title": {
+    "zh": "参考资料：{name}",
+    "en": "Reference files: {name}"
+  },
+  "project.files.help": {
+    "zh": "支持上传 PDF、markdown、txt、yaml 等任意格式。Loop 启动时，文件会作为“参考资料”段落注入 Coder 的首轮 prompt（小文件全文，大文件摘要）。单文件最多 5 MB，数量不限。",
+    "en": "Upload PDF, markdown, txt, yaml or any other format. When the Loop starts, the files are injected as a “reference files” section into the Coder's first prompt (full text for small files, summary for large ones). Max 5 MB per file, no limit on the count."
+  },
+  "project.files.dragText": {
+    "zh": "点击或拖拽文件到这里上传",
+    "en": "Click or drag files here to upload"
+  },
+  "project.files.dragHint": {
+    "zh": "支持任意格式，单文件不超过 5 MB",
+    "en": "Any format supported, up to 5 MB per file"
+  },
+  "project.files.empty": {
+    "zh": "暂无参考文件",
+    "en": "No reference files yet"
+  },
+  "project.files.uploadedAt": {
+    "zh": "上传时间",
+    "en": "Uploaded at"
+  },
+  "project.files.loadFailed": {
+    "zh": "参考文件加载失败",
+    "en": "Failed to load reference files"
+  },
+  "project.files.tooLarge": {
+    "zh": "文件过大（单个文件最大 5 MB）",
+    "en": "File too large (max 5 MB)"
+  },
+  "project.files.uploadFailed": {
+    "zh": "上传失败：{detail}",
+    "en": "Upload failed: {detail}"
+  },
+  "project.files.uploaded": {
+    "zh": "已上传 {name}",
+    "en": "Uploaded {name}"
+  },
+  "project.files.removed": {
+    "zh": "已移除",
+    "en": "Removed"
+  },
+  "project.files.deleteFailed": {
+    "zh": "删除失败",
+    "en": "Delete failed"
+  },
+  "mermaid.renderer.renderError": {
+    "zh": "Mermaid 渲染出错：{error}",
+    "en": "Mermaid render error: {error}"
+  },
+  "mermaid.renderer.renderFailed": {
+    "zh": "Mermaid 渲染失败",
+    "en": "mermaid render failed"
+  },
+  "mermaid.renderer.noBrowser": {
+    "zh": "Mermaid 需要浏览器环境",
+    "en": "mermaid requires a browser environment"
+  },
+  "mermaid.renderer.missingGlobal": {
+    "zh": "Mermaid 脚本已加载，但全局对象缺失",
+    "en": "mermaid script loaded but global is missing"
+  },
+  "mermaid.renderer.cdnFailed": {
+    "zh": "Mermaid CDN 脚本加载失败",
+    "en": "mermaid CDN script failed to load"
+  },
+  "preset.openai.label": {
+    "zh": "OpenAI",
+    "en": "OpenAI"
+  },
+  "preset.openai.hint": {
+    "zh": "GPT-4o / GPT-4.1 / o1 / o3 / o4",
+    "en": "GPT-4o / GPT-4.1 / o1 / o3 / o4"
+  },
+  "preset.deepseek.label": {
+    "zh": "DeepSeek",
+    "en": "DeepSeek"
+  },
+  "preset.deepseek.hint": {
+    "zh": "国内首选 · 极致性价比",
+    "en": "Top pick in China · unbeatable value"
+  },
+  "preset.qwen.label": {
+    "zh": "Qwen（Dashscope）",
+    "en": "Qwen (Dashscope)"
+  },
+  "preset.qwen.hint": {
+    "zh": "qwen-max / qwen-plus / qwen-coder — 阿里云",
+    "en": "qwen-max / qwen-plus / qwen-coder — Alibaba Cloud"
+  },
+  "preset.glm.label": {
+    "zh": "GLM（智谱）",
+    "en": "GLM (Zhipu)"
+  },
+  "preset.glm.hint": {
+    "zh": "glm-4-plus / glm-4-flash — 智谱 AI",
+    "en": "glm-4-plus / glm-4-flash — Zhipu AI"
+  },
+  "preset.moonshot.label": {
+    "zh": "Moonshot（Kimi）",
+    "en": "Moonshot (Kimi)"
+  },
+  "preset.moonshot.hint": {
+    "zh": "moonshot-v1 / kimi-k2 — 长上下文",
+    "en": "moonshot-v1 / kimi-k2 — long context"
+  },
+  "preset.doubao.label": {
+    "zh": "Doubao（火山方舟）",
+    "en": "Doubao (Volcano Ark)"
+  },
+  "preset.doubao.hint": {
+    "zh": "豆包 — 字节跳动",
+    "en": "Doubao — ByteDance"
+  },
+  "preset.ollamaCloud.label": {
+    "zh": "Ollama（本地）",
+    "en": "Ollama (local)"
+  },
+  "preset.ollamaCloud.hint": {
+    "zh": "localhost:11434 — 本地离线",
+    "en": "localhost:11434 — local, offline"
+  },
+  "preset.openrouter.label": {
+    "zh": "OpenRouter",
+    "en": "OpenRouter"
+  },
+  "preset.openrouter.hint": {
+    "zh": "统一接口访问 200+ 模型",
+    "en": "One API for 200+ models"
+  },
+  "preset.custom.label": {
+    "zh": "自定义（任意 OpenAI 兼容 API）",
+    "en": "Custom (any OpenAI-compatible API)"
+  },
+  "preset.custom.hint": {
+    "zh": "自填 endpoint URL 和 model",
+    "en": "Fill in endpoint URL and model yourself"
+  },
+  "preset.ollamaLocal.label": {
+    "zh": "Ollama（本地）",
+    "en": "Ollama (local)"
+  },
+  "preset.ollamaLocal.hint": {
+    "zh": "localhost:11434 — 本地离线",
+    "en": "localhost:11434 — local, offline"
+  },
+  "preset.groq.label": {
+    "zh": "Groq",
+    "en": "Groq"
+  },
+  "preset.groq.hint": {
+    "zh": "LPU 极速推理 · 免费额度",
+    "en": "Ultra-fast LPU inference · free tier"
+  },
+  "preset.together.label": {
+    "zh": "Together.ai",
+    "en": "Together.ai"
+  },
+  "preset.together.hint": {
+    "zh": "开源模型 API · 大免费额度",
+    "en": "Open-model API · generous free tier"
+  },
+  "preset.fireworks.label": {
+    "zh": "Fireworks.ai",
+    "en": "Fireworks.ai"
+  },
+  "preset.fireworks.hint": {
+    "zh": "极速开源推理 · $1 免费额度",
+    "en": "Fast open-model inference · $1 free"
+  },
+  "preset.mistral.label": {
+    "zh": "Mistral AI",
+    "en": "Mistral AI"
+  },
+  "preset.mistral.hint": {
+    "zh": "Codestral / Mistral-Large",
+    "en": "Codestral / Mistral-Large"
+  },
+  "preset.xai.label": {
+    "zh": "xAI (Grok)",
+    "en": "xAI (Grok)"
+  },
+  "preset.xai.hint": {
+    "zh": "Grok-2 / Grok-2-mini",
+    "en": "Grok-2 / Grok-2-mini"
+  },
+  "preset.perplexity.label": {
+    "zh": "Perplexity",
+    "en": "Perplexity"
+  },
+  "preset.perplexity.hint": {
+    "zh": "联网增强搜索 · 实时",
+    "en": "Web-grounded search · real-time"
+  },
+  "preset.cohere.label": {
+    "zh": "Cohere",
+    "en": "Cohere"
+  },
+  "preset.cohere.hint": {
+    "zh": "Command-R / Command-R+",
+    "en": "Command-R / Command-R+"
+  },
+  "preset.anthropic.label": {
+    "zh": "Anthropic (Claude)",
+    "en": "Anthropic (Claude)"
+  },
+  "preset.anthropic.hint": {
+    "zh": "Claude 原生协议（/v1/messages，非 OpenAI 兼容）",
+    "en": "Claude's native protocol (/v1/messages — not OpenAI-compatible)"
+  },
+  "settings.fetchModels": {
+    "zh": "拉取 model 列表",
+    "en": "Fetch model list"
+  },
+  "settings.fetchModelsAgain": {
+    "zh": "重新拉取（{n}）",
+    "en": "Fetch again ({n})"
+  },
+  "settings.fetchModelsPick": {
+    "zh": "从下拉选 model",
+    "en": "Pick a model from the list"
+  },
+  "settings.fetchModelsFirst": {
+    "zh": "先点右上方「拉取 model 列表」",
+    "en": "Use “Fetch model list” above first"
+  },
+  "settings.fetchModelsCurrent": {
+    "zh": "点「拉取 model 列表」获取当前 provider 的 model",
+    "en": "Click “Fetch model list” to load this provider's models"
+  }
 }

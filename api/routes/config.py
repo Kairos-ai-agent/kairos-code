@@ -224,37 +224,55 @@ async def fetch_custom_models(request: FetchModelsRequest):
     headers = {}
 
     if request.protocol == "anthropic":
-        # Anthropic API typically has no public /models endpoint
-        # Always return common models for Anthropic-compatible services
-        # Try fetching but don't fail if it doesn't work
+        # Anthropic serves GET /v1/models (x-api-key + anthropic-version). The
+        # note that used to sit here — "Anthropic API typically has no public
+        # /models endpoint" — has been wrong for a while, and it made this branch
+        # unreachable in practice anyway: the drawer hardcoded protocol="openai"
+        # so nothing ever got here to find out.
+        #
+        # Anthropic-compatible gateways (MiniMax and friends) may not serve it.
+        # If they don't, say so and let the user type the id — the old code
+        # answered with a hardcoded list of MiniMax models for *any* Anthropic
+        # endpoint, which is worse than an honest empty result.
+        from kairos.llm.endpoints import resolve_anthropic_base
         try:
-            if request.api_key:
-                headers["x-api-key"] = request.api_key
-                headers["anthropic-version"] = "2023-06-01"
-            async with httpx.AsyncClient(timeout=5, follow_redirects=False,
+            root = resolve_anthropic_base({"endpointUrl": request.base_url})
+            validate_config_url(root, what="base_url")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        url = f"{root}/v1/models"
+        if request.api_key:
+            headers["x-api-key"] = request.api_key
+            headers["anthropic-version"] = "2023-06-01"
+        try:
+            async with httpx.AsyncClient(timeout=10, follow_redirects=False,
                                          trust_env=False) as client:
-                resp = await client.get(f"{base}/models", headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    models = [
-                        {"id": m.get("id", m.get("name", "")), "name": m.get("name", m.get("id", ""))}
-                        for m in data.get("data", [])
-                    ]
-                    if models:
-                        models.sort(key=lambda x: x["id"])
-                        return {"models": models, "count": len(models)}
-        except Exception:
+                resp = await client.get(url, headers=headers)
+            if resp.status_code == 200:
+                models = []
+                for m in resp.json().get("data", []):
+                    mid = str(m.get("id") or "").strip()
+                    if not mid:
+                        continue
+                    # Anthropic calls the human-readable field display_name;
+                    # OpenAI-compatible gateways use name.
+                    models.append({"id": mid, "name": str(m.get("display_name")
+                                                          or m.get("name") or mid)})
+                models.sort(key=lambda x: x["id"])
+                if models:
+                    return {"models": models, "count": len(models),
+                            "note": f"fetched {len(models)} models from {root}"}
+            return {"models": [], "count": 0,
+                    "error": f"GET {url} returned {resp.status_code}",
+                    "note": "this endpoint has no /v1/models — type the model id "
+                            "in the box and press Enter"}
+        except Exception as exc:
             import logging
-            logging.getLogger(__name__).debug("Failed to fetch MiniMax models", exc_info=True)
-
-        # Always return fallback list for Anthropic protocol
-        return {"models": [
-            {"id": "MiniMax-Text-01", "name": "MiniMax Text 01"},
-            {"id": "abab6.5s-chat", "name": "Abab 6.5s Chat"},
-            {"id": "abab5.5-chat", "name": "Abab 5.5 Chat"},
-            {"id": "claude-sonnet-4-20250514", "name": "Claude Sonnet"},
-            {"id": "claude-3-5-haiku-20241022", "name": "Claude 3.5 Haiku"},
-        ], "note": "Anthropic protocol - common models listed. You can also input model ID manually."}
+            logging.getLogger(__name__).debug(
+                "Failed to fetch Anthropic models", exc_info=True)
+            return {"models": [], "count": 0,
+                    "error": f"{type(exc).__name__} fetching {url}: {exc}",
+                    "note": "type the model id in the box and press Enter"}
 
     # OpenAI protocol
     try:

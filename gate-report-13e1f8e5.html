@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en" data-lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kairos Gate Report — demo-relay</title>
+<style>
+:root {
+  --bg:#ffffff; --fg:#1f2328; --muted:#59636e; --line:#d8dee4; --card:#f6f8fa;
+  --ok:#1a7f37; --bad:#cf222e; --warn:#9a6700; --idle:#57606a; --accent:#0969da;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#0d1117; --fg:#e6edf3; --muted:#9198a1; --line:#30363d; --card:#161b22;
+           --ok:#3fb950; --bad:#f85149; --warn:#d29922; --idle:#8b949e; --accent:#4493f8; }
+}
+* { box-sizing:border-box; }
+body { margin:0; padding:32px 20px; background:var(--bg); color:var(--fg);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,
+  "PingFang SC","Microsoft YaHei",sans-serif; }
+.wrap { max-width:960px; margin:0 auto; }
+header { display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap; margin-bottom:8px; }
+h1 { font-size:22px; margin:0 0 4px; }
+h2 { font-size:15px; margin:28px 0 10px; color:var(--muted); font-weight:600;
+  text-transform:uppercase; letter-spacing:.04em; }
+.badge { display:inline-block; padding:3px 10px; border-radius:999px; font-size:13px;
+  font-weight:600; border:1px solid currentColor; }
+.badge.ok { color:var(--ok); } .badge.bad { color:var(--bad); }
+.badge.warn { color:var(--warn); } .badge.idle { color:var(--idle); }
+.pill { display:inline-block; padding:2px 8px; border-radius:6px; background:var(--card);
+  border:1px solid var(--line); font-size:12px; color:var(--muted); margin-right:6px; }
+.sub { color:var(--muted); font-size:13px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:16px 0 4px; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+.card .k { font-size:12px; color:var(--muted); }
+.card .v { font-size:20px; font-weight:600; margin-top:2px; }
+table { width:100%; border-collapse:collapse; font-size:13.5px; }
+th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+th { color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.03em; }
+tr:last-child td { border-bottom:none; }
+code { background:var(--card); border:1px solid var(--line); border-radius:5px;
+  padding:1px 5px; font-size:12.5px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+.sev { font-size:11px; font-weight:700; letter-spacing:.03em; }
+.sev.BUG,.sev.BLOCKER { color:var(--bad); }
+.sev.MAJOR { color:var(--warn); }
+.sev.MINOR,.sev.SUGGESTION,.sev.INFO { color:var(--idle); }
+.chart { display:flex; align-items:flex-end; gap:6px; height:110px; margin:6px 0 2px; }
+.chart .bar { flex:0 0 34px; background:var(--accent); border-radius:4px 4px 0 0; position:relative; }
+.chart .bar.rej { background:var(--bad); }
+.chart .bar span { position:absolute; top:-20px; left:0; right:0; text-align:center;
+  font-size:11px; color:var(--muted); }
+.chart-legend { color:var(--muted); font-size:12px; }
+footer { margin-top:32px; padding-top:14px; border-top:1px solid var(--line);
+  color:var(--muted); font-size:12.5px; }
+.lang { margin-left:auto; }
+.lang button { background:transparent; border:1px solid var(--line); color:var(--muted);
+  border-radius:6px; padding:3px 9px; font-size:12px; cursor:pointer; }
+.lang button[aria-pressed="true"] { color:var(--fg); border-color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1><span class="i18n" data-en="Kairos Gate Report" data-zh="Kairos 门禁报告">Kairos Gate Report</span></h1>
+    <div class="sub">demo-relay · <code>13e1f8e5</code>
+      · a61692d8 · 2026-09-16 23:53:51</div>
+  </div>
+  <div class="lang">
+    <button id="btn-en" aria-pressed="true">EN</button>
+    <button id="btn-zh" aria-pressed="false">中文</button>
+  </div>
+</header>
+<div><span class="badge ok"><span class="i18n" data-en="Passed" data-zh="已通过">Passed</span></span>
+  <span class="pill"><span class="i18n" data-en="✅ · 3 round(s) · $0.0000 · first-pass no" data-zh="✅ · 3 轮 · $0.0000 · 一次通过 否">✅ · 3 round(s) · $0.0000 · first-pass no</span></span></div>
+<p class="sub"><strong><span class="i18n" data-en="Requirement" data-zh="需求">Requirement</span></strong>: kairos demo — retry planner gate walkthrough</p>
+<h2><span class="i18n" data-en="Verdict" data-zh="结论">Verdict</span></h2><p><span class="i18n" data-en="Passed after 3 round(s): the Reviewer sent work back 2 time(s)." data-zh="经过 3 轮通过：审查员打回过 2 次。">Passed after 3 round(s): the Reviewer sent work back 2 time(s).</span></p>
+<div class="grid">
+<div class="card"><div class="k"><span class="i18n" data-en="Rounds" data-zh="轮次">Rounds</span></div><div class="v">3</div></div>
+<div class="card"><div class="k"><span class="i18n" data-en="Rejected rounds" data-zh="被打回轮次">Rejected rounds</span></div><div class="v">2</div></div>
+<div class="card"><div class="k"><span class="i18n" data-en="First-pass" data-zh="一次通过">First-pass</span></div><div class="v"><span class="i18n" data-en="no" data-zh="否">no</span></div></div>
+<div class="card"><div class="k"><span class="i18n" data-en="Final score" data-zh="最终评分">Final score</span></div><div class="v">100</div></div>
+<div class="card"><div class="k"><span class="i18n" data-en="Cost" data-zh="花费">Cost</span></div><div class="v">$0.0000</div></div>
+<div class="card"><div class="k"><span class="i18n" data-en="Tokens" data-zh="Token">Tokens</span></div><div class="v">74057</div></div>
+</div>
+<h2><span class="i18n" data-en="Score per round" data-zh="每轮评分">Score per round</span></h2><div class="chart">
+<div class="bar rej" style="height:36px"><span>40</span></div>
+<div class="bar rej" style="height:72px"><span>80</span></div>
+<div class="bar" style="height:90px"><span>100</span></div>
+</div>
+<div class="chart-legend"><span class="i18n" data-en="Round" data-zh="轮次">Round</span> → R1 · R2 · R3</div>
+<h2><span class="i18n" data-en="Rounds" data-zh="轮次明细">Rounds</span></h2><table><thead><tr><th><span class="i18n" data-en="Round" data-zh="轮次">Round</span></th><th><span class="i18n" data-en="Score" data-zh="评分">Score</span></th><th><span class="i18n" data-en="Verdict" data-zh="结论">Verdict</span></th><th><span class="i18n" data-en="Issues" data-zh="问题数">Issues</span></th><th><span class="i18n" data-en="Coder summary" data-zh="Coder 摘要">Coder summary</span></th></tr></thead><tbody>
+<tr><td>R1</td><td>40</td><td><span class="sev BUG"><span class="i18n" data-en="rejected" data-zh="打回">rejected</span></span></td><td>3</td><td>Implemented the retry planner in relay.py (exponential backoff).</td></tr>
+<tr><td>R2</td><td>80</td><td><span class="sev BUG"><span class="i18n" data-en="rejected" data-zh="打回">rejected</span></span></td><td>1</td><td>Fixed the delay calculation and the retry count in relay.py.</td></tr>
+<tr><td>R3</td><td>100</td><td><span class="sev MINOR"><span class="i18n" data-en="approved" data-zh="通过">approved</span></span></td><td>0</td><td>Applied Retry-After to the final delay in relay.py.</td></tr>
+</tbody></table>
+<h2><span class="i18n" data-en="Issues found by the Reviewer" data-zh="审查员发现的问题">Issues found by the Reviewer</span></h2>
+<p><span class="i18n" data-en="No open issues in this round." data-zh="本轮没有未解决问题。">No open issues in this round.</span></p>
+<h2><span class="i18n" data-en="Cost ledger" data-zh="成本账本">Cost ledger</span></h2>
+<p class="sub"><span class="i18n" data-en="Sum of ledger entries inside this run&#x27;s time window." data-zh="本次运行时间窗内的账本合计。">Sum of ledger entries inside this run&#x27;s time window.</span></p>
+<table><thead><tr><th><span class="i18n" data-en="Model" data-zh="模型">Model</span></th><th><span class="i18n" data-en="Calls" data-zh="调用次数">Calls</span></th><th><span class="i18n" data-en="Prompt tokens" data-zh="输入 Token">Prompt tokens</span></th><th><span class="i18n" data-en="Completion tokens" data-zh="输出 Token">Completion tokens</span></th><th><span class="i18n" data-en="Cost (USD)" data-zh="花费（USD）">Cost (USD)</span></th></tr></thead><tbody>
+<tr><td>scripted-coder</td><td>7</td><td>38182</td><td>123</td><td>$0.000000</td></tr>
+<tr><td>scripted-reviewer</td><td>6</td><td>35184</td><td>568</td><td>$0.000000</td></tr>
+</tbody></table>
+<h2><span class="i18n" data-en="What Kairos learned" data-zh="Kairos 积累的知识">What Kairos learned</span></h2>
+<p><span class="pill"><span class="i18n" data-en="1 working fixes" data-zh="1 可复用修法">1 working fixes</span></span> · <span class="pill"><span class="i18n" data-en="0 project skills" data-zh="0 项目技能">0 project skills</span></span> · <span class="pill"><span class="i18n" data-en="0 project notes" data-zh="0 项目笔记">0 project notes</span></span></p>
+<h2><span class="i18n" data-en="Reproduce" data-zh="复现方式">Reproduce</span></h2><p><code>python -m kairos gate report --project 13e1f8e5 --out gate-report.html</code></p>
+<footer><span class="i18n" data-en="Generated by Kairos Code — a self-hosted multi-agent pipeline that enforces review gates." data-zh="由 Kairos Code 生成 —— 自托管、强制审查门禁的多智能体流水线。">Generated by Kairos Code — a self-hosted multi-agent pipeline that enforces review gates.</span></footer>
+</div>
+<script>
+(function () {
+  var root = document.documentElement;
+  function apply(lang) {
+    root.setAttribute('data-lang', lang);
+    root.setAttribute('lang', lang);
+    highlight(document.getElementById('btn-en'), document.getElementById('btn-zh'), lang);
+    document.querySelectorAll('.i18n[data-en][data-zh]').forEach(function (el) {
+      el.textContent = el.getAttribute('data-' + lang);
+    });
+    var t = document.querySelector('title');
+    if (t) {
+      document.title = document.title.replace(/Kairos Gate Report|Kairos 门禁报告/,
+        lang === 'zh' ? 'Kairos 门禁报告' : 'Kairos Gate Report');
+    }
+  }
+  function highlight(en, zh, lang) {
+    if (!en || !zh) { return; }
+    en.setAttribute('aria-pressed', lang === 'en' ? 'true' : 'false');
+    zh.setAttribute('aria-pressed', lang === 'zh' ? 'true' : 'false');
+  }
+  var en = document.getElementById('btn-en'), zh = document.getElementById('btn-zh');
+  if (en) { en.addEventListener('click', function () { apply('en'); }); }
+  if (zh) { zh.addEventListener('click', function () { apply('zh'); }); }
+})();
+</script>
+</body>
+</html>

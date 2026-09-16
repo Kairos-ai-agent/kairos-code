@@ -150,16 +150,16 @@ class ModelRouter:
                         ),
                     )
                 if anthropic_cfg and (anthropic_cfg.get("apiKey") or anthropic_cfg.get("model")):
-                    from kairos.llm.endpoints import resolve_base_url
+                    from kairos.llm.endpoints import resolve_anthropic_base
 
                     self._model_configs["__r37_anthropic__"] = LLMConfig(
                         provider="anthropic",
                         model=anthropic_cfg.get("model") or "claude-3-5-sonnet-latest",
                         api_key=anthropic_cfg.get("apiKey") or "",
-                        base_url=resolve_base_url(
-                            anthropic_cfg, default="https://api.anthropic.com",
-                            suffix="/messages",
-                        ),
+                        # AnthropicProvider appends "/v1/messages" to whatever it
+                        # is given, so this must resolve to the origin — not to
+                        # "…/v1", which used to produce /v1/v1/messages.
+                        base_url=resolve_anthropic_base(anthropic_cfg),
                     )
                 # R37+: the active provider determines which LLMConfig
                 # the Coder / Reviewer actually use. We register both

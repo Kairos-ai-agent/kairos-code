@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { matchPreset } from '../llm/presets';
+import { LLM_PRESETS, getPreset, matchPreset } from '../llm/presets';
 
 /**
  * A preset is a *choice the user makes*, not something to be re-derived from whatever
@@ -34,5 +34,32 @@ describe('matchPreset', () => {
 
   it('falls back to the OpenAI default when nothing is configured', () => {
     expect(matchPreset('', '')).toBe('openai');
+  });
+});
+
+/**
+ * R39: Anthropic speaks a different protocol, and the drawer has to know it.
+ * The "fetch model list" button was hardcoded to protocol:"openai", so an
+ * Anthropic endpoint was always asked the OpenAI way (bare /models, Bearer
+ * token) and never came back with a list — the backend's Anthropic branch was
+ * dead code. A preset carries the protocol so that cannot happen again.
+ */
+describe('the Anthropic preset', () => {
+  it('exists and declares its protocol', () => {
+    const p = getPreset('anthropic');
+    expect(p.protocol).toBe('anthropic');
+    expect(p.endpointUrl).toBe('https://api.anthropic.com/v1/messages');
+  });
+
+  it('is recognised from its endpoint, not from its model name', () => {
+    expect(matchPreset('https://api.anthropic.com/v1/messages', 'claude-sonnet-4-5-20250929'))
+      .toBe('anthropic');
+  });
+
+  it('leaves every other preset on the OpenAI protocol', () => {
+    for (const p of LLM_PRESETS) {
+      if (p.id === 'anthropic') continue;
+      expect(p.protocol ?? 'openai').toBe('openai');
+    }
   });
 });

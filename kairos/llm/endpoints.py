@@ -32,3 +32,23 @@ def resolve_base_url(cfg: dict[str, Any], *, default: str, suffix: str) -> str:
 
     base = str(cfg.get("baseUrl") or "").strip()
     return base.rstrip("/") or default
+
+
+def resolve_anthropic_base(cfg: dict[str, Any], *,
+                           default: str = "https://api.anthropic.com") -> str:
+    """The base ``AnthropicProvider`` expects: it appends ``/v1/messages`` itself.
+
+    The Settings drawer writes the *full* endpoint (``…/v1/messages``), and a
+    user may also write just ``…/v1``. Either way the base has to come out as the
+    origin that ``/v1/messages`` can be appended to. Stripping only ``/messages``
+    leaves ``…/v1`` behind, the provider appends its own path, and the request
+    goes to ``/v1/v1/messages`` — a 404 on every call, including the default
+    config shipped in the drawer. Hence both suffixes come off here.
+
+    A gateway that serves Anthropic's protocol under a prefix (``https://gw/x``)
+    keeps its prefix, so ``https://gw/x/v1/messages`` is what gets called.
+    """
+    base = resolve_base_url(cfg, default=default, suffix="/v1/messages")
+    if base.rstrip("/").endswith("/v1"):
+        base = base.rstrip("/")[: -len("/v1")]
+    return base.rstrip("/") or default

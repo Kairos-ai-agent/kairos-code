@@ -17,7 +17,7 @@ import {
   GlobalOutlined,
 } from '@ant-design/icons';
 import { LANGS, tGlobal, useI18n, useT } from '../i18n';
-import { useSettingsStore, CoderMode, TtsProvider, SttProvider, LlmProvider } from '../stores/settingsStore';
+import { useSettingsStore, CoderMode, TtsProvider, SttProvider, LlmProvider, ProviderSettings } from '../stores/settingsStore';
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import { LLM_PRESETS, matchPreset, getPreset, CUSTOM_MODEL } from '../llm/presets';
@@ -628,10 +628,27 @@ const OpenAICompatForm: React.FC<{
     setLastFetchedKey('');
     if (id === 'custom') return;  // user fills in manually
     const p = getPreset(id);
-    onChange({
-      endpointUrl: p.endpointUrl || value.endpointUrl,
-      model: p.defaultModel || value.model,
-    });
+    // Write into the slot the preset's protocol belongs to, AND switch the
+    // active provider to that slot. Going through the local `onChange` would
+    // be wrong here: each form binds it to its own slot
+    // (setProvider({ openai: {...} }) / { anthropic: {...} }), so an `active`
+    // key passed that way lands *inside* provider.openai as a stray field
+    // while provider.active stays put — the URL would show, the calls would
+    // keep going to the old provider.
+    const slot = p.protocol === 'anthropic' ? 'anthropic' : 'openai';
+    // Read the live store rather than this form's props: applyPreset is an
+    // event handler, and the slot it must write to is not necessarily the one
+    // this form is bound to (picking Anthropic while the OpenAI form is shown
+    // is the normal case).
+    const snapshot = useSettingsStore.getState().provider;
+    useSettingsStore.getState().setProvider({
+      active: slot,
+      [slot]: {
+        ...snapshot[slot],
+        endpointUrl: p.endpointUrl || snapshot[slot].endpointUrl,
+        model: p.defaultModel || snapshot[slot].model,
+      },
+    } as Partial<ProviderSettings>);
     if (p.defaultModel) setPinnedModel(p.defaultModel);
   };
 
@@ -665,8 +682,11 @@ const OpenAICompatForm: React.FC<{
         note?: string;
       }>('/config/models/custom/fetch', {
         base_url: fetchBaseUrl,
-        api_key: value.apiKey,
-        protocol: 'openai',
+        api_key: value.apiKey || '',
+        // Was hardcoded 'openai', which is why the backend's Anthropic branch
+        // was unreachable: an Anthropic endpoint was always asked the OpenAI
+        // way and the answer was never a model list.
+        protocol: preset.protocol ?? 'openai',
       });
       const list = (r.data.models || []).map((m) => m.id).filter(Boolean);
       setFetchedModels(list);
@@ -869,8 +889,8 @@ const OpenAICompatForm: React.FC<{
             style={{ padding: 0 }}
           >
             {fetchedModels.length > 0
-              ? `重新拉取 (${fetchedModels.length})`
-              : '拉取 model 列表'}
+              ? t('settings.fetchModelsAgain', { n: fetchedModels.length })
+              : t('settings.fetchModels')}
           </Button>
         </div>
         <Select
@@ -881,8 +901,8 @@ const OpenAICompatForm: React.FC<{
           showSearch
           placeholder={
             fetchedModels.length > 0
-              ? '从下拉选 model'
-              : (preset.defaultModel || '先点右上方「拉取 model 列表」')}
+              ? t('settings.fetchModelsPick')
+              : (preset.defaultModel || t('settings.fetchModelsFirst'))}
           options={modelOptions}
           onInputKeyDown={(e) => {
             // Escape hatch when 「拉取 model 列表」 fails (backend down,
@@ -902,7 +922,7 @@ const OpenAICompatForm: React.FC<{
           }
           notFoundContent={
             fetchedModels.length === 0
-              ? '点「拉取 model 列表」获取当前 provider 的 model'
+              ? t('settings.fetchModelsCurrent')
               : '无匹配'
           }
         />

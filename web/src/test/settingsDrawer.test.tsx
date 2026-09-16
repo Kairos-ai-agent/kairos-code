@@ -103,4 +103,23 @@ describe('SettingsDrawer', () => {
     });
     expect(useSettingsStore.getState().mcp.enabledServers).toEqual(['filesystem', 'github']);
   });
+
+  it('picking the Anthropic preset switches the provider slot, not just the URL', async () => {
+    renderDrawer();
+    const select = screen.getByTestId('llm-preset-select');
+    fireEvent.mouseDown(select.querySelector('.ant-select-selector')!);
+    const option = await screen.findByTitle('Anthropic (Claude)');
+    fireEvent.click(option);
+
+    const p = useSettingsStore.getState().provider;
+    expect(p.active).toBe('anthropic');
+    expect(p.anthropic.endpointUrl).toBe('https://api.anthropic.com/v1/messages');
+    expect(p.anthropic.model).toBe('claude-sonnet-4-5-20250929');
+    // Regression guard. An earlier version passed `active` through the form's
+    // local onChange, which each form binds to its own slot
+    // (setProvider({ openai: {...} })) — so "active" was written *inside*
+    // provider.openai as a stray field and provider.active never changed.
+    expect((p.openai as unknown as Record<string, unknown>).active).toBeUndefined();
+    expect(p.openai.endpointUrl).toBe('https://api.openai.com/v1/chat/completions');
+  });
 });

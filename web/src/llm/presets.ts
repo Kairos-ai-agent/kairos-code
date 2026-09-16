@@ -34,6 +34,11 @@ export interface LLMPreset {
   hint: string;
   /** The full chat completions URL the backend will POST to. */
   endpointUrl: string;
+  /** Which wire protocol that URL speaks. Anthropic is *not* OpenAI-shaped:
+   *  it posts /v1/messages with x-api-key headers, and lists models from
+   *  GET /v1/models with the same headers. Defaults to "openai" when absent,
+   *  which is what every preset but Anthropic is. */
+  protocol?: 'openai' | 'anthropic';
   /** Default model the preset is built around. Pre-fills the
    *  Model field when the user picks this preset (before they
    *  hit "Fetch"). After Fetch, this is just one option among
@@ -58,6 +63,18 @@ export const LLM_PRESETS: LLMPreset[] = [
     signupUrl: 'https://platform.openai.com/',
     docsUrl: 'https://platform.openai.com/docs',
     recommended: true,
+  },
+  {
+    id: 'anthropic',
+    label: 'preset.anthropic.label',
+    hint: 'preset.anthropic.hint',
+    // Not OpenAI-compatible: /v1/messages + x-api-key, and its model list comes
+    // from GET /v1/models rather than the OpenAI-shaped bare /models.
+    protocol: 'anthropic',
+    endpointUrl: 'https://api.anthropic.com/v1/messages',
+    defaultModel: 'claude-sonnet-4-5-20250929',
+    signupUrl: 'https://console.anthropic.com/',
+    docsUrl: 'https://docs.anthropic.com/en/api/models-list',
   },
   {
     id: 'deepseek',

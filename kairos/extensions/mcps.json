@@ -338,6 +338,72 @@
       "source": "https://github.com/modelcontextprotocol/servers",
       "stars": "8.5k",
       "official": true
+    },
+    {
+      "name": "firebase",
+      "bundled": false,
+      "source": "claude-plugins-official/firebase",
+      "note": "from the Claude Code plugin marketplace (vendor-published)",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "firebase-tools@latest",
+        "mcp"
+      ]
+    },
+    {
+      "name": "greptile",
+      "bundled": false,
+      "source": "claude-plugins-official/greptile",
+      "note": "from the Claude Code plugin marketplace (vendor-published)",
+      "transport": "http",
+      "url": "https://api.greptile.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${GREPTILE_API_KEY}"
+      }
+    },
+    {
+      "name": "laravel-boost",
+      "bundled": false,
+      "source": "claude-plugins-official/laravel-boost",
+      "note": "from the Claude Code plugin marketplace (vendor-published)",
+      "transport": "stdio",
+      "command": "php",
+      "args": [
+        "artisan",
+        "boost:mcp"
+      ]
+    },
+    {
+      "name": "serena",
+      "bundled": false,
+      "source": "claude-plugins-official/serena",
+      "note": "from the Claude Code plugin marketplace (vendor-published)",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/oraios/serena",
+        "serena",
+        "start-mcp-server"
+      ]
+    },
+    {
+      "name": "terraform",
+      "bundled": false,
+      "source": "claude-plugins-official/terraform",
+      "note": "from the Claude Code plugin marketplace (vendor-published)",
+      "transport": "stdio",
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "TFE_TOKEN=${TFE_TOKEN}",
+        "hashicorp/terraform-mcp-server:0.4.0"
+      ]
     }
   ]
 }

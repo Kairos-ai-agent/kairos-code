@@ -25,6 +25,11 @@ from typing import Dict, List, Optional, Tuple
 REPO = Path(__file__).resolve().parent.parent
 SKILLS = REPO / "kairos" / "skills"
 
+# NOTE: a blind carry can DEMOTE a skill — the flat copy often held a generic
+# `priority: 0.5` while the directory copy had a deliberate 0.6/0.8, and taking
+# the flat's value silently lowered it (it broke the R34 skills' 0.6 contract).
+# If this is ever run again on a tree that still has flat copies, carry
+# `priority` only when the directory has none, or take the MAX of the two.
 CARRY = ("priority", "when", "globs", "keywords", "tags")
 sys.path.insert(0, str(REPO))
 

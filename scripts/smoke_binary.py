@@ -39,8 +39,11 @@ def get(url: str, timeout: float = 5.0) -> tuple[int, str]:
             return resp.status, resp.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as exc:
         return exc.code, ""
-    except Exception:  # noqa: BLE001 - not up yet
-        return 0, ""
+    except Exception as exc:  # noqa: BLE001 - not up yet
+        # Carry the reason, not just the zero: "-> 0" sent me looking for a
+        # product bug when the answer was a five-second read timeout on an
+        # endpoint that needs six seconds on a cold start.
+        return 0, f"{type(exc).__name__}: {exc}"
 
 
 def terminate_tree(proc: subprocess.Popen) -> None:
@@ -203,9 +206,17 @@ def main() -> int:
         # build that serves the UI but carries no skills and no offline MCP
         # servers passes every other check here — which is exactly how the
         # packaged app ended up "installing 36 skills" and loading none.
-        code, body = get(f"{base}/api/extensions/capabilities")
+        # This endpoint asks the runtime what it has, which means waiting for the
+        # bundled MCP servers on a cold start — measured at 6s cold, 1s warm. The
+        # 5s default suits /health and the UI; it is wrong for the one call whose
+        # whole job is to reflect the servers. A too-short read here failed a
+        # perfectly good release artefact.
+        code, body = get(f"{base}/api/extensions/capabilities", timeout=120.0)
         if code != 200:
-            return report(f"/api/extensions/capabilities -> {code}")
+            # Say why, not just that. `-> 0` means the request raised, and the
+            # exception text is the only thing that distinguishes a timeout from
+            # a refused connection or a half-read response.
+            return report(f"/api/extensions/capabilities -> {code} {body[:300]}")
         caps = json.loads(body)
         skills = (caps.get("skills") or {}).get("count", 0)
         mcp = len((caps.get("mcp") or {}).get("configured") or [])

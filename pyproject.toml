@@ -65,7 +65,7 @@ tui = ["textual>=0.80,<1.0"]
 # /metrics endpoint + the Cogs dashboard counters.
 metrics = ["prometheus-client>=0.20.0"]
 # Native MCP stdio client and the bundled filesystem MCP server.
-mcp = ["mcp>=1.0.0"]
+mcp = ["mcp[cli]>=1.0.0"]
 # Pluggable integrations. Every one of these is imported lazily (inside the
 # function that needs it), so the base install stays small and keeps working
 # without them — declaring them here makes the feature installable and documents
@@ -88,7 +88,7 @@ dev = [
     "mypy>=1.11.0",
     "textual>=0.80,<1.0",
     "prometheus-client>=0.20.0",
-    "mcp>=1.0.0",
+    "mcp[cli]>=1.0.0",
 ]
 all = [
     "kairos-code[ollama,dashscope,zhipuai,tui,metrics,mcp,voice,memory,browser,cloud,llm,telemetry,daemon]",

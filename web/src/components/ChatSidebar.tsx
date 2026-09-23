@@ -36,14 +36,14 @@
  * the topbar can stay minimal.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Button, Spin, Empty, Tooltip, Popconfirm, Input, App as AntdApp } from 'antd';
 import {
   MessageOutlined, ThunderboltOutlined,
   CheckCircleFilled, CloseCircleFilled, DownOutlined,
   UpOutlined, ProjectOutlined, DeleteOutlined,
   AppstoreOutlined, ToolOutlined, SettingOutlined,
-  SunOutlined, MoonOutlined,
+  SunOutlined, MoonOutlined, ShopOutlined,
   HistoryOutlined, DashboardOutlined, BranchesOutlined, SyncOutlined,
 } from '@ant-design/icons';
 
@@ -323,10 +323,65 @@ const ChatSidebar: React.FC = () => {
 
 // Exported so the vitest tests can mount it in isolation. Production
 // code uses it via ChatSidebar's render tree.
+/**
+ * Route match for a rail cell: the route itself, or a child of it
+ * (`/trace/<project>` keeps Trace lit). `/` is not a destination — the
+ * router redirects it to `/run`.
+ */
+function isActive(to: string, pathname: string): boolean {
+  return pathname === to || pathname.startsWith(`${to}/`);
+}
+
+/**
+ * A labelled group of rail cells. The label is what turns nine equal-weight
+ * icons into three readable questions ("where do I work / what is installed /
+ * what is the state of things"), and one grid for every group keeps the
+ * column edges aligned down the whole rail.
+ */
+const NavGroup: React.FC<{
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}> = ({ label, hint, children }) => {
+  const tokens = useThemeTokens();
+  return (
+    <div>
+      <div
+        data-testid="footer-group-label"
+        title={hint}
+        style={{
+          fontSize: 10,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          color: tokens.labelTertiary,
+          padding: '0 4px 4px',
+          userSelect: 'none',
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          display: 'grid',
+          // Three columns, not four: a cell here is ~72px, which fits the
+          // longest labels in any language ("Marketplace", "Dashboard"). Four
+          // columns gave ~52px and truncated them — the grid has to be sized by
+          // the longest word it must hold, not by how many items look tidy.
+          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+          gap: 4,
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+};
+
 export const SidebarFooter: React.FC = () => {
   const t = useT();
   const tokens = useThemeTokens();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const mode = useThemeStore((s) => s.mode);
   const toggle = useThemeStore((s) => s.toggle);
   const openSettings = useSettingsStore((s) => s.openDrawer);
@@ -335,81 +390,79 @@ export const SidebarFooter: React.FC = () => {
   // buttons (padding 7px 10px, borderRadius 8, fontSize 13). This
   // keeps the footer feeling native to the sidebar instead of a
   // generic "settings" panel.
-  // One icon size and one grid for the whole footer: the old markup mixed
-  // 12/14px icons, 3- and 4-button rows (61-85px) and three alignment modes.
+  // One icon size and one cell for the whole rail: the old footer mixed
+  // 12/14px icons, 3- and 4-column rows (61-85px) and two different button
+  // chromes, which is what made it read as an even smear of nine icons.
   const FOOTER_ICON = { fontSize: 14 } as const;
   const LABEL = {
     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
   } as const;
 
-  // A destination: equal column, centred icon + label, hover wash.
+  // A destination: equal column, icon over label, hover wash.
+  //
+  // The label sits *below* the icon rather than beside it. Side by side, a
+  // four-column cell in this sidebar is ~52px, and an icon plus "全部项目" does
+  // not fit in 52px — so the rail truncated its own labels (a screenshot check
+  // caught "全…" where "全部项目" was meant). Stacked, the label gets the whole
+  // cell width, and the grid stays a grid instead of a flex row that happens to
+  // align at the left edge.
   const baseBtn = {
-    padding: '7px 6px',
+    padding: '6px 2px',
     borderRadius: 8,
     background: 'transparent',
     border: 'none',
     color: tokens.labelSecondary,
-    fontSize: 12,
+    fontSize: 11,
+    lineHeight: 1.2,
     display: 'flex',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 3,
     minWidth: 0,
     cursor: 'pointer',
     transition: 'background 0.12s, color 0.12s',
   } as const;
 
-  // Destinations live on a 3-column grid so every row shares the same column
-  // edges and no label can be squeezed onto a second line.
-  const gridRow = {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-    gap: 4,
+  // The cell the user is standing on. The inset bar is the same language
+  // ProjectRow uses for the active project — one rule for "you are here" —
+  // and `aria-current` carries the same fact to screen readers.
+  const activeBtn = {
+    background: tokens.bgLay2,
+    boxShadow: `inset 2px 0 0 ${tokens.labelPrimary}`,
+    color: tokens.labelPrimary,
+    fontWeight: 600,
   } as const;
 
-  // Utility bars (the Advanced disclosure and the theme switch) are a different
-  // class of control, so they get a hairline outline and left-aligned content
-  // instead of pretending to be destinations.
-  const barBtn = {
-    ...baseBtn,
-    justifyContent: 'flex-start',
-    paddingInlineStart: 10,
-    // The hairline border would otherwise add 2px and break the row rhythm
-    // (bars 33px tall next to 31px destinations) — compensate vertically.
-    paddingBlock: 6,
-    border: `1px solid ${tokens.border}`,
-    color: tokens.labelTertiary,
-  } as const;
-
-  const barHover = (on: boolean) => (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.currentTarget.style.background = on ? tokens.bgLay2 : 'transparent';
-    e.currentTarget.style.color = on ? tokens.labelSecondary : tokens.labelTertiary;
-  };
-
-  // R38.8: navigation collapsed to three primary views. Chat / Today /
-  // Tools / Loop / Trace / Projects / Dashboard still exist (and keep
-  // their routes) but live behind one "Advanced" toggle, so a new user
-  // is not asked to choose between eight peer destinations on day one.
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-
-  const navBtn = (
+  const navRow = (
     testId: string,
     icon: React.ReactNode,
     label: string,
-    onClick: () => void,
-  ) => (
-    <button
-      type="button"
-      data-testid={testId}
-      onClick={onClick}
-      style={baseBtn}
-      onMouseEnter={(e) => { e.currentTarget.style.background = tokens.bgLay2; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-    >
-      {icon}
-      <span style={LABEL}>{label}</span>
-    </button>
-  );
+    /** Route to navigate to; `null` for a control that only opens something. */
+    to: string | null,
+    onClick?: () => void,
+  ) => {
+    const active = to !== null && isActive(to, pathname);
+    return (
+      <button
+        type="button"
+        data-testid={testId}
+        title={label}
+        aria-current={active ? 'page' : undefined}
+        onClick={() => { onClick?.(); if (to) navigate(to); }}
+        style={active ? { ...baseBtn, ...activeBtn } : baseBtn}
+        onMouseEnter={(e) => {
+          if (!active) e.currentTarget.style.background = tokens.bgLay2;
+        }}
+        onMouseLeave={(e) => {
+          if (!active) e.currentTarget.style.background = 'transparent';
+        }}
+      >
+        {icon}
+        <span style={LABEL}>{label}</span>
+      </button>
+    );
+  };
 
   return (
     <div
@@ -420,104 +473,68 @@ export const SidebarFooter: React.FC = () => {
         paddingTop: 8,
         display: 'flex',
         flexDirection: 'column',
-        gap: 6,
+        gap: 10,
       }}
     >
-      {/* ----- Primary views: the three things a user actually does ----- */}
-      <div style={gridRow}>
-        <Tooltip title={t('nav.run')} placement="top">
-          {navBtn('footer-run', <ThunderboltOutlined style={FOOTER_ICON} />,
-                  t('nav.run'), () => navigate('/run'))}
-        </Tooltip>
-        <Tooltip title={t('nav.history')} placement="top">
-          {navBtn('footer-history', <HistoryOutlined style={FOOTER_ICON} />,
-                  t('nav.history'), () => navigate('/history'))}
-        </Tooltip>
-        <Tooltip title={t('shell.sidebar.settingsTooltip')} placement="top">
-          {navBtn('footer-settings', <SettingOutlined style={FOOTER_ICON} />,
-                  t('common.settings'), openSettings)}
-        </Tooltip>
-      </div>
+      {/* Destination groups. R38.13: the old footer hid six destinations
+          behind an "Advanced" disclosure and gave two of its four rows a
+          different shape, so the rail read as nine equal-weight icons and
+          still couldn't answer "where am I?". Now: three labelled groups,
+          one uniform 4-column grid, and the current route marked. */}
+      <NavGroup label={t('nav.sectionNavigate')} hint={t('nav.sectionNavigateHint')}>
+        {navRow('footer-run', <ThunderboltOutlined style={FOOTER_ICON} />,
+                t('nav.run'), '/run')}
+        {navRow('footer-history', <HistoryOutlined style={FOOTER_ICON} />,
+                t('nav.history'), '/history')}
+        {navRow('footer-chat', <MessageOutlined style={FOOTER_ICON} />,
+                t('nav.chat'), '/chat')}
+      </NavGroup>
 
-      {/* ----- Utilities: bars, not destinations ----- */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <Tooltip title={t('nav.advancedHint')} placement="top">
-          <button
-            type="button"
-            data-testid="footer-advanced"
-            aria-expanded={advancedOpen}
-            onClick={() => setAdvancedOpen((v) => !v)}
-            style={barBtn}
-            onMouseEnter={barHover(true)}
-            onMouseLeave={barHover(false)}
-          >
-            {advancedOpen ? <UpOutlined style={FOOTER_ICON} />
-                          : <DownOutlined style={FOOTER_ICON} />}
-            <span style={{ ...LABEL, marginInlineStart: 2 }}>{t('nav.advanced')}</span>
-          </button>
-        </Tooltip>
+      <NavGroup label={t('nav.sectionExtensions')} hint={t('nav.sectionExtensionsHint')}>
+        {navRow('footer-tools', <ToolOutlined style={FOOTER_ICON} />,
+                t('shell.sidebar.tools'), '/tools')}
+        {navRow('footer-marketplace', <ShopOutlined style={FOOTER_ICON} />,
+                t('nav.marketplace'), '/marketplace')}
+        {navRow('footer-trace', <BranchesOutlined style={FOOTER_ICON} />,
+                t('nav.trace'), '/trace')}
+      </NavGroup>
 
-        {/* Same 3-column grid as the primary row: seven destinations fill
-            three tidy rows and every cell keeps the same width. */}
-        <div
-          data-testid="footer-advanced-group"
-          style={{
-            display: advancedOpen ? 'grid' : 'none',
-            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-            gap: 4,
-          }}
-        >
-          {/* 「新建对话」is gone from here: it duplicated the NewChatButton at
-              the top of the sidebar (which also creates the project for you).
-              That leaves six entries, i.e. two tidy rows of three. */}
-          <Tooltip title={t('shell.sidebar.today')} placement="top">
-            {navBtn('footer-today', <AppstoreOutlined style={FOOTER_ICON} />,
-                    t('shell.sidebar.today'), () => navigate('/today'))}
-          </Tooltip>
-          <Tooltip title={t('shell.sidebar.tools')} placement="top">
-            {navBtn('footer-tools', <ToolOutlined style={FOOTER_ICON} />,
-                    t('shell.sidebar.tools'), () => navigate('/tools'))}
-          </Tooltip>
-          <Tooltip title={t('nav.loop')} placement="top">
-            {navBtn('footer-loop', <SyncOutlined style={FOOTER_ICON} />,
-                    t('nav.loop'), () => navigate('/loop'))}
-          </Tooltip>
-          <Tooltip title={t('nav.trace')} placement="top">
-            {navBtn('footer-trace', <BranchesOutlined style={FOOTER_ICON} />,
-                    t('nav.trace'), () => navigate('/trace'))}
-          </Tooltip>
-          <Tooltip title={t('nav.projects')} placement="top">
-            {navBtn('footer-projects', <ProjectOutlined style={FOOTER_ICON} />,
-                    t('nav.projects'), () => navigate('/projects'))}
-          </Tooltip>
-          <Tooltip title={t('nav.dashboard')} placement="top">
-            {navBtn('footer-dashboard', <DashboardOutlined style={FOOTER_ICON} />,
-                    t('nav.dashboard'), () => navigate('/dashboard'))}
-          </Tooltip>
-        </div>
+      <NavGroup label={t('nav.sectionSystem')} hint={t('nav.sectionSystemHint')}>
+        {navRow('footer-today', <AppstoreOutlined style={FOOTER_ICON} />,
+                t('shell.sidebar.today'), '/today')}
+        {navRow('footer-projects', <ProjectOutlined style={FOOTER_ICON} />,
+                t('nav.projects'), '/projects')}
+        {navRow('footer-loop', <SyncOutlined style={FOOTER_ICON} />,
+                t('nav.loop'), '/loop')}
+        {navRow('footer-dashboard', <DashboardOutlined style={FOOTER_ICON} />,
+                t('nav.dashboard'), '/dashboard')}
+      </NavGroup>
 
-        {/* A preference, not a destination — same bar treatment as Advanced. */}
-        <Tooltip
+      {/* Settings and the theme switch share the same grid as everything
+          else: they are one click, and pretending they need a different
+          chrome was the thing that made the footer look uneven. */}
+      <NavGroup label={t('nav.sectionPreferences')} hint={t('nav.sectionPreferencesHint')}>
+        {navRow('footer-settings', <SettingOutlined style={FOOTER_ICON} />,
+                t('common.settings'), null, openSettings)}
+        <button
+          type="button"
+          data-testid="footer-theme"
+          onClick={toggle}
+          aria-label={t(mode === 'dark' ? 'shell.sidebar.switchToLight'
+                                        : 'shell.sidebar.switchToDark')}
           title={t(mode === 'dark' ? 'shell.sidebar.switchToLight'
                                    : 'shell.sidebar.switchToDark')}
-          placement="top"
+          style={baseBtn}
+          onMouseEnter={(e) => { e.currentTarget.style.background = tokens.bgLay2; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
         >
-          <button
-            type="button"
-            data-testid="footer-theme"
-            onClick={toggle}
-            style={barBtn}
-            onMouseEnter={barHover(true)}
-            onMouseLeave={barHover(false)}
-          >
-            {mode === 'dark' ? <SunOutlined style={FOOTER_ICON} />
-                             : <MoonOutlined style={FOOTER_ICON} />}
-            <span style={{ ...LABEL, marginInlineStart: 2 }}>
-              {t(mode === 'dark' ? 'shell.sidebar.light' : 'shell.sidebar.dark')}
-            </span>
-          </button>
-        </Tooltip>
-      </div>
+          {mode === 'dark' ? <SunOutlined style={FOOTER_ICON} />
+                           : <MoonOutlined style={FOOTER_ICON} />}
+          <span style={LABEL}>
+            {t(mode === 'dark' ? 'shell.sidebar.light' : 'shell.sidebar.dark')}
+          </span>
+        </button>
+      </NavGroup>
     </div>
   );
 };

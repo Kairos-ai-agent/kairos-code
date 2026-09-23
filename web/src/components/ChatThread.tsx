@@ -1,32 +1,40 @@
 /**
  * ChatThread — the scrollable message list in the main area.
  *
- * Message rendering rules (mirrors the legacy Loop page but as a
- * scrollable list of bubbles, not a tabbed inspector):
+ * The thread is organised by *turn*, not by message, because that is the unit
+ * the user thinks in ("I asked, it worked, it answered"):
  *
- *   - User: light gray bubble, right-aligned, plain text
- *   - Coder / Reviewer: bordered card with a role chip + name + content
- *   - Tool call: code-style block with a "tool" pill
- *   - Tool result: code-style block, dim, indented under the call
- *   - Loop digest: prominent score + verdict block
- *   - Issue: severity-colored card (CRITICAL/MAJOR/MINOR/SUGGESTION)
+ *   ┌ user: the question ────────────────────────────────┐
+ *   ├ ▸ 过程 · 4 步 · 12.4s   (collapses the whole run)  │
+ *   │   💭 thinking …                                    │
+ *   │   🔧 read_file  ok  0.3s                           │
+ *   │   🔧 run_tests  failed  8.1s                       │
+ *   └ Kairos: the answer (markdown) ─────────────────────┘
  *
- * Auto-scrolls to the bottom on new messages unless the user has
- * scrolled up to read history (then leaves the scroll position
- * alone — standard chat behaviour).
+ * Why: the events an agent emits while working (agent.progress, tool.call,
+ * tool.result, agent.thinking) used to land as flat bubbles between the
+ * question and the answer, so a busy turn buried its own reply and the user
+ * could not see *how* the answer was reached. Grouping keeps the sequence
+ * visible without letting the transcript become a log file: the process block
+ * is open while a turn is running and collapsed once it is done.
+ *
+ * Tool calls are paired with their results by (turn, tool) — the backend emits
+ * both with those fields — so each step shows its own duration and outcome.
+ * Nothing here invents a step: a message with no result yet renders as running.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Tag, Empty, Badge, Tooltip, Segmented } from 'antd';
+import { Tag, Empty, Tooltip, Segmented } from 'antd';
 import {
-  UserOutlined, CodeOutlined, AuditOutlined, ToolOutlined,
-  CheckCircleOutlined, CloseCircleOutlined,
-  BranchesOutlined, FileTextOutlined, BulbOutlined, LoadingOutlined,
+  UserOutlined, AuditOutlined, ToolOutlined, EditOutlined,
+  CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined,
+  BranchesOutlined, BulbOutlined, FileSearchOutlined, ThunderboltOutlined,
 } from '@ant-design/icons';
 
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import { useT } from '../i18n';
-import { useChatStore } from '../stores/chatStore';
 import type { Message } from '../types';
+import { useChatStore } from '../stores/chatStore';
+import { renderMarkdown, MONO_STACK, type MarkdownStyle } from '../utils/markdown';
 
 interface Props {
   messages: Message[];
@@ -34,6 +42,139 @@ interface Props {
   /** Show a "raw" toggle to dump the raw JSON instead of the parsed view. */
   showRawToggle?: boolean;
 }
+
+interface Step {
+  kind: 'thinking' | 'tool';
+  /** Tool name (tool steps only). */
+  tool?: string;
+  args?: string;
+  /** null = no result arrived yet: the step is still running. */
+  ok?: boolean | null;
+  /** Seconds source: the call's own timestamp, set when the step is created. */
+  startedAt: number;
+  ms?: number;
+  /** Free text: the thinking body, or the tool result. */
+  text: string;
+}
+
+interface Turn {
+  key: string;
+  user?: Message;
+  steps: Step[];
+  reply?: Message;
+  /** Additional bubbles that are neither user, process nor reply. */
+  others: Message[];
+}
+
+// ------------------------------------------------------------------ grouping
+
+const isProcessTopic = (m: Message): boolean => {
+  const topic = (m.topic || '').toLowerCase();
+  return topic === 'agent.progress' || topic === 'agent.thinking'
+      || topic.startsWith('tool.');
+};
+
+const isReply = (m: Message): boolean => {
+  const topic = (m.topic || '').toLowerCase();
+  const sender = (m.sender || '').toLowerCase();
+  if (isProcessTopic(m)) return false;
+  if (sender === 'user' || sender === 'human') return false;
+  return sender === 'agent' || sender.includes('coder')
+      || sender.includes('planner') || sender.includes('specialist')
+      || topic === 'agent.chat' || topic === 'agent.response';
+};
+
+/** Short one-line rendering of a tool's arguments for the step row. */
+function summarizeArgs(meta: Record<string, unknown>, content: string): string {
+  const fromMeta = meta?.args ?? meta?.arguments;
+  if (fromMeta && typeof fromMeta === 'object') {
+    try {
+      const s = JSON.stringify(fromMeta);
+      return s.length > 80 ? `${s.slice(0, 80)}…` : s;
+    } catch { /* fall through to content */ }
+  }
+  // The backend writes "Calling name({...})" into content; take the part
+  // inside the first parenthesis so the row shows the call, not the wrapper.
+  const open = content.indexOf('(');
+  const close = content.lastIndexOf(')');
+  if (open >= 0 && close > open) {
+    const inner = content.slice(open + 1, close);
+    return inner.length > 80 ? `${inner.slice(0, 80)}…` : inner;
+  }
+  return '';
+}
+
+function groupIntoTurns(messages: Message[]): Turn[] {
+  const turns: Turn[] = [];
+  let current: Turn | null = null;
+  const keyOf = (m: Message, i: number) => m.id || `i${i}`;
+
+  messages.forEach((m, i) => {
+    const sender = (m.sender || '').toLowerCase();
+    if (sender === 'user' || sender === 'human') {
+      current = { key: keyOf(m, i), user: m, steps: [], others: [] };
+      turns.push(current);
+      return;
+    }
+    if (isProcessTopic(m)) {
+      if (!current) {
+        current = { key: keyOf(m, i), steps: [], others: [] };
+        turns.push(current);
+      }
+      const topic = (m.topic || '').toLowerCase();
+      const meta = m.metadata || {};
+      if (topic.startsWith('tool.')) {
+        const tool = String(meta.tool || meta.name || 'tool');
+        if (topic === 'tool.result') {
+          // Attach to the oldest open call for this tool in this turn.
+          const open = current.steps.find(
+            (s) => s.kind === 'tool' && s.tool === tool && s.ok === null);
+          const body = stringifyContent(m.content);
+          if (open) {
+            open.ok = meta.ok === false || meta.error ? false : true;
+            open.ms = Math.max(0, (m.timestamp - open.startedAt) * 1000);
+            open.text = body;
+          } else {
+            current.steps.push({
+              kind: 'tool', tool, ok: true, text: body,
+              startedAt: m.timestamp,
+            });
+          }
+        } else {
+          current.steps.push({
+            kind: 'tool', tool, ok: null,
+            args: summarizeArgs(meta, stringifyContent(m.content)),
+            text: stringifyContent(m.content),
+            startedAt: m.timestamp,
+          });
+        }
+      } else if (topic === 'agent.progress') {
+        // Progress chatter is not a step of its own — it would triple the
+        // row count. It only tells us a turn is running, which the live row
+        // already says.
+      } else {
+        current.steps.push({
+          kind: 'thinking', ok: true, text: stringifyContent(m.content),
+          startedAt: m.timestamp,
+        });
+      }
+      return;
+    }
+    if (isReply(m) && current && !current.reply) {
+      current.reply = m;
+      return;
+    }
+    if (current) current.others.push(m);
+    else {
+      const t: Turn = { key: keyOf(m, i), steps: [], others: [m] };
+      turns.push(t);
+      current = t;
+    }
+  });
+  return turns;
+}
+
+// ------------------------------------------------------------------ thread
 
 const ChatThread: React.FC<Props> = ({ messages, emptyHint, showRawToggle = false }) => {
   const tokens = useThemeTokens();
@@ -54,16 +195,8 @@ const ChatThread: React.FC<Props> = ({ messages, emptyHint, showRawToggle = fals
     return () => el.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Auto-scroll on new messages. R38.6.4: the previous logic
-  // set ``el.scrollTop = el.scrollHeight`` synchronously, but
-  // the DOM hadn't reflowed the new bubble yet, so the
-  // scrollHeight was the OLD value and the new bottom was
-  // either missed (tall messages cut off the top) or jumped
-  // somewhere wrong. Use ``requestAnimationFrame`` so the
-  // scroll happens after React has painted the new message,
-  // and fall back to ``scrollIntoView`` on the last child
-  // for the rare case where the container has a different
-  // scrollable parent (e.g. nested flex with overflow:hidden).
+  // Auto-scroll on new messages, after the new bubble has been painted (a
+  // synchronous scrollTop read would still see the old scrollHeight).
   useEffect(() => {
     const el = containerRef.current;
     if (!el || !stickToBottomRef.current) return;
@@ -78,16 +211,23 @@ const ChatThread: React.FC<Props> = ({ messages, emptyHint, showRawToggle = fals
     return () => cancelAnimationFrame(raf);
   }, [messages]);
 
+  const turns = useMemo(() => groupIntoTurns(messages), [messages]);
+  const mdStyle = useMemo<MarkdownStyle>(() => ({
+    text: tokens.labelPrimary,
+    muted: tokens.labelTertiary,
+    codeBackground: tokens.toolBubble,
+    codeColor: tokens.labelPrimary,
+    border: tokens.border,
+    link: tokens.coderAccent,
+    mono: MONO_STACK,
+  }), [tokens]);
+
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column',
-      height: 'calc(100vh - 52px)',
-    }}>
+    <div style={{ display: 'flex', flexDirection: 'column',
+                  height: 'calc(100vh - 52px)' }}>
       {showRawToggle && (
-        <div style={{
-          display: 'flex', justifyContent: 'flex-end',
-          padding: '8px 16px 0',
-        }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end',
+                      padding: '8px 16px 0' }}>
           <Segmented
             size="small"
             value={view}
@@ -97,22 +237,15 @@ const ChatThread: React.FC<Props> = ({ messages, emptyHint, showRawToggle = fals
           />
         </div>
       )}
-      <div
-        ref={containerRef}
-        style={{
-          flex: 1, overflowY: 'auto',
-          padding: '24px 16px 24px',
-        }}
-      >
+      <div ref={containerRef} style={{ flex: 1, overflowY: 'auto',
+                                       padding: '24px 16px 24px' }}>
         <div style={{ maxWidth: 768, margin: '0 auto' }}>
           {messages.length === 0 ? (
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              minHeight: '60vh',
-            }}>
+            <div style={{ display: 'flex', alignItems: 'center',
+                          justifyContent: 'center', minHeight: '60vh' }}>
               <Empty
                 image={<BranchesOutlined style={{ fontSize: 40,
-                                                color: tokens.labelTertiary }} />}
+                                                  color: tokens.labelTertiary }} />}
                 description={
                   <span style={{ color: tokens.labelTertiary }}>
                     {emptyHint || t('chat.thread.empty')}
@@ -124,15 +257,12 @@ const ChatThread: React.FC<Props> = ({ messages, emptyHint, showRawToggle = fals
             <pre style={{
               background: tokens.toolBubble, color: tokens.labelPrimary,
               padding: 16, borderRadius: 8, overflow: 'auto',
-              fontSize: 12, lineHeight: 1.5,
-              fontFamily: 'SF Mono, "JetBrains Mono", Consolas, monospace',
+              fontSize: 12, lineHeight: 1.5, fontFamily: MONO_STACK,
             }}>
               {JSON.stringify(messages, null, 2)}
             </pre>
           ) : (
-            messages.map((m, i) => (
-              <MessageBubble key={m.id || i} message={m} />
-            ))
+            turns.map((turn) => <TurnView key={turn.key} turn={turn} mdStyle={mdStyle} />)
           )}
           {view !== 'raw' && <LiveStatusRow />}
         </div>
@@ -143,14 +273,183 @@ const ChatThread: React.FC<Props> = ({ messages, emptyHint, showRawToggle = fals
 
 export default ChatThread;
 
-// ---------------------------------------------------------------------------
-// LiveStatusRow — "what is the agent doing right now" under the thread.
-//
-// R38.8: `agent.progress` events were deliberately kept out of the thread (they
-// are per-turn chatter), which left the user staring at a silent page while the
-// agent worked. The row consumes the same events as *status*, not as messages:
-// thinking → running a tool → thinking → gone when a reply lands.
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------ turn
+
+const TurnView: React.FC<{ turn: Turn; mdStyle: MarkdownStyle }> = ({ turn, mdStyle }) => {
+  // A turn with no reply yet is still running: its process stays open so the
+  // user can watch the steps land, then folds away once the answer arrives.
+  const running = !turn.reply;
+  return (
+    <div data-testid="chat-turn">
+      {turn.user && <UserBubble message={turn.user} />}
+      {turn.steps.length > 0 && <ProcessBlock steps={turn.steps} running={running} />}
+      {turn.others.map((m, i) => (
+        <MessageBubble key={m.id || i} message={m} mdStyle={mdStyle} />
+      ))}
+      {turn.reply && (
+        <AssistantBubble message={turn.reply} mdStyle={mdStyle}
+                         running={false} />
+      )}
+    </div>
+  );
+};
+
+// ------------------------------------------------------------------ process
+
+/** `0.4s` / `12.3s` / `1m 04s` — seconds are enough for a tool call. */
+function formatMs(ms: number | undefined): string {
+  if (ms === undefined || ms < 0) return '';
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(1)}s`;
+  const m = Math.floor(s / 60);
+  return `${m}m ${String(Math.round(s - m * 60)).padStart(2, '0')}s`;
+}
+
+const ProcessBlock: React.FC<{ steps: Step[]; running: boolean }> = ({ steps, running }) => {
+  const tokens = useThemeTokens();
+  const t = useT();
+  const [open, setOpen] = useState(running);
+  // Follow the turn: open while it runs, folded once it finishes — unless the
+  // user has expressed a preference by toggling it themselves.
+  const touched = useRef(false);
+  useEffect(() => {
+    if (!touched.current) setOpen(running);
+  }, [running]);
+
+  const total = steps.reduce((acc, s) => acc + (s.ms || 0), 0);
+  const failed = steps.filter((s) => s.kind === 'tool' && s.ok === false).length;
+
+  return (
+    <div
+      data-testid="process-block"
+      style={{
+        margin: '2px 0 10px 34px',
+        border: `1px solid ${tokens.border}`,
+        borderRadius: 8,
+        background: tokens.bgLay1,
+        overflow: 'hidden',
+      }}
+    >
+      <button
+        type="button"
+        data-testid="process-toggle"
+        aria-expanded={open}
+        onClick={() => { touched.current = true; setOpen((v) => !v); }}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+          padding: '5px 10px', background: 'transparent', border: 'none',
+          cursor: 'pointer', textAlign: 'left',
+          fontSize: 11.5, color: tokens.labelTertiary,
+        }}
+      >
+        <span style={{ transform: open ? 'rotate(90deg)' : 'none',
+                       transition: 'transform 0.12s', display: 'inline-block' }}>
+          ▸
+        </span>
+        {running ? <LoadingOutlined spin style={{ fontSize: 11 }} />
+                 : <ThunderboltOutlined style={{ fontSize: 11 }} />}
+        <span>
+          {t('chat.process.summary', {
+            n: steps.length,
+            time: formatMs(total) || '—',
+          })}
+        </span>
+        {failed > 0 && (
+          <Tag color="red" style={{ marginInlineStart: 'auto', marginInlineEnd: 0,
+                                    fontSize: 10, lineHeight: '16px' }}>
+            {t('chat.process.failedSteps', { n: failed })}
+          </Tag>
+        )}
+      </button>
+      {open && (
+        <div style={{ padding: '0 10px 8px 10px' }}>
+          {steps.map((s, i) => <StepRow key={i} step={s} />)}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const StepRow: React.FC<{ step: Step }> = ({ step }) => {
+  const tokens = useThemeTokens();
+  const t = useT();
+  const [open, setOpen] = useState(false);
+
+  const isThinking = step.kind === 'thinking';
+  const running = step.ok === null;
+  const bad = step.ok === false;
+
+  const color = bad ? tokens.danger
+    : running ? tokens.labelTertiary
+    : isThinking ? tokens.coderAccent ?? tokens.labelSecondary
+    : tokens.success;
+
+  const icon = isThinking ? <BulbOutlined style={{ fontSize: 11 }} />
+    : running ? <LoadingOutlined spin style={{ fontSize: 11, color: tokens.labelTertiary }} />
+    : bad ? <CloseCircleOutlined style={{ fontSize: 11 }} />
+    : <CheckCircleOutlined style={{ fontSize: 11 }} />;
+
+  const label = isThinking
+    ? t('chat.process.thinkingStep')
+    : step.tool || 'tool';
+
+  // A one-line preview so the row says WHAT it is doing, not just which tool
+  // ran: for a thinking step that is the thought, and for a failed step it is
+  // the reason. The full text stays one click away.
+  const preview = (step.text || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+
+  // Long results stay behind a click: the sequence is what matters, and the
+  // four-hundredth line of a file read is not.
+  const body = step.text;
+  const long = (body || '').length > 160;
+
+  return (
+    <div data-testid="process-step" style={{ fontSize: 11.5, marginBottom: 3 }}>
+      <div
+        onClick={() => long && setOpen((v) => !v)}
+        style={{
+          display: 'flex', alignItems: 'baseline', gap: 6,
+          cursor: long ? 'pointer' : 'default',
+          color: tokens.labelSecondary, minWidth: 0,
+        }}
+      >
+        <span style={{ color, flexShrink: 0 }}>{icon}</span>
+        <span style={{ fontWeight: 600, color: tokens.labelPrimary,
+                       flexShrink: 0, fontFamily: MONO_STACK,
+                       fontSize: 11 }}>{label}</span>
+        {step.args && (
+          <span style={{
+            color: tokens.labelTertiary, fontFamily: MONO_STACK, fontSize: 10.5,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            minWidth: 0, flex: 1,
+          }}>{step.args}</span>
+        )}
+        {!step.args && preview && (
+          <span style={{
+            color: bad ? tokens.danger : tokens.labelTertiary,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            minWidth: 0, flex: 1,
+          }}>{preview}</span>
+        )}
+        <span style={{ marginInlineStart: 'auto', flexShrink: 0,
+                       color: tokens.labelTertiary, fontSize: 10.5 }}>
+          {running ? t('chat.process.running') : formatMs(step.ms)}
+        </span>
+      </div>
+      {open && body && (
+        <pre style={{
+          margin: '4px 0 6px 17px', padding: '6px 8px',
+          background: tokens.toolBubble, color: tokens.labelSecondary,
+          borderRadius: 6, fontSize: 11, lineHeight: 1.5,
+          fontFamily: MONO_STACK, whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word', maxHeight: 240, overflow: 'auto',
+        }}>{body}</pre>
+      )}
+    </div>
+  );
+};
+
+// ------------------------------------------------------------------ live status
 
 const LiveStatusRow: React.FC = () => {
   const tokens = useThemeTokens();
@@ -160,10 +459,8 @@ const LiveStatusRow: React.FC = () => {
   return (
     <div
       data-testid="live-status"
-      style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        margin: '10px 0 6px', fontSize: 12, color: tokens.labelTertiary,
-      }}
+      style={{ display: 'flex', alignItems: 'center', gap: 8,
+               margin: '10px 0 6px', fontSize: 12, color: tokens.labelTertiary }}
     >
       <LoadingOutlined spin style={{ fontSize: 12 }} />
       <span>
@@ -175,9 +472,124 @@ const LiveStatusRow: React.FC = () => {
   );
 };
 
-// ---------------------------------------------------------------------------
-// MessageBubble — render one Message according to its sender/topic/type.
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------ bubbles
+
+const MessageBubble: React.FC<{ message: Message; mdStyle: MarkdownStyle }> = ({
+  message, mdStyle,
+}) => {
+  const sender = (message.sender || '').toLowerCase();
+  const topic = (message.topic || '').toLowerCase();
+  if (sender === 'user' || sender === 'human') return <UserBubble message={message} />;
+  if (topic === 'agent.thinking') {
+    return <ThinkingBubble message={message} />;
+  }
+  if (topic.startsWith('tool.')) return <ToolBubble message={message} />;
+  if (sender.includes('reviewer') || topic.includes('review')) {
+    return <ReviewerBubble message={message} />;
+  }
+  if (isReply(message)) return <AssistantBubble message={message} mdStyle={mdStyle} />;
+  return <SystemBubble message={message} />;
+};
+
+const UserBubble: React.FC<{ message: Message }> = ({ message }) => {
+  const tokens = useThemeTokens();
+  return (
+    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+      <div style={{
+        maxWidth: '85%', padding: '10px 14px',
+        background: tokens.userBubble, color: tokens.labelPrimary,
+        borderRadius: 16, fontSize: 14, lineHeight: 1.55,
+        whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+      }}>
+        {stringifyContent(message.content)}
+      </div>
+    </div>
+  );
+};
+
+function splitThinking(text: string): { thinking: string; body: string } {
+  if (!text) return { thinking: '', body: text };
+  const m = text.match(/<think>([\s\S]*?)<\/think>/i);
+  if (!m) return { thinking: '', body: text };
+  return { thinking: (m[1] || '').trim(),
+           body: text.replace(m[0], '').trim() };
+}
+
+/**
+ * The reply. Markdown is rendered (replies are written in it — code fences and
+ * lists were showing up as literal characters), a leading ``<think>`` block is
+ * folded above it, and the whole thing is one conversation bubble with the
+ * Kairos mark rather than a bordered "role card".
+ */
+const AssistantBubble: React.FC<{
+  message: Message;
+  mdStyle: MarkdownStyle;
+  running?: boolean;
+}> = ({ message, mdStyle, running = false }) => {
+  const tokens = useThemeTokens();
+  const t = useT();
+  const raw = stringifyContent(message.content);
+  const { thinking, body } = splitThinking(raw);
+  const rendered = useMemo(() => renderMarkdown(body, mdStyle), [body, mdStyle]);
+  const meta = message.metadata || {};
+  const usage = (meta.usage || {}) as Record<string, number>;
+  const tokensUsed = typeof usage.total_tokens === 'number' ? usage.total_tokens : null;
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8,
+                  marginTop: 4, marginBottom: 6 }}>
+      <div style={{
+        width: 26, height: 26, borderRadius: 6,
+        background: '#facc15', color: '#000',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontWeight: 900, fontSize: 14, flexShrink: 0, marginTop: 2,
+      }}>K</div>
+      <div style={{ flex: 1, minWidth: 0, background: tokens.bgElevated,
+                    borderRadius: 8, padding: '8px 12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8,
+                      marginBottom: 2 }}>
+          <span style={{ fontSize: 11, color: tokens.labelTertiary }}>Kairos</span>
+          {message.topic && message.topic !== 'agent.chat' && (
+            <span style={{ fontSize: 10, color: tokens.labelTertiary }}>
+              {message.topic}
+            </span>
+          )}
+          {tokensUsed !== null && (
+            <Tooltip title={t('chat.thread.tokenUsage')}>
+              <span style={{ fontSize: 10, color: tokens.labelTertiary,
+                             marginInlineStart: 'auto' }}>
+                {tokensUsed.toLocaleString()} tokens
+              </span>
+            </Tooltip>
+          )}
+        </div>
+        {thinking && (
+          <details
+            data-testid="think-block"
+            style={{ marginBottom: 6, background: tokens.bgLay1,
+                     border: `1px solid ${tokens.border}`,
+                     borderRadius: 6, padding: '4px 8px' }}
+          >
+            <summary style={{ cursor: 'pointer', fontSize: 11,
+                              color: tokens.labelTertiary, userSelect: 'none' }}>
+              💭 {t('chat.thread.thinking')}
+            </summary>
+            <div style={{ fontSize: 12, color: tokens.labelSecondary,
+                          lineHeight: 1.6, marginTop: 4, whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word' }}>
+              {thinking}
+            </div>
+          </details>
+        )}
+        <div style={{ fontSize: 13, color: tokens.labelPrimary, lineHeight: 1.62,
+                      wordBreak: 'break-word' }}>
+          {rendered}
+          {running && <LoadingOutlined spin style={{ marginInlineStart: 6 }} />}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const ThinkingBubble: React.FC<{ message: Message }> = ({ message }) => {
   const t = useT();
@@ -193,149 +605,10 @@ const ThinkingBubble: React.FC<{ message: Message }> = ({ message }) => {
   );
 };
 
-const MessageBubble: React.FC<{ message: Message }> = ({ message }) => {
-  const tokens = useThemeTokens();
-  const role = inferRole(message);
-  if (role === 'user') {
-    return <UserBubble message={message} />;
-  }
-  if (role === 'tool') {
-    return <ToolBubble message={message} />;
-  }
-  if (role === 'thinking') {
-    return <ThinkingBubble message={message} />;
-  }
-  if (role === 'reviewer') {
-    return <ReviewerBubble message={message} />;
-  }
-  if (role === 'coder') {
-    return <CoderBubble message={message} />;
-  }
-  // Generic system / unknown.
-  return <SystemBubble message={message} />;
-};
-
-function inferRole(
-  m: Message,
-): 'user' | 'coder' | 'reviewer' | 'tool' | 'thinking' | 'system' {
-  const sender = (m.sender || '').toLowerCase();
-  const topic = (m.topic || '').toLowerCase();
-  if (sender === 'user' || sender === 'human') return 'user';
-  // R38.8: classify the agent's own process by *topic* first. These are the
-  // events the user wants to watch, and their sender is usually just "agent",
-  // which would otherwise render them as ordinary replies.
-  if (topic === 'agent.thinking') return 'thinking';
-  if (topic.startsWith('tool.')) return 'tool';
-  if (sender.includes('reviewer') || topic.includes('review')) return 'reviewer';
-  if (sender.includes('tool')) return 'tool';
-  if (sender.includes('coder') || sender.includes('planner')
-      || sender.includes('specialist') || sender === 'agent') return 'coder';
-  return 'system';
-}
-
-const UserBubble: React.FC<{ message: Message }> = ({ message }) => {
-  const tokens = useThemeTokens();
-  return (
-    <div style={{ display: 'flex', justifyContent: 'flex-end',
-                  marginBottom: 16 }}>
-      <div style={{
-        maxWidth: '85%', padding: '10px 14px',
-        background: tokens.userBubble, color: tokens.labelPrimary,
-        borderRadius: 16, fontSize: 14, lineHeight: 1.55,
-        whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-      }}>
-        {stringifyContent(message.content)}
-      </div>
-    </div>
-  );
-};
-
-const CoderBubble: React.FC<{ message: Message }> = ({ message }) => {
-  // R38.6.3: the user said the "Coder" role label is noisy
-  // in casual chat. Render the reply as a plain conversation
-  // bubble (small Kairos avatar + text) instead of a bordered
-  // role card. We keep the Reviewer card because its status
-  // (verdict, score) is useful info the user wants to see.
-  return <AssistantBubble message={message} />;
-};
-
-function splitThinking(text: string): { thinking: string; body: string } {
-  if (!text) return { thinking: '', body: text };
-  const m = text.match(/<think>([\s\S]*?)<\/think>/i);
-  if (!m) return { thinking: '', body: text };
-  return { thinking: (m[1] || '').trim(),
-           body: text.replace(m[0], '').trim() };
-}
-
-// R38.6.3: new "AssistantBubble" — a clean conversation-style
-// bubble used for plain chat replies. Small avatar (the Kairos
-// K), a thin label ("Kairos"), and the text. No bordered card
-// or topic meta line — chat should feel like chat.
-const AssistantBubble: React.FC<{ message: Message }> = ({ message }) => {
-  const tokens = useThemeTokens();
-  const t = useT();
-  const { thinking, body } = splitThinking(stringifyContent(message.content));
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'flex-start', gap: 8,
-      marginTop: 4, marginBottom: 4,
-    }}>
-      <div style={{
-        width: 26, height: 26, borderRadius: 6,
-        background: '#facc15', color: '#000',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontWeight: 900, fontSize: 14, flexShrink: 0, marginTop: 2,
-      }}>K</div>
-      <div style={{
-        flex: 1, minWidth: 0,
-        background: tokens.bgElevated, borderRadius: 8,
-        padding: '8px 12px',
-      }}>
-        <span style={{
-          fontSize: 11, color: tokens.labelTertiary,
-          display: 'block', marginBottom: 2,
-        }}>Kairos</span>
-        {thinking && (
-          <details
-            data-testid="think-block"
-            style={{
-              marginBottom: 6, background: tokens.bgLay1,
-              border: `1px solid ${tokens.border}`,
-              borderRadius: 6, padding: '4px 8px',
-            }}
-          >
-            <summary style={{
-              cursor: 'pointer', fontSize: 11,
-              color: tokens.labelTertiary, userSelect: 'none',
-            }}>
-              💭 {t('chat.thread.thinking')}
-            </summary>
-            <div style={{
-              fontSize: 12, color: tokens.labelSecondary,
-              lineHeight: 1.6, marginTop: 4,
-              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-            }}>
-              {thinking}
-            </div>
-          </details>
-        )}
-        {body && (
-          <span style={{
-            fontSize: 13, color: tokens.labelPrimary,
-            whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-            lineHeight: 1.6,
-          }}>{body}</span>
-        )}
-      </div>
-    </div>
-  );
-};
-
 const ReviewerBubble: React.FC<{ message: Message }> = ({ message }) => {
   const tokens = useThemeTokens();
   const t = useT();
   const content = stringifyContent(message.content);
-  // Try to extract a score / verdict from the metadata if present.
   const meta = message.metadata || {};
   const score = typeof meta.score === 'number' ? meta.score : null;
   const approve = typeof meta.approve === 'boolean' ? meta.approve : null;
@@ -348,8 +621,7 @@ const ReviewerBubble: React.FC<{ message: Message }> = ({ message }) => {
       meta={message.topic}
       extra={
         (score !== null || approve !== null) ? (
-          <div style={{ display: 'flex', gap: 8, marginTop: 10,
-                        flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
             {score !== null && (
               <Tag color={score >= 80 ? 'green' : score >= 50 ? 'orange' : 'red'}>
                 {t('chat.thread.score', { n: score })}
@@ -374,14 +646,9 @@ const ToolBubble: React.FC<{ message: Message }> = ({ message }) => {
   const tool = String(meta.tool || meta.name || 'tool');
   const isResult = (message.topic || '').toLowerCase() === 'tool.result';
   const body = stringifyContent(message.content);
-  // R38.8: a result can be long (a file, a page, a diff) — collapse it behind a
-  // one-line summary so the *sequence* of steps stays readable. The call itself
-  // stays expanded: that is the part the user is watching for.
   return (
     <RoleBubble
       icon={<ToolOutlined />}
-      // Two explicit calls (not a dynamic key) so scripts/check_i18n.mjs can
-      // see both keys — a dynamic key hides a typo from the gate.
       roleLabel={isResult
         ? t('chat.thread.toolResultRole', { tool })
         : t('chat.thread.toolLabel', { tool })}
@@ -415,9 +682,7 @@ const RoleBubble: React.FC<{
   meta?: string;
   extra?: React.ReactNode;
   mono?: boolean;
-  /** R38.8: when set, ``content`` collapses behind a one-line summary. */
   summary?: string;
-  /** Start collapsed (default: expanded). */
   collapsed?: boolean;
 }> = ({ icon, roleLabel, accent, content, meta, extra, mono, summary, collapsed }) => {
   const tokens = useThemeTokens();
@@ -428,9 +693,7 @@ const RoleBubble: React.FC<{
       borderRadius: 12, padding: '10px 14px',
       fontSize: 14, lineHeight: 1.55,
       color: tokens.labelPrimary,
-      fontFamily: mono
-        ? 'SF Mono, "JetBrains Mono", Consolas, monospace'
-        : undefined,
+      fontFamily: mono ? MONO_STACK : undefined,
       whiteSpace: 'pre-wrap', wordBreak: 'break-word',
     }}>
       {content}
@@ -442,32 +705,25 @@ const RoleBubble: React.FC<{
         width: 32, height: 32, borderRadius: 8,
         background: tokens.bgLay1, color: accent,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 16, flexShrink: 0,
-        border: `1px solid ${tokens.border}`,
+        fontSize: 16, flexShrink: 0, border: `1px solid ${tokens.border}`,
       }}>
         {icon}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          marginBottom: 4,
-        }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8,
+                      marginBottom: 4 }}>
           <span style={{ fontSize: 13, fontWeight: 600,
-                        color: tokens.labelPrimary }}>{roleLabel}</span>
+                         color: tokens.labelPrimary }}>{roleLabel}</span>
           {meta && <span style={{ fontSize: 11, color: tokens.labelTertiary }}>
                      {meta}
                    </span>}
         </div>
         {summary ? (
-          <details
-            data-testid="collapsible-body"
-            open={!collapsed}
-            style={{ margin: 0 }}
-          >
-            <summary style={{
-              cursor: 'pointer', fontSize: 12,
-              color: tokens.labelTertiary, userSelect: 'none',
-            }}>{summary}</summary>
+          <details data-testid="collapsible-body" open={!collapsed} style={{ margin: 0 }}>
+            <summary style={{ cursor: 'pointer', fontSize: 12,
+                              color: tokens.labelTertiary, userSelect: 'none' }}>
+              {summary}
+            </summary>
             <div style={{ marginTop: 6 }}>{body}</div>
           </details>
         ) : body}
@@ -478,15 +734,7 @@ const RoleBubble: React.FC<{
 };
 
 function stringifyContent(c: Message['content']): string {
-  if (typeof c === 'string') {
-    // R38.6.4: the LLM reply sometimes starts with "\n" or " "
-    // (a stray newline from a markdown code block, or the API
-    // returning a leading blank line). With whiteSpace: pre-wrap
-    // in the bubble that renders as a visible empty first line.
-    // Strip leading whitespace so the bubble starts tight.
-    return c.replace(/^\s+/, '');
-  }
+  if (typeof c === 'string') return c.replace(/^\s+/, '');
   if (c == null) return '';
   try { return JSON.stringify(c, null, 2); } catch { return String(c); }
 }
-

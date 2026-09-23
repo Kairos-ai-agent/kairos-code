@@ -4,6 +4,65 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project aims at
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reaches 1.0.
 
+## [Unreleased]
+
+### Added
+
+- **A marketplace for the three kinds of extension.** MCP servers, plugins and
+  skills each had a list somewhere and no way to act on it: installing a server
+  meant hand-editing `mcp.yaml`, and there was nowhere that answered "what else
+  could this thing do?". The new page (`/marketplace`) puts all three behind one
+  tabbed view. Installing an MCP server writes it into the user's `mcp.yaml`
+  atomically and only touches that one entry, so an existing configuration
+  survives; uninstalling removes just that entry. Bundled servers are marked as
+  such because they need no download and work with the network unplugged.
+  Plugins are listed with what they contribute (they load from disk, so there is
+  nothing to install) and skills are searchable by name, category and text.
+
+- **"Test" on an MCP server really starts it.** The button sends a real request
+  to a new `POST /extensions/mcp/probe`, which launches that one server and waits
+  for an MCP `initialize` handshake, reporting the tools it exposes or the error
+  it failed with. A server that is listed but cannot answer is worse than one
+  that is absent — that is exactly how 0.1.5 shipped — so the marketplace can
+  prove each entry works rather than asserting it.
+
+- **The transcript shows how an answer was reached.** Messages are grouped into
+  turns — your question, then a collapsible process block, then the reply — and
+  the block summarises the run (`Process · 4 steps · 12.4s`, plus a count of
+  failures). Each step is a row: thinking, or a tool call with its arguments, its
+  outcome and **its own duration**, paired from the call and its result by turn
+  and tool so two calls to the same tool don't borrow each other's timings. A
+  call that has not returned yet reads as running and claims no duration. The
+  block is open while the turn runs and folds away once the answer lands, unless
+  you have opened or closed it yourself.
+
+- **Replies are rendered as Markdown.** They were plain text with preserved
+  whitespace, so code fences, lists and emphasis arrived as literal characters.
+  The renderer is a small local module rather than a dependency: the app ships as
+  a frozen binary and the bundle is part of it. It builds React elements rather
+  than HTML, so a reply containing a script tag is text and a `javascript:` link
+  stays inert.
+
+### Changed
+
+- **The bottom-left rail is grouped and shows where you are.** It was nine
+  same-weight icons behind an "Advanced" disclosure, with two rows in a different
+  chrome — and, after all that, no indication of the current page. It is now
+  three labelled groups (Navigate / Extensions / System) plus Preferences, all on
+  one four-column grid so the column edges line up down the whole rail, with the
+  current route marked the same way the active project is marked. Nothing is
+  hidden behind a disclosure any more, and Settings and the theme switch share the
+  same cell shape as every destination, because they are also one click.
+
+- **The i18n translator reports the work it did and fails when it did none.**
+  `translate_i18n.py` printed `all validated` after a run in which every batch was
+  rejected with HTTP 401 and not a single key was written — a catalog that gained
+  nothing has no quality problems either, so the summary could not see the
+  difference. It now reports how many keys it filled, and exits non-zero when
+  batches failed, because a rejected key leaves the catalogs exactly as they were.
+
+
+
 ## [0.1.6] - 2026-09-17
 
 ### Fixed

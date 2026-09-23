@@ -1,81 +1,350 @@
 {
-  "nav.run": {"zh": "运行", "en": "Run"},
-  "nav.history": {"zh": "历史", "en": "History"},
-  "nav.settings": {"zh": "设置", "en": "Settings"},
-  "nav.primary": {"zh": "主视图", "en": "Primary"},
-  "nav.advanced": {"zh": "高级", "en": "Advanced"},
-  "nav.advancedHint": {"zh": "聊天、工具、追踪、项目等", "en": "Chat, tools, trace, projects and more"},
-  "nav.loop": {"zh": "循环", "en": "Loop"},
-  "nav.trace": {"zh": "追踪", "en": "Trace"},
-  "nav.projects": {"zh": "全部项目", "en": "All projects"},
-  "nav.dashboard": {"zh": "看板", "en": "Dashboard"},
-
-  "run.title": {"zh": "运行", "en": "Run"},
-  "run.refresh": {"zh": "刷新", "en": "Refresh"},
-  "run.loadFailed": {"zh": "加载失败", "en": "Failed to load"},
-  "run.noProject": {"zh": "还没有项目。先创建一个项目，或先跑一次演示。", "en": "No project yet. Create one, or try the demo first."},
-  "run.demoHint": {"zh": "不需要 API Key 就能看到完整门禁流程：", "en": "See the whole gate with no API key:"},
-  "run.demoCommand": {"zh": "kairos demo", "en": "kairos demo"},
-  "run.noRuns": {"zh": "这个项目还没有跑过任何一轮。", "en": "This project has not run yet."},
-  "run.noRunsHint": {"zh": "在下面写一句需求，点“开始运行”，Coder 写、Reviewer 审、门禁决定是否放行。", "en": "Write a requirement below and start a run: the Coder writes, the Reviewer gates, the ledger records."},
-  "run.state.passed": {"zh": "已通过", "en": "Passed"},
-  "run.state.rejected": {"zh": "未通过", "en": "Not passed"},
-  "run.state.running": {"zh": "进行中", "en": "Running"},
-  "run.state.empty": {"zh": "暂无轮次", "en": "No rounds"},
-  "run.card.verdict": {"zh": "过关了吗", "en": "Did it pass?"},
-  "run.card.cost": {"zh": "花了多少", "en": "What did it cost?"},
-  "run.card.delta": {"zh": "比上轮好还是差", "en": "Better or worse?"},
-  "run.rounds": {"zh": "轮次", "en": "Rounds"},
-  "run.rejected": {"zh": "被打回", "en": "Rejected"},
-  "run.finalScore": {"zh": "最终评分", "en": "Final score"},
-  "run.firstPass": {"zh": "一次通过", "en": "First-pass"},
-  "run.yes": {"zh": "是", "en": "yes"},
-  "run.no": {"zh": "否", "en": "no"},
-  "run.issues": {"zh": "问题总数", "en": "Issues"},
-  "run.liveRound": {"zh": "当前轮次", "en": "Current round"},
-  "run.cost": {"zh": "花费", "en": "Cost"},
-  "run.calls": {"zh": "调用", "en": "Calls"},
-  "run.tokens": {"zh": "Token", "en": "Tokens"},
-  "run.costHint": {"zh": "来自成本账本（每次模型调用都会记账）", "en": "From the cost ledger (every model call is recorded)"},
-  "run.noPrev": {"zh": "这是第一次运行，没有可对比的上轮。", "en": "First run — nothing to compare against yet."},
-  "run.gateReport": {"zh": "门禁报告", "en": "Gate Report"},
-  "run.view": {"zh": "查看", "en": "View"},
-  "run.copyBadge": {"zh": "复制徽章", "en": "Copy badge"},
-  "run.badgeCopied": {"zh": "徽章已复制", "en": "Badge copied"},
-  "run.th.round": {"zh": "轮次", "en": "Round"},
-  "run.th.score": {"zh": "评分", "en": "Score"},
-  "run.th.verdict": {"zh": "结论", "en": "Verdict"},
-  "run.th.issues": {"zh": "问题", "en": "Issues"},
-  "run.th.summary": {"zh": "本轮摘要", "en": "Summary"},
-  "run.approved": {"zh": "通过", "en": "approved"},
-  "run.rejectedTag": {"zh": "打回", "en": "rejected"},
-  "run.startTitle": {"zh": "开始一次运行", "en": "Start a run"},
-  "run.startPlaceholder": {"zh": "描述你想要的改动，例如：把重试延迟改成指数退避，并遵守 Retry-After。", "en": "Describe the change you want, e.g. retry a 503 with exponential backoff and honour Retry-After."},
-  "run.start": {"zh": "开始运行", "en": "Start"},
-  "run.started": {"zh": "已开始运行", "en": "Run started"},
-  "run.startFailed": {"zh": "启动失败", "en": "Failed to start"},
-  "run.stop": {"zh": "停止", "en": "Stop"},
-  "run.stopped": {"zh": "已停止", "en": "Stopped"},
-  "run.stopFailed": {"zh": "停止失败", "en": "Failed to stop"},
-  "run.running": {"zh": "运行中，页面会自动刷新…", "en": "Running — this page refreshes itself…"},
-
-  "history.title": {"zh": "历史", "en": "History"},
-  "history.refresh": {"zh": "刷新", "en": "Refresh"},
-  "history.loadFailed": {"zh": "加载失败", "en": "Failed to load"},
-  "history.empty": {"zh": "还没有运行记录。", "en": "No runs recorded yet."},
-  "history.noRounds": {"zh": "这次运行没有轮次记录。", "en": "This run has no round records."},
-  "history.firstPass": {"zh": "一次通过", "en": "first-pass"},
-  "history.rejectedShort": {"zh": "打回", "en": "rejected"},
-  "history.th.run": {"zh": "运行", "en": "Run"},
-  "history.th.when": {"zh": "开始时间", "en": "Started"},
-  "history.th.verdict": {"zh": "结论", "en": "Verdict"},
-  "history.th.rounds": {"zh": "轮次", "en": "Rounds"},
-  "history.th.score": {"zh": "评分", "en": "Score"},
-  "history.th.cost": {"zh": "花费", "en": "Cost"},
-  "history.th.delta": {"zh": "对比上轮", "en": "vs prev"},
-  "history.th.round": {"zh": "轮次", "en": "Round"},
-  "history.th.issues": {"zh": "问题", "en": "Issues"},
-  "history.view": {"zh": "查看门禁报告", "en": "View Gate Report"},
-  "history.download": {"zh": "下载报告（Markdown）", "en": "Download report (Markdown)"},
-  "history.trace": {"zh": "查看追踪", "en": "View trace"}
+  "nav.run": {
+    "zh": "运行",
+    "en": "Run"
+  },
+  "nav.history": {
+    "zh": "历史",
+    "en": "History"
+  },
+  "nav.settings": {
+    "zh": "设置",
+    "en": "Settings"
+  },
+  "nav.primary": {
+    "zh": "主视图",
+    "en": "Primary"
+  },
+  "nav.advanced": {
+    "zh": "高级",
+    "en": "Advanced"
+  },
+  "nav.advancedHint": {
+    "zh": "聊天、工具、追踪、项目等",
+    "en": "Chat, tools, trace, projects and more"
+  },
+  "nav.loop": {
+    "zh": "循环",
+    "en": "Loop"
+  },
+  "nav.trace": {
+    "zh": "追踪",
+    "en": "Trace"
+  },
+  "nav.projects": {
+    "zh": "项目",
+    "en": "Projects"
+  },
+  "nav.dashboard": {
+    "zh": "看板",
+    "en": "Dashboard"
+  },
+  "run.title": {
+    "zh": "运行",
+    "en": "Run"
+  },
+  "run.refresh": {
+    "zh": "刷新",
+    "en": "Refresh"
+  },
+  "run.loadFailed": {
+    "zh": "加载失败",
+    "en": "Failed to load"
+  },
+  "run.noProject": {
+    "zh": "还没有项目。先创建一个项目，或先跑一次演示。",
+    "en": "No project yet. Create one, or try the demo first."
+  },
+  "run.demoHint": {
+    "zh": "不需要 API Key 就能看到完整门禁流程：",
+    "en": "See the whole gate with no API key:"
+  },
+  "run.demoCommand": {
+    "zh": "kairos demo",
+    "en": "kairos demo"
+  },
+  "run.noRuns": {
+    "zh": "这个项目还没有跑过任何一轮。",
+    "en": "This project has not run yet."
+  },
+  "run.noRunsHint": {
+    "zh": "在下面写一句需求，点“开始运行”，Coder 写、Reviewer 审、门禁决定是否放行。",
+    "en": "Write a requirement below and start a run: the Coder writes, the Reviewer gates, the ledger records."
+  },
+  "run.state.passed": {
+    "zh": "已通过",
+    "en": "Passed"
+  },
+  "run.state.rejected": {
+    "zh": "未通过",
+    "en": "Not passed"
+  },
+  "run.state.running": {
+    "zh": "进行中",
+    "en": "Running"
+  },
+  "run.state.empty": {
+    "zh": "暂无轮次",
+    "en": "No rounds"
+  },
+  "run.card.verdict": {
+    "zh": "过关了吗",
+    "en": "Did it pass?"
+  },
+  "run.card.cost": {
+    "zh": "花了多少",
+    "en": "What did it cost?"
+  },
+  "run.card.delta": {
+    "zh": "比上轮好还是差",
+    "en": "Better or worse?"
+  },
+  "run.rounds": {
+    "zh": "轮次",
+    "en": "Rounds"
+  },
+  "run.rejected": {
+    "zh": "被打回",
+    "en": "Rejected"
+  },
+  "run.finalScore": {
+    "zh": "最终评分",
+    "en": "Final score"
+  },
+  "run.firstPass": {
+    "zh": "一次通过",
+    "en": "First-pass"
+  },
+  "run.yes": {
+    "zh": "是",
+    "en": "yes"
+  },
+  "run.no": {
+    "zh": "否",
+    "en": "no"
+  },
+  "run.issues": {
+    "zh": "问题总数",
+    "en": "Issues"
+  },
+  "run.liveRound": {
+    "zh": "当前轮次",
+    "en": "Current round"
+  },
+  "run.cost": {
+    "zh": "花费",
+    "en": "Cost"
+  },
+  "run.calls": {
+    "zh": "调用",
+    "en": "Calls"
+  },
+  "run.tokens": {
+    "zh": "Token",
+    "en": "Tokens"
+  },
+  "run.costHint": {
+    "zh": "来自成本账本（每次模型调用都会记账）",
+    "en": "From the cost ledger (every model call is recorded)"
+  },
+  "run.noPrev": {
+    "zh": "这是第一次运行，没有可对比的上轮。",
+    "en": "First run — nothing to compare against yet."
+  },
+  "run.gateReport": {
+    "zh": "门禁报告",
+    "en": "Gate Report"
+  },
+  "run.view": {
+    "zh": "查看",
+    "en": "View"
+  },
+  "run.copyBadge": {
+    "zh": "复制徽章",
+    "en": "Copy badge"
+  },
+  "run.badgeCopied": {
+    "zh": "徽章已复制",
+    "en": "Badge copied"
+  },
+  "run.th.round": {
+    "zh": "轮次",
+    "en": "Round"
+  },
+  "run.th.score": {
+    "zh": "评分",
+    "en": "Score"
+  },
+  "run.th.verdict": {
+    "zh": "结论",
+    "en": "Verdict"
+  },
+  "run.th.issues": {
+    "zh": "问题",
+    "en": "Issues"
+  },
+  "run.th.summary": {
+    "zh": "本轮摘要",
+    "en": "Summary"
+  },
+  "run.approved": {
+    "zh": "通过",
+    "en": "approved"
+  },
+  "run.rejectedTag": {
+    "zh": "打回",
+    "en": "rejected"
+  },
+  "run.startTitle": {
+    "zh": "开始一次运行",
+    "en": "Start a run"
+  },
+  "run.startPlaceholder": {
+    "zh": "描述你想要的改动，例如：把重试延迟改成指数退避，并遵守 Retry-After。",
+    "en": "Describe the change you want, e.g. retry a 503 with exponential backoff and honour Retry-After."
+  },
+  "run.start": {
+    "zh": "开始运行",
+    "en": "Start"
+  },
+  "run.started": {
+    "zh": "已开始运行",
+    "en": "Run started"
+  },
+  "run.startFailed": {
+    "zh": "启动失败",
+    "en": "Failed to start"
+  },
+  "run.stop": {
+    "zh": "停止",
+    "en": "Stop"
+  },
+  "run.stopped": {
+    "zh": "已停止",
+    "en": "Stopped"
+  },
+  "run.stopFailed": {
+    "zh": "停止失败",
+    "en": "Failed to stop"
+  },
+  "run.running": {
+    "zh": "运行中，页面会自动刷新…",
+    "en": "Running — this page refreshes itself…"
+  },
+  "history.title": {
+    "zh": "历史",
+    "en": "History"
+  },
+  "history.refresh": {
+    "zh": "刷新",
+    "en": "Refresh"
+  },
+  "history.loadFailed": {
+    "zh": "加载失败",
+    "en": "Failed to load"
+  },
+  "history.empty": {
+    "zh": "还没有运行记录。",
+    "en": "No runs recorded yet."
+  },
+  "history.noRounds": {
+    "zh": "这次运行没有轮次记录。",
+    "en": "This run has no round records."
+  },
+  "history.firstPass": {
+    "zh": "一次通过",
+    "en": "first-pass"
+  },
+  "history.rejectedShort": {
+    "zh": "打回",
+    "en": "rejected"
+  },
+  "history.th.run": {
+    "zh": "运行",
+    "en": "Run"
+  },
+  "history.th.when": {
+    "zh": "开始时间",
+    "en": "Started"
+  },
+  "history.th.verdict": {
+    "zh": "结论",
+    "en": "Verdict"
+  },
+  "history.th.rounds": {
+    "zh": "轮次",
+    "en": "Rounds"
+  },
+  "history.th.score": {
+    "zh": "评分",
+    "en": "Score"
+  },
+  "history.th.cost": {
+    "zh": "花费",
+    "en": "Cost"
+  },
+  "history.th.delta": {
+    "zh": "对比上轮",
+    "en": "vs prev"
+  },
+  "history.th.round": {
+    "zh": "轮次",
+    "en": "Round"
+  },
+  "history.th.issues": {
+    "zh": "问题",
+    "en": "Issues"
+  },
+  "history.view": {
+    "zh": "查看门禁报告",
+    "en": "View Gate Report"
+  },
+  "history.download": {
+    "zh": "下载报告（Markdown）",
+    "en": "Download report (Markdown)"
+  },
+  "history.trace": {
+    "zh": "查看追踪",
+    "en": "View trace"
+  },
+  "nav.chat": {
+    "zh": "对话",
+    "en": "Chat"
+  },
+  "nav.marketplace": {
+    "zh": "市场",
+    "en": "Marketplace"
+  },
+  "nav.sectionNavigate": {
+    "zh": "导航",
+    "en": "Navigate"
+  },
+  "nav.sectionNavigateHint": {
+    "zh": "开始干活的地方",
+    "en": "Where you get work done"
+  },
+  "nav.sectionExtensions": {
+    "zh": "扩展",
+    "en": "Extensions"
+  },
+  "nav.sectionExtensionsHint": {
+    "zh": "工具、市场与追踪",
+    "en": "Tools, marketplace and trace"
+  },
+  "nav.sectionSystem": {
+    "zh": "系统",
+    "en": "System"
+  },
+  "nav.sectionSystemHint": {
+    "zh": "今天的安排、项目与运行状态",
+    "en": "Today, projects and run state"
+  },
+  "nav.sectionPreferences": {
+    "zh": "偏好",
+    "en": "Preferences"
+  },
+  "nav.sectionPreferencesHint": {
+    "zh": "设置与外观",
+    "en": "Settings and appearance"
+  }
 }

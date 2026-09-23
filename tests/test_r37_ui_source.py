@@ -1173,40 +1173,59 @@ def test_chatsidebar_exports_sidebarfooter():
 
 
 def test_chatsidebar_footer_has_today_tools_settings_theme():
-    """All 4 footer buttons are present with the expected testids."""
+    """Every destination is present with its testid, and nothing is hidden.
+
+    R38.13: the footer used to hide six destinations behind a collapsed
+    "Advanced" group and give two of its rows a different chrome. It is now four
+    labelled groups on one grid, and the current route is marked — so there is
+    no disclosure left to assert, and adding one back would be a regression.
+    """
     src = _read("components/ChatSidebar.tsx")
-    # The ids are passed to the shared `navBtn(...)` factory, so we assert the
+    # The ids are passed to the shared `navRow(...)` factory, so assert the
     # names themselves rather than one exact JSX serialisation.
     for tid in ("footer-today", "footer-tools", "footer-settings", "footer-theme"):
         assert tid in src, f"missing testid: {tid}"
-    # R38.8: the three primary views are always visible; the rest live in the
-    # collapsed Advanced group.
-    for tid in ("footer-run", "footer-history", "footer-advanced"):
-        assert tid in src, f"missing primary-nav testid: {tid}"
+    for tid in ("footer-run", "footer-history", "footer-chat",
+                "footer-marketplace", "footer-trace",
+                "footer-projects", "footer-loop", "footer-dashboard"):
+        assert tid in src, f"missing destination testid: {tid}"
+    # The disclosure is gone: a labelled group answers "what is this?" without
+    # costing a click.
+    assert "footer-advanced" not in src, (
+        "the Advanced disclosure came back — destinations belong in labelled "
+        "groups, not behind a toggle"
+    )
+    # The groups are what replaced it.
+    assert "NavGroup" in src and "footer-group-label" in src
 
 
 def test_chatsidebar_footer_uses_navigate_for_today_and_tools():
-    """Today + Tools call useNavigate(). Settings calls openDrawer().
-    Theme is wired to the store's `toggle` action."""
+    """Every cell navigates to its own route; Settings opens the drawer and the
+    theme cell is wired to the store's `toggle` action."""
     src = _read("components/ChatSidebar.tsx")
-    # The SidebarFooter is the part that does the navigation.
-    assert "navigate('/today')" in src
-    assert "navigate('/tools')" in src
+    # navRow(testId, icon, label, to) — the route is an argument now, so assert
+    # the routes are the ones passed to it.
+    for route in ("/run", "/history", "/chat", "/tools", "/marketplace",
+                  "/trace", "/today", "/projects", "/loop", "/dashboard"):
+        assert f"'{route}'" in src, f"missing destination: {route}"
+    # Settings is a control, not a destination: `null` route plus the drawer.
     assert "openSettings" in src
-    # Theme footer wires onClick={toggle} — verify the binding.
     assert "useThemeStore" in src
-    # The footer's onClick passes the store's `toggle` action ref.
-    # Allow either `toggle()` (invocation) or `toggle` (reference)
-    # depending on the component's call style.
-    # New primary views (R38.8).
-    assert "navigate('/run')" in src
-    assert "navigate('/history')" in src
-    # The theme control is wired to the store's `toggle` action, now handed to
-    # the shared button factory instead of an inline onClick.
+    # The theme control is wired to the store's `toggle` action.
     import re
-    assert re.search(r"footer-theme[\s\S]{0,400}toggle", src), (
+    assert re.search(r"footer-theme[\s\S]{0,500}toggle", src), (
         "footer theme button should be wired to the toggle action"
     )
+
+
+def test_chatsidebar_footer_marks_the_current_route():
+    """The rail answers "where am I?" — that was the complaint that produced
+    the redesign. A cell must derive its state from the router, not from a
+    prop that can go stale."""
+    src = _read("components/ChatSidebar.tsx")
+    assert "useLocation" in src, "the footer must read the current route"
+    assert "aria-current" in src, "the current cell must say so for a11y"
+    assert "isActive" in src, "route matching belongs in one helper"
 
 
 # ---------------------------------------------------------------------------

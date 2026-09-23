@@ -276,11 +276,18 @@ def do_language(language: dict, authored: dict, auth: dict, client: httpx.Client
 
     done = len(authored) - len(todo)
     rejected: dict[str, list[str]] = {}
+    new_keys = 0
+    failed_batches = 0
     for start in range(0, len(todo), BATCH):
         chunk = todo[start:start + BATCH]
         try:
             result = translate_batch(client, auth, language["english"], chunk)
         except Exception as exc:  # noqa: BLE001 - one bad batch, not a bad run
+            # Counted, not just printed: a run where EVERY batch failed used to
+            # finish with "all validated", because a catalog that gained nothing
+            # has no quality problems either. The summary must not call that a
+            # success.
+            failed_batches += 1
             with PRINT_LOCK:
                 print(f"[{value}] batch at {start} failed ({exc}); skipping", flush=True)
             continue
@@ -294,6 +301,8 @@ def do_language(language: dict, authored: dict, auth: dict, client: httpx.Client
                 # never render "1 score 1" in the meantime)
                 rejected.setdefault(value, []).append(key)
                 continue
+            if key not in catalog:
+                new_keys += 1
             catalog[key] = text
         done += len(chunk)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -314,7 +323,7 @@ def do_language(language: dict, authored: dict, auth: dict, client: httpx.Client
     if problems:
         with PRINT_LOCK:
             print(f"[{value}] {len(problems)} problem(s), e.g. {problems[:3]}")
-    return value, len(catalog), total, problems
+    return value, len(catalog), total, problems, new_keys, failed_batches
 
 
 def main() -> int:
@@ -374,7 +383,7 @@ def main() -> int:
     print(f"translating {len(selected)} language(s) with {auth['model']} "
           f"({len(authored)} keys each), workers={args.workers}")
 
-    totals: list[tuple[str, int, int, list[str]]] = []
+    totals: list[tuple] = []
     with httpx.Client(http2=False) as client:
         with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
             futures = [pool.submit(do_language, lang, authored, auth, client,
@@ -386,16 +395,28 @@ def main() -> int:
                 except Exception as exc:  # noqa: BLE001 - reported, run continues
                     with PRINT_LOCK:
                         print(f"!! language failed: {exc}", flush=True)
-                    totals.append(("?", 0, len(authored), [str(exc)]))
+                    totals.append(("?", 0, len(authored), [str(exc)], 0, 1))
 
     if not args.dry_run:
         # regenerate the locale modules so the app picks the new catalogs up
         import subprocess
         print("regenerating locale modules …", flush=True)
         subprocess.run([sys.executable, str(REPO / "scripts" / "merge_i18n.py")], check=False)
-        bad = [(v, len(p)) for v, _c, _t, p in totals if p]
-        print(f"done: {len(totals)} language(s)"
-              + (f", {len(bad)} with problems: {bad[:6]}" if bad else ", all validated"))
+        bad = [(v, len(p)) for v, _c, _t, p, _n, _f in totals if p]
+        new_total = sum(n for *_rest, n, _f in totals)
+        failed_total = sum(f for *_rest, f in totals)
+        print(f"done: {len(totals)} language(s), {new_total} key(s) filled")
+        if bad:
+            print(f"  {len(bad)} with quality problems: {bad[:6]}")
+        if failed_total:
+            # Be a tool that can be trusted in a chain: refuse to exit 0 when
+            # the work did not happen. Every batch failing means the key was
+            # rejected (401) or the provider was down — and the catalog is
+            # exactly as it was before.
+            print(f"  {failed_total} batch(es) FAILED — the catalogs did not "
+                  f"change. Check the API key in data/settings.json.",
+                  file=sys.stderr)
+            return 1
     return 0
 
 

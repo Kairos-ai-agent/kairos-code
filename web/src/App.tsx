@@ -21,6 +21,7 @@ import ProjectPage from './pages/Project';
 import Loop from './pages/Loop';
 import Trace from './pages/Trace';
 import Tools from './pages/Tools';
+import Marketplace from './pages/Marketplace';
 import { connectWebSocket } from './api/client';
 
 const App: React.FC = () => {
@@ -39,6 +40,7 @@ const App: React.FC = () => {
         <Route path="/today" element={<Today />} />
         <Route path="/tools" element={<Tools />} />
         <Route path="/tools/:tool" element={<Tools />} />
+        <Route path="/marketplace" element={<Marketplace />} />
         <Route path="/trace" element={<Navigate to="/chat" replace />} />
         <Route path="/trace/:projectId" element={<Trace />} />
         <Route path="/trace/:projectId/:sessionId" element={<Trace />} />

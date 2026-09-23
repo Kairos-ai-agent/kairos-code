@@ -187,6 +187,7 @@
   "chat.thread.thinking": "ভাবছে (প্রসারিত করতে ক্লিক করুন)",
   "chat.thread.thinkingRole": "ভাবছে",
   "chat.thread.tokenUsage": "এই উত্তরে খরচ হওয়া টোকেন",
+  "chat.thread.tokensUsed": "{n} টোকেন",
   "chat.thread.toolLabel": "টুল · {tool}",
   "chat.thread.toolResultRole": "ফলাফল · {tool}",
   "chat.thread.viewPretty": "সুন্দর",

@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Đang suy nghĩ (nhấp để mở rộng)",
   "chat.thread.thinkingRole": "Suy nghĩ",
   "chat.thread.tokenUsage": "Token đã dùng cho phản hồi này",
+  "chat.thread.tokensUsed": "{n} token",
   "chat.thread.toolLabel": "công cụ · {tool}",
   "chat.thread.toolResultRole": "kết quả · {tool}",
   "chat.thread.viewPretty": "Đẹp",

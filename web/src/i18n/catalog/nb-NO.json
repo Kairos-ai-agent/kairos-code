@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Tenker (klikk for å utvide)",
   "chat.thread.thinkingRole": "Tenker",
   "chat.thread.tokenUsage": "Tokens brukt på dette svaret",
+  "chat.thread.tokensUsed": "{n} tokens",
   "chat.thread.toolLabel": "verktøy · {tool}",
   "chat.thread.toolResultRole": "resultat · {tool}",
   "chat.thread.viewPretty": "Pen",

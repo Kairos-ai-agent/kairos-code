@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Hugsun (smelltu til að opna)",
   "chat.thread.thinkingRole": "Hugsun",
   "chat.thread.tokenUsage": "Tokens notað í þetta svar",
+  "chat.thread.tokensUsed": "{n} tákn",
   "chat.thread.toolLabel": "tól · {tool}",
   "chat.thread.toolResultRole": "niðurstaða · {tool}",
   "chat.thread.viewPretty": "Fínt",

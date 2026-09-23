@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Размислување (кликнете за проширување)",
   "chat.thread.thinkingRole": "Размислување",
   "chat.thread.tokenUsage": "Токени потрошени за овој одговор",
+  "chat.thread.tokensUsed": "{n} токени",
   "chat.thread.toolLabel": "алатка · {tool}",
   "chat.thread.toolResultRole": "резултат · {tool}",
   "chat.thread.viewPretty": "Убаво",

@@ -187,6 +187,7 @@
   "chat.thread.thinking": "ചിന്തിക്കുന്നു (വികസിപ്പിക്കാൻ ക്ലിക്ക് ചെയ്യുക)",
   "chat.thread.thinkingRole": "ചിന്തിക്കുന്നു",
   "chat.thread.tokenUsage": "ഈ മറുപടിക്ക് ചെലവായ Tokens",
+  "chat.thread.tokensUsed": "{n} ടോക്കണുകൾ",
   "chat.thread.toolLabel": "tool · {tool}",
   "chat.thread.toolResultRole": "ഫലം · {tool}",
   "chat.thread.viewPretty": "Pretty",

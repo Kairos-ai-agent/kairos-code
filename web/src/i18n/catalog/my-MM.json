@@ -187,6 +187,7 @@
   "chat.thread.thinking": "စဉ်းစားနေသည် (ချဲ့ရန် ကလစ်နှိပ်ပါ)",
   "chat.thread.thinkingRole": "စဉ်းစားနေသည်",
   "chat.thread.tokenUsage": "ဤအဖြေအတွက် သုံးသော token များ",
+  "chat.thread.tokensUsed": "{n} tokens",
   "chat.thread.toolLabel": "ကိရိယာ · {tool}",
   "chat.thread.toolResultRole": "ရလဒ် · {tool}",
   "chat.thread.viewPretty": "လှပသော",

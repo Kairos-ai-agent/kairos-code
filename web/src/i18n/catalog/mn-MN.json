@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Бодож байна (дэлгэхийн тулд дарна уу)",
   "chat.thread.thinkingRole": "Бодол",
   "chat.thread.tokenUsage": "Энэ хариултад зарцуулсан токен",
+  "chat.thread.tokensUsed": "{n} токен",
   "chat.thread.toolLabel": "хэрэгсэл · {tool}",
   "chat.thread.toolResultRole": "үр дүн · {tool}",
   "chat.thread.viewPretty": "Сайхан",

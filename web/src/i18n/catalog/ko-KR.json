@@ -187,6 +187,7 @@
   "chat.thread.thinking": "생각 중(클릭해 펼치기)",
   "chat.thread.thinkingRole": "생각 중",
   "chat.thread.tokenUsage": "이 답변에 사용한 토큰",
+  "chat.thread.tokensUsed": "{n} 토큰",
   "chat.thread.toolLabel": "도구 · {tool}",
   "chat.thread.toolResultRole": "결과 · {tool}",
   "chat.thread.viewPretty": "보기 좋게",

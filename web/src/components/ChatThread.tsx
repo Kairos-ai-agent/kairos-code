@@ -558,7 +558,7 @@ const AssistantBubble: React.FC<{
             <Tooltip title={t('chat.thread.tokenUsage')}>
               <span style={{ fontSize: 10, color: tokens.labelTertiary,
                              marginInlineStart: 'auto' }}>
-                {tokensUsed.toLocaleString()} tokens
+                {t('chat.thread.tokensUsed', { n: tokensUsed.toLocaleString() })}
               </span>
             </Tooltip>
           )}

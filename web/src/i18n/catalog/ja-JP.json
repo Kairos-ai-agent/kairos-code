@@ -187,6 +187,7 @@
   "chat.thread.thinking": "思考中（クリックで展開）",
   "chat.thread.thinkingRole": "考え中",
   "chat.thread.tokenUsage": "この返信で消費したトークン",
+  "chat.thread.tokensUsed": "{n} トークン",
   "chat.thread.toolLabel": "ツール · {tool}",
   "chat.thread.toolResultRole": "結果 · {tool}",
   "chat.thread.viewPretty": "整形",

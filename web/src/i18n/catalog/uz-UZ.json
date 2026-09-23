@@ -187,6 +187,7 @@
   "chat.thread.thinking": "O'ylash (ochish uchun bosing)",
   "chat.thread.thinkingRole": "O‘ylash",
   "chat.thread.tokenUsage": "Bu javobga sarflangan tokenlar",
+  "chat.thread.tokensUsed": "{n} token",
   "chat.thread.toolLabel": "vosita · {tool}",
   "chat.thread.toolResultRole": "natija · {tool}",
   "chat.thread.viewPretty": "Chiroyli",

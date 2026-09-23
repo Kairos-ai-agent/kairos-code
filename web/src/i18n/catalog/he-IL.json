@@ -187,6 +187,7 @@
   "chat.thread.thinking": "חשיבה (לחיצה להרחבה)",
   "chat.thread.thinkingRole": "חשיבה",
   "chat.thread.tokenUsage": "טוקנים שהושקעו בתשובה זו",
+  "chat.thread.tokensUsed": "{n} טוקנים",
   "chat.thread.toolLabel": "כלי · {tool}",
   "chat.thread.toolResultRole": "תוצאה · {tool}",
   "chat.thread.viewPretty": "מעוצב",

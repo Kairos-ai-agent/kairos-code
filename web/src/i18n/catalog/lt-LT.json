@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Mąstymas (spustelėkite, kad išplėstumėte)",
   "chat.thread.thinkingRole": "Galvojimas",
   "chat.thread.tokenUsage": "Šiam atsakymui sunaudota tokenų",
+  "chat.thread.tokensUsed": "{n} tokenų",
   "chat.thread.toolLabel": "įrankis · {tool}",
   "chat.thread.toolResultRole": "rezultatas · {tool}",
   "chat.thread.viewPretty": "Gražus",

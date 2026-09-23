@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Міркування (натисніть, щоб розгорнути)",
   "chat.thread.thinkingRole": "Міркування",
   "chat.thread.tokenUsage": "Токенів витрачено на цю відповідь",
+  "chat.thread.tokensUsed": "{n} токенів",
   "chat.thread.toolLabel": "інструмент · {tool}",
   "chat.thread.toolResultRole": "результат · {tool}",
   "chat.thread.viewPretty": "Форматовано",

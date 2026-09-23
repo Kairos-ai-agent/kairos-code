@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Mõtlemine (klõpsa avamiseks)",
   "chat.thread.thinkingRole": "Mõtlemine",
   "chat.thread.tokenUsage": "Sellele vastusele kulunud tokenid",
+  "chat.thread.tokensUsed": "{n} tokenit",
   "chat.thread.toolLabel": "tööriist · {tool}",
   "chat.thread.toolResultRole": "tulemus · {tool}",
   "chat.thread.viewPretty": "Ilus",

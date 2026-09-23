@@ -187,6 +187,7 @@
   "chat.thread.thinking": "سوچ (پھیلانے کے لیے کلک کریں)",
   "chat.thread.thinkingRole": "سوچ",
   "chat.thread.tokenUsage": "اس جواب پر خرچ ہونے والے tokens",
+  "chat.thread.tokensUsed": "{n} ٹوکنز",
   "chat.thread.toolLabel": "ٹول · {tool}",
   "chat.thread.toolResultRole": "نتیجہ · {tool}",
   "chat.thread.viewPretty": "خوبصورت",

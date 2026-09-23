@@ -187,6 +187,7 @@
   "chat.thread.thinking": "सोचाइ (विस्तार गर्न क्लिक गर्नुहोस्)",
   "chat.thread.thinkingRole": "सोचाइ",
   "chat.thread.tokenUsage": "यो जवाफमा खर्च भएका टोकनहरू",
+  "chat.thread.tokensUsed": "{n} टोकन",
   "chat.thread.toolLabel": "tool · {tool}",
   "chat.thread.toolResultRole": "नतिजा · {tool}",
   "chat.thread.viewPretty": "सुन्दर",

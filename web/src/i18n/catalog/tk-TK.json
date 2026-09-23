@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Pikir edýär (açmak üçin basyň)",
   "chat.thread.thinkingRole": "Pikirlenme",
   "chat.thread.tokenUsage": "Bu jogaba sarp edilen tokenler",
+  "chat.thread.tokensUsed": "{n} token",
   "chat.thread.toolLabel": "gural · {tool}",
   "chat.thread.toolResultRole": "netije · {tool}",
   "chat.thread.viewPretty": "Gözel",

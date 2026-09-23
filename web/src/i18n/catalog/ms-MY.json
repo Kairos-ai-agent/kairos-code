@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Berfikir (klik untuk kembang)",
   "chat.thread.thinkingRole": "Berfikir",
   "chat.thread.tokenUsage": "Token digunakan untuk balasan ini",
+  "chat.thread.tokensUsed": "{n} token",
   "chat.thread.toolLabel": "alat · {tool}",
   "chat.thread.toolResultRole": "hasil · {tool}",
   "chat.thread.viewPretty": "Kemas",

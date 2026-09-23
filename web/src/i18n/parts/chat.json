@@ -150,5 +150,9 @@
   "chat.thread.tokenUsage": {
     "zh": "这条回复消耗的 token 数",
     "en": "Tokens spent on this reply"
+  },
+  "chat.thread.tokensUsed": {
+    "zh": "{n} tokens",
+    "en": "{n} tokens"
   }
 }

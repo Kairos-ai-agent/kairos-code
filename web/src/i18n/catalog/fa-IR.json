@@ -187,6 +187,7 @@
   "chat.thread.thinking": "در حال اندیشیدن (برای باز کردن کلیک کنید)",
   "chat.thread.thinkingRole": "در حال فکر کردن",
   "chat.thread.tokenUsage": "توکن‌های مصرف‌شده در این پاسخ",
+  "chat.thread.tokensUsed": "{n} توکن",
   "chat.thread.toolLabel": "ابزار · {tool}",
   "chat.thread.toolResultRole": "نتیجه · {tool}",
   "chat.thread.viewPretty": "خوانا",

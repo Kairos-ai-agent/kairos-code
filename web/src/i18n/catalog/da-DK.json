@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Tænker (klik for at udvide)",
   "chat.thread.thinkingRole": "Tænker",
   "chat.thread.tokenUsage": "Tokens brugt på dette svar",
+  "chat.thread.tokensUsed": "{n} tokens",
   "chat.thread.toolLabel": "værktøj · {tool}",
   "chat.thread.toolResultRole": "resultat · {tool}",
   "chat.thread.viewPretty": "Pæn",

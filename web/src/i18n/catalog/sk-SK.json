@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Uvažovanie (kliknutím rozbalíte)",
   "chat.thread.thinkingRole": "Premýšľanie",
   "chat.thread.tokenUsage": "Tokeny spotrebované na túto odpoveď",
+  "chat.thread.tokensUsed": "{n} tokenov",
   "chat.thread.toolLabel": "nástroj · {tool}",
   "chat.thread.toolResultRole": "výsledok · {tool}",
   "chat.thread.viewPretty": "Upravené",

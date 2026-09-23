@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Pensant (fes clic per desplegar)",
   "chat.thread.thinkingRole": "Pensant",
   "chat.thread.tokenUsage": "Tokens gastats en aquesta resposta",
+  "chat.thread.tokensUsed": "{n} tokens",
   "chat.thread.toolLabel": "eina · {tool}",
   "chat.thread.toolResultRole": "resultat · {tool}",
   "chat.thread.viewPretty": "Formatat",

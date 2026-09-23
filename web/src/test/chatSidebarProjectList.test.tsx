@@ -60,7 +60,11 @@ describe('ChatSidebar project list', () => {
   it('shows the empty state when there are no projects', () => {
     renderSidebar();
     expect(screen.getByText(/Add a folder from the top bar/)).toBeInTheDocument();
-    expect(screen.queryByText('Projects')).not.toBeInTheDocument();
+    // No project rows. Scoped to the rows rather than asserting the word
+    // "Projects" is absent from the document: the navigation rail has a
+    // "Projects" destination of its own, and a document-wide check would fail
+    // for a reason that has nothing to do with the project list.
+    expect(document.querySelector('[data-testid^="project-row-"]')).toBeNull();
   });
 
   it('shows up to 10 projects by default and hides the rest', () => {
@@ -71,9 +75,11 @@ describe('ChatSidebar project list', () => {
     useChatStore.getState().setProjects(list);
     useChatStore.getState().setCurrentProject(list[0]);
     renderSidebar();
-    // Header
-    expect(screen.getByText('Projects')).toBeInTheDocument();
-    expect(screen.getByText('15')).toBeInTheDocument();
+    // Header — scoped to the project list, because the navigation rail also has
+    // a "Projects" destination and a document-wide lookup now matches twice.
+    const header = within(screen.getByTestId('project-list-header'));
+    expect(header.getByText('Projects')).toBeInTheDocument();
+    expect(header.getByText('15')).toBeInTheDocument();
     // First 10 visible
     for (let i = 0; i < 10; i++) {
       expect(screen.getByText(`Project ${i}`)).toBeInTheDocument();

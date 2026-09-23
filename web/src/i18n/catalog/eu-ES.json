@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Pentsatzen (klik egin zabaltzeko)",
   "chat.thread.thinkingRole": "Pentsatzen",
   "chat.thread.tokenUsage": "Erantzun honetan erabilitako tokenak",
+  "chat.thread.tokensUsed": "{n} token",
   "chat.thread.toolLabel": "tresna · {tool}",
   "chat.thread.toolResultRole": "emaitza · {tool}",
   "chat.thread.viewPretty": "Ederra",

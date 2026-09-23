@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Denkt nach (zum Erweitern klicken)",
   "chat.thread.thinkingRole": "Denken",
   "chat.thread.tokenUsage": "Tokens für diese Antwort",
+  "chat.thread.tokensUsed": "{n} Tokens",
   "chat.thread.toolLabel": "Tool · {tool}",
   "chat.thread.toolResultRole": "Ergebnis · {tool}",
   "chat.thread.viewPretty": "Formatiert",

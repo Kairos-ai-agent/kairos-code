@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Gândire (apasă pentru a extinde)",
   "chat.thread.thinkingRole": "Gândire",
   "chat.thread.tokenUsage": "Tokeni consumați pentru acest răspuns",
+  "chat.thread.tokensUsed": "{n} tokenuri",
   "chat.thread.toolLabel": "instrument · {tool}",
   "chat.thread.toolResultRole": "rezultat · {tool}",
   "chat.thread.viewPretty": "Formatat",

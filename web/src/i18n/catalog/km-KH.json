@@ -187,6 +187,7 @@
   "chat.thread.thinking": "កំពុងគិត (ចុចដើម្បីពង្រីក)",
   "chat.thread.thinkingRole": "កំពុងគិត",
   "chat.thread.tokenUsage": "Tokens ដែលបានប្រើសម្រាប់ការឆ្លើយតបនេះ",
+  "chat.thread.tokensUsed": "{n} tokens",
   "chat.thread.toolLabel": "ឧបករណ៍ · {tool}",
   "chat.thread.toolResultRole": "លទ្ធផល · {tool}",
   "chat.thread.viewPretty": "ស្អាត",

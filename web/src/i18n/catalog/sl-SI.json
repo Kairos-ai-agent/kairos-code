@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Razmišljanje (klikni za razširitev)",
   "chat.thread.thinkingRole": "Razmišljanje",
   "chat.thread.tokenUsage": "Žetoni, porabljeni za ta odgovor",
+  "chat.thread.tokensUsed": "{n} žetonov",
   "chat.thread.toolLabel": "orodje · {tool}",
   "chat.thread.toolResultRole": "rezultat · {tool}",
   "chat.thread.viewPretty": "Lepo",

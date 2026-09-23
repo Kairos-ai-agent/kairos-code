@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Ragionamento (clicca per espandere)",
   "chat.thread.thinkingRole": "Ragionamento",
   "chat.thread.tokenUsage": "Token spesi per questa risposta",
+  "chat.thread.tokensUsed": "{n} token",
   "chat.thread.toolLabel": "tool · {tool}",
   "chat.thread.toolResultRole": "risultato · {tool}",
   "chat.thread.viewPretty": "Formattato",

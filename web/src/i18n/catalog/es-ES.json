@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Pensando (clic para expandir)",
   "chat.thread.thinkingRole": "Pensando",
   "chat.thread.tokenUsage": "Tokens usados en esta respuesta",
+  "chat.thread.tokensUsed": "{n} tokens",
   "chat.thread.toolLabel": "herramienta · {tool}",
   "chat.thread.toolResultRole": "resultado · {tool}",
   "chat.thread.viewPretty": "Bonito",

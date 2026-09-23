@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Gondolkodás (kattints a kibontáshoz)",
   "chat.thread.thinkingRole": "Gondolkodás",
   "chat.thread.tokenUsage": "Erre a válaszra fordított tokenek",
+  "chat.thread.tokensUsed": "{n} token",
   "chat.thread.toolLabel": "eszköz · {tool}",
   "chat.thread.toolResultRole": "eredmény · {tool}",
   "chat.thread.viewPretty": "Formázott",

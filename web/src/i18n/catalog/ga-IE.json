@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Ag smaoineamh (cliceáil chun leathnú)",
   "chat.thread.thinkingRole": "Ag smaoineamh",
   "chat.thread.tokenUsage": "Tokení caite ar an bhfreagra seo",
+  "chat.thread.tokensUsed": "{n} token",
   "chat.thread.toolLabel": "uirlis · {tool}",
   "chat.thread.toolResultRole": "toradh · {tool}",
   "chat.thread.viewPretty": "Deas",

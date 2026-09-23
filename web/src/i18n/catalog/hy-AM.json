@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Մտածում (սեղմեք՝ բացելու համար)",
   "chat.thread.thinkingRole": "Մտածում",
   "chat.thread.tokenUsage": "Այս պատասխանի վրա ծախսված token-ները",
+  "chat.thread.tokensUsed": "{n} token",
   "chat.thread.toolLabel": "գործիք · {tool}",
   "chat.thread.toolResultRole": "արդյունք · {tool}",
   "chat.thread.viewPretty": "Գեղեցիկ",

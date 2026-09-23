@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Мислене (щракнете за разгъване)",
   "chat.thread.thinkingRole": "Мислене",
   "chat.thread.tokenUsage": "Токени, изразходвани за този отговор",
+  "chat.thread.tokensUsed": "{n} токена",
   "chat.thread.toolLabel": "инструмент · {tool}",
   "chat.thread.toolResultRole": "резултат · {tool}",
   "chat.thread.viewPretty": "Оформен",

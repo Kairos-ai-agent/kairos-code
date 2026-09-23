@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Ойлау (ашу үшін басыңыз)",
   "chat.thread.thinkingRole": "Ойлау",
   "chat.thread.tokenUsage": "Осы жауапқа жұмсалған токендер",
+  "chat.thread.tokensUsed": "{n} token",
   "chat.thread.toolLabel": "құрал · {tool}",
   "chat.thread.toolResultRole": "нәтиже · {tool}",
   "chat.thread.viewPretty": "Әдемі",

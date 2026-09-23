@@ -187,6 +187,7 @@
   "chat.thread.thinking": "ფიქრი (დააჭირე გაშლისთვის)",
   "chat.thread.thinkingRole": "ფიქრი",
   "chat.thread.tokenUsage": "ამ პასუხზე დახარჯული ტოკენები",
+  "chat.thread.tokensUsed": "{n} ტოკენი",
   "chat.thread.toolLabel": "ხელსაწყო · {tool}",
   "chat.thread.toolResultRole": "შედეგი · {tool}",
   "chat.thread.viewPretty": "ლამაზი",

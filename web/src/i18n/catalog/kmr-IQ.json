@@ -187,6 +187,7 @@
   "chat.thread.thinking": "بیرکردنەوە (کلیک بکە بۆ کردنەوە)",
   "chat.thread.thinkingRole": "بیرکردنەوە",
   "chat.thread.tokenUsage": "تۆکن بەکارهێنراو لەم وەڵامە",
+  "chat.thread.tokensUsed": "{n} token",
   "chat.thread.toolLabel": "ئامراز · {tool}",
   "chat.thread.toolResultRole": "ئەنجام · {tool}",
   "chat.thread.viewPretty": "جوان",

@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Domāšana (noklikšķiniet, lai izvērstu)",
   "chat.thread.thinkingRole": "Domāšana",
   "chat.thread.tokenUsage": "Šai atbildei iztērētie tokeni",
+  "chat.thread.tokensUsed": "{n} tokeni",
   "chat.thread.toolLabel": "rīks · {tool}",
   "chat.thread.toolResultRole": "rezultāts · {tool}",
   "chat.thread.viewPretty": "Sakārtots",

@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Tänker (klicka för att expandera)",
   "chat.thread.thinkingRole": "Tänker",
   "chat.thread.tokenUsage": "Tokens för detta svar",
+  "chat.thread.tokensUsed": "{n} tokens",
   "chat.thread.toolLabel": "verktyg · {tool}",
   "chat.thread.toolResultRole": "resultat · {tool}",
   "chat.thread.viewPretty": "Snygg",

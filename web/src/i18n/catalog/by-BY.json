@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Разважанне (націсніце, каб разгарнуць)",
   "chat.thread.thinkingRole": "Думкі",
   "chat.thread.tokenUsage": "Токенаў на гэты адказ",
+  "chat.thread.tokensUsed": "{n} токенаў",
   "chat.thread.toolLabel": "інструмент · {tool}",
   "chat.thread.toolResultRole": "вынік · {tool}",
   "chat.thread.viewPretty": "Прыгожы",

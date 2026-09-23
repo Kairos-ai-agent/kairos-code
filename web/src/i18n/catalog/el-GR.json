@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Σκέψη (πατήστε για ανάπτυξη)",
   "chat.thread.thinkingRole": "Σκέψη",
   "chat.thread.tokenUsage": "Tokens που δαπανήθηκαν για αυτή την απάντηση",
+  "chat.thread.tokensUsed": "{n} tokens",
   "chat.thread.toolLabel": "εργαλείο · {tool}",
   "chat.thread.toolResultRole": "αποτέλεσμα · {tool}",
   "chat.thread.viewPretty": "Μορφοποιημένο",

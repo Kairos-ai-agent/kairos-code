@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Düşünüyor (genişletmek için tıklayın)",
   "chat.thread.thinkingRole": "Düşünüyor",
   "chat.thread.tokenUsage": "Bu yanıt için harcanan token",
+  "chat.thread.tokensUsed": "{n} token",
   "chat.thread.toolLabel": "araç · {tool}",
   "chat.thread.toolResultRole": "sonuç · {tool}",
   "chat.thread.viewPretty": "Güzel",

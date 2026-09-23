@@ -187,6 +187,7 @@
   "chat.thread.thinking": "Ajattelee (napsauta avataksesi)",
   "chat.thread.thinkingRole": "Ajattelu",
   "chat.thread.tokenUsage": "Tähän vastaukseen käytetyt tokenit",
+  "chat.thread.tokensUsed": "{n} tokenia",
   "chat.thread.toolLabel": "työkalu · {tool}",
   "chat.thread.toolResultRole": "tulos · {tool}",
   "chat.thread.viewPretty": "Siisti",

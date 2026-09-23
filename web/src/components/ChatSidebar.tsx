@@ -175,10 +175,9 @@ const ChatSidebar: React.FC = () => {
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 4px', minHeight: 0 }}>
         {/* ------------------- Projects list ------------------- */}
-        {/* ------------------- Projects list ------------------- */}
         {projects.length > 0 && (
-          <div style={{ marginBottom: 12 }}>
-            <div style={{
+          <div data-testid="project-list" style={{ marginBottom: 12 }}>
+            <div data-testid="project-list-header" style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '6px 8px 4px',
             }}>

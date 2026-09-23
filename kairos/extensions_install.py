@@ -436,6 +436,35 @@ def _remove(path: Path, name: str) -> Tuple[str, bool, Dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
+def install_entry(
+    entry: Mapping[str, Any],
+    *,
+    name: Optional[str] = None,
+    scope: str = "user",
+    project_path: Optional[Path] = None,
+    user_dir: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """Add (or reset) one *already normalised* entry in one layer of ``mcp.yaml``.
+
+    This is the path a marketplace install takes, and it is the same path a
+    curated install takes: the only difference between the two is where the entry
+    came from. Keeping one implementation means a remote server cannot install
+    itself in a way the curated ones do not — no second code path to keep honest.
+
+    Same guarantees as :func:`install_mcp`: only this key is touched, the write is
+    atomic, and a second identical install reports ``changed: False``.
+    """
+    key = str(name or entry.get("name") or "")
+    _check_name(key)
+    body = yaml_body(entry)
+    path = layer_path(scope, project_path=project_path, user_dir=user_dir)
+    text, changed = _add(path, key, body)
+    if changed:
+        _atomic_write(path, text)
+    return {"ok": True, "changed": changed, "path": str(path),
+            "entry": dict(entry), "config": body}
+
+
 def install_mcp(
     name: str,
     *,
@@ -444,7 +473,7 @@ def install_mcp(
     registry: RegistryLike = None,
     user_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    """Add (or reset) one server in one layer of ``mcp.yaml``.
+    """Add (or reset) one server from the curated registry into one layer.
 
     Only that server's key is touched: every other entry and every comment in the
     file is left as it was. Idempotent — installing the same server twice writes
@@ -453,14 +482,8 @@ def install_mcp(
     Returns ``{"ok", "changed", "path", "entry", "config"}``: the registry entry,
     and the body that landed in the file.
     """
-    entry = registry_entry(name, registry=registry)
-    body = yaml_body(entry)
-    path = layer_path(scope, project_path=project_path, user_dir=user_dir)
-    text, changed = _add(path, name, body)
-    if changed:
-        _atomic_write(path, text)
-    return {"ok": True, "changed": changed, "path": str(path),
-            "entry": entry, "config": body}
+    return install_entry(registry_entry(name, registry=registry), name=name,
+                         scope=scope, project_path=project_path, user_dir=user_dir)
 
 
 def uninstall_mcp(

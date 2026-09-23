@@ -21,15 +21,16 @@
  * The page never reports success it did not see: every action is a real
  * request, and the state it shows afterwards comes back from the server.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Badge, Button, Card, Empty, Input, Segmented, Spin, Tag, Tooltip,
-  Typography, App as AntdApp,
+  Alert, Badge, Button, Card, Empty, Input, Segmented, Space, Spin,
+  Tag, Tooltip, Typography, App as AntdApp,
 } from 'antd';
 import {
   ApiOutlined, AppstoreOutlined, BookOutlined, CheckCircleFilled,
   CloudOutlined, DownloadOutlined, ExperimentOutlined, DeleteOutlined,
   ReloadOutlined, SearchOutlined, ThunderboltOutlined,
+  CloudDownloadOutlined,
 } from '@ant-design/icons';
 
 import { useThemeTokens } from '../hooks/useThemeTokens';
@@ -71,6 +72,40 @@ interface SkillItem {
   bytes?: number | null;
   path?: string | null;
   on_disk: boolean;
+}
+
+/** One remote marketplace this build can search (`GET /extensions/market/sources`). */
+interface MarketSource {
+  id: string;
+  label: string;
+  homepage?: string | null;
+  kind: string;
+  description: string;
+  installable: boolean;
+}
+
+/**
+ * One entry from a remote marketplace, normalised server-side to the same fields
+ * the curated registry uses.
+ *
+ * `installable` is the honest one: an entry with neither a launcher nor a URL is
+ * still shown, but it gets a link to its homepage instead of an Install button
+ * that could not work.
+ */
+interface RemoteEntry {
+  name: string;
+  source: string;
+  upstream?: string | null;
+  description: string;
+  version?: string | null;
+  category?: string | null;
+  transport?: string | null;
+  command?: string | null;
+  args: string[];
+  url?: string | null;
+  env_keys: string[];
+  homepage?: string | null;
+  installable: boolean;
 }
 
 /** One row of `GET /extensions/mcp/installed` (absent on older backends). */
@@ -203,28 +238,230 @@ const McpTab: React.FC = () => {
     }
   };
 
+  // ---- remote marketplaces -------------------------------------------
+  //
+  // 'curated' is the shipped registry: 26 servers someone actually ran, filtered
+  // in the browser. The remote sources exist because "we picked 26" is not an
+  // answer to "is there anything else?" — and only sources that carry install
+  // information are wired up, so a row here can be installed rather than merely
+  // admired.
+  const [source, setSource] = useState<string>('curated');
+  const [sources, setSources] = useState<MarketSource[]>([]);
+  const [remote, setRemote] = useState<{ loading: boolean; ok: boolean;
+                                        total: number; entries: RemoteEntry[];
+                                        error?: string | null }>(
+    { loading: false, ok: true, total: 0, entries: [] });
+
+  useEffect(() => {
+    api.get<{ sources: MarketSource[] }>('/extensions/market/sources')
+      .then((r) => setSources(r.data.sources || []))
+      // An older backend has no market endpoints: the curated tab still works.
+      .catch(() => setSources([]));
+  }, []);
+
+  const searchRemote = useCallback(async (src: string, q: string) => {
+    if (src === 'curated') return;
+    setRemote((r) => ({ ...r, loading: true }));
+    try {
+      const res = await api.get<{ ok: boolean; total: number;
+                                  entries: RemoteEntry[]; error?: string | null }>(
+        '/extensions/market/search',
+        { params: { source: src, q: q || undefined, limit: 30 } });
+      setRemote({ loading: false, ok: res.data.ok !== false,
+                  total: res.data.total || 0, entries: res.data.entries || [],
+                  error: res.data.error || null });
+    } catch (e: any) {
+      setRemote({ loading: false, ok: false, total: 0, entries: [],
+                  error: e?.response?.data?.detail || String(e?.message || e) });
+    }
+  }, []);
+
+  // Search when the source changes, so picking a tab always shows something
+  // rather than an empty page that looks broken.
+  useEffect(() => {
+    if (source !== 'curated') searchRemote(source, query);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source]);
+
+  const installRemote = async (entry: RemoteEntry) => {
+    const key = `${entry.source}:${entry.name}`;
+    setBusy(key);
+    try {
+      await api.post('/extensions/market/install',
+                     { source: entry.source, id: entry.upstream || entry.name,
+                       scope: 'user' });
+      msgApi.success(t('market.installed', { name: entry.name }));
+      loadInstalled();
+      setProbe((p) => { const n = { ...p }; delete n[entry.name]; return n; });
+    } catch (e: any) {
+      msgApi.error(e?.response?.data?.detail || t('market.actionFailed'));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   if (loading) return <Spin style={{ display: 'block', marginTop: 40 }} />;
+
+  const isRemote = source !== 'curated';
+  const activeSource = sources.find((s) => s.id === source);
 
   return (
     <>
+      {sources.length > 0 && (
+        <div data-testid="market-source-row"
+             style={{ display: 'flex', gap: 6, marginBottom: 10,
+                      alignItems: 'center', flexWrap: 'wrap' }}>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {t('market.sourceLabel')}
+          </Text>
+          <Tag.CheckableTag checked={source === 'curated'}
+                            onChange={() => setSource('curated')}
+                            data-testid="market-source-curated">
+            {t('market.sourceCurated')}
+          </Tag.CheckableTag>
+          {sources.map((s) => (
+            <Tag.CheckableTag key={s.id} checked={source === s.id}
+                              onChange={() => setSource(s.id)}
+                              data-testid={`market-source-${s.id}`}>
+              {s.label}
+            </Tag.CheckableTag>
+          ))}
+          {activeSource?.homepage && (
+            <a href={activeSource.homepage} target="_blank" rel="noreferrer"
+               style={{ fontSize: 12 }}>
+              {t('market.sourceOpen')}
+            </a>
+          )}
+        </div>
+      )}
+      {isRemote && activeSource && (
+        <Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 10 }}>
+          {activeSource.description}
+        </Paragraph>
+      )}
+
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
         <Input
           allowClear
           prefix={<SearchOutlined style={{ color: tokens.labelTertiary }} />}
-          placeholder={t('market.searchMcp')}
+          placeholder={isRemote ? t('market.searchRemote') : t('market.searchMcp')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onPressEnter={() => { if (isRemote) searchRemote(source, query); }}
           style={{ maxWidth: 320 }}
         />
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          {t('market.countOf', { shown: filtered.length, total: servers.length })}
-        </Text>
+        {!isRemote && (
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {t('market.countOf', { shown: filtered.length, total: servers.length })}
+          </Text>
+        )}
+        {isRemote && (
+          <Button size="small" onClick={() => searchRemote(source, query)}
+                  loading={remote.loading} data-testid="market-remote-search">
+            {t('market.search')}
+          </Button>
+        )}
+        {isRemote && !remote.loading && remote.ok && (
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {t('market.countOf', { shown: remote.entries.length, total: remote.total })}
+          </Text>
+        )}
         {readOnly && (
           <Tag color="orange">{t('market.readOnlyBackend')}</Tag>
         )}
       </div>
 
-      {filtered.length === 0 ? (
+      {isRemote ? (
+        remote.loading ? (
+          <Spin style={{ display: 'block', marginTop: 24 }} />
+        ) : !remote.ok ? (
+          // "no results" and "we could not ask" must not look the same.
+          <Alert type="warning" showIcon data-testid="market-remote-error"
+                 message={t('market.remoteUnavailable')}
+                 description={remote.error || undefined} />
+        ) : remote.entries.length === 0 ? (
+          <Empty description={t('market.emptyMcp')} />
+        ) : (
+          <div style={{ display: 'grid', gap: 10 }}>
+            {remote.entries.map((e) => {
+              const state = installed[e.name];
+              const key = `${e.source}:${e.name}`;
+              const launcher = e.command
+                ? `${e.command} ${(e.args || []).join(' ')}`
+                : (e.url || '');
+              return (
+                <Card key={key} size="small"
+                      data-testid={`remote-card-${e.name}`}
+                      styles={{ body: { padding: '12px 14px' } }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                    <CloudDownloadOutlined style={{ fontSize: 16, marginTop: 3,
+                                                    color: tokens.labelSecondary }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center',
+                                    gap: 6, flexWrap: 'wrap' }}>
+                        <Text strong style={{ fontSize: 14 }}>{e.name}</Text>
+                        <Tag style={{ marginInlineEnd: 0 }}>{activeSource?.label}</Tag>
+                        {e.version && (
+                          <Text type="secondary" style={{ fontSize: 11 }}>v{e.version}</Text>
+                        )}
+                        {state && (
+                          <Tag color="green" style={{ marginInlineEnd: 0 }}>
+                            {t('market.installedTag')}
+                          </Tag>
+                        )}
+                        {!e.installable && (
+                          <Tooltip title={t('market.notInstallableHint')}>
+                            <Tag color="orange" style={{ marginInlineEnd: 0 }}>
+                              {t('market.notInstallable')}
+                            </Tag>
+                          </Tooltip>
+                        )}
+                      </div>
+                      <Paragraph type="secondary"
+                                 style={{ fontSize: 12, margin: '4px 0 6px' }}
+                                 ellipsis={{ rows: 2 }}>
+                        {e.description}
+                      </Paragraph>
+                      {launcher && (
+                        <Text code style={{ fontSize: 11 }}>{launcher}</Text>
+                      )}
+                      {(e.env_keys || []).length > 0 && (
+                        <div style={{ marginTop: 4 }}>
+                          <Text type="secondary" style={{ fontSize: 11 }}>
+                            {t('market.needsEnv', { keys: e.env_keys.join(', ') })}
+                          </Text>
+                        </div>
+                      )}
+                    </div>
+                    <Space direction="vertical" size={6} align="end">
+                      {e.installable ? (
+                        <Button size="small" type="primary" loading={busy === key}
+                                onClick={() => installRemote(e)}
+                                data-testid={`remote-install-${e.name}`}>
+                          {t('market.install')}
+                        </Button>
+                      ) : (
+                        <Tooltip title={t('market.notInstallableHint')}>
+                          <Button size="small" disabled
+                                  data-testid={`remote-install-${e.name}`}>
+                            {t('market.install')}
+                          </Button>
+                        </Tooltip>
+                      )}
+                      {e.homepage && (
+                        <a href={e.homepage} target="_blank" rel="noreferrer"
+                           style={{ fontSize: 12 }}>
+                          {t('market.sourceOpen')}
+                        </a>
+                      )}
+                    </Space>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )
+      ) : filtered.length === 0 ? (
         <Empty description={t('market.emptyMcp')} />
       ) : (
         <div style={{ display: 'grid', gap: 10 }}>

@@ -19,6 +19,25 @@ All notable changes to this project are documented here. The format follows
   Plugins are listed with what they contribute (they load from disk, so there is
   nothing to install) and skills are searchable by name, category and text.
 
+- **The marketplace reaches beyond what we shipped.** A curated list of 26 servers
+  answers "is anything installed?" and not "is there anything else?", so the MCP
+  tab now has a source selector. Two remote marketplaces are wired up, and only
+  two, because these are the ones that survive being checked rather than read
+  about: the **official MCP registry** (`registry.modelcontextprotocol.io` —
+  public API, no sign-in, and entries that carry an npm package plus
+  `runtimeHint: npx` for a local server or a `remotes[].url` for a hosted one) and
+  the **Cline marketplace** (`github.com/cline/marketplace`, entries with explicit
+  `install.args[]` / `install.env[]`, fetched through jsDelivr because
+  `raw.githubusercontent.com` is unreliable from mainland China). Both are
+  normalised into the same shape the curated registry uses and installed through
+  `install_entry`, so a remote server lands in `mcp.yaml` exactly as a curated one
+  does — credentials written as `${VAR}` references, never literals. Entries with
+  neither a launcher nor a URL are still listed, with a link to their homepage and
+  a disabled button instead of an Install that could not work, and a source that
+  cannot be reached says so rather than showing an empty list that reads as "no
+  results". The two failure modes are the same one: never claim something works
+  that has not been shown to.
+
 - **"Test" on an MCP server really starts it.** The button sends a real request
   to a new `POST /extensions/mcp/probe`, which launches that one server and waits
   for an MCP `initialize` handshake, reporting the tools it exposes or the error

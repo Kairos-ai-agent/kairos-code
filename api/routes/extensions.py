@@ -220,6 +220,59 @@ class MCPProbeResponse(BaseModel):
     ms: int = 0
 
 
+class MarketSourceItem(BaseModel):
+    """One place a server can come from, and whether it can be installed from."""
+
+    id: str
+    label: str
+    homepage: Optional[str] = None
+    kind: str = "mcp"
+    description: str = ""
+    installable: bool = False
+
+
+class MarketSourcesResponse(BaseModel):
+    sources: List[MarketSourceItem] = []
+
+
+class MarketEntry(BaseModel):
+    """A remote entry, normalised to the same shape the curated registry uses.
+
+    ``installable`` is the honest field: an entry with neither a launcher nor a
+    URL is still worth showing, and the page links out instead of offering an
+    Install button that cannot work.
+    """
+
+    name: str
+    source: str
+    upstream: Optional[str] = None
+    description: str = ""
+    version: Optional[str] = None
+    category: Optional[str] = None
+    transport: Optional[str] = None
+    command: Optional[str] = None
+    args: List[str] = []
+    url: Optional[str] = None
+    env_keys: List[str] = []
+    homepage: Optional[str] = None
+    installable: bool = False
+
+
+class MarketSearchResponse(BaseModel):
+    ok: bool = True
+    source: str = ""
+    total: int = 0
+    entries: List[MarketEntry] = []
+    error: Optional[str] = None
+
+
+class MarketInstallRequest(BaseModel):
+    source: str
+    id: str
+    scope: str = "user"
+    project_id: Optional[str] = None
+
+
 class PluginItem(BaseModel):
     name: str
     marketplace: str
@@ -592,6 +645,79 @@ async def _probe_server(config) -> dict:
             logger.debug("extensions: probe close failed: %s", exc)
     return {"ok": ok, "tools": tools, "error": error,
             "ms": int((time.monotonic() - started) * 1000)}
+
+
+@router.get("/extensions/market/sources", response_model=MarketSourcesResponse)
+async def market_sources() -> MarketSourcesResponse:
+    """The remote marketplaces this build can reach, and what they are for.
+
+    Declared rather than probed: a list that goes empty when the network hiccups
+    is worse than a list that is always there, and every search reports its own
+    reachability anyway.
+    """
+    from kairos.extensions import market_sources as ms
+
+    return MarketSourcesResponse(
+        sources=[MarketSourceItem(**s) for s in ms.list_sources()])
+
+
+@router.get("/extensions/market/search", response_model=MarketSearchResponse)
+async def market_search(source: str, q: Optional[str] = None,
+                        limit: int = 30) -> MarketSearchResponse:
+    """Search one remote marketplace. A source that cannot be reached says so in
+    ``error`` instead of returning an empty list that looks like "no results"."""
+    import asyncio
+
+    from kairos.extensions import market_sources as ms
+
+    result = await asyncio.to_thread(ms.search, source, query=q, limit=limit)
+    return MarketSearchResponse(**result)
+
+
+@router.post("/extensions/market/install", response_model=MCPInstallResponse)
+async def market_install(request: MarketInstallRequest) -> MCPInstallResponse:
+    """Resolve one remote entry and install it through the same path as a
+    curated one.
+
+    Resolved at install time rather than trusting an entry the client sends back:
+    the page's copy came over the wire once, and the file it writes is the user's.
+    """
+    import asyncio
+
+    from kairos.extensions import market_sources as ms
+    from kairos.extensions_install import install_entry
+
+    entry, error = await asyncio.to_thread(ms.fetch_entry, request.source, request.id)
+    if entry is None:
+        raise HTTPException(status_code=400, detail=error or "entry not found")
+    if not entry.get("installable"):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "%r has no start command or URL in %s, so there is nothing to "
+                "install — open it on its homepage instead" % (request.id, request.source)
+            ),
+        )
+
+    project_root = _write_scope(request.scope, request.project_id)
+    try:
+        result = install_entry(entry, name=entry["name"], scope=request.scope,
+                               project_path=project_root,
+                               user_dir=_user_kairos_dir())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except OSError as exc:
+        raise HTTPException(status_code=500,
+                            detail=f"could not write mcp.yaml: {exc}")
+    return MCPInstallResponse(
+        ok=bool(result["ok"]),
+        changed=bool(result["changed"]),
+        path=str(result["path"]),
+        scope=request.scope,
+        entry=dict(result["entry"]),
+        config=dict(result["config"]),
+        server=_effective_one(entry["name"], project_root),
+    )
 
 
 @router.post("/extensions/mcp/install", response_model=MCPInstallResponse)

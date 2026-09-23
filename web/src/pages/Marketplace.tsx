@@ -314,18 +314,35 @@ const McpTab: React.FC = () => {
           <Text type="secondary" style={{ fontSize: 12 }}>
             {t('market.sourceLabel')}
           </Text>
-          <Tag.CheckableTag checked={source === 'curated'}
-                            onChange={() => setSource('curated')}
-                            data-testid="market-source-curated">
-            {t('market.sourceCurated')}
-          </Tag.CheckableTag>
-          {sources.map((s) => (
-            <Tag.CheckableTag key={s.id} checked={source === s.id}
-                              onChange={() => setSource(s.id)}
-                              data-testid={`market-source-${s.id}`}>
-              {s.label}
-            </Tag.CheckableTag>
-          ))}
+          {/* CheckableTag's unchecked state is bare text by default, which reads
+              as a stray label next to the selected pill rather than as something
+              you can click. Give every chip a border so the row looks like one
+              control. */}
+          {(() => {
+            const chip = (on: boolean) => ({
+              border: `1px solid ${on ? 'transparent' : tokens.border}`,
+              padding: '2px 10px',
+              borderRadius: 12,
+            });
+            return (
+              <>
+                <Tag.CheckableTag checked={source === 'curated'}
+                                  onChange={() => setSource('curated')}
+                                  style={chip(source === 'curated')}
+                                  data-testid="market-source-curated">
+                  {t('market.sourceCurated')}
+                </Tag.CheckableTag>
+                {sources.map((s) => (
+                  <Tag.CheckableTag key={s.id} checked={source === s.id}
+                                    onChange={() => setSource(s.id)}
+                                    style={chip(source === s.id)}
+                                    data-testid={`market-source-${s.id}`}>
+                    {s.label}
+                  </Tag.CheckableTag>
+                ))}
+              </>
+            );
+          })()}
           {activeSource?.homepage && (
             <a href={activeSource.homepage} target="_blank" rel="noreferrer"
                style={{ fontSize: 12 }}>

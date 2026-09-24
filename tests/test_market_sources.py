@@ -1628,6 +1628,8 @@ def _openers(outcomes: dict, calls: list):
 def test_a_fetch_goes_direct_first(monkeypatch):
     """Most machines need no proxy, and a stale registry entry must not decide."""
     calls = []
+    monkeypatch.setattr(ms.urllib.request, "getproxies",
+                        lambda: {"https": "http://127.0.0.1:9"})
     monkeypatch.setattr(ms.urllib.request, "build_opener",
                         _openers({"direct": _Reply(b'{"ok": true}')}, calls))
 
@@ -1638,6 +1640,8 @@ def test_a_fetch_goes_direct_first(monkeypatch):
 def test_a_refused_direct_connection_falls_back_to_the_proxy(monkeypatch):
     """A proxy the user actually runs is still how some networks work."""
     calls = []
+    monkeypatch.setattr(ms.urllib.request, "getproxies",
+                        lambda: {"https": "http://127.0.0.1:9"})
     monkeypatch.setattr(ms.urllib.request, "build_opener",
                         _openers({"direct": urllib.error.URLError(OSError("refused")),
                                   "proxy": _Reply(b'{"ok": true}')}, calls))
@@ -1649,6 +1653,8 @@ def test_a_refused_direct_connection_falls_back_to_the_proxy(monkeypatch):
 def test_when_both_routes_fail_the_direct_error_is_raised(monkeypatch):
     """The message a user reads must be about their network, not a last attempt."""
     calls = []
+    monkeypatch.setattr(ms.urllib.request, "getproxies",
+                        lambda: {"https": "http://127.0.0.1:9"})
     monkeypatch.setattr(ms.urllib.request, "build_opener",
                         _openers({"direct": urllib.error.URLError(OSError("direct reason")),
                                   "proxy": urllib.error.URLError(OSError("proxy reason"))},

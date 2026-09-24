@@ -272,7 +272,80 @@ gh api repos/{owner}/{repo}/actions/jobs/{job_id}/logs --allow-escape-sequences 
 - `Path()` **不是空路径**，它是 `Path(".")` 且**永远为真** → 任何 `if policy.allowed_root:` 式的生成器都会给出真实分支。要测“未设置”就得传 `""`/`None`。
 - 只在 Linux 上跑的模块用 `pytestmark = pytest.mark.skipif(not sys.platform.startswith("linux"))` 保护 → 这类文件在 Windows 上永远 skip，本地全绿也会骗人。改动后若无法本地验证，就**直接调用被测函数按测试的断言手工验证一遍**。
 
+## 自定义 base URL：「能不能落实」要分三环验，别凭界面判断
+
+用户问「自定义 base url 是否真的可以落实」时，界面显示正确 **不是**证据 ✓。三个环节会独立失败 ✓，逐个验才有意义 ✓：
+
+1. **存得进** ✓ —— 值经 `SettingsStore` 往返回落盘（注意文件里是**嵌套** `provider.{openai,anthropic,active}` ✓，而数据类是**扁平**的 `provider_openai` ✓，两种形状都要认 ✓）。
+2. **取得对** ✓ —— `resolve_base_url()` 让 `endpointUrl` 赢过陈旧的 `baseUrl` ✓ 并按协议剥掉客户端会自己拼的后缀 ✓。
+3. **真发得到** ✓ —— 用**应用自己的工厂** `create_provider()`（`model_router` 就用它 ✓）打一个**本机桩服务**，断言桩**收到了**那个路径 ✓。
+
+`scripts/verify_custom_base_url.py` 就是这三环 ✓（本机桩 ✓ 不出网 ✓ 不用真 key ✓ 临时 `SettingsStore(path=…)` ✓ 不碰用户 data ✓）；`tests/test_anthropic_endpoint_and_models.py` 把它固定成回归 ✓（14 条 ✓，含用 `KAIROS_DATA_DIR` + 真 `ModelRouter` 验接线 ✓）。
+
+### 本轮抓到并修掉的真缺陷（两个都不在界面上可见）
+
+1. **Anthropic 双 `/v1`** ✗✓ —— `resolve_base_url(suffix="/messages")` 只剥 `/messages` ✓ → 基址剩 `…/v1` ✓ → 而 `AnthropicProvider.complete()` 是 `f"{base}/v1/messages"` ✓ → 每次请求打到 **`/v1/v1/messages`** **404** ✓。而抽屉里的**默认值** `https://api.anthropic.com/v1/messages` 正好触发它 ✓✓ → 全新 Anthropic 配置**从来没通过** ✓。修法是新增 `resolve_anthropic_base()` ✓（剥 `/v1/messages` **再**剥尾部 `/v1` ✓，网关前缀保留 ✓），并且回归断言要落在**上线的那个字符串**上 —— `f"{base}/v1/messages".count("/v1/") == 1` ✓（断言 `base` 本身是个同义反复 ✓ 抓不到 ✓）。
+2. **前端 protocol 写死** ✗✓ —— `fetchModels` 里 `protocol: 'openai'` 是常量 ✓ → 后端那个 `if protocol == "anthropic"` 分支**永远到不了** ✓，而该分支还**照 MiniMax 写**：对**任何** Anthropic 端点都回一份硬编码 MiniMax 模型列表 ✗✓（用户选了它必然 model-not-found ✓）。修法：预设新增 `protocol` 字段 + 一个 Anthropic 预设 ✓；后端改成真打 `GET {origin}/v1/models` ✓（头 `x-api-key` + `anthropic-version` ✓，取 **`display_name`** 而非 `name` ✗✓）+ 拉不到就**如实回空和原因** ✓（不再塞会过期的列表 ✓）。
+
+### 两个前端坑（都靠 tsc/测试当场抓住）
+
+- ✗ **“单独跑通过、整个文件跑失败” 一律先怀疑状态泄漏** ✓（不是功能坏 ✓）：zustand store 是模块级的 ✓，`beforeEach` 少重置一个切片就会漏 ✓。本案：`settingsDrawer.test.tsx` 注释写着 “reset the store” ✓ 但漏了 **`provider`** ✗ → 上一个测试的 active provider / URL / key 漏进下一个 ✓。修法：模块加载时快照一份初始切片（`structuredClone` ✓）✓ 在 `beforeEach` 里还原 ✓。**判据**：`npx vitest run <file> -t "<单条名>"` 绿而整文件红 → 就是它 ✓；`-t` 单跑也是这类问题的标准定位手法 ✓。
+
+- ✗ **表单的 `onChange` 绑定在自己的槽位上** ✓：`ProviderForm` 的 `onChange={(patch) => setProvider({openai: {...provider.openai, ...patch}})}` ✓ —— 于是 `onChange({..., active:'anthropic'})` 会把 `active` **写进 `provider.openai` 当野字段** ✗✓，而 `provider.active` 纹丝不动 ✓（URL 显示对了、调用还走旧 provider ✓）。事件处理器里**直接读 store** ✓：`useSettingsStore.getState().provider` ✓ + `setProvider({active: slot, [slot]: {...}})` ✓。回归断言要包括「**另一个槽里没有野字段**」✓。
+- ✗ **`patch` 替换以 `}` 结尾的 JSX 属性会吃掉闭合括号** ✓（本轮两次 ✓：`placeholder={…}` ✓、测试文件的 `});` ✓）→ 改完**立刻 `npx tsc --noEmit`** ✓，它 0.5 秒就能告诉你 ✓。
+
+### `check_i18n.mjs` 的已知盲区（手动补）
+
+它在 **JSX 三元表达式里的裸字符串**上看不见 ✗✓ —— 本轮实测漏掉 5 处用户可见中文 ✓（`'拉取 model 列表'` ✓ `` `重新拉取 (${n})` `` ✓ `'从下拉选 model'` ✓ 等 ✓），门禁仍然报“0 hardcoded” ✓。**手动判据**：`.tsx` 里只要出现中文字面量 ✓ 一律接进 i18n（`t('key')` ✓，带参用 `tGlobal(key, {n})` ✓）。新键加进 `web/src/i18n/parts/*.json` 后用 `translate_i18n.py --all` 补 63 语言 ✓ —— 它读 `data/settings.json` 的 key（占位符 ✓），临时从桌面版 `%LOCALAPPDATA%/kairos-code/data/settings.json` 借真 key 并**在 finally 里还原** ✓（值永不打印 ✓）。
+
+## 打包版专属缺陷：`mcp` 没被冻进二进制（v0.1.5 真实事故）
+
+**症状**：发布的 Windows 包能启动、能列出 5 台随包 MCP 服务器 ✓，但**一台都起不来** ✓：
+
+```
+kairos/mcp_local_servers.py:392: from mcp.server.stdio import stdio_server
+ModuleNotFoundError: No module named 'mcp'
+```
+
+→ 每次启动在 5 个请求超时上白烧 **60 秒预算** ✓，整套 MCP（含本轮新加的 HTTP 传输 ✓）在打包版里**全废** ✓，而**源码形态一切正常** ✓（`python -m kairos.mcp_local_servers --server time` 直接能答 ✓）。
+
+**根因**：`mcp` 是**可选 extra** ✓ → PyInstaller 顺着 import 找不到它 ✓ → 而 `build_binary.py` 没显式收 ✓。修法：`--collect-submodules mcp` / `mcp.server` / `mcp.client` ✓（服务端和 HTTP 客户端都是**延迟导入** ✓，光有顶层包不够 ✓）。
+
+**为什么之前没发现 —— 以及真正的教训** ✓：`smoke_binary.py` 只**数**了服务器数量 ✓（内容断言 ✓ ✓），**没有让任何一台真的答一次** ✓。**数得出 ≠ 跑得起来** ✓✓。现在冒烟会拿 `--mcp-serve <名>` 发一个真 `initialize` ✓ 并断言回包里有 `serverInfo` ✓。**护栏必须双证** ✓：对着已知坏包要 **FAIL** ✓（实测退出码 1 ✓）、对着修好的包要 **PASS** ✓（`bundled MCP servers answer initialize (time, filesystem)` ✓）—— 只在好包上通过的护栏等于没有 ✓。
+
+**注意 `--installed` 形态** ✓：那是**核心依赖**的源码安装 ✓，`mcp` 是可选 extra ✓ → 那里**没有** MCP 是正确的 ✓，而且 `--mcp-serve` 是**冻结版专属旗标** ✓（核心安装收到它只会当 CLI 启 ✓）。护栏按形态区分 ✓，跳过时**打印原因**而不是静默通过 ✓。
+
+**验证发布的包** ✓：`gh release download <tag> --pattern '*windows*'` → 解出来（**zip 里还套一层目录** ✓ 别把路径写错 ✓）→ 用仓库的 `scripts/smoke_binary.py` 打它 ✓。**发布工作流的绿 ≠ 产物可用** ✓✓。
+
+## CI 上反复出现的假红：测试写死了自己所在的平台
+
+`tests/test_updater.py` 两条**一直**在 CI 红、本地绿 ✓（v0.1.4 和 v0.1.5 两次发布窗口都出现 ✓）。不是限流、不是网络、不是 product 缺陷 ✓ —— 它的 `_release()` fixture **默认造 `windows-x86_64` 资产** ✗，而 `check_for_update()` 用 `platform_key()` 挑资产 ✓ → Linux 上挑不到 → `asset=None` → `TypeError: 'NoneType' object is not subscriptable` ✓✓（报错**看起来像 updater 坏了** ✓ 实际 fixture 写死了平台 ✓）。
+
+**规则**：fixture 造数据要**按被测代码的规则**造（这里就是 `platform_key()`）✓，或者把三个平台都断言一遍 ✓。
+
+**顺带两个真坑**：
+1. ✗ `check_for_update` 把结果**缓存在 `data_dir` 里 12 小时** ✓ —— 一个测试里 loop 三个平台**共用同一个 `tmp_path`** ✓ → 第 2、3 轮读到第 1 轮的答案 ✓（我写「三平台证明」时就是这么翻车的 ✓）。**每个平台一个独立 `data_dir`** ✓。
+2. ✗ **我误判过一次同一条红** ✓：先断定「测试打真实 API 被限流」✓ → 给 `ci.yml` 加了 `GITHUB_TOKEN` ✓ —— 而那两条测试**用的是注入的 FakeFetch，根本不出网** ✓✓。**下一个提交把 token 撤了 ✓ 并把原因写进信息** ✓：**注释里写错的原因比代码本身更毒** ✓（它会让后来人沿错方向查 ✓）。诊断「打不打网络」之前先**读 fixture** ✓。
+
 ## 发布前的检查（本仓库）
+
+**先跑 `tests/test_repo_hygiene.py`** —— 它是发布门禁，不是普通测试。开源准备时它抓出 46 行机器路径（盘符、用户名、私有项目名、私有密钥文件名），全在导入进来的技能里。判据：`FORBIDDEN` 里的每个模式在 tracked 文本文件里为 0 命中；它自带 `ALLOW`（注释/文档行、`<user>` 这类占位符）和一条「扫到的文件数 > 100」的反空扫断言。
+
+配套两个可重跑的脚本（都在 `scripts/`，都先给 `--dry-run`）：`relativize_provenance.py`（把导入时写的绝对 `source-path:` 改成 agent 相对路径，554 个文件）、`prune_private_notes.py`（哪些技能**整篇**是私有笔记 → 删；哪些只是路径 → 改写）。**删的判据是文件而不是行**：一篇「本机私有项目流程」改不掉它的私有性。原文件留在别的 agent 目录里，删仓库里的副本不丢东西。
+
+### 这轮踩的四个坑（每个都值得记）
+
+1. **`re.sub` 的替换串会解释反斜杠** ✗ —— `re.sub(pat, f"description: {value}", …)` 里 value 含 `E:\cl_system` → `re.error: bad escape \c`，脚本崩、文件没改。**替换串用 lambda** ✓；这与「heredoc 吃反斜杠」是同一类（本会话 heredoc 坑了我三次 ✓），正则一律写进 `.py` 文件而不要走 shell heredoc ✓。
+2. **YAML 里放 Windows 路径必须用单引号** ✓ —— 双引号要 `\\`，漏一处就 `found unknown escape character 'c'`，**整个文件加载失败** ✓（579/580 ✗ → 被「加载数 == 磁盘数」这条不变量当场抓到 ✓✓）。单引号里 YAML 不做转义处理（只有 `''` 表示一个引号）✓。
+3. **判据要用解析器，不要用字符串匹配** ✓ —— 第一版修复产出的描述**看起来**正常 ✗、却让文件不可解析 ✓。改成 `yaml.safe_load(front_matter)` 失败即视为待修 ✓，一次抓准 ✓。
+4. **`rglob` 在坏联接上会中途抛异常** ✗（`.openclaw/skills/...` 里有删除技能留下的悬挂联接 ✓）→ 整个修复脚本中止 ✓。改用 `os.walk(root, onerror=lambda e: None)` ✓：跳过读不了的目录，永不抛 ✓。
+5. **删路径的脚本自己不能含那条路径** ✓ —— 卫生门禁会拒掉 `prune_private_notes.py` 自己 ✗。正解不是加白名单 ✓，而是**运行时把字符串拼起来**（`_p("C:", "\\", "Users", …)` ✓），并写明为什么 —— 仓库里只有配料、没有成品路径 ✓，判据对别处仍然有效 ✓。
+
+### 导入技能的质检（一次就能全库巡检）
+
+导入时我给 `description` 统一加了引号 ✗ → 多行描述（`description: >`）被写成字面量 `">"` ✓ → **53 个技能没有可用描述** ✗✓（描述是 agent 选中技能的唯一依据 ✓，等于白导入 ✓）。巡检脚本的形状：逐文件 `yaml.safe_load` front matter ✓ → `description` 不是字符串、或等于 `>`/`|`、或长度 < 12 → 计数 ✓。修法是**从原件恢复**（`source-path:` 正好能反查 ✓），原件没了就**用正文自己的第一句**（不编造 ✓✓）。`scripts/repair_skill_descriptions.py` 幂等 ✓。
+
+**判据**：任何「导入/批量生成」之后，三件事一起看 —— ① 加载数 == 磁盘数；② 全库 YAML 可解析；③ 每个技能都有非空描述。三条都过才算导入成功，不能只看“文件写出去了”。
 
 - `OPEN_SOURCE_CHECKLIST.md` 有完整审计与证据；`scripts/ci_local.sh` 一次跑完 CI 的全部四道门禁；`scripts/prepare_github.py --owner X --repo Y [--apply]` 替换 `OWNER/REPO` 占位符。
 - **历史重写后 `.git` 里不含 web/dist**（gitignore），但打包 wheel 需要 `web/dist`（走 `hatch_build.py`，见下文）→ 发 wheel 前先 `npm run build`。
@@ -290,7 +363,7 @@ for c in $(git rev-list --all); do git grep -hIE "sk-[A-Za-z0-9_-]{20,}" "$c"; d
 #    sha256(key)[:12] 与 data/settings.json 里的值对比
 # 4. 抹除（保留提交，只替换字符串）：文件放仓库外，事后立刻删
 git-filter-repo --force --replace-text /tmp/redact.txt   # 内容：literal:<key>==>REDACTED
-#    同样的办法可抹机器用户名：literal:<user>==>user（当前文件 + 全历史一起改）
+#    同样的办法可抹机器用户名：literal:you==>user（当前文件 + 全历史一起改）
 ```
 
 配套要点：
@@ -371,6 +444,95 @@ git-filter-repo --force --replace-text /tmp/redact.txt   # 内容：literal:<key
 2. 脚本跑完**立刻** `python -m py_compile <file>` ✓，再跑 pytest ✓ —— 这一步能在 0.8 秒内抓住语法错 ✓，否则 pytest 的报错信息看起来像“测试炸了”而不是“我改坏了” ✓。
 3. 脚本要**可重入** ✓：先 `replace()` 掉自己上次插入的标记 ✓ 再重新插入 ✓（我那次就是靠“先撤销再重插”一次修好的 ✓）。
 4. 只改**几处**时优先用 `patch` 工具（它会校验唯一匹配 ✓）；批量插入才写脚本 ✓。
+
+## 工具自己会撒谎：总结必须能报“没干活”（translate_i18n 真实事故）
+
+跑 `python scripts/translate_i18n.py --all` ✗ → 每个 batch 都 `401 Authorization Required` ✗ → 61 个 catalog **一个键都没写** ✗ → 脚本结尾却打印 **`done: 61 language(s), all validated`** ✗✓ 而且**退出码 0** ✗✓。
+
+**根因**：`do_language()` 把异常 `print` 完就 `continue` ✗，返回值里**没有“成功了几条 / 失败了几批”** ✓ → `main` 只能数 `catalogs 的质量问题` ✓ → 而“一个键都没加”的 catalog **恰好没有质量问题** ✓✓ → “all validated” ✓。
+
+**修法（已落地）**：`do_language` 返回 `new_keys` + `failed_batches` ✓；总结改成 `done: N language(s), M key(s) filled` ✓；**只要有 batch 失败就 `return 1`** ✓（密钥被拒时 catalog 与跑之前一模一样 ✓，绝不能让上游 `&&` 链把这当成成功 ✓）。
+
+**可迁移的规则**：一个会写外部状态的工具 ✓，总结必须是「意图 vs 实际」的对比 ✓（翻译了 0 条 ≠ 都通过 ✓）；只看质量分不看工作量的成功判定一定会撒谎 ✓。看到 `all validated` 这类无信息量的措辞先查它算了什么 ✓。
+
+### 跑翻译脚本的正确姿势（key 永不进对话）
+
+`data/settings.json` **被 gitignore 且从未进过库** ✓（`git ls-files --error-unmatch` + 全历史扫描双证 ✓）→ 所以它**可能装着真 key** ✓，判断泄漏只看全历史 ✓、别因为工作区里是 35 字符就报警 ✓。
+
+- 它读的是 **repo 的** `data/settings.json` ✓ → 那份可能是**过期 key** ✓（本次就是 401 ✓）；**桌面版** `%LOCALAPPDATA%/kairos-code/data/settings.json` 里那份是有效的 ✓（实测单语言真翻出 51 个键 ✓）。
+- 用法：备份 → `cp` 覆盖 → 跑 → **`trap restore EXIT` 还原** ✓；全程**文件级复制 ✓ 不读内容 ✓ 不打印 ✓**（`wc -c` 只看字节数 ✓）。
+- 两处 model 字段无所谓的 ✓：脚本的 `BROKEN_MODEL_HINT` 会把 `deepseek-flash` 之类换成 `deepseek-chat` ✓（思考型模型会返回空正文 ✓）。
+
+## 折叠块渲染 0 个节点：写测试前先想清楚
+
+`ChatThread` 的「过程」块在**轮次结束且用户没手动展开**时是 `<details>`/条件渲染 ✗ → 里面的 `process-step` **根本不在 DOM 里** ✓ → 断言步骤的测试必须**先点开**（`aria-expanded === 'false'` 时点 toggle ✓）。
+
+**规则**：测试失败时先分清是「功能错」还是「我把正确的行为当成了错」✓ —— 本次 2 条失败里 1 条是这个 ✓、另 1 条是我把「一次调用+它的结果」数成 2 步 ✗（正确是 **1 步** ✓ 结果属于那次调用 ✓）。**改断言前先写一句“它在保护什么”** ✓。
+
+## 对话过程展示：耗时靠配对算，别加后端字段（本轮实现）
+
+用户要「调用工具/正在思考都能详细展示过程」✓。`tool.call` / `tool.result` 的 metadata 只有 `{task_id, tool, turn}` ✗（没有耗时 ✗）→ **在前端配对**即可 ✓：按 `(tool)` 找**最早的未闭合调用** ✓（同一工具会重复调用 ✓，不能用工具名做字典键 ✓）✓，`ms = result.timestamp - call.startedAt` ✓。
+
+两条不变量 ✓：① **未闭合的调用不能显示耗时** ✓（显示“进行中” ✓，UI 明说正在跑 ✓）；② 一个轮次只有**一个** reply ✓ → 分组：user → 过程 → reply ✓，轮次未结束就保持展开 ✓、结束后自动折叠 ✓（用户手动点过之后不再自动改 ✓）。
+
+前端 markdown：**自己写** ✓（`web/src/utils/markdown.tsx` ✓ 零依赖 ✓ 不用 `dangerouslySetInnerHTML` ✓ → `<script>` 在回复里是文本 ✓、`javascript:` 链接被降级成纯文本 ✓）。改它时记得：代码跨距里的 `**` 必须保持字面 ✓、未闭合的 fence 按代码块处理 ✓（不能吞掉后面的正文 ✓）。
+
+## 门禁不能被 `tail` 读（真实事故：我把红的当成绿的）
+
+跑 `node scripts/check_i18n.mjs 2>&1 | tail -4` ✗ → 最后 4 行是 **信息性的 `296 unused key(s)`** 列表 ✓ → 我读成“守卫通过” ✗✓ —— 而真正的失败在**上面 40 行**：`1 problem(s): ChatThread.tsx:561 [jsx-text] "tokens"` ✓✓。本地报绿、CI 报红 ✓。
+
+**规则**：
+- 任何门禁 **不允许接给 `tail`/`head`/`grep` 再目测** ✓ —— 重定向到文件 ✓、**单独 echo 退出码** ✓、再 grep **具体结论行**（如 ``N problem\(s\)`` ✓ 而不是“最后几行” ✓）✓。
+- 报“通过”必须同时有 **退出码 0** ✓。`check_i18n.mjs` 把 `unused key(s)` 当**信息**输出 ✗ —— 它永远在尾部 ✓，所以尾部看什么都是“绿” ✗✓。
+- 同理：`merge_i18n.py` 必须用 **CI 的同一条命令（带 `--strict`）** ✓。不带 `--strict` 本地永远绿 ✗✓。**“本地绿 CI 红”先去读 workflow 里的确切命令** ✓。
+
+## 全量跑过之后又改了一行 = 全量作废（第二次踩）
+
+前端 **190/190 全绿** ✓ → 之后我又改了侧栏 CSS + 一个导航标签 ✓ → 只重跑了**一个**测试文件 ✗ → CI 抛出 2 条失败 ✓（`chatSidebarProjectList.test.tsx` 的 ``queryByText('Projects')`` 撞上了我新加的侧栏「Projects」入口 ✗✓）。
+
+**规则**：
+- 启动全量后**任何一次编辑都让那次全量失效** ✓ —— 要么改完**再跑一次全量** ✓，要么明确说“这次全量早于改动” ✓✓。
+- **改动一个导航/菜单标签前，先全库搜这个字符串** ✓（`search_files` 搜 `Projects` ✓）—— 断言“整个文档里没有 X”的测试会因此碎掉 ✓，而它**不是**坏测试 ✓，只是作用域太大 ✓。
+- 写这类断言时**限定区域** ✓：`document.querySelector('[data-testid^="project-row-"]')` ✓ 而不是遍历整篇文档 ✓✓。
+
+## 新增 UI 文案必须走 i18n，不能改成模板字符串糊弄守卫
+
+`ChatThread.tsx` 里裸写 `{n} tokens` ✗ → 守卫报 `[jsx-text] "tokens"` ✓。可以写成 ``{`${n} tokens`}`` 让守卫看不见 ✗ —— **那是绕过门禁** ✗✓。正确做法是加键 ✓（`chat.thread.tokensUsed` = `{n} tokens` ✓）→ 然后**翻译 61 语言 + merge + 重跑守卫** ✓✓（多花 ~7 分钟 ✓，但门禁不会撒谎 ✓）。
+
+## 模块级默认参数不能被替换（真测出了两个红灯）
+
+`def search(..., fetch: Callable = _http_json)` ✗ —— 默认值在**模块导入时**就绑定死了 ✓ → 测试里 `monkeypatch.setattr(module, "_http_json", stub)` **完全无效** ✗✓（真网依旧被请求 ✗，两个 API 测试红 ✓）。
+
+**规则**：任何需要被替换/代理/缓存的协作者 ✓ 都写成 `fetch=None` ✓ → **函数内** `fetch = fetch or _http_json` ✓✓。默认参数只适合真正的常量 ✓；把“以后可能想换掉的东西”写成默认参数 ✓ 等于提前写死 ✓。
+
+## 子代理的调研结论必须自己打一遍（官方 Registry 的两种返回形状）
+
+子代理说条目是 `{"server": {...}}` 包裹的 ✓ → 我实测 `GET /v0/servers?limit=5` ✓ 拿到的是**扁平的** ✓✓（`name/description/version/packages/remotes` 直接在外层 ✓），而另一批又是包裹的 ✓ → **两种形状同时在线** ✓。
+
+**规则**：调研报告里的 endpoint / 字段名 / 文件名 ✓ 属于**待验证假设** ✓ → 每个关键结论都自己 curl 一次 ✓（很便宜 ✓）；归一化函数要**两种形状都吃得下** ✓ 而不是按报告写死一种 ✓✓。
+
+**顺带**：`curl -s -o /dev/null -w "%{size_download}"` 在部分重定向下报 **0 字节** ✗ 但内容其实拿到了 ✓ —— **不要用它的 0 判定“空响应”** ✓，直接落盘再数 ✓。
+
+## “没结果”和“问不到”必须长得不一样（市场源）
+
+远程市场源的搜索 ✓ 不能用 `{}` 代替失败 ✗ —— 用户看到空列表会以为“真没有” ✓。契约：`{ok: false, entries: [], error: "<源> is unreachable (...)"}` ✓ → 前端渲染成 Alert ✓ 而不是 `<Empty>` ✓✓。同一条规矩在 probe / 安装 / 更新检查上已经用过三次 ✓，**新增任何远程调用时默认照抄** ✓。
+
+**另一个诚实字段**：`installable` ✓ —— 条目里既无启动命令也无 URL 时 ✓ 列表**照样展示** ✓ 但按钮 disabled + 链到主页 ✓，而不是给一个点了必然失败的 Install ✓（“能装”与“只能看”必须分开 ✓）。
+
+## UI 改动：截图是验收步骤，不是装饰（同类事故已两次）
+
+**改完必须自己截图 + 看图问逐字问题** ✓ —— 「代码看起来对了」在本仓库已经错过两次：
+
+1. 左下侧栏：commit message 里我写的是「统一四列网格」✗ —— 截图显示它其实是 flex 自适应 ✓、而且**在截断自己的标签**（「全部项目」→「全…」✓）。
+2. 聊天回复去掉「角色名」：名字确实去掉了 ✓ **但那个槽位没空着** ✗ —— `agent.response` / `coder.summary` / `reviewer.summary` 搬了进来 ✓，说的是同一件事的粗糙版本 ✓。**只有看截图才发现** ✓。
+
+**规则**：
+
+- **删掉一个标签后，必须再回去看那个位置新露出了什么** ✓ —— 删标签不会让槽位消失 ✓，下一个渲染的东西就会顶上来 ✓。
+- 截图命令：`msedge.exe --headless=new --hide-scrollbars --window-size=1500,1200 --virtual-time-budget=16000 --screenshot=<png> <url>` ✓（`browser_exec` 在本机会超时 ✗）。
+- 看图用 vision ✓，并且**问逐字问题** ✓（「回复上方逐字报出什么标签」✓）比「看看哪里不对」有效得多 ✓；看不清就带 `region` 放大 ✓。
+- 临时实例必须隔离 HOME ✓：`HOME=$H USERPROFILE=$H KAIROS_PORT=NNNNN python -m kairos.cli serve --port NNNNN` ✓ —— **绝不碰用户的 `data/`** ✓。
+- 顺带的好旁证：**用键数会自己作证** ✓ —— 去掉 `chat.thread.roleReviewer` 后 i18n 守卫的「用键 940 → 939」正是「标签真的没了」的证据 ✓。
 
 ## 打包/交付：`rm -rf <dir>` 在被占用时会先删光内容再失败（真实事故）
 

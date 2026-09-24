@@ -197,7 +197,10 @@ def main() -> int:
             print(f"FAIL: GET / returned {code} and did not look like the SPA "
                   f"(the bundle is probably missing web/dist)", file=sys.stderr)
             return 1
-        print(f"[smoke] GET / 200  ({len(page)} bytes of the bundled UI)")
+        # Measure bytes, not characters. The page contains a multi-byte one ("§"),
+        # so this number was one low while calling itself bytes — the kind of
+        # off-by-one that sends a reader hunting a stale asset that is not there.
+        print(f"[smoke] GET / 200  ({len(page.encode('utf-8'))} bytes of the bundled UI)")
 
         code, _ = get(f"{base}/assets/definitely-not-here.js")
         print(f"[smoke] missing asset -> {code} (404 expected)")

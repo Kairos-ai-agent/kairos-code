@@ -77,3 +77,7 @@ _check_extract.py
 /dist*/
 # Git worktrees the loop creates for the Coder/Reviewer during a run
 /.kairos-worktrees/
+
+# The demo writes its report into the working directory; it is an output, not
+# source. One was committed by accident once.
+gate-report-*.html

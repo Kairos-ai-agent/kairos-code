@@ -159,6 +159,42 @@
     "zh": "搜索这个市场…",
     "en": "Search this marketplace…"
   },
+  "market.sourceLocal": {
+    "zh": "本地已安装",
+    "en": "Installed here"
+  },
+  "market.sourceUnreachable": {
+    "zh": "问不到 {source}",
+    "en": "Could not read {source}"
+  },
+  "market.retry": {
+    "zh": "重试",
+    "en": "Retry"
+  },
+  "market.installing": {
+    "zh": "正在下载并安装…",
+    "en": "Downloading and installing…"
+  },
+  "market.installElapsed": {
+    "zh": "已用 {n} 秒",
+    "en": "{n}s elapsed"
+  },
+  "market.installSlowHint": {
+    "zh": "大插件是一个文件一个文件转换的，可能要几分钟 —— 请不要关页面",
+    "en": "A large plugin is converted one file at a time — this can take a few minutes. Don't close the page."
+  },
+  "market.installWarned": {
+    "zh": "{name} 装好了，但有文件被跳过",
+    "en": "{name} is installed, but files were skipped"
+  },
+  "market.alreadyInstalled": {
+    "zh": "{name} 已经装过了，内容没有变化",
+    "en": "{name} was already installed — nothing changed"
+  },
+  "market.emptyRemote": {
+    "zh": "这个来源里没有匹配的条目",
+    "en": "Nothing in this source matches"
+  },
   "market.search": {
     "zh": "搜索",
     "en": "Search"

@@ -62,6 +62,45 @@ All notable changes to this project are documented here. The format follows
   than HTML, so a reply containing a script tag is text and a `javascript:` link
   stays inert.
 
+- **The marketplace installs plugins and skills, from four more public sources.**
+  The MCP tab could browse and install; plugins and skills could only be looked at,
+  because there was nowhere to install them *from*. Wired up now: **Smithery**
+  (17,061 MCP servers — its list endpoint names no endpoint URL, so the detail is
+  fetched only for the entries actually returned, and an entry whose detail fails
+  comes back marked non-installable with the reason rather than as a silent
+  omission), **Cline's plugin and skill registries** (16 and 38), **Anthropic's
+  official Claude plugin marketplace** (311 plugins across four different `source`
+  shapes, all of them walked) and **`anthropics/skills`** (19). Each is normalised
+  into the same entry shape and installed through one path.
+
+  A Claude plugin converts to a Kairos plugin on install: `commands/`, `agents/`,
+  `skills/`, `hooks/` and `.mcp.json` are copied, a `kairos-plugin.yaml` is written
+  with `capabilities` derived from the directories that **actually exist** (a Claude
+  plugin's manifest declares none of them — its components are found by directory
+  convention, which is why the four ports this project already carried worked
+  unchanged), `CLAUDE_PLUGIN_ROOT` is rewritten to the installed directory, and
+  `ATTRIBUTION.md` records the upstream URL and the original manifest verbatim. A
+  file that depends on a Claude-only facility is skipped and **named in the
+  install's warnings** instead of being dropped quietly, and a plugin whose licence
+  is not permissive is refused outright — installing `claude-security` today fails
+  with "its licence looks like proprietary", which is the rule working as intended.
+
+  Listings read the repository **tarball** rather than an index, because it is the
+  only source measured to be both complete and unthrottled. jsDelivr's file API
+  came back empty for whole plugin directories of this very marketplace
+  (`claude-security` 42 files, `code-modernization` 29, `cwc-makers` 6 — all zero
+  through the CDN), which would have installed an empty plugin and reported success.
+  GitHub's git-trees API is authoritative but allows an anonymous caller 60 requests
+  an hour, which is how a real install failed with `403 rate limit exceeded`. One
+  3 MB download returns the listing and every file's contents together, so an
+  install costs one request instead of one per file. The API stays as the fallback,
+  and when both roads are closed the source says why — a source that cannot be
+  reached must never look like a source with nothing in it. The Claude
+  marketplace's own `marketplace.json` is read that way too: jsDelivr stopped
+  answering from this network mid-session (three consecutive live loads returned
+  `unreachable ([SSL: UNEXPECTED_EOF_WHILE_READING])`), and the source now lists
+  all 311 plugins from the tarball with the CDN kept as the fallback.
+
 ### Changed
 
 - **Replies no longer carry a role name.** The transcript printed "Kairos" above

@@ -20,6 +20,14 @@ Two properties are deliberate:
 
 Precedence, as everywhere else in Kairos: bundled plugin defaults < user
 (``~/.kairos/mcp.yaml``) < project (``<project>/.kairos/mcp.yaml``).
+
+Two more writers live at the bottom of this module, for the two marketplaces
+that are not MCP servers: :func:`install_plugin` converts a Claude plugin into a
+plugin directory (the conversion is
+:mod:`kairos.extensions.claude_plugin`, the destination and the atomicity are
+here) and :func:`install_skill` writes one ``SKILL.md`` into the user's skills
+scope. They keep the same two properties by other means — a staged tree swapped
+into place, and no write at all when the result would be identical.
 """
 
 from __future__ import annotations
@@ -27,7 +35,9 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 
@@ -185,22 +195,27 @@ def yaml_body(entry: Mapping[str, Any]) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def layer_path(scope: str, *, project_path: Optional[Path] = None,
-               user_dir: Optional[Path] = None) -> Path:
-    """The ``mcp.yaml`` a scope writes to.
+def scope_dir(scope: str, *, project_path: Optional[Path] = None,
+              user_dir: Optional[Path] = None) -> Path:
+    """The ``.kairos`` directory a scope writes to.
 
-    ``user_dir`` overrides the ``.kairos`` directory itself (the same parameter
+    ``user_dir`` overrides that directory itself (the same parameter
     :func:`kairos.mcp_client.load_configs` takes), which is how tests keep their
     hands off a real ``~/.kairos``.
     """
     if scope == "user":
-        base = Path(user_dir) if user_dir else Path.home() / ".kairos"
-        return base / "mcp.yaml"
+        return Path(user_dir) if user_dir else Path.home() / ".kairos"
     if scope == "project":
         if not project_path:
             raise ValueError("scope='project' needs a project_path")
-        return Path(project_path) / ".kairos" / "mcp.yaml"
+        return Path(project_path) / ".kairos"
     raise ValueError(f"unknown scope {scope!r}: expected one of {list(SCOPES)}")
+
+
+def layer_path(scope: str, *, project_path: Optional[Path] = None,
+               user_dir: Optional[Path] = None) -> Path:
+    """The ``mcp.yaml`` a scope writes to."""
+    return scope_dir(scope, project_path=project_path, user_dir=user_dir) / "mcp.yaml"
 
 
 # ---------------------------------------------------------------------------
@@ -500,3 +515,187 @@ def uninstall_mcp(
     if changed:
         _atomic_write(path, text)
     return {"ok": True, "changed": changed, "path": str(path), "entry": removed}
+
+
+# ---------------------------------------------------------------------------
+# Plugins and skills
+#
+# The MCP writers above change one key inside one YAML file. These two write a
+# *tree*, which fails differently: there is no comment to preserve, but a
+# half-written plugin directory is a plugin that half works, and a file deleted
+# between two renames is a plugin that is not there at all. So the same two
+# properties are kept, by other means — the whole tree is built somewhere else
+# and swapped into place, and a second identical install writes nothing.
+# ---------------------------------------------------------------------------
+
+#: Where plugin directories live, per scope. Mirrors
+#: :class:`kairos.plugins.PluginManager`, which loads ``~/.kairos/plugins/``.
+PLUGIN_DIR = "plugins"
+
+#: Where skills live. ``kairos.skills.SkillsLoader`` reads
+#: ``<.kairos>/skills/<name>/SKILL.md`` — the directory is the skill's name.
+SKILL_DIR = "skills"
+SKILL_FILE = "SKILL.md"
+
+#: A SKILL.md has to start with frontmatter: the loader skips files that do not,
+#: with a warning nobody sees.
+_FRONTMATTER = re.compile(r"\A---\s*\n.*?\n---\s*(\n|\Z)", re.DOTALL)
+
+
+def plugin_dir(scope: str = "user", *, project_path: Optional[Path] = None,
+               user_dir: Optional[Path] = None) -> Path:
+    """The plugin directory a scope writes into."""
+    return scope_dir(scope, project_path=project_path, user_dir=user_dir) / PLUGIN_DIR
+
+
+def skills_dir(scope: str = "user", *, project_path: Optional[Path] = None,
+               user_dir: Optional[Path] = None) -> Path:
+    """The skills directory a scope writes into."""
+    return scope_dir(scope, project_path=project_path, user_dir=user_dir) / SKILL_DIR
+
+
+def _trees_equal(left: Path, right: Path) -> bool:
+    """Whether two directories hold the same files with the same bytes."""
+    def index(root: Path) -> Dict[str, Path]:
+        out: Dict[str, Path] = {}
+        for path in root.rglob("*"):
+            if path.is_file():
+                out[str(path.relative_to(root)).replace("\\", "/")] = path
+        return out
+
+    a, b = index(left), index(right)
+    if set(a) != set(b):
+        return False
+    for rel, path in a.items():
+        try:
+            if path.read_bytes() != b[rel].read_bytes():
+                return False
+        except OSError:
+            return False
+    return True
+
+
+def _swap_dir(staged: Path, dest: Path) -> None:
+    """Move ``staged`` onto ``dest``, putting ``dest`` back if the move fails.
+
+    A directory cannot be replaced while it is non-empty on Windows, so the old
+    one is renamed aside, the new one takes its place, and only then is the old
+    one removed. If the second rename fails the first is undone: the plugin
+    directory is either the old tree or the new one, never missing.
+    """
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if not dest.exists():
+        os.replace(staged, dest)
+        return
+    aside = dest.with_name("%s.old-%s" % (dest.name, uuid.uuid4().hex[:8]))
+    os.replace(dest, aside)
+    try:
+        os.replace(staged, dest)
+    except BaseException:
+        os.replace(aside, dest)
+        raise
+    shutil.rmtree(aside, ignore_errors=True)
+
+
+def install_plugin(
+    entry: Mapping[str, Any],
+    *,
+    name: Optional[str] = None,
+    scope: str = "user",
+    project_path: Optional[Path] = None,
+    user_dir: Optional[Path] = None,
+    fetch: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Install one Claude plugin by converting it into a scope's plugin directory.
+
+    The conversion itself is :mod:`kairos.extensions.claude_plugin` — this
+    function owns only *where* it lands and *how*: the tree is built in a staging
+    directory next to the destination, compared with what is already there, and
+    swapped in only if it differs. Installing the same plugin twice therefore
+    reports ``changed: False`` and touches nothing.
+
+    A refused conversion (no determinable licence, nothing to install, an
+    unfetchable location) returns ``ok: False`` **and writes nothing**: the
+    staging directory is discarded. ``warnings`` is always the full list, so a
+    plugin that installed with files skipped says which ones.
+    """
+    from kairos.extensions import claude_plugin
+
+    key = _check_name(str(name or entry.get("name") or ""))
+    dest = plugin_dir(scope, project_path=project_path, user_dir=user_dir) / key
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=key + ".", suffix=".staging",
+                                    dir=str(dest.parent)))
+    try:
+        converted, warnings = claude_plugin.convert(entry, staging, fetch=fetch,
+                                                   root=dest)
+        if converted is None:
+            return {"ok": False, "changed": False, "path": None,
+                    "installed_path": None, "warnings": list(warnings),
+                    "entry": dict(entry)}
+        if dest.exists() and _trees_equal(staging, dest):
+            return {"ok": True, "changed": False, "path": str(dest),
+                    "installed_path": str(dest), "warnings": list(warnings),
+                    "entry": dict(entry)}
+        _swap_dir(staging, dest)
+        return {"ok": True, "changed": True, "path": str(dest),
+                "installed_path": str(dest), "warnings": list(warnings),
+                "entry": dict(entry)}
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+
+def install_skill(
+    entry: Mapping[str, Any],
+    *,
+    name: Optional[str] = None,
+    scope: str = "user",
+    project_path: Optional[Path] = None,
+    user_dir: Optional[Path] = None,
+    content: Optional[str] = None,
+    fetch: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Write one skill's ``SKILL.md`` into a scope's skills directory.
+
+    ``content`` is used when the caller already holds the file; otherwise it is
+    read from the entry's ``raw_url`` (the jsDelivr URL the marketplace
+    recorded) through the call-time-resolved fetcher.
+
+    Two refusals, both because writing would leave something that looks
+    installed and is not: an empty file, and a file with no YAML frontmatter —
+    ``kairos.skills.SkillsLoader`` skips those, so a skill installed that way
+    would sit on disk and never load.
+
+    Unlike the plugin converter, a ``${CLAUDE_SKILL_DIR}`` reference in a skill
+    body is *not* a reason to refuse: a skill is text the model reads, and the
+    loader in this project already carries dozens of adapted skills that mention
+    it. It is reported as a warning instead, so the reference is not a surprise.
+    """
+    from kairos.extensions import claude_plugin
+
+    key = _check_name(str(name or entry.get("name") or ""))
+    text = content if content is not None else claude_plugin.fetch_skill_text(entry, fetch)
+    text = str(text or "")
+    if not text.strip():
+        raise ValueError("%r has an empty SKILL.md" % key)
+    if not _FRONTMATTER.match(text):
+        raise ValueError(
+            "%r has no YAML frontmatter in its SKILL.md, so the skills loader "
+            "would skip it — refusing to write a file that never loads" % key)
+
+    path = skills_dir(scope, project_path=project_path, user_dir=user_dir) / key / SKILL_FILE
+    if _read_text(path) == text:
+        return {"ok": True, "changed": False, "path": str(path),
+                "installed_path": str(path), "warnings": [], "entry": dict(entry)}
+
+    _atomic_write(path, text)
+    warnings: List[str] = []
+    variables = claude_plugin.claude_only_variables(text)
+    if variables:
+        warnings.append(
+            "%s mentions %s, which only Claude Code resolves; the skill loads, "
+            "but that reference will not" % (key, ", ".join(variables)))
+    return {"ok": True, "changed": True, "path": str(path),
+            "installed_path": str(path), "warnings": warnings,
+            "entry": dict(entry)}

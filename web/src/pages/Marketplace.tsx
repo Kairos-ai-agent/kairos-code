@@ -79,9 +79,16 @@ interface MarketSource {
   id: string;
   label: string;
   homepage?: string | null;
+  /** mcp | plugin | skill | mixed — decides which tab offers it. */
   kind: string;
   description: string;
   installable: boolean;
+  /** True when the source can only answer a question, not list itself. */
+  needs_query?: boolean;
+  /** The upstream's own count, or null when it declares none. */
+  total?: number | null;
+  /** Why this source is what it is — shown next to the selector, not hidden. */
+  note?: string | null;
 }
 
 /**
@@ -106,6 +113,42 @@ interface RemoteEntry {
   env_keys: string[];
   homepage?: string | null;
   installable: boolean;
+  /** mcp | plugin | skill — decided by the source the entry came from. */
+  kind?: string | null;
+  /** The entry's own reason for not being installable, when it has one. */
+  note?: string | null;
+}
+
+/** One page of `GET /extensions/market/search`. */
+interface MarketSearchResponse {
+  ok: boolean;
+  source: string;
+  total: number | null;
+  /** The list, under both of its names — older builds only send `entries`. */
+  items?: RemoteEntry[];
+  entries?: RemoteEntry[];
+  note?: string | null;
+  /** Set when the source could not be asked. Distinct from an empty result. */
+  error?: string | null;
+}
+
+/** The result of `POST /extensions/market/install`. */
+interface MarketInstallResult {
+  ok: boolean;
+  changed: boolean;
+  kind: string;
+  installed_path?: string | null;
+  /** Files a conversion had to skip, named. Never swallowed. */
+  warnings?: string[];
+}
+
+/** One install that came back, kept on screen until the next one. */
+interface InstallReport {
+  name: string;
+  kind: string;
+  changed: boolean;
+  installedPath: string | null;
+  warnings: string[];
 }
 
 /** One row of `GET /extensions/mcp/installed` (absent on older backends). */
@@ -119,6 +162,32 @@ type ProbeResult = { ok: boolean; tools?: string[]; error?: string | null; ms?: 
 
 /** How many skills to render before asking the user to keep going. */
 const SKILL_PAGE = 60;
+
+/** How many entries one browse of a remote source asks for. */
+const REMOTE_PAGE = 60;
+
+/**
+ * How long an install is given.
+ *
+ * An install is not a search: a large plugin is converted file by file — the
+ * live measurement for microsoft/azure-skills (935 files, of which the first
+ * 400 are copied) is ~3 minutes. The client's default 120 s aborts such a
+ * request *while the server keeps writing it*, so the page would report a
+ * failure and the plugin would be sitting there installed after a refresh.
+ * Being told "it failed" about something that succeeded is worse than waiting,
+ * so this one call gets its own budget; browse and search keep the default.
+ */
+const INSTALL_TIMEOUT_MS = 600000;
+
+/** After this many seconds, say that it can take a while, not just that it is busy. */
+const SLOW_INSTALL_SECONDS = 5;
+
+/**
+ * The installed-here list in a tab's source row. It is a chip like any other
+ * source so that "what I have" and "what I could get" are the same control, but
+ * it is never a source id the market endpoint would recognise.
+ */
+const LOCAL = '__local__';
 
 const Marketplace: React.FC = () => {
   const t = useT();
@@ -158,6 +227,381 @@ const Marketplace: React.FC = () => {
 };
 
 export default Marketplace;
+
+// ---------------------------------------------------------------- shared
+//
+// The three tabs differ in what they install, not in how they choose where to
+// look. One source row and one remote pane are shared, so a fix to "an empty
+// result must not look like an unreachable source" holds for all of them.
+
+/** Every remote marketplace this build can reach, and whether the answer is in. */
+function useMarketSources(): { sources: MarketSource[]; loaded: boolean } {
+  const [state, setState] = useState<{ sources: MarketSource[]; loaded: boolean }>(
+    { sources: [], loaded: false });
+  useEffect(() => {
+    api.get<{ sources: MarketSource[] }>('/extensions/market/sources')
+      .then((r) => setState({ sources: r.data.sources || [], loaded: true }))
+      // An older backend has no market endpoints. That is a finished answer —
+      // "there is nowhere else to look" — so the tabs fall back to the
+      // installed-here list instead of spinning forever.
+      .catch(() => setState({ sources: [], loaded: true }));
+  }, []);
+  return state;
+}
+
+/** The sources of one kind, plus `mixed`, which every kind may claim. */
+const sourcesOfKind = (all: MarketSource[], kind: string): MarketSource[] =>
+  all.filter((s) => {
+    const k = String(s.kind || '').toLowerCase();
+    return k === kind || k === 'mixed';
+  });
+
+/**
+ * Where a tab opens. A new user has nothing installed, so defaulting to the
+ * installed list would open the tab on an empty screen. The first source of this
+ * kind that can actually be installed from wins: the point of browsing is to get
+ * something, and a listing that carries no install information (Cline's, which
+ * only the Cline CLI can install) would open the tab on rows with no button —
+ * or, when that source is rate-limited, on an error. Sources of the kind that
+ * cannot be installed from are still one click away.
+ */
+function useDefaultSource(source: string, setSource: (id: string) => void,
+                          kind: string, sources: MarketSource[],
+                          loaded: boolean): void {
+  useEffect(() => {
+    if (source || !loaded) return;
+    const remote = sourcesOfKind(sources, kind);
+    const pick = remote.find((s) => s.installable) || remote[0];
+    setSource(pick ? pick.id : LOCAL);
+  }, [source, loaded, kind, sources, setSource]);
+}
+
+/**
+ * The source row: one chip per place to look, the installed-here list first.
+ *
+ * A source's own `total` rides on its chip when upstream declared one, so the
+ * number is visible before the click rather than inferred after it.
+ */
+const SourceRow: React.FC<{
+  testPrefix: string;
+  sources: MarketSource[];
+  value: string;
+  onChange: (id: string) => void;
+  first: { id: string; label: string; testId: string; total?: number | null };
+  homepage?: string | null;
+}> = ({ testPrefix, sources, value, onChange, first, homepage }) => {
+  const t = useT();
+  const tokens = useThemeTokens();
+  // CheckableTag's unchecked state is bare text by default, which reads as a
+  // stray label next to the selected pill rather than as something you can
+  // click. Give every chip a border so the row looks like one control.
+  const chip = (on: boolean) => ({
+    border: `1px solid ${on ? 'transparent' : tokens.border}`,
+    padding: '2px 10px',
+    borderRadius: 12,
+  });
+  const withTotal = (s: { label: string; total?: number | null }) => (
+    <>
+      {s.label}
+      {typeof s.total === 'number' ? ` · ${s.total}` : ''}
+    </>
+  );
+  return (
+    <div data-testid={`${testPrefix}-source-row`}
+         style={{ display: 'flex', gap: 6, marginBottom: 10,
+                  alignItems: 'center', flexWrap: 'wrap' }}>
+      <Text type="secondary" style={{ fontSize: 12 }}>
+        {t('market.sourceLabel')}
+      </Text>
+      <Tag.CheckableTag checked={value === first.id}
+                        onChange={() => onChange(first.id)}
+                        style={chip(value === first.id)}
+                        data-testid={first.testId}>
+        {withTotal(first)}
+      </Tag.CheckableTag>
+      {sources.map((s) => (
+        <Tag.CheckableTag key={s.id} checked={value === s.id}
+                          onChange={() => onChange(s.id)}
+                          style={chip(value === s.id)}
+                          data-testid={`${testPrefix}-source-${s.id}`}>
+          {withTotal(s)}
+        </Tag.CheckableTag>
+      ))}
+      {homepage && (
+        <a href={homepage} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>
+          {t('market.sourceOpen')}
+        </a>
+      )}
+    </div>
+  );
+};
+
+/**
+ * One remote source of one kind: browse, filter, install.
+ *
+ * Everything it claims comes back from the server — the entry list, the total,
+ * the reason a source could not be read and the warnings a conversion produced.
+ * It is mounted with `key={source.id}`, so switching sources starts from a
+ * clean slate rather than showing the previous source's rows under a new name.
+ */
+const RemoteSourcePane: React.FC<{
+  source: MarketSource;
+  testPrefix: string;
+  /** Names already installed here, so a card can say so. */
+  installed: Set<string>;
+  /** Re-read the installed list. Called only after the server said ok. */
+  onInstalled: () => void;
+}> = ({ source, testPrefix, installed, onInstalled }) => {
+  const t = useT();
+  const tokens = useThemeTokens();
+  const { message: msgApi } = AntdApp.useApp();
+  const [query, setQuery] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  /** Seconds the current install has been running — see INSTALL_TIMEOUT_MS. */
+  const [elapsed, setElapsed] = useState(0);
+  const [report, setReport] = useState<InstallReport | null>(null);
+  const [state, setState] = useState<{
+    loading: boolean; ok: boolean; total: number | null;
+    entries: RemoteEntry[]; error: string | null;
+  }>({ loading: true, ok: true, total: source.total ?? null, entries: [], error: null });
+
+  // A three-minute install that shows nothing moving is a hang as far as the
+  // user is concerned. Count the seconds out loud.
+  useEffect(() => {
+    if (!busy) { setElapsed(0); return; }
+    setElapsed(0);
+    const id = setInterval(() => setElapsed((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [busy]);
+
+  const browse = useCallback(async (q: string) => {
+    setState((s) => ({ ...s, loading: true }));
+    try {
+      const r = await api.get<MarketSearchResponse>('/extensions/market/search', {
+        params: { source: source.id, q: q || undefined, limit: REMOTE_PAGE },
+      });
+      setState({
+        loading: false,
+        // `ok:false` with an `error` is a failed question, not an empty answer.
+        ok: r.data.ok !== false,
+        total: r.data.total ?? null,
+        entries: r.data.items || r.data.entries || [],
+        error: r.data.error || null,
+      });
+    } catch (e: any) {
+      setState({ loading: false, ok: false, total: null, entries: [],
+                 error: e?.response?.data?.detail || String(e?.message || e) });
+    }
+  }, [source.id]);
+
+  // Browse with no query as soon as the source is on screen: these sources
+  // list themselves, and a tab that opens empty reads as broken.
+  useEffect(() => { browse(''); }, [browse]);
+
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return state.entries;
+    return state.entries.filter((e) => e.name.toLowerCase().includes(q)
+      || (e.description || '').toLowerCase().includes(q)
+      || (e.category || '').toLowerCase().includes(q));
+  }, [state.entries, query]);
+
+  const install = async (entry: RemoteEntry) => {
+    const key = `${entry.source}:${entry.name}`;
+    setBusy(key);
+    try {
+      // The server re-resolves the entry from the source; only the id travels.
+      // Its own timeout: a plugin conversion is minutes, not the client's 120 s.
+      const r = await api.post<MarketInstallResult>('/extensions/market/install',
+        { source: entry.source, id: entry.upstream || entry.name, scope: 'user' },
+        { timeout: INSTALL_TIMEOUT_MS });
+      const warnings = r.data?.warnings || [];
+      setReport({
+        name: entry.name,
+        kind: r.data?.kind || '',
+        changed: r.data?.changed !== false,
+        installedPath: r.data?.installed_path || null,
+        warnings,
+      });
+      msgApi.success(r.data?.changed === false
+        ? t('market.alreadyInstalled', { name: entry.name })
+        : t('market.installed', { name: entry.name }));
+      // What is installed is state, not an assumption: ask again.
+      onInstalled();
+    } catch (e: any) {
+      // A 4xx carries `detail` and is not a success shape at all.
+      setReport(null);
+      msgApi.error(e?.response?.data?.detail || t('market.actionFailed'));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12,
+                    alignItems: 'center', flexWrap: 'wrap' }}>
+        <Input
+          allowClear
+          prefix={<SearchOutlined style={{ color: tokens.labelTertiary }} />}
+          placeholder={t('market.searchRemote')}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onPressEnter={() => browse(query)}
+          style={{ maxWidth: 320 }}
+          data-testid={`${testPrefix}-remote-filter`}
+        />
+        <Button size="small" loading={state.loading}
+                onClick={() => browse(query)}
+                data-testid={`${testPrefix}-remote-search`}>
+          {t('market.search')}
+        </Button>
+        {/* A re-browse of a list already on screen is a busy state, not a
+            second page of chrome: the rows stay and the spinner sits here. */}
+        {state.loading && state.entries.length > 0 && (
+          <span data-testid={`${testPrefix}-browse-busy`}>
+            <Spin size="small" />
+          </span>
+        )}
+        {!state.loading && state.ok && (
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {t('market.countOf', { shown: shown.length,
+                                   total: state.total ?? state.entries.length })}
+          </Text>
+        )}
+      </div>
+
+      {report && (
+        <Alert
+          showIcon
+          style={{ marginBottom: 12 }}
+          data-testid={`${testPrefix}-install-report`}
+          type={report.warnings.length ? 'warning' : 'success'}
+          message={report.warnings.length
+            ? t('market.installWarned', { name: report.name })
+            : t('market.installed', { name: report.name })}
+          description={(
+            <>
+              {report.installedPath && (
+                <Text code style={{ fontSize: 11 }}>{report.installedPath}</Text>
+              )}
+              {report.warnings.length > 0 && (
+                <ul data-testid={`${testPrefix}-install-warnings`}
+                    style={{ margin: '6px 0 0', paddingInlineStart: 18 }}>
+                  {report.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                </ul>
+              )}
+            </>
+          )}
+        />
+      )}
+
+      {state.loading && state.entries.length === 0 ? (
+        <div data-testid={`${testPrefix}-browse-loading`}>
+          <Spin style={{ display: 'block', marginTop: 24 }} />
+        </div>
+      ) : state.error ? (
+        // "nothing matched" and "we could not ask" are different answers and
+        // must not arrive on the same screen.
+        <Alert
+          type="warning"
+          showIcon
+          data-testid={`${testPrefix}-source-error`}
+          message={t('market.sourceUnreachable', { source: source.label })}
+          description={state.error}
+          action={(
+            <Button size="small" onClick={() => browse(query)}
+                    data-testid={`${testPrefix}-retry`}>
+              {t('market.retry')}
+            </Button>
+          )}
+        />
+      ) : shown.length === 0 ? (
+        <div data-testid={`${testPrefix}-source-empty`}>
+          <Empty description={t('market.emptyRemote')} />
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 10 }}>
+          {shown.map((e) => {
+            const key = `${e.source}:${e.name}`;
+            const isBusy = busy === key;
+            return (
+              <Card key={key} size="small"
+                    data-testid={`${testPrefix}-remote-card-${e.name}`}
+                    styles={{ body: { padding: '12px 14px' } }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  <CloudDownloadOutlined style={{ fontSize: 16, marginTop: 3,
+                                                  color: tokens.labelSecondary }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center',
+                                  gap: 6, flexWrap: 'wrap' }}>
+                      <Text strong style={{ fontSize: 14 }}>{e.name}</Text>
+                      <Tag style={{ marginInlineEnd: 0 }}>{source.label}</Tag>
+                      {e.category && (
+                        <Tag style={{ marginInlineEnd: 0 }}>{e.category}</Tag>
+                      )}
+                      {installed.has(e.name) && (
+                        <Tag color="green" style={{ marginInlineEnd: 0 }}>
+                          {t('market.installedTag')}
+                        </Tag>
+                      )}
+                    </div>
+                    <Paragraph type="secondary"
+                               style={{ fontSize: 12, margin: '4px 0 6px' }}
+                               ellipsis={{ rows: 2 }}>
+                      {e.description}
+                    </Paragraph>
+                    {isBusy && (
+                      <>
+                        <Text type="secondary" style={{ fontSize: 11.5 }}
+                              data-testid={`${testPrefix}-install-busy-${e.name}`}>
+                          {t('market.installing')} · {t('market.installElapsed', { n: elapsed })}
+                        </Text>
+                        {/* A big plugin is converted file by file. Saying so is
+                            the difference between "slow" and "broken". */}
+                        {elapsed >= SLOW_INSTALL_SECONDS && (
+                          <div data-testid={`${testPrefix}-install-slow-${e.name}`}
+                               style={{ fontSize: 11, marginTop: 2,
+                                        color: tokens.labelTertiary }}>
+                            {t('market.installSlowHint')}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  <Space direction="vertical" size={6} align="end">
+                    {e.installable ? (
+                      <Button size="small" type="primary" loading={isBusy}
+                              onClick={() => install(e)}
+                              data-testid={`${testPrefix}-remote-install-${e.name}`}>
+                        {t('market.install')}
+                      </Button>
+                    ) : (
+                      // Never a dead button. An entry with nothing to launch
+                      // says why, in its own words.
+                      <Text type="secondary"
+                            style={{ fontSize: 11, maxWidth: 220,
+                                     display: 'inline-block', textAlign: 'right' }}
+                            data-testid={`${testPrefix}-remote-note-${e.name}`}>
+                        {e.note || t('market.notInstallableHint')}
+                      </Text>
+                    )}
+                    {e.homepage && (
+                      <a href={e.homepage} target="_blank" rel="noreferrer"
+                         style={{ fontSize: 12 }}>
+                        {t('market.sourceOpen')}
+                      </a>
+                    )}
+                  </Space>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+};
 
 // ---------------------------------------------------------------- MCP
 
@@ -246,18 +690,11 @@ const McpTab: React.FC = () => {
   // information are wired up, so a row here can be installed rather than merely
   // admired.
   const [source, setSource] = useState<string>('curated');
-  const [sources, setSources] = useState<MarketSource[]>([]);
+  const { sources } = useMarketSources();
   const [remote, setRemote] = useState<{ loading: boolean; ok: boolean;
                                         total: number; entries: RemoteEntry[];
                                         error?: string | null }>(
     { loading: false, ok: true, total: 0, entries: [] });
-
-  useEffect(() => {
-    api.get<{ sources: MarketSource[] }>('/extensions/market/sources')
-      .then((r) => setSources(r.data.sources || []))
-      // An older backend has no market endpoints: the curated tab still works.
-      .catch(() => setSources([]));
-  }, []);
 
   const searchRemote = useCallback(async (src: string, q: string) => {
     if (src === 'curated') return;
@@ -287,9 +724,12 @@ const McpTab: React.FC = () => {
     const key = `${entry.source}:${entry.name}`;
     setBusy(key);
     try {
+      // Same endpoint as the plugin and skill tabs, so the same budget: this
+      // can be a plugin conversion, and 120 s would abort it mid-write.
       await api.post('/extensions/market/install',
                      { source: entry.source, id: entry.upstream || entry.name,
-                       scope: 'user' });
+                       scope: 'user' },
+                     { timeout: INSTALL_TIMEOUT_MS });
       msgApi.success(t('market.installed', { name: entry.name }));
       loadInstalled();
       setProbe((p) => { const n = { ...p }; delete n[entry.name]; return n; });
@@ -308,48 +748,15 @@ const McpTab: React.FC = () => {
   return (
     <>
       {sources.length > 0 && (
-        <div data-testid="market-source-row"
-             style={{ display: 'flex', gap: 6, marginBottom: 10,
-                      alignItems: 'center', flexWrap: 'wrap' }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            {t('market.sourceLabel')}
-          </Text>
-          {/* CheckableTag's unchecked state is bare text by default, which reads
-              as a stray label next to the selected pill rather than as something
-              you can click. Give every chip a border so the row looks like one
-              control. */}
-          {(() => {
-            const chip = (on: boolean) => ({
-              border: `1px solid ${on ? 'transparent' : tokens.border}`,
-              padding: '2px 10px',
-              borderRadius: 12,
-            });
-            return (
-              <>
-                <Tag.CheckableTag checked={source === 'curated'}
-                                  onChange={() => setSource('curated')}
-                                  style={chip(source === 'curated')}
-                                  data-testid="market-source-curated">
-                  {t('market.sourceCurated')}
-                </Tag.CheckableTag>
-                {sources.map((s) => (
-                  <Tag.CheckableTag key={s.id} checked={source === s.id}
-                                    onChange={() => setSource(s.id)}
-                                    style={chip(source === s.id)}
-                                    data-testid={`market-source-${s.id}`}>
-                    {s.label}
-                  </Tag.CheckableTag>
-                ))}
-              </>
-            );
-          })()}
-          {activeSource?.homepage && (
-            <a href={activeSource.homepage} target="_blank" rel="noreferrer"
-               style={{ fontSize: 12 }}>
-              {t('market.sourceOpen')}
-            </a>
-          )}
-        </div>
+        <SourceRow
+          testPrefix="market"
+          sources={sources}
+          value={source}
+          onChange={setSource}
+          first={{ id: 'curated', label: t('market.sourceCurated'),
+                   testId: 'market-source-curated' }}
+          homepage={activeSource?.homepage}
+        />
       )}
       {isRemote && activeSource && (
         <Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 10 }}>
@@ -604,45 +1011,108 @@ const McpTab: React.FC = () => {
 const PluginTab: React.FC = () => {
   const t = useT();
   const tokens = useThemeTokens();
+  const { sources, loaded } = useMarketSources();
   const [plugins, setPlugins] = useState<PluginItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [source, setSource] = useState<string>('');
 
-  useEffect(() => {
+  const loadPlugins = useCallback(() => {
+    setLoading(true);
     api.get<{ plugins: PluginItem[] }>('/extensions/plugins')
       .then((r) => setPlugins(r.data.plugins || []))
       .catch(() => setPlugins([]))
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <Spin style={{ display: 'block', marginTop: 40 }} />;
-  if (plugins.length === 0) return <Empty description={t('market.emptyPlugins')} />;
+  useEffect(() => { loadPlugins(); }, [loadPlugins]);
+
+  const remote = useMemo(() => sourcesOfKind(sources, 'plugin'), [sources]);
+  useDefaultSource(source, setSource, 'plugin', sources, loaded);
+  const installed = useMemo(() => new Set(plugins.map((p) => p.name)), [plugins]);
+  const active = remote.find((s) => s.id === source);
+  // Before the answer is in, `source` is empty and the installed list is what
+  // there is to show. It is the same list the tab showed before it could browse.
+  const onLocal = !source || source === LOCAL;
+
+  if (loading && onLocal && !loaded) {
+    return <Spin style={{ display: 'block', marginTop: 40 }} />;
+  }
 
   return (
     <>
-      <Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 12 }}>
-        {t('market.pluginsNote')}
-      </Paragraph>
-      <div style={{ display: 'grid', gap: 10 }}>
-        {plugins.map((p) => (
-          <Card key={p.name} size="small" data-testid={`plugin-card-${p.name}`}
-                styles={{ body: { padding: '12px 14px' } }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-              <AppstoreOutlined style={{ fontSize: 16, marginTop: 3,
-                                         color: tokens.labelSecondary }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <Text strong style={{ fontSize: 14 }}>{p.name}</Text>
-                  {p.marketplace && <Tag style={{ marginInlineEnd: 0 }}>{p.marketplace}</Tag>}
-                </div>
-                <div style={{ fontSize: 12.5, color: tokens.labelSecondary, marginTop: 4 }}>
-                  {p.description}
-                </div>
-              </div>
-              <CheckCircleFilled style={{ color: tokens.success, fontSize: 14 }} />
+      {sources.length > 0 && (
+        <SourceRow
+          testPrefix="plugin"
+          sources={remote}
+          value={source}
+          onChange={setSource}
+          first={{ id: LOCAL, label: t('market.sourceLocal'),
+                   testId: 'plugin-source-local', total: plugins.length }}
+          homepage={active?.homepage}
+        />
+      )}
+
+      {active && (
+        <Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 8 }}>
+          {active.description}
+        </Paragraph>
+      )}
+      {active?.note && (
+        // The source's own caveat — "the Cline CLI installs these" — is not
+        // decoration: it is the reason the rows below have no Install button.
+        <Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 10 }}
+                   data-testid="plugin-source-note">
+          {active.note}
+        </Paragraph>
+      )}
+
+      {onLocal ? (
+        <>
+          <Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 12 }}>
+            {t('market.pluginsNote')}
+          </Paragraph>
+          {loading ? (
+            <Spin style={{ display: 'block', marginTop: 40 }} />
+          ) : plugins.length === 0 ? (
+            <Empty description={t('market.emptyPlugins')} />
+          ) : (
+            <div style={{ display: 'grid', gap: 10 }}>
+              {plugins.map((p) => (
+                <Card key={p.name} size="small" data-testid={`plugin-card-${p.name}`}
+                      styles={{ body: { padding: '12px 14px' } }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                    <AppstoreOutlined style={{ fontSize: 16, marginTop: 3,
+                                               color: tokens.labelSecondary }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <Text strong style={{ fontSize: 14 }}>{p.name}</Text>
+                        {p.marketplace && (
+                          <Tag style={{ marginInlineEnd: 0 }}>{p.marketplace}</Tag>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 12.5, color: tokens.labelSecondary,
+                                    marginTop: 4 }}>
+                        {p.description}
+                      </div>
+                    </div>
+                    <CheckCircleFilled style={{ color: tokens.success, fontSize: 14 }} />
+                  </div>
+                </Card>
+              ))}
             </div>
-          </Card>
-        ))}
-      </div>
+          )}
+        </>
+      ) : active ? (
+        <RemoteSourcePane
+          key={active.id}
+          source={active}
+          testPrefix="plugin"
+          installed={installed}
+          onInstalled={loadPlugins}
+        />
+      ) : (
+        <Spin style={{ display: 'block', marginTop: 40 }} />
+      )}
     </>
   );
 };
@@ -652,18 +1122,29 @@ const PluginTab: React.FC = () => {
 const SkillTab: React.FC = () => {
   const t = useT();
   const tokens = useThemeTokens();
+  const { sources, loaded } = useMarketSources();
   const [skills, setSkills] = useState<SkillItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string>('__all__');
   const [limit, setLimit] = useState(SKILL_PAGE);
+  const [source, setSource] = useState<string>('');
 
-  useEffect(() => {
+  const loadSkills = useCallback(() => {
+    setLoading(true);
     api.get<{ skills: SkillItem[] }>('/extensions/skills')
       .then((r) => setSkills(r.data.skills || []))
       .catch(() => setSkills([]))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { loadSkills(); }, [loadSkills]);
+
+  const remote = useMemo(() => sourcesOfKind(sources, 'skill'), [sources]);
+  useDefaultSource(source, setSource, 'skill', sources, loaded);
+  const installed = useMemo(() => new Set(skills.map((s) => s.name)), [skills]);
+  const active = remote.find((s) => s.id === source);
+  const onLocal = !source || source === LOCAL;
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -681,79 +1162,122 @@ const SkillTab: React.FC = () => {
     });
   }, [skills, query, category]);
 
-  if (loading) return <Spin style={{ display: 'block', marginTop: 40 }} />;
+  if (loading && onLocal && !loaded) {
+    return <Spin style={{ display: 'block', marginTop: 40 }} />;
+  }
+  if (!onLocal && !active) {
+    return <Spin style={{ display: 'block', marginTop: 40 }} />;
+  }
 
   const shown = filtered.slice(0, limit);
 
   return (
     <>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12,
-                    alignItems: 'center', flexWrap: 'wrap' }}>
-        <Input
-          allowClear
-          prefix={<SearchOutlined style={{ color: tokens.labelTertiary }} />}
-          placeholder={t('market.searchSkill')}
-          value={query}
-          onChange={(e) => { setQuery(e.target.value); setLimit(SKILL_PAGE); }}
-          style={{ maxWidth: 320 }}
+      {sources.length > 0 && (
+        <SourceRow
+          testPrefix="skill"
+          sources={remote}
+          value={source}
+          onChange={setSource}
+          first={{ id: LOCAL, label: t('market.sourceLocal'),
+                   testId: 'skill-source-local', total: skills.length }}
+          homepage={active?.homepage}
         />
-        {categories.length > 2 && (
-          <Segmented
-            size="small"
-            value={category}
-            onChange={(v) => { setCategory(String(v)); setLimit(SKILL_PAGE); }}
-            options={categories.slice(0, 6).map((c) => ({
-              label: c === '__all__' ? t('market.allCategories') : c,
-              value: c,
-            }))}
-          />
-        )}
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          {t('market.countOf', { shown: shown.length, total: filtered.length })}
-        </Text>
-      </div>
+      )}
 
-      {filtered.length === 0 ? (
-        <Empty description={t('market.emptySkills')} />
+      {active && (
+        <Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 8 }}>
+          {active.description}
+        </Paragraph>
+      )}
+      {active?.note && (
+        <Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 10 }}
+                   data-testid="skill-source-note">
+          {active.note}
+        </Paragraph>
+      )}
+
+      {!onLocal && active ? (
+        <RemoteSourcePane
+          key={active.id}
+          source={active}
+          testPrefix="skill"
+          installed={installed}
+          onInstalled={loadSkills}
+        />
       ) : (
-        <div style={{ display: 'grid', gap: 8 }}>
-          {shown.map((s) => (
-            <Card key={s.name} size="small" data-testid={`skill-card-${s.name}`}
-                  styles={{ body: { padding: '10px 14px' } }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                <BookOutlined style={{ fontSize: 14, marginTop: 3,
-                                       color: tokens.labelSecondary }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center',
-                                flexWrap: 'wrap' }}>
-                    <Text strong style={{ fontSize: 13 }}>{s.name}</Text>
-                    {s.category && <Tag style={{ marginInlineEnd: 0 }}>{s.category}</Tag>}
-                    {s.on_disk
-                      ? <Tag color="green" style={{ marginInlineEnd: 0 }}>
-                          {t('market.skillReady')}
-                        </Tag>
-                      : <Tag color="red" style={{ marginInlineEnd: 0 }}>
-                          {t('market.skillMissing')}
-                        </Tag>}
-                  </div>
-                  {s.description && (
-                    <div style={{ fontSize: 12, color: tokens.labelSecondary,
-                                  marginTop: 3 }}>
-                      {s.description}
+        <>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12,
+                        alignItems: 'center', flexWrap: 'wrap' }}>
+            <Input
+              allowClear
+              prefix={<SearchOutlined style={{ color: tokens.labelTertiary }} />}
+              placeholder={t('market.searchSkill')}
+              value={query}
+              onChange={(e) => { setQuery(e.target.value); setLimit(SKILL_PAGE); }}
+              style={{ maxWidth: 320 }}
+            />
+            {categories.length > 2 && (
+              <Segmented
+                size="small"
+                value={category}
+                onChange={(v) => { setCategory(String(v)); setLimit(SKILL_PAGE); }}
+                options={categories.slice(0, 6).map((c) => ({
+                  label: c === '__all__' ? t('market.allCategories') : c,
+                  value: c,
+                }))}
+              />
+            )}
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {t('market.countOf', { shown: shown.length, total: filtered.length })}
+            </Text>
+          </div>
+
+          {loading ? (
+            <Spin style={{ display: 'block', marginTop: 40 }} />
+          ) : filtered.length === 0 ? (
+            <Empty description={t('market.emptySkills')} />
+          ) : (
+            <div style={{ display: 'grid', gap: 8 }}>
+              {shown.map((s) => (
+                <Card key={s.name} size="small" data-testid={`skill-card-${s.name}`}
+                      styles={{ body: { padding: '10px 14px' } }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                    <BookOutlined style={{ fontSize: 14, marginTop: 3,
+                                           color: tokens.labelSecondary }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center',
+                                    flexWrap: 'wrap' }}>
+                        <Text strong style={{ fontSize: 13 }}>{s.name}</Text>
+                        {s.category && <Tag style={{ marginInlineEnd: 0 }}>{s.category}</Tag>}
+                        {s.on_disk
+                          ? <Tag color="green" style={{ marginInlineEnd: 0 }}>
+                              {t('market.skillReady')}
+                            </Tag>
+                          : <Tag color="red" style={{ marginInlineEnd: 0 }}>
+                              {t('market.skillMissing')}
+                            </Tag>}
+                      </div>
+                      {s.description && (
+                        <div style={{ fontSize: 12, color: tokens.labelSecondary,
+                                      marginTop: 3 }}>
+                          {s.description}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              </div>
-            </Card>
-          ))}
-          {filtered.length > shown.length && (
-            <Button block icon={<ReloadOutlined />}
-                    onClick={() => setLimit((n) => n + SKILL_PAGE)}
-                    data-testid="skill-load-more">
-              {t('market.loadMore', { n: filtered.length - shown.length })}
-            </Button>
+                  </div>
+                </Card>
+              ))}
+              {filtered.length > shown.length && (
+                <Button block icon={<ReloadOutlined />}
+                        onClick={() => setLimit((n) => n + SKILL_PAGE)}
+                        data-testid="skill-load-more">
+                  {t('market.loadMore', { n: filtered.length - shown.length })}
+                </Button>
+              )}
+            </div>
           )}
-        </div>
+        </>
       )}
     </>
   );

@@ -34,6 +34,32 @@ GET /api/extensions/plugins
 GET /api/extensions/summary
     Aggregate counts: skills installed / failed, MCPs total,
     plugins total. Used by the UI to render the header status.
+
+Remote marketplaces (the extensions page)
+------------------------------------------
+
+GET /api/extensions/market/sources
+    Every source this build can reach — the curated-adjacent official MCP
+    registry, Smithery, Cline's three listings, and Anthropic's official plugin
+    and skill directories. Each item carries ``id``, ``label``, ``kind`` (mcp /
+    plugin / skill / mixed), ``needs_query``, ``homepage``, ``total`` (the
+    upstream's own count, or null when it declares none) and ``note``. The
+    totals are fetched in parallel, off the event loop, with a timeout each.
+
+GET /api/extensions/market/search?source=ID&q=QUERY&limit=N
+    One page of one source: ``source``, ``total``, ``items`` (also under its
+    older name ``entries``), ``note`` and ``error``. An empty result set and a
+    source that could not be reached are deliberately different: the first is
+    ``ok: true`` with ``total: 0``, the second is ``ok: false`` with a reason in
+    ``error`` and ``total: null``.
+
+POST /api/extensions/market/install
+    Install one resolved entry by its own kind: an MCP server into ``mcp.yaml``
+    (the same path a curated install takes), a Claude plugin by conversion into
+    the plugin directory, a skill as a SKILL.md in the skills scope. Answers
+    ``ok``, ``changed``, ``kind``, ``installed_path`` and ``warnings``. It is
+    idempotent, and a conversion that had to skip a file says so in ``warnings``
+    by name.
 """
 from __future__ import annotations
 
@@ -221,14 +247,25 @@ class MCPProbeResponse(BaseModel):
 
 
 class MarketSourceItem(BaseModel):
-    """One place a server can come from, and whether it can be installed from."""
+    """One place an extension can come from, and what it can give you."""
 
     id: str
     label: str
     homepage: Optional[str] = None
+    #: "mcp" | "plugin" | "skill" | "mixed".
     kind: str = "mcp"
     description: str = ""
     installable: bool = False
+    #: True for a source too large to browse that searches on its own side (the
+    #: registry, Smithery): the page asks for a query before it asks for a page.
+    needs_query: bool = False
+    #: How many entries the upstream itself declares. ``None`` when it declares
+    #: none — the official registry reports a page cursor, not a total — or when
+    #: it could not be asked. Never a number this server made up.
+    total: Optional[int] = None
+    #: A caveat worth showing beside the source: what is listed but not
+    #: installable, or what installing actually does.
+    note: Optional[str] = None
 
 
 class MarketSourcesResponse(BaseModel):
@@ -241,6 +278,12 @@ class MarketEntry(BaseModel):
     ``installable`` is the honest field: an entry with neither a launcher nor a
     URL is still worth showing, and the page links out instead of offering an
     Install button that cannot work.
+
+    ``kind`` says what it is — an MCP server, a plugin or a skill. It matters
+    because the three install differently (a YAML key, a directory, a SKILL.md),
+    and offering a plugin as an MCP install is how a user ends up with a config
+    entry that never starts. ``note`` carries the reason when something cannot be
+    installed.
     """
 
     name: str
@@ -256,13 +299,31 @@ class MarketEntry(BaseModel):
     env_keys: List[str] = []
     homepage: Optional[str] = None
     installable: bool = False
+    #: "mcp" | "plugin" | "skill".
+    kind: str = "mcp"
+    note: Optional[str] = None
 
 
 class MarketSearchResponse(BaseModel):
+    """One page of one remote source.
+
+    ``entries`` and ``items`` are the same list under two names: the marketplace
+    page reads ``entries`` and the extensions page reads ``items``, and renaming
+    the field would empty one of them without a word.
+
+    ``error`` is the important field. An empty result set and a source that
+    could not be reached must not look the same: ``ok: false`` plus a reason is
+    the difference, and ``total: null`` (rather than ``0``) keeps "we could not
+    ask" from reading as "there are none".
+    """
+
     ok: bool = True
     source: str = ""
-    total: int = 0
+    total: Optional[int] = None
     entries: List[MarketEntry] = []
+    items: List[MarketEntry] = []
+    #: What the source says about its own listing ("not installable here", ...).
+    note: Optional[str] = None
     error: Optional[str] = None
 
 
@@ -271,6 +332,35 @@ class MarketInstallRequest(BaseModel):
     id: str
     scope: str = "user"
     project_id: Optional[str] = None
+
+
+class MarketInstallResponse(BaseModel):
+    """The result of installing one remote entry.
+
+    ``installed_path`` is where it landed — an ``mcp.yaml``, a plugin directory,
+    or a SKILL.md — and ``kind`` says which of the three it was. ``warnings`` is
+    always present and is the point: a converted plugin that had to leave a file
+    behind says so here, by name. An install that quietly dropped half of what it
+    fetched would be the defect this field exists to prevent.
+
+    The MCP-specific fields (``path``, ``entry``, ``config``, ``server``) are
+    kept for the mcp.yaml writers; for a plugin or a skill they are the entry and
+    otherwise empty.
+    """
+
+    ok: bool
+    changed: bool
+    kind: str = "mcp"
+    installed_path: Optional[str] = None
+    warnings: List[str] = []
+    source: str = ""
+    id: str = ""
+    scope: str = "user"
+    path: Optional[str] = None
+    entry: dict = {}
+    config: dict = {}
+    #: The server's effective config after an MCP install.
+    server: Optional[InstalledMCPServer] = None
 
 
 class PluginItem(BaseModel):
@@ -647,59 +737,140 @@ async def _probe_server(config) -> dict:
             "ms": int((time.monotonic() - started) * 1000)}
 
 
-@router.get("/extensions/market/sources", response_model=MarketSourcesResponse)
-async def market_sources() -> MarketSourcesResponse:
-    """The remote marketplaces this build can reach, and what they are for.
+#: How long one source gets to say how big it is. The sources list is a
+#: read-mostly page: a source that cannot answer in a few seconds contributes
+#: ``total: null`` rather than holding up every other source.
+MARKET_TOTAL_TIMEOUT_S = 6.0
 
-    Declared rather than probed: a list that goes empty when the network hiccups
-    is worse than a list that is always there, and every search reports its own
-    reachability anyway.
+
+async def _source_total(source_id: str) -> Optional[int]:
+    """One source's own declared size, off the event loop.
+
+    ``total_count`` never raises and never invents: a source that has no total
+    (the registry publishes a cursor) or cannot be reached answers ``None``, and
+    the page shows the source without a count.
     """
     from kairos.extensions import market_sources as ms
 
-    return MarketSourcesResponse(
-        sources=[MarketSourceItem(**s) for s in ms.list_sources()])
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(ms.total_count, source_id),
+                                      MARKET_TOTAL_TIMEOUT_S)
+    except Exception:  # a timeout, a dead source, a changed shape
+        return None
+
+
+@router.get("/extensions/market/sources", response_model=MarketSourcesResponse)
+async def market_sources() -> MarketSourcesResponse:
+    """The remote marketplaces this build can reach, and what each one holds.
+
+    The list itself is declared rather than probed — a list that goes empty when
+    the network hiccups is worse than a list that is always there — but each
+    source's ``total`` is asked for, in parallel and off the event loop, because
+    a number the user can act on is worth one bounded request. A source that
+    does not answer in time is reported with ``total: null``.
+    """
+    from kairos.extensions import market_sources as ms
+
+    metas = ms.list_sources()
+    totals = await asyncio.gather(*[_source_total(meta["id"]) for meta in metas])
+    items = []
+    for meta, total in zip(metas, totals):
+        merged = dict(meta)
+        merged["total"] = total
+        items.append(MarketSourceItem(**merged))
+    return MarketSourcesResponse(sources=items)
 
 
 @router.get("/extensions/market/search", response_model=MarketSearchResponse)
 async def market_search(source: str, q: Optional[str] = None,
                         limit: int = 30) -> MarketSearchResponse:
-    """Search one remote marketplace. A source that cannot be reached says so in
-    ``error`` instead of returning an empty list that looks like "no results"."""
-    import asyncio
+    """Search one remote marketplace.
 
+    A source that cannot be reached says so in ``error`` instead of returning an
+    empty list that looks like "no results" — those two are different answers and
+    the page has to be able to tell them apart. Every source fetches its entries
+    off the event loop: one slow marketplace must not stall the service.
+    """
     from kairos.extensions import market_sources as ms
 
     result = await asyncio.to_thread(ms.search, source, query=q, limit=limit)
-    return MarketSearchResponse(**result)
+    entries: List[MarketEntry] = []
+    for raw in (result.get("entries") or []):
+        if isinstance(raw, dict) and raw.get("name"):
+            entries.append(MarketEntry(**raw))
+    return MarketSearchResponse(
+        ok=bool(result.get("ok", True)),
+        source=str(result.get("source") or source),
+        total=result.get("total"),
+        entries=entries,
+        items=entries,
+        note=result.get("note"),
+        error=result.get("error"),
+    )
 
 
-@router.post("/extensions/market/install", response_model=MCPInstallResponse)
-async def market_install(request: MarketInstallRequest) -> MCPInstallResponse:
-    """Resolve one remote entry and install it through the same path as a
-    curated one.
+@router.post("/extensions/market/install", response_model=MarketInstallResponse)
+async def market_install(request: MarketInstallRequest) -> MarketInstallResponse:
+    """Resolve one remote entry and install it by its own kind.
 
-    Resolved at install time rather than trusting an entry the client sends back:
-    the page's copy came over the wire once, and the file it writes is the user's.
+    The entry is resolved again here rather than trusted from the client: the
+    page's copy came over the wire once, and it is the user's file that gets
+    written. An MCP entry goes into ``mcp.yaml`` through the same path a curated
+    entry takes; a plugin is converted into a plugin directory; a skill is
+    written into the user's skills scope. ``kind`` decides, and the response says
+    which one ran.
     """
-    import asyncio
-
     from kairos.extensions import market_sources as ms
-    from kairos.extensions_install import install_entry
 
     entry, error = await asyncio.to_thread(ms.fetch_entry, request.source, request.id)
     if entry is None:
         raise HTTPException(status_code=400, detail=error or "entry not found")
+
+    kind = str(entry.get("kind") or "mcp").strip().lower()
     if not entry.get("installable"):
         raise HTTPException(
             status_code=400,
-            detail=(
-                "%r has no start command or URL in %s, so there is nothing to "
-                "install — open it on its homepage instead" % (request.id, request.source)
-            ),
+            detail=(entry.get("note") or
+                    "%r has no start command or URL in %s, so there is nothing to "
+                    "install — open it on its homepage instead"
+                    % (request.id, request.source)),
         )
 
     project_root = _write_scope(request.scope, request.project_id)
+
+    if kind in ("plugin", "skill"):
+        from kairos.extensions_install import install_plugin, install_skill
+
+        installer = install_plugin if kind == "plugin" else install_skill
+        try:
+            result = await asyncio.to_thread(
+                installer, entry, scope=request.scope, project_path=project_root,
+                user_dir=_user_kairos_dir())
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except OSError as exc:
+            raise HTTPException(status_code=500,
+                                detail="could not write the %s: %s" % (kind, exc))
+        if not result.get("ok"):
+            raise HTTPException(
+                status_code=400,
+                detail="; ".join(result.get("warnings") or [])
+                       or "the %s could not be installed" % kind)
+        return MarketInstallResponse(
+            ok=True,
+            changed=bool(result.get("changed")),
+            kind=kind,
+            installed_path=result.get("installed_path"),
+            warnings=list(result.get("warnings") or []),
+            source=request.source,
+            id=str(entry.get("name") or request.id),
+            scope=request.scope,
+            path=result.get("path"),
+            entry=dict(result.get("entry") or entry),
+        )
+
+    from kairos.extensions_install import install_entry
+
     try:
         result = install_entry(entry, name=entry["name"], scope=request.scope,
                                project_path=project_root,
@@ -709,11 +880,16 @@ async def market_install(request: MarketInstallRequest) -> MCPInstallResponse:
     except OSError as exc:
         raise HTTPException(status_code=500,
                             detail=f"could not write mcp.yaml: {exc}")
-    return MCPInstallResponse(
+    return MarketInstallResponse(
         ok=bool(result["ok"]),
         changed=bool(result["changed"]),
-        path=str(result["path"]),
+        kind="mcp",
+        installed_path=str(result["path"]),
+        warnings=[],
+        source=request.source,
+        id=str(entry.get("name") or request.id),
         scope=request.scope,
+        path=str(result["path"]),
         entry=dict(result["entry"]),
         config=dict(result["config"]),
         server=_effective_one(entry["name"], project_root),

@@ -64,14 +64,27 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **Replies no longer carry a role name.** The transcript printed "Kairos" above
+  every agent reply and "审查员" above every reviewer reply. A name over a
+  paragraph invites the reader to file the text under a person instead of judging
+  it, and it has to be skipped on every single turn. The mark and the bubble
+  already say who is speaking, so both labels are gone; the reviewer's score and
+  approve/request-changes verdict stay, because that is the part that carries
+  meaning. The same slot also stopped printing the pipeline's internal stage ids
+  (`coder.summary`, `reviewer.summary`), which say the same thing in a rawer
+  form — the trace view is where stage attribution belongs. Step rows keep their
+  labels, because there "which step is this" is a real question.
+
 - **The bottom-left rail is grouped and shows where you are.** It was nine
   same-weight icons behind an "Advanced" disclosure, with two rows in a different
   chrome — and, after all that, no indication of the current page. It is now
   three labelled groups (Navigate / Extensions / System) plus Preferences, all on
-  one four-column grid so the column edges line up down the whole rail, with the
+  one three-column grid so the column edges line up down the whole rail, with the
   current route marked the same way the active project is marked. Nothing is
   hidden behind a disclosure any more, and Settings and the theme switch share the
-  same cell shape as every destination, because they are also one click.
+  same cell shape as every destination, because they are also one click. The
+  column count comes from the longest label the rail has to hold — a screenshot
+  check caught it truncating its own labels at four.
 
 - **The i18n translator reports the work it did and fails when it did none.**
   `translate_i18n.py` printed `all validated` after a run in which every batch was

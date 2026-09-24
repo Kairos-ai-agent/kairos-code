@@ -182,3 +182,57 @@ describe('ChatThread turn grouping', () => {
     expect(step.textContent).toContain('let me consider');
   });
 });
+
+/**
+ * A reply is the agent's words, not a letterhead. A name printed above it is
+ * noise to skip on every turn, and in a two-agent pipeline it is worse than
+ * noise: "审查员" over a paragraph invites the reader to file the text under a
+ * person instead of judging it. The verdict is the part that carries meaning,
+ * so the verdict stays and the name goes.
+ */
+describe('ChatThread reply speaker', () => {
+  it('prints no role name above an agent reply', () => {
+    render(<ChatThread messages={[question('hi'), reply('hello')]} />);
+    expect(screen.queryByText('Kairos')).toBeNull();
+  });
+
+  it('prints no role name above a reviewer reply, and keeps the verdict', () => {
+    render(
+      <ChatThread messages={[
+        question('hi'),
+        msg({ sender: 'reviewer', topic: 'review.result', content: 'looks fine',
+              metadata: { score: 92, approve: true } }),
+      ]} />,
+    );
+    expect(screen.queryByText('审查员')).toBeNull();
+    expect(screen.queryByText('Reviewer')).toBeNull();
+    // What has to survive is the judgement, not the badge: no name, still a score.
+    expect(screen.getByText(/92/)).toBeTruthy();
+    expect(screen.getByText('looks fine')).toBeTruthy();
+  });
+
+  it('leaves no role name anywhere in a mixed thread', () => {
+    const { container } = render(
+      <ChatThread messages={[
+        question('q'),
+        msg({ topic: 'agent.thinking', content: 'let me consider', timestamp: 1001 }),
+        call('read_file', 1002),
+        result('read_file', 1005),
+        // A reply tagged with a stage id: the header slot must not print it.
+        msg({ topic: 'coder.summary', content: 'done' }),
+        msg({ sender: 'reviewer', topic: 'review.result', content: 'ok',
+              metadata: { score: 80 } }),
+      ]} />,
+    );
+    const text = container.textContent || '';
+    for (const name of ['Kairos', '审查员', 'Reviewer', 'Coder', '编码者']) {
+      expect(text).not.toContain(name);
+    }
+    // Nor the pipeline's internal stage ids: /trace is where attribution lives,
+    // and a reply that announces its own stage is the same complaint in a rawer
+    // form. Step rows keep theirs — "which step is this" is a real question there.
+    expect(text).not.toContain('coder.summary');
+    expect(text).not.toContain('review.result');
+    expect(text).toContain('done');
+  });
+});

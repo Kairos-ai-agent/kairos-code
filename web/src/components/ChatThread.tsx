@@ -548,12 +548,6 @@ const AssistantBubble: React.FC<{
                     borderRadius: 8, padding: '8px 12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8,
                       marginBottom: 2 }}>
-          <span style={{ fontSize: 11, color: tokens.labelTertiary }}>Kairos</span>
-          {message.topic && message.topic !== 'agent.chat' && (
-            <span style={{ fontSize: 10, color: tokens.labelTertiary }}>
-              {message.topic}
-            </span>
-          )}
           {tokensUsed !== null && (
             <Tooltip title={t('chat.thread.tokenUsage')}>
               <span style={{ fontSize: 10, color: tokens.labelTertiary,
@@ -615,10 +609,8 @@ const ReviewerBubble: React.FC<{ message: Message }> = ({ message }) => {
   return (
     <RoleBubble
       icon={<AuditOutlined />}
-      roleLabel={t('chat.thread.roleReviewer')}
       accent={tokens.reviewerAccent}
       content={content}
-      meta={message.topic}
       extra={
         (score !== null || approve !== null) ? (
           <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
@@ -676,7 +668,12 @@ const SystemBubble: React.FC<{ message: Message }> = ({ message }) => {
 
 const RoleBubble: React.FC<{
   icon: React.ReactNode;
-  roleLabel: string;
+  /**
+   * Optional by design: a reply is identified by its mark and its chrome, not
+   * by a name printed above it. Step rows keep a label, because there the
+   * question "which step is this" has a real answer.
+   */
+  roleLabel?: string;
   accent: string;
   content: string;
   meta?: string;
@@ -710,14 +707,16 @@ const RoleBubble: React.FC<{
         {icon}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8,
-                      marginBottom: 4 }}>
-          <span style={{ fontSize: 13, fontWeight: 600,
-                         color: tokens.labelPrimary }}>{roleLabel}</span>
-          {meta && <span style={{ fontSize: 11, color: tokens.labelTertiary }}>
-                     {meta}
-                   </span>}
-        </div>
+        {(roleLabel || meta) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8,
+                        marginBottom: 4 }}>
+            {roleLabel && <span style={{ fontSize: 13, fontWeight: 600,
+                           color: tokens.labelPrimary }}>{roleLabel}</span>}
+            {meta && <span style={{ fontSize: 11, color: tokens.labelTertiary }}>
+                       {meta}
+                     </span>}
+          </div>
+        )}
         {summary ? (
           <details data-testid="collapsible-body" open={!collapsed} style={{ margin: 0 }}>
             <summary style={{ cursor: 'pointer', fontSize: 12,

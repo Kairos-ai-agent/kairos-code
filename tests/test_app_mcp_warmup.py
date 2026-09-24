@@ -77,3 +77,31 @@ def test_the_warm_up_actually_starts_the_servers(monkeypatch):
     assert sorted(reg._clients) == ["warm-a", "warm-b"], reg._clients
     assert sorted(t.name for t in reg.all_tools()) == [
         "mcp_warm-a__ping", "mcp_warm-b__ping"]
+
+
+def test_shutdown_closes_the_project_runtimes(monkeypatch):
+    """What the app starts, the app stops.
+
+    Nothing closed the project runtimes on shutdown, so every MCP child
+    outlived the app. A bundled one is a second copy of the executable:
+    fifty of them were still alive, holding the binary, when it came time
+    to replace it. The close -> close_all wiring itself is covered by
+    test_close_closes_mcp_registry; this pins that shutdown calls it.
+    """
+    from api.deps import orchestrator
+
+    called = {"n": 0}
+    original = orchestrator.close
+
+    async def spy():
+        called["n"] += 1
+        await original()
+
+    monkeypatch.setattr(orchestrator, "close", spy)
+
+    from api.app import app
+
+    with TestClient(app) as client:
+        assert client.get("/api/health").json()["status"] == "ok"
+
+    assert called["n"] == 1, "shutdown never closed the project runtimes"

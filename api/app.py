@@ -209,6 +209,15 @@ async def lifespan(app: FastAPI):
             await agent._llm.close()
         except Exception:
             pass
+    # Then the project runtimes: the watchers, the worktrees, and each MCP
+    # registry. Without that last part every MCP child this app spawned
+    # outlives it -- and a bundled server is a second copy of this same
+    # executable, so one run used to leave five of them behind, about 500 MB
+    # of memory, still holding the binary against the next update.
+    try:
+        await orchestrator.close()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("orchestrator close failed: %s", exc)
     log.info("Shutdown complete.")
 
 # Create FastAPI app

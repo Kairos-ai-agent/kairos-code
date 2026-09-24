@@ -132,6 +132,8 @@ class SkillItem(BaseModel):
     bytes: Optional[int] = None
     path: Optional[str] = None  # path within repo
     on_disk: bool = False
+    installed: bool = False  # on disk, so the loader will actually load it
+    scope: Optional[str] = None  # project | global | bundled
 
 
 class SkillsResponse(BaseModel):
@@ -365,9 +367,15 @@ class MarketInstallResponse(BaseModel):
 
 class PluginItem(BaseModel):
     name: str
-    marketplace: str
-    install: str
-    description: str
+    marketplace: str = ""
+    install: str = ""
+    description: str = ""
+    installed: bool = False
+    origin: Optional[str] = None  # bundled | user | registry
+    path: Optional[str] = None
+    version: Optional[str] = None
+    enabled: Optional[bool] = None
+    capabilities: List[str] = []
 
 
 class PluginsResponse(BaseModel):
@@ -388,44 +396,89 @@ class SummaryResponse(BaseModel):
 
 @router.get("/extensions/skills", response_model=SkillsResponse)
 async def list_skills() -> SkillsResponse:
-    """List installed skills with their frontmatter metadata.
+    """List the skills that are installed, and where each one came from.
 
-    The source of truth is ``kairos/extensions/installed.json``
-    (the install script's summary), but we also verify the
-    SKILL.md is actually on disk — a stale summary can mark
-    a skill as installed when the file is missing.
+    The source of truth is the loader — bundled, then project, then global —
+    because that is the set the agent will actually have.  A record file
+    (``kairos/extensions/installed.json``) describes one install run, not the
+    running system, and reading it alone is how a skill that is on disk stays
+    invisible: the summary predates everything added since.  Records are still
+    honoured in both directions — a record whose file is gone is reported as
+    missing rather than dropped, and a file whose record is stale is reported
+    as installed, because it is.
     """
-    installed = _load_json("installed.json")
-    records = (installed.get("skills") or {}).get("records") or []
+    from kairos.skills import SkillsLoader
+
+    scopes = {"project": None, "global": _HOME_GLOBAL_SKILLS,
+              "bundled": _SKILLS_DIR}
+    loader = SkillsLoader(project_dir=None, global_dir=scopes["global"],
+                          bundled_dir=scopes["bundled"])
+
+    records: dict = {}
+    for r in ((_load_json("installed.json").get("skills") or {})
+              .get("records") or []):
+        name = r.get("name")
+        if name and name not in records:
+            records[name] = r
+
     items: List[SkillItem] = []
-    for r in records:
-        # The record's path is the *target* file (relative to repo
-        # root), e.g. "kairos/skills/docx/SKILL.md". Resolve and
-        # verify on disk.
-        rel_path = r.get("path") or ""
-        abs_path = _REPO_ROOT / rel_path
-        on_disk = abs_path.exists() and abs_path.stat().st_size > 100
-        # Read the frontmatter for a richer description.
-        description: Optional[str] = None
-        if on_disk:
+    seen = set()
+    for skill in loader.discover():
+        rec = records.get(skill.name) or {}
+        path = skill.source_path
+        size: Optional[int] = None
+        if path is not None:
             try:
-                md = abs_path.read_text(encoding="utf-8", errors="replace")
-                description = _parse_frontmatter(md).get("description")
+                size = path.stat().st_size
+                size = size if size > 0 else None
             except OSError:
-                pass
-        if not description:
-            description = r.get("description")
+                path = None
+        scope = _scope_of(path, scopes)
+        if path is not None:
+            try:
+                where = path.relative_to(_REPO_ROOT).as_posix()
+            except ValueError:
+                where = str(path)
+        else:
+            where = rec.get("path")
         items.append(SkillItem(
-            name=r.get("name", ""),
-            category=r.get("category"),
-            description=description,
-            source=r.get("source"),
-            status=r.get("status", "missing") if on_disk
-                    else "missing",
-            bytes=r.get("bytes"),
-            path=rel_path,
-            on_disk=on_disk,
+            name=skill.name,
+            category=getattr(skill, "category", "") or rec.get("category"),
+            description=skill.description or rec.get("description"),
+            source=rec.get("source")
+                   or ("bundled" if scope == "bundled" else None),
+            status=rec.get("status")
+                   or ("installed" if path is not None else "missing"),
+            bytes=size if size is not None else rec.get("bytes"),
+            path=where,
+            on_disk=path is not None,
+            installed=path is not None,
+            scope=scope,
         ))
+        seen.add(skill.name)
+
+    # A record whose file is gone is a broken install. Reporting it is what
+    # keeping records around is for.
+    for name, rec in records.items():
+        if name in seen:
+            continue
+        items.append(SkillItem(
+            name=str(name),
+            category=rec.get("category"),
+            description=rec.get("description"),
+            source=rec.get("source"),
+            status="missing",
+            bytes=rec.get("bytes"),
+            path=rec.get("path"),
+            on_disk=False,
+            installed=False,
+            scope=None,
+        ))
+
+    # 583 skills is a lot of list: keep it in a stable, findable order rather
+    # than whatever order the loader happened to walk the directories in.
+    items.sort(key=lambda i: i.name)
+
     installed_count = sum(1 for i in items if i.on_disk)
     failed_count = sum(1 for i in items if i.status == "download-failed")
     return SkillsResponse(
@@ -981,17 +1034,60 @@ async def probe_mcp_server(request: MCPProbeRequest) -> MCPProbeResponse:
 
 @router.get("/extensions/plugins", response_model=PluginsResponse)
 async def list_plugins() -> PluginsResponse:
-    reg = _load_json("plugins.json")
-    plugins = [
-        PluginItem(
-            name=p["name"],
+    """List what this build ships, what the user added, and what the registry
+    could still install — each one saying which of the three it is.
+
+    ``plugins.json`` is a catalogue of what *can* be installed, not a list of
+    what is: read alone it shows a plugin as present because an entry exists for
+    it, and shows nothing at all for a plugin that arrived from anywhere else.
+    Disk is the truth; the registry is the shelf.
+    """
+    from kairos.plugins import PluginManager
+
+    manager = PluginManager()
+
+    def from_info(info) -> PluginItem:
+        entry = info.to_dict() if hasattr(info, "to_dict") else {}
+        return PluginItem(
+            name=str(entry.get("name") or getattr(info, "name", "")),
+            description=entry.get("description") or "",
+            installed=True,
+            origin="bundled" if entry.get("bundled") else "user",
+            path=entry.get("path"),
+            version=entry.get("version"),
+            enabled=entry.get("enabled"),
+            capabilities=list(entry.get("capabilities") or []),
+        )
+
+    items: List[PluginItem] = []
+    seen = set()
+    for getter in ("list_bundled", "list_installed"):
+        try:
+            found = getattr(manager, getter)()
+        except Exception as exc:  # one broken manifest must not hide the rest
+            logger.warning("plugins: %s failed: %s", getter, exc)
+            continue
+        for info in found:
+            name = getattr(info, "name", "")
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            items.append(from_info(info))
+
+    for p in (_load_json("plugins.json").get("plugins") or []):
+        name = p.get("name") or ""
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        items.append(PluginItem(
+            name=name,
             marketplace=p.get("marketplace", ""),
             install=p.get("install", ""),
             description=p.get("description", ""),
-        )
-        for p in (reg.get("plugins") or [])
-    ]
-    return PluginsResponse(plugins=plugins, total=len(plugins))
+            installed=False,
+            origin="registry",
+        ))
+    return PluginsResponse(plugins=items, total=len(items))
 
 
 # ---------------------------------------------------------------------------

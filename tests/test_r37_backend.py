@@ -1314,3 +1314,86 @@ def test_restore_route_unarchives_project(monkeypatch):
     r = client.post("/api/projects/nope/restore")
     assert r.status_code == 404
     assert "not found" in r.json()["detail"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Installed state comes from disk, not from a bookkeeping file
+#
+# /extensions/skills answered from ``installed.json`` and /extensions/plugins
+# from ``plugins.json``. Both describe an install run — one script's 29 records,
+# and a catalogue of what *could* be installed — so a skill that is on disk with
+# no record was invisible, and a catalogue entry with nothing behind it was
+# listed with a green tick as if it were installed.
+# ---------------------------------------------------------------------------
+
+
+def _recorded_skill_names():
+    from api.routes import extensions as ext
+    records = ((ext._load_json("installed.json").get("skills") or {})
+               .get("records") or [])
+    return {r.get("name") for r in records}
+
+
+def test_installed_skills_come_from_the_loader_not_the_record_file():
+    from fastapi.testclient import TestClient
+    from api.app import app
+    from api.routes import extensions as ext
+
+    data = TestClient(app).get("/api/extensions/skills").json()
+    listed = {s["name"]: s for s in data["skills"]}
+    assert listed, "the endpoint returned no skills at all"
+
+    from kairos.skills import SkillsLoader
+    on_disk = {s.name for s in SkillsLoader(
+        project_dir=None, global_dir=ext._HOME_GLOBAL_SKILLS,
+        bundled_dir=ext._SKILLS_DIR).discover()}
+
+    # A skill on disk that no record mentions must still be listed. That is the
+    # difference between describing an install and describing the system.
+    unrecorded = on_disk - _recorded_skill_names()
+    assert unrecorded, "fixture assumption: bundled skills beyond the records"
+    assert unrecorded <= set(listed), sorted(unrecorded - set(listed))[:5]
+
+    # And the state reported is the state of the file, in both directions.
+    for name, s in listed.items():
+        assert s["on_disk"] == s["installed"], name
+        assert s["installed"] == (name in on_disk), name
+
+
+def test_a_record_whose_file_is_gone_is_reported_as_missing():
+    """A stale record is a broken install, so it is listed and says so —
+    hiding it is how "installed but unreachable" stays invisible."""
+    from fastapi.testclient import TestClient
+    from api.app import app
+
+    listed = {s["name"]: s for s in
+              TestClient(app).get("/api/extensions/skills").json()["skills"]}
+    for name in _recorded_skill_names():
+        if name not in listed:
+            continue          # not a skill file at all — nothing to report
+        s = listed[name]
+        if not s["installed"]:
+            assert s["on_disk"] is False, name
+            assert s["status"] in ("missing", "source-missing",
+                                   "download-failed"), (name, s["status"])
+
+
+def test_plugins_report_disk_and_catalogue_separately():
+    import os as _os
+    from fastapi.testclient import TestClient
+    from api.app import app
+
+    items = TestClient(app).get("/api/extensions/plugins").json()["plugins"]
+    names = [p["name"] for p in items]
+    assert len(names) == len(set(names)), "a plugin is listed twice"
+
+    installed = [p for p in items if p["installed"]]
+    assert installed, "no plugin is installed — the bundled ones should be"
+    for p in installed:
+        assert p["origin"] in ("bundled", "user"), p
+        assert p["path"] and _os.path.exists(p["path"]), p
+
+    # What is on the shelf is not what is on disk.
+    for p in items:
+        if not p["installed"]:
+            assert p["origin"] == "registry", p

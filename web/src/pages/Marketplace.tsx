@@ -58,9 +58,15 @@ interface McpItem {
 
 interface PluginItem {
   name: string;
-  marketplace: string;
-  install: string;
-  description: string;
+  marketplace?: string;
+  install?: string;
+  description?: string;
+  /** On disk, so the agent will actually load it — not "in a list". */
+  installed?: boolean;
+  origin?: string | null;  // bundled | user | registry
+  path?: string | null;
+  version?: string | null;
+  capabilities?: string[];
 }
 
 interface SkillItem {
@@ -72,6 +78,8 @@ interface SkillItem {
   bytes?: number | null;
   path?: string | null;
   on_disk: boolean;
+  installed?: boolean;
+  scope?: string | null;
 }
 
 /** One remote marketplace this build can search (`GET /extensions/market/sources`). */
@@ -540,8 +548,13 @@ const RemoteSourcePane: React.FC<{
                       {e.category && (
                         <Tag style={{ marginInlineEnd: 0 }}>{e.category}</Tag>
                       )}
-                      {installed.has(e.name) && (
-                        <Tag color="green" style={{ marginInlineEnd: 0 }}>
+                      {(installed.has(e.name)
+                        || (e.upstream ? installed.has(e.upstream) : false)) && (
+                        // An entry installs under `upstream || name` (that id is
+                        // what travels in the request), so that is what to look
+                        // for on disk — a Cline entry lands under its upstream id.
+                        <Tag color="green" style={{ marginInlineEnd: 0 }}
+                             data-testid={`${testPrefix}-remote-installed-${e.name}`}>
                           {t('market.installedTag')}
                         </Tag>
                       )}
@@ -1028,7 +1041,12 @@ const PluginTab: React.FC = () => {
 
   const remote = useMemo(() => sourcesOfKind(sources, 'plugin'), [sources]);
   useDefaultSource(source, setSource, 'plugin', sources, loaded);
-  const installed = useMemo(() => new Set(plugins.map((p) => p.name)), [plugins]);
+  // The list on this tab is what is installed here, so the green check and the
+  // "Installed" tag on the remote rows mean the same thing: the backend found
+  // it on disk. A catalogue entry is not an installed plugin.
+  const installedList = useMemo(() => plugins.filter((p) => p.installed), [plugins]);
+  const installed = useMemo(() => new Set(installedList.map((p) => p.name)),
+    [installedList]);
   const active = remote.find((s) => s.id === source);
   // Before the answer is in, `source` is empty and the installed list is what
   // there is to show. It is the same list the tab showed before it could browse.
@@ -1047,7 +1065,7 @@ const PluginTab: React.FC = () => {
           value={source}
           onChange={setSource}
           first={{ id: LOCAL, label: t('market.sourceLocal'),
-                   testId: 'plugin-source-local', total: plugins.length }}
+                   testId: 'plugin-source-local', total: installedList.length }}
           homepage={active?.homepage}
         />
       )}
@@ -1073,11 +1091,11 @@ const PluginTab: React.FC = () => {
           </Paragraph>
           {loading ? (
             <Spin style={{ display: 'block', marginTop: 40 }} />
-          ) : plugins.length === 0 ? (
+          ) : installedList.length === 0 ? (
             <Empty description={t('market.emptyPlugins')} />
           ) : (
             <div style={{ display: 'grid', gap: 10 }}>
-              {plugins.map((p) => (
+              {installedList.map((p) => (
                 <Card key={p.name} size="small" data-testid={`plugin-card-${p.name}`}
                       styles={{ body: { padding: '12px 14px' } }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
@@ -1086,9 +1104,13 @@ const PluginTab: React.FC = () => {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                         <Text strong style={{ fontSize: 14 }}>{p.name}</Text>
-                        {p.marketplace && (
+                        {p.marketplace ? (
                           <Tag style={{ marginInlineEnd: 0 }}>{p.marketplace}</Tag>
-                        )}
+                        ) : p.origin ? (
+                          <Tag style={{ marginInlineEnd: 0 }}>
+                            {t('market.installedFrom', { layer: p.origin })}
+                          </Tag>
+                        ) : null}
                       </div>
                       <div style={{ fontSize: 12.5, color: tokens.labelSecondary,
                                     marginTop: 4 }}>
@@ -1142,7 +1164,13 @@ const SkillTab: React.FC = () => {
 
   const remote = useMemo(() => sourcesOfKind(sources, 'skill'), [sources]);
   useDefaultSource(source, setSource, 'skill', sources, loaded);
-  const installed = useMemo(() => new Set(skills.map((s) => s.name)), [skills]);
+  // Same rule as the plugins tab: only skills the loader actually found on
+  // disk count as installed. A record whose file is gone is reported as
+  // missing and is not counted here.
+  const installedSkills = useMemo(
+    () => skills.filter((s) => s.installed ?? s.on_disk), [skills]);
+  const installed = useMemo(() => new Set(installedSkills.map((s) => s.name)),
+    [installedSkills]);
   const active = remote.find((s) => s.id === source);
   const onLocal = !source || source === LOCAL;
 
@@ -1180,7 +1208,7 @@ const SkillTab: React.FC = () => {
           value={source}
           onChange={setSource}
           first={{ id: LOCAL, label: t('market.sourceLocal'),
-                   testId: 'skill-source-local', total: skills.length }}
+                   testId: 'skill-source-local', total: installedSkills.length }}
           homepage={active?.homepage}
         />
       )}

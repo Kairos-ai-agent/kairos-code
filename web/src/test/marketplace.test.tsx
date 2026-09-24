@@ -30,12 +30,14 @@ const MCP = {
 const PLUGIN = {
   name: 'code-review', marketplace: 'bundled',
   install: 'bundled', description: 'Review skills',
+  installed: true, origin: 'bundled',
 };
 
 const SKILL = {
   name: 'docx', category: 'docs', description: 'Word documents',
   source: 'bundled', status: 'installed', bytes: 100,
   path: 'kairos/skills/docx/SKILL.md', on_disk: true,
+  installed: true, scope: 'bundled',
 };
 
 function mockApi(opts: { installEndpoints: boolean }) {
@@ -549,5 +551,71 @@ describe('Marketplace remote plugin and skill sources', () => {
     // And the browse that fed the list keeps the default: only the write is long.
     const search = get.mock.calls.find((c) => c[0] === '/extensions/market/search');
     expect((search as any[])[1]?.timeout).toBeUndefined();
+  });
+});
+
+describe('installed state comes from disk, not from a catalogue', () => {
+  beforeEach(() => { get.mockReset(); post.mockReset(); });
+
+  it('marks a plugin installed from a remote source, and lists it as installed', async () => {
+    const fromMarket = { ...PLUGIN, name: 'code-modernization',
+                         marketplace: '', install: '', origin: 'user' };
+    const remoteEntry = { ...PLUGIN_ENTRY, name: 'code-modernization',
+                          id: 'code-modernization' };
+    mockKinds({ 'anthropic-plugins': page('anthropic-plugins', [remoteEntry]) },
+              { plugins: [PLUGIN, fromMarket] });
+    renderPage();
+    await openPlugins();
+
+    // The row that offers the install says it has already happened.
+    await screen.findByTestId('plugin-remote-card-code-modernization');
+    expect(screen.getByTestId('plugin-remote-installed-code-modernization'))
+      .toBeInTheDocument();
+
+    // And it is under "installed here" — not only under the source it came from,
+    // which is the state a fresh install used to leave the page in.
+    fireEvent.click(screen.getByTestId('plugin-source-local'));
+    expect(await screen.findByTestId('plugin-card-code-modernization')).toBeInTheDocument();
+  });
+
+  it('does not list a catalogue entry as installed when nothing is on disk', async () => {
+    mockKinds({}, { plugins: [{ ...PLUGIN, installed: false, origin: 'registry' }] });
+    renderPage();
+    await openPlugins();
+    fireEvent.click(screen.getByTestId('plugin-source-local'));
+
+    // The registry is a shelf, not a state: an entry with nothing behind it is
+    // not an installed plugin, and the count must not include it.
+    expect(screen.queryByTestId('plugin-card-code-review')).toBeNull();
+    expect(screen.getByTestId('plugin-source-local').textContent).toContain('0');
+  });
+
+  it('counts only the skills that are on disk', async () => {
+    get.mockImplementation((url: string) => {
+      if (url === '/extensions/mcps') return Promise.resolve({ data: { servers: [MCP] } });
+      if (url === '/extensions/mcp/installed') return Promise.resolve({ data: { servers: [] } });
+      if (url === '/extensions/plugins') return Promise.resolve({ data: { plugins: [PLUGIN] } });
+      if (url === '/extensions/skills') {
+        return Promise.resolve({ data: { skills: [
+          SKILL,
+          { ...SKILL, name: 'gone', installed: false, on_disk: false, status: 'missing' },
+        ] } });
+      }
+      if (url === '/extensions/market/sources') {
+        return Promise.resolve({ data: { sources: KIND_SOURCES } });
+      }
+      return Promise.resolve({ data: {} });
+    });
+    renderPage();
+    fireEvent.click(screen.getByTestId('market-tab-skills'));
+    // The tab opens on a source it can install from; the installed list is a
+    // click away, exactly as it is for a user.
+    fireEvent.click(await screen.findByTestId('skill-source-local'));
+
+    // Two skills are listed; one is a record whose file is gone. The chip counts
+    // what is installed, so a broken record cannot inflate it.
+    const chip = screen.getByTestId('skill-source-local');
+    expect(chip.textContent).toMatch(/1(?!\d)/);
+    expect(await screen.findByTestId('skill-card-gone')).toBeInTheDocument();
   });
 });

@@ -58,6 +58,7 @@ class Skill:
     """Parsed skill file."""
     name: str
     description: str = ""
+    category: str = ""
     when: Dict[str, Any] = field(default_factory=dict)
     priority: float = 0.5
     body: str = ""
@@ -130,6 +131,7 @@ def _parse_skill(path: Path) -> Optional[Skill]:
     return Skill(
         name=str(meta.get("name") or path.stem),
         description=str(meta.get("description") or ""),
+        category=str(meta.get("category") or ""),
         when=meta.get("when") or {},
         priority=float(meta.get("priority") or 0.5),
         body=body.strip(),

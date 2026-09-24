@@ -6,7 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Added
+### Fixed
+
+- **The marketplace called things installed that were not, and said nothing
+  about things that were.** Both tabs answered from bookkeeping files: the plugin
+  list from `plugins.json` (a catalogue of what *can* be installed) and the
+  skills list from `installed.json` (one install script's 29 records). So the
+  plugins tab drew a green tick against all 20 catalogue entries whether or not
+  anything was behind them, the "Installed here" count was a catalogue size
+  rather than a state, and a plugin or a skill installed from a remote source —
+  the only kind this page can install — did not appear as installed anywhere,
+  including on the row the install had just come from. Both endpoints now read
+  the running system. `/extensions/plugins` returns what this build ships, what
+  the user added and what the registry could still install, each with
+  `installed` and an `origin` (`bundled` / `user` / `registry`);
+  `/extensions/skills` returns what the loader actually discovers, with `scope`
+  and the frontmatter `category`, and reports a record whose file is gone as
+  missing instead of silently dropping it. The count is that number now — 7
+  plugins and 581 skills on a working install, against 20 and 29 before. Remote
+  rows match an entry on its name *and* its upstream id, so a Cline entry that
+  installs under its id is recognised as installed too.
 
 - **A marketplace for the three kinds of extension.** MCP servers, plugins and
   skills each had a list somewhere and no way to act on it: installing a server

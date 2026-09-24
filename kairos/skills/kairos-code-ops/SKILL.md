@@ -363,7 +363,7 @@ for c in $(git rev-list --all); do git grep -hIE "sk-[A-Za-z0-9_-]{20,}" "$c"; d
 #    sha256(key)[:12] 与 data/settings.json 里的值对比
 # 4. 抹除（保留提交，只替换字符串）：文件放仓库外，事后立刻删
 git-filter-repo --force --replace-text /tmp/redact.txt   # 内容：literal:<key>==>REDACTED
-#    同样的办法可抹机器用户名：literal:you==>user（当前文件 + 全历史一起改）
+#    同样的办法可抹机器用户名：literal:<user>==>user（当前文件 + 全历史一起改）
 ```
 
 配套要点：

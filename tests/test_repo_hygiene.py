@@ -25,11 +25,16 @@ FORBIDDEN = [
     r"/c/Users/you",
 ]
 
-# Lines that legitimately talk about paths: documentation of the rule itself,
-# placeholder examples, and the drive-letter helpers in the file browser.
+# A line is exempt only when it is about the rule: it names a placeholder, a
+# well-known path that belongs to nobody, or this gate.
+#
+# Comment markers were on this list, and that was the hole. `^#` waived every
+# comment, so a bundled skill could name the maintainer in a note about how to
+# redact names and still pass everywhere -- green locally, green in CI, and
+# shipped inside the release binary. Write the example with a placeholder;
+# never re-add a comment waiver so a line can pass.
 ALLOW = re.compile(
     r"<name>|<user>|C:\\\\Users\\\\me|D:\\\\some\\\\machine|"
-    r"^#|^\s*//|\"\"\"|^\s*\*|'\"'\"'|`C:\\\\`|C:\\\\\\\\, D:\\\\\\\\|"
     r"C:\\\\proj|System32|/etc/(passwd|shadow)|test_repo_hygiene|"
     r"FORBIDDEN|ALLOW"
 )
@@ -103,4 +108,18 @@ def test_gitignore_does_not_hide_source_files() -> None:
     untracked = [p for p in required if p not in tracked]
     assert not untracked, (
         f"these files exist locally but are NOT tracked (a broad .gitignore rule?): {untracked}"
-    )
+    )
+
+def test_a_comment_line_is_not_waived() -> None:
+    """The hole that let a leak ship: `^#` exempted every comment.
+
+    A bundled skill named the maintainer in a note about how to redact names, and
+    every gate stayed green -- locally, in CI, and inside the release binary. Pin
+    it with the pattern list itself so this file still carries no literal.
+    """
+    name = FORBIDDEN[2]
+    for line in (f"# note: {name} ==> user", f"#   indented {name}",
+                 f"// {name} in a comment", f"    {name} bare"):
+        assert re.search(r"|".join(FORBIDDEN), line), line
+        assert not ALLOW.search(line), f"a comment must not be exempt: {line!r}"
+

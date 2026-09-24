@@ -595,7 +595,7 @@ class Orchestrator:
         The registry is stored on `project.runtime.mcp_registry` so
         it can be closed on shutdown.
         """
-        from kairos.mcp_client import McpRegistry
+        from kairos.mcp_client import McpRegistry, should_defer_start
         if not work_dir:
             return []
         reg = McpRegistry()
@@ -604,24 +604,38 @@ class Orchestrator:
         except Exception as e:  # noqa: BLE001
             logger.debug("MCP load skipped for %s: %s", project.id, e)
             return []
-        # start_all is async; for the synchronous _create_agents
-        # path we run it via asyncio.run if there's a loop, else
-        # we skip (MCP servers will be started on first async tick).
+        # start_all is async, so who starts it depends on the caller:
+        #
+        #   * a running loop (a request, a script) -- scheduled, the caller
+        #     never waits for a server;
+        #   * no loop while the app is starting (it set the flag before
+        #     building this orchestrator) -- deferred, because the app is
+        #     about to open a port and the servers would delay it. This is
+        #     what made a double-click sit on "127.0.0.1 refused to connect":
+        #     five configured servers were awaited before uvicorn owned a
+        #     port, 129 seconds of it;
+        #   * no loop anywhere else (a library caller) -- started inline, as
+        #     before: it is the caller's own startup, not a port somebody is
+        #     already waiting on.
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
                 # Fire-and-forget: schedule start_all on the running loop.
                 loop.create_task(reg.start_all())
+            elif should_defer_start():
+                reg.defer_start()
             else:
                 loop.run_until_complete(reg.start_all())
         except RuntimeError:
-            # No event loop — start synchronously (start_all is
-            # an async coroutine; we use asyncio.run).
-            try:
-                asyncio.run(reg.start_all())
-            except Exception as e:  # noqa: BLE001
-                logger.debug("MCP start_all failed for %s: %s", project.id, e)
-                return []
+            if should_defer_start():
+                reg.defer_start()
+            else:
+                try:
+                    asyncio.run(reg.start_all())
+                except Exception as e:  # noqa: BLE001
+                    logger.debug(
+                        "MCP start_all failed for %s: %s", project.id, e)
+                    return []
         project.runtime.mcp_registry = reg
         return list(reg.all_tools())
 

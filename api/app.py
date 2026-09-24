@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import traceback
@@ -154,7 +155,42 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # noqa: BLE001
         log.warning("Feishu setup failed: %s", exc)
 
+    # MCP servers are configured by the user, so they can hang: a command
+    # that is not installed, or one that has to fetch something over a
+    # blocked network. Starting them on a background task keeps the port
+    # opening in seconds -- the servers warm up while the UI loads, and the
+    # first page a user sees is the app rather than a refused connection.
+    try:
+        from kairos.mcp_client import pending_registries
+        pending = pending_registries()
+        if pending:
+            async def _warm_mcp() -> None:
+                for reg in pending:
+                    try:
+                        await reg.start_all()
+                    except Exception as exc:  # noqa: BLE001
+                        log.debug("mcp warm-up failed: %s", exc)
+            app.state.mcp_warm_task = asyncio.create_task(_warm_mcp())
+            log.info("MCP warm-up scheduled for %d registry(ies)", len(pending))
+    except Exception as exc:  # noqa: BLE001
+        # Loud on purpose: a silent failure here means the servers never
+        # start, and the only symptom is tools that quietly are not there.
+        log.warning("MCP warm-up scheduling failed: %s", exc)
+
     yield
+
+    # Shutdown: a warm-up still in flight would outlive the loop that owns it
+    # ("Task was destroyed but it is pending", then a traceback about a closed
+    # event loop), so end it here.
+    _warm = getattr(app.state, "mcp_warm_task", None)
+    if _warm is not None and not _warm.done():
+        _warm.cancel()
+        try:
+            await _warm
+        except asyncio.CancelledError:
+            pass
+        except Exception:  # noqa: BLE001
+            pass
 
     # Shutdown: close the browser first, then LLM clients
     if _browser_manager is not None:

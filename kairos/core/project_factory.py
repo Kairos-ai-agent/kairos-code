@@ -569,7 +569,7 @@ class ProjectFactory:
 
     def _attach_mcp(self, project: Project, work_dir: str) -> List[Any]:
         """Load and start MCP servers for the project."""
-        from kairos.mcp_client import McpRegistry
+        from kairos.mcp_client import McpRegistry, should_defer_start
         if not work_dir:
             return []
         
@@ -579,17 +579,23 @@ class ProjectFactory:
         except Exception:
             return []
         
+        # Same three cases as the orchestrator path; see the comment there.
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
                 loop.create_task(reg.start_all())
+            elif should_defer_start():
+                reg.defer_start()
             else:
                 loop.run_until_complete(reg.start_all())
         except RuntimeError:
-            try:
-                asyncio.run(reg.start_all())
-            except Exception:
-                return []
+            if should_defer_start():
+                reg.defer_start()
+            else:
+                try:
+                    asyncio.run(reg.start_all())
+                except Exception:
+                    return []
         
         project.runtime.mcp_registry = reg
         return list(reg.all_tools())

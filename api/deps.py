@@ -11,10 +11,17 @@ import json
 from pathlib import Path
 
 from kairos.config.settings import settings
+from kairos.mcp_client import defer_start_until_serving
 from kairos.llm.model_router import ModelRouter
 from kairos.core.orchestrator import Orchestrator
 from kairos.review.engine import ReviewEngine
 from kairos.llm.base import LLMConfig
+
+# The app is about to open a port, so MCP servers must not be started inline
+# here: a user's server that cannot start (a missing command, a network the
+# firewall drops) would delay the port and the browser would land on
+# "127.0.0.1 refused to connect". The lifespan starts them once we serve.
+defer_start_until_serving()
 
 # Initialize core components (singleton pattern)
 config_path = Path(__file__).parent.parent / "kairos" / "config" / "models_config.yaml"

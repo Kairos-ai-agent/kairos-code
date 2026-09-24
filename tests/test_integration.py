@@ -292,9 +292,12 @@ def test_mcp_attached_when_yaml_present(orch, tmp_path, monkeypatch):
     class FakeRegistry:
         def __init__(self):
             self.started = False
+            self.deferred = False
             self.loaded_from = None
         def load(self, project_dir):
             self.loaded_from = project_dir
+        def defer_start(self):
+            self.deferred = True
         async def start_all(self):
             self.started = True
         def all_tools(self):
@@ -315,7 +318,12 @@ def test_mcp_attached_when_yaml_present(orch, tmp_path, monkeypatch):
     # The orchestrator passes the project work_dir; McpRegistry.load
     # itself does the `.kairos/mcp.yaml` resolution internally.
     assert fake.loaded_from == tmp_path
-    assert fake.started is True
+    # Attached either way. Whether the servers are up by the time this
+    # returns depends on the context: with a running loop start_all is
+    # scheduled; with none while the app is starting it is deferred to the
+    # lifespan (starting it inline there kept the port closed for 129s).
+    assert (fake.started or fake.deferred), (
+        "the registry was neither started nor deferred")
 
 
 def test_mcp_attached_failure_recorded(orch, tmp_path, monkeypatch):
@@ -357,6 +365,7 @@ async def test_close_closes_mcp_registry(orch, tmp_path, monkeypatch):
         def __init__(self):
             self.closed = False
         def load(self, project_dir): pass
+        def defer_start(self): pass
         async def start_all(self): pass
         def all_tools(self): return []
         async def close_all(self):

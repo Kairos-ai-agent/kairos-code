@@ -177,8 +177,14 @@ def main() -> int:
     _emit("  Press Ctrl+C to stop.\n")
 
     if not args.no_browser:
+        # The budget has to outlast a slow first start. Servers the user
+        # configured can each spend a slice of the MCP start budget, and the
+        # old 30s gave up before the port was open -- so the browser landed
+        # on "127.0.0.1 refused to connect" while the app was still coming
+        # up. The thread still opens the browser when the budget expires,
+        # so a genuinely broken start is visible rather than silent.
         threading.Thread(target=_open_browser_when_ready,
-                         args=(url, 30.0), daemon=True).start()
+                         args=(url, 180.0), daemon=True).start()
 
     # R38.6.4 packaging: pre-load kairos submodules (with per-module
     # try/except + a log file the user can inspect post-mortem;

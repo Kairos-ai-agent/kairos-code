@@ -870,6 +870,38 @@ class McpToolAdapter(BaseTool):
 # ---------------------------------------------------------------------------
 
 
+#: Registries that were created where no event loop was running (import
+#: time, before uvicorn serves) and therefore could not be started yet.
+#: ``api.app``'s lifespan drains this once it is serving.
+_DEFERRED: "list[McpRegistry]" = []
+
+
+def pending_registries() -> "list[McpRegistry]":
+    """Take the registries waiting to start. Drains, so a second caller
+    (a reload, a second lifespan) does not start them twice."""
+    out = list(_DEFERRED)
+    _DEFERRED.clear()
+    return out
+
+
+#: Set by the API layer before it builds its orchestrator. While set, MCP
+#: startup is deferred to the app's lifespan instead of running inline: the
+#: app is about to open a port, and servers configured by the user would
+#: delay it (measured: five servers, 129 seconds, and a browser that had
+#: already opened onto "127.0.0.1 refused to connect").
+_DEFER_UNTIL_SERVING = False
+
+
+def defer_start_until_serving() -> None:
+    """Defer MCP startup to whoever is about to serve HTTP."""
+    global _DEFER_UNTIL_SERVING
+    _DEFER_UNTIL_SERVING = True
+
+
+def should_defer_start() -> bool:
+    return _DEFER_UNTIL_SERVING
+
+
 class McpRegistry:
     """Loads MCP server configs, starts them, and aggregates their tools.
 
@@ -891,6 +923,22 @@ class McpRegistry:
         self.include_bundled = True
         self._tools: Dict[str, McpToolAdapter] = {}
         self._startup_errors: Dict[str, str] = {}
+        #: True when this registry was created without a running loop and
+        #: is waiting for one to hand it to.
+        self._deferred = False
+
+    def defer_start(self) -> None:
+        """Record that this registry still has to start, without starting it.
+
+        Called where there is no running event loop -- at import time, before
+        the HTTP server exists. The old code used ``asyncio.run`` there, which
+        blocked the whole startup for as long as the configured servers took:
+        five of them cost 102 seconds, so the browser opened onto a port that
+        was not listening yet and showed "127.0.0.1 refused to connect".
+        """
+        self._deferred = True
+        if self not in _DEFERRED:
+            _DEFERRED.append(self)
 
     @property
     def startup_errors(self) -> Dict[str, str]:
@@ -923,6 +971,17 @@ class McpRegistry:
         for name, cfg in self._configs.items():
             if not cfg.enabled:
                 continue
+            if name in self._clients:
+                # Already up. This phase can be entered from more than one
+                # place, and spawning a second child for a server that is
+                # already answering doubles the cost of a hanging one
+                # (measured: one 51s timeout became two, 102s of startup).
+                continue
+            if name in self._startup_errors:
+                # A server that already failed in this session is not tried
+                # again: retrying a hang spends another full slice of the
+                # budget and cannot succeed without the user changing it.
+                continue
             remaining = deadline - time.monotonic()
             if remaining <= 1.0:
                 logger.warning(
@@ -932,6 +991,7 @@ class McpRegistry:
                     f"skipped: the {START_BUDGET_S:.0f}s start budget was spent")
                 continue
             await self._start_one(name, cfg, remaining)
+        self._deferred = False
 
     async def _start_one(self, name: str, cfg: McpServerConfig,
                          budget_s: float) -> None:

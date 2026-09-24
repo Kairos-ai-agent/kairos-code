@@ -8,6 +8,23 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **A browser that opened onto a port nobody was listening on.** Starting the app
+  waited for every MCP server the user had configured: the servers were started
+  inline while `api.app` was still being imported, before uvicorn owned a port.
+  With five configured servers — four whose command is not installed, one that has
+  to reach a network it cannot — that was **129 seconds** of "127.0.0.1 refused to
+  connect", because the launcher gives up waiting after 30 and opens the browser
+  anyway. The start phase also ran twice, so one 50s timeout became two. Startup
+  now serves first and warms the servers on a background task: the port opens in
+  about **four seconds** and the servers arrive when they arrive. `start_all` is
+  idempotent, so entering the phase twice no longer respawns a server that is
+  already answering or retries one that already failed this session. The deferral
+  is opt-in — the API layer asks for it before building its orchestrator — so a CLI
+  run, `kairos demo` and any library caller still start their servers inline
+  exactly as before. The launcher waits up to 180 seconds for the port, and still
+  opens the browser when that expires, so a genuinely broken start stays visible
+  instead of silent.
+
 - **The marketplace called things installed that were not, and said nothing
   about things that were.** Both tabs answered from bookkeeping files: the plugin
   list from `plugins.json` (a catalogue of what *can* be installed) and the

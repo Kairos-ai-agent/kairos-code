@@ -148,3 +148,85 @@ def test_the_whole_start_phase_is_bounded(monkeypatch):
     skipped = [e for e in registry.startup_errors.values() if "budget" in e]
     assert len(skipped) == 3, registry.startup_errors
     assert registry.all_tools() == []
+
+
+def _counting_registry(monkeypatch, specs: dict, delay: float = 0.05):
+    """Like _registry, but records every client_for call, not just the last."""
+    registry = McpRegistry()
+    registry.include_bundled = False
+    registry._configs = {
+        name: McpServerConfig(name=name, command="kairos-fake",
+                              enabled=kw.get("enabled", True))
+        for name, kw in specs.items()
+    }
+    calls: list = []
+
+    def fake_client_for(cfg, budget_s=None):
+        calls.append(cfg.name)
+        return FakeClient(cfg, delay=delay, budget_s=budget_s,
+                          fail=specs[cfg.name].get("fail", False))
+
+    monkeypatch.setattr(mc, "client_for", fake_client_for)
+    registry.calls = calls  # type: ignore[attr-defined]
+    return registry
+
+
+def test_a_second_start_phase_does_not_spawn_servers_again(monkeypatch):
+    """Startup is entered from more than one place; the later entries are free.
+
+    Measured in the packaged app: one 51s timeout became two, because the
+    phase ran twice and each pass spawned the same five servers again.
+    """
+    registry = _counting_registry(
+        monkeypatch, {"a": {}, "b": {}, "broken": {"fail": True}})
+
+    asyncio.run(registry.start_all())
+    first = list(registry.calls)
+    asyncio.run(registry.start_all())
+
+    assert sorted(first) == ["a", "b", "broken"], first
+    assert registry.calls == first, "the second phase spawned what was already up"
+    assert sorted(t.name for t in registry.all_tools()) == [
+        "mcp_a__a_tool", "mcp_b__b_tool"]
+
+
+def test_a_failed_server_is_not_retried(monkeypatch):
+    """Re-entering the phase must not spend a second timeout on a known hang."""
+    registry = _counting_registry(monkeypatch, {"broken": {"fail": True}})
+
+    asyncio.run(registry.start_all())
+    assert registry.calls == ["broken"]
+    asyncio.run(registry.start_all())
+
+    assert registry.calls == ["broken"], "a known-bad server was tried again"
+
+
+def test_no_running_loop_defers_instead_of_blocking(monkeypatch):
+    """The import-time path records the registry instead of starting it."""
+    mc.pending_registries()  # drain whatever an earlier test / import left
+    registry = _counting_registry(monkeypatch, {"a": {}})
+
+    registry.defer_start()
+
+    assert registry._deferred is True
+    assert registry.calls == [], "defer_start started a server"
+    assert mc.pending_registries() == [registry]
+    assert mc.pending_registries() == [], "pending_registries must drain"
+
+
+def test_the_import_time_path_never_blocks_on_servers():
+    """Guard: _attach_mcp must defer where no loop is running.
+
+    asyncio.run(...start_all()) there meant a double-click waited for every
+    configured server before uvicorn owned a port: 102 seconds of
+    "127.0.0.1 refused to connect" with the five servers a user had configured.
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    for rel in ("kairos/core/orchestrator.py", "kairos/core/project_factory.py"):
+        text = (root / rel).read_text(encoding="utf-8")
+        # Deferring is opt-in (the API layer asks for it); a caller with no
+        # loop and no app still starts servers inline as it always did.
+        assert "should_defer_start()" in text, rel
+        assert "reg.defer_start()" in text, rel

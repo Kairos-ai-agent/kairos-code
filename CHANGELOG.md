@@ -8,6 +8,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **A stale system proxy made the marketplace look offline.** Windows hands every
+  process the proxy in the registry. A leftover entry — `ProxyEnable=1` pointing at
+  `127.0.0.1:7897` after the tool that owned it stopped — refuses every connection
+  with `WinError 10061`, and the marketplace reported each remote source as
+  unreachable: the plugins and skills tabs, which default to remote sources, came
+  up empty with "由于目标计算机积极拒绝，无法连接" and no listing. Outbound
+  marketplace fetches now try a direct connection first and fall back to the
+  configured proxy, logging which one was used, so a proxy a user actually runs
+  still works while a dead one stops being fatal. Measured from a machine with the
+  stale entry: all six sources failed before, four now return entries, and
+  Smithery fails with a real network timeout rather than a refusal.
+
 - **A browser that opened onto a port nobody was listening on.** Starting the app
   waited for every MCP server the user had configured: the servers were started
   inline while `api.app` was still being imported, before uvicorn owned a port.

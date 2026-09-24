@@ -85,11 +85,14 @@ import threading
 import time
 import urllib.error
 import urllib.parse
+import logging
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 USER_AGENT = "kairos-code-marketplace/1.0 (+https://github.com/Kairos-ai-agent/kairos-code)"
 
@@ -306,6 +309,39 @@ SOURCES: Dict[str, Dict[str, Any]] = {
 # --------------------------------------------------------------------------- fetching
 
 
+def _open(req: "urllib.request.Request", timeout: float):
+    """Open ``req``: direct first, and only then through the machine's proxy.
+
+    Windows hands every process the proxy in the registry, and a leftover entry
+    (``127.0.0.1:7897`` after the tool that owned it stopped, ``ProxyEnable=1``)
+    refuses every connection with ``WinError 10061``. That made a marketplace
+    source report itself unreachable and a user saw empty plugins and skills
+    tabs, with the reason sitting in a registry key they had no reason to know
+    about.
+
+    So the direct connection is tried first: for most machines it is simply the
+    right one, and a proxy the user actually runs answers on the second attempt
+    (a dead one costs one refused connection instead of every request). The
+    failure that matters is reported as a warning, because a person reading the
+    console needs to know which of the two it was.
+    """
+    direct = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        return direct.open(req, timeout=timeout)
+    except Exception as first:  # noqa: BLE001
+        proxies = urllib.request.getproxies()
+        if not proxies:
+            raise
+        logger.warning(
+            "market fetch to %s failed directly (%s); retrying through the "
+            "configured proxy %s", req.full_url, getattr(first, "reason", first),
+            proxies)
+        try:
+            return urllib.request.build_opener().open(req, timeout=timeout)
+        except Exception:  # noqa: BLE001
+            raise first
+
+
 def _http_json(url: str, timeout: float = 20.0) -> Any:
     """GET ``url`` and parse JSON. Raises on any failure — callers decide what a
     failure means for them, because the answer differs per source."""
@@ -313,7 +349,7 @@ def _http_json(url: str, timeout: float = 20.0) -> Any:
         "User-Agent": USER_AGENT,
         "Accept": "application/json",
     })
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with _open(req, timeout=timeout) as r:
         body = r.read().decode("utf-8", "replace")
     return json.loads(body)
 
@@ -330,7 +366,7 @@ def _http_text(url: str, timeout: float = 20.0) -> str:
         "User-Agent": USER_AGENT,
         "Accept": "text/plain, text/markdown, */*",
     })
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with _open(req, timeout=timeout) as r:
         return r.read().decode("utf-8", "replace")
 
 
@@ -346,7 +382,7 @@ def _http_bytes(url: str, timeout: float = 30.0) -> bytes:
         "User-Agent": USER_AGENT,
         "Accept": "application/octet-stream, */*",
     })
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with _open(req, timeout=timeout) as r:
         return r.read()
 
 

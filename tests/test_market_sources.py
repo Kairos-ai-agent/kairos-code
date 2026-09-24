@@ -1573,3 +1573,98 @@ def test_a_skill_with_no_frontmatter_is_refused_rather_than_written(tmp_path):
         install_skill(entry, user_dir=tmp_path, content="just a body\n")
     assert "frontmatter" in str(err.value)
     assert not (tmp_path / "skills").exists()
+
+
+# ---------------------------------------------------------------------------
+
+
+def test_the_three_transports_all_use_the_retrying_open():
+    """One place to fix it, so it is one place to check."""
+    from pathlib import Path
+
+    text = (Path(__file__).resolve().parents[1]
+            / "kairos" / "extensions" / "market_sources.py").read_text(encoding="utf-8")
+    assert text.count("with _open(req, timeout=timeout) as r:") == 3
+    assert "ProxyHandler({})" in text
+
+
+# ---------------------------------------------------------------------------
+# The proxy Windows hands to every process
+# ---------------------------------------------------------------------------
+
+
+class _Reply:
+    def __init__(self, body: bytes):
+        self.body = body
+
+    def read(self):
+        return self.body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def _openers(outcomes: dict, calls: list):
+    """build_opener(ProxyHandler({})) is the direct path, build_opener() the proxy one."""
+    def build(*handlers):
+        kind = "direct" if handlers else "proxy"
+        calls.append(kind)
+
+        class Opener:
+            def open(self, req, timeout=None):
+                outcome = outcomes[kind]
+                if isinstance(outcome, Exception):
+                    raise outcome
+                return outcome
+
+        return Opener()
+
+    return build
+
+
+def test_a_fetch_goes_direct_first(monkeypatch):
+    """Most machines need no proxy, and a stale registry entry must not decide."""
+    calls = []
+    monkeypatch.setattr(ms.urllib.request, "build_opener",
+                        _openers({"direct": _Reply(b'{"ok": true}')}, calls))
+
+    assert ms._http_json("https://example.invalid/x") == {"ok": True}
+    assert calls == ["direct"], calls
+
+
+def test_a_refused_direct_connection_falls_back_to_the_proxy(monkeypatch):
+    """A proxy the user actually runs is still how some networks work."""
+    calls = []
+    monkeypatch.setattr(ms.urllib.request, "build_opener",
+                        _openers({"direct": urllib.error.URLError(OSError("refused")),
+                                  "proxy": _Reply(b'{"ok": true}')}, calls))
+
+    assert ms._http_json("https://example.invalid/x") == {"ok": True}
+    assert calls == ["direct", "proxy"], calls
+
+
+def test_when_both_routes_fail_the_direct_error_is_raised(monkeypatch):
+    """The message a user reads must be about their network, not a last attempt."""
+    calls = []
+    monkeypatch.setattr(ms.urllib.request, "build_opener",
+                        _openers({"direct": urllib.error.URLError(OSError("direct reason")),
+                                  "proxy": urllib.error.URLError(OSError("proxy reason"))},
+                                 calls))
+
+    with pytest.raises(urllib.error.URLError) as err:
+        ms._http_json("https://example.invalid/x")
+    assert "direct reason" in str(err.value)
+    assert calls == ["direct", "proxy"], calls
+
+
+def test_the_three_transports_all_use_the_retrying_open():
+    """One place to fix it, so it is one place to check."""
+    from pathlib import Path
+
+    text = (Path(__file__).resolve().parents[1]
+            / "kairos" / "extensions" / "market_sources.py").read_text(encoding="utf-8")
+    assert text.count("with _open(req, timeout=timeout) as r:") == 3
+    assert "ProxyHandler({})" in text

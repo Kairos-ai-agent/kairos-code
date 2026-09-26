@@ -41,7 +41,10 @@ def test_the_hosts_credentials_are_withheld(clean_env):
 def test_the_child_still_gets_what_it_needs_to_run(clean_env):
     env = mc.child_env()
     assert env["PATH"] == "C:/fake/bin"
-    assert env["PYTHONIOENCODING"] == "utf-8"
+    # PYTHONIOENCODING is deliberately *not* asserted here: child_env() does not
+    # set it, the spawn does, and a host that happens to export it made this
+    # assertion pass locally while CI, which does not, failed with a KeyError.
+    # The spawn path is asserted in test_the_real_spawn_uses_the_minimised_environment.
 
 
 def test_a_server_keeps_the_variables_its_configuration_declares(clean_env):

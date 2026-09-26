@@ -12,17 +12,25 @@ Deliberate examples are fine: `C:\\Users\\<name>\\...`, `C:\\\\Windows\\\\System
 """
 from __future__ import annotations
 
+import getpass
 import re
 import subprocess
 from pathlib import Path
 
 # Markers that only ever appear on the machine this project was developed on.
+# The maintainer's account name is discovered at run time. Writing it down here
+# would put the very string this gate exists to catch into the public tree — and
+# because this file is exempt from its own scan, nothing else would have caught
+# it. An empty account name disables that one pattern rather than matching
+# everything, because `(?!)` cannot match.
+_ACCOUNT = getpass.getuser() or ""
+
 FORBIDDEN = [
     r"D_bak",
     r"software_bak",
-    r"you",
-    r"[A-Z]:\\Users\\you",
-    r"/c/Users/you",
+    re.escape(_ACCOUNT) if _ACCOUNT else r"(?!)",
+    "[A-Z]:" + re.escape("\\Users\\") + (re.escape(_ACCOUNT) if _ACCOUNT else r"(?!)"),
+    "/c/Users/" + (re.escape(_ACCOUNT) if _ACCOUNT else r"(?!)"),
 ]
 
 # A line is exempt only when it is about the rule: it names a placeholder, a

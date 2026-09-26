@@ -180,6 +180,17 @@ def main() -> int:
         return 1
     size_mb = binary.stat().st_size / 1048576
     print(f"[build] OK       : {binary}  ({size_mb:.1f} MB)")
+
+    # A published artefact carries no credentials, and that must not depend on
+    # someone remembering to check. The build is what gets published, so the
+    # refusal belongs here, next to the size it just reported.
+    scan = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "scan_binary_secrets.py"), str(binary)],
+        cwd=str(ROOT))
+    if scan.returncode != 0:
+        print("error: refusing to hand over an artefact that failed the secret scan",
+              file=sys.stderr)
+        return 1
     return 0
 
 

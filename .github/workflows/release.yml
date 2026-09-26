@@ -165,6 +165,13 @@ jobs:
       - name: Freeze a standalone executable
         run: python scripts/build_binary.py --out dist
 
+      - name: "Refuse to publish a build that carries a secret"
+        run: |
+          for artefact in dist/*; do
+            [ -f "$artefact" ] || continue
+            python scripts/scan_binary_secrets.py "$artefact"
+          done
+
       - name: "Smoke test it — headless, health endpoint plus the bundled UI"
         shell: bash
         run: |

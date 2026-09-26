@@ -18,19 +18,36 @@ import subprocess
 from pathlib import Path
 
 # Markers that only ever appear on the machine this project was developed on.
-# The maintainer's account name is discovered at run time. Writing it down here
-# would put the very string this gate exists to catch into the public tree — and
-# because this file is exempt from its own scan, nothing else would have caught
-# it. An empty account name disables that one pattern rather than matching
-# everything, because `(?!)` cannot match.
+# The maintainer's account name is discovered at run time rather than written
+# down: that literal was the last copy of the username in the tree, and this file
+# is exempt from its own scan, so nothing else could have caught it.
+#
+# Two limits, both learned the hard way. Only **path-qualified** forms are
+# matched -- a bare account name is a normal English word on a CI runner, where
+# `getpass.getuser()` returns `runner`, and a guard that flags every use of
+# "runner" fails on the first push and gets deleted. And a list of generic
+# service accounts is skipped outright, so a builder that happens to be called
+# `ubuntu` or `build` does not turn this into a coin flip.
 _ACCOUNT = getpass.getuser() or ""
+_GENERIC_ACCOUNTS = {
+    "runner", "root", "user", "admin", "administrator", "ubuntu", "docker",
+    "build", "jenkins", "vagrant", "circleci", "travis", "appveyor", "cloud",
+    "codespace", "vscode", "system", "defaultuser0", "me",
+}
+
+_OWN_ACCOUNT_MARKERS = []
+if _ACCOUNT and _ACCOUNT.lower() not in _GENERIC_ACCOUNTS:
+    _OWN_ACCOUNT_MARKERS = [
+        "[A-Z]:" + re.escape("\\Users\\") + re.escape(_ACCOUNT),
+        "[A-Z]:" + "/Users/" + re.escape(_ACCOUNT),
+        "/c/Users/" + re.escape(_ACCOUNT),
+        re.escape("\\Users\\") + re.escape(_ACCOUNT),
+    ]
 
 FORBIDDEN = [
     r"D_bak",
     r"software_bak",
-    re.escape(_ACCOUNT) if _ACCOUNT else r"(?!)",
-    "[A-Z]:" + re.escape("\\Users\\") + (re.escape(_ACCOUNT) if _ACCOUNT else r"(?!)"),
-    "/c/Users/" + (re.escape(_ACCOUNT) if _ACCOUNT else r"(?!)"),
+    *_OWN_ACCOUNT_MARKERS,
 ]
 
 # A line is exempt only when it is about the rule: it names a placeholder, a

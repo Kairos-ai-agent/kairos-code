@@ -52,6 +52,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import shutil
 import time
 import sys
@@ -65,6 +66,62 @@ import yaml
 from kairos.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# The child's environment
+# ---------------------------------------------------------------------------
+
+# Variables a child process legitimately needs to run at all. Everything else
+# stays behind, above all provider API keys: an MCP server is third-party code,
+# and a server that can read the host environment can read every credential the
+# user ever exported. Muse keeps credentials out of the agent's reach by
+# surrogate tokens; the local equivalent, when the child is a subprocess on the
+# user's own machine, is simply not to hand them over.
+INHERITED_ENV_KEYS = (
+    "PATH", "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC",
+    "TEMP", "TMP", "TMPDIR", "HOME", "HOMEDRIVE", "HOMEPATH", "USERPROFILE",
+    "USERNAME", "LANG", "LC_ALL", "LC_CTYPE", "TZ", "SSL_CERT_FILE",
+    "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "NODE_EXTRA_CA_CERTS",
+    "PYTHONIOENCODING", "PYTHONUTF8", "PYTHONUNBUFFERED", "UV_CACHE_DIR",
+)
+
+# A name that suggests a credential is withheld even if it somehow reached the
+# allowlist. It does not apply to values the server's own configuration
+# declares: naming a token in mcp.yaml is an explicit decision by the user.
+SECRETISH_NAME = re.compile(
+    r"(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH|COOKIE|SESSION)", re.I
+)
+
+
+def child_env(config_env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    """The environment for an MCP subprocess.
+
+    Declared values pass through untouched -- a user who wrote
+    ``GITHUB_TOKEN: ${GITHUB_TOKEN}`` in a server definition meant it. Only the
+    *inherited* host environment is filtered, so a server keeps working when it
+    is configured and stops receiving everything the user's shell happened to
+    export.
+
+    ``KAIROS_MCP_INHERIT_ENV=1`` restores the old pass-everything behaviour for
+    anyone whose server genuinely needs it.
+    """
+    if os.environ.get("KAIROS_MCP_INHERIT_ENV", "").strip().lower() in ("1", "on", "true", "yes"):
+        env = dict(os.environ)
+    else:
+        env = {}
+        withheld = []
+        for name in INHERITED_ENV_KEYS:
+            value = os.environ.get(name)
+            if value is not None and not SECRETISH_NAME.search(name):
+                env[name] = value
+        for name in os.environ:
+            if SECRETISH_NAME.search(name) and name not in (config_env or {}):
+                withheld.append(name)
+        if withheld:
+            logger.debug("mcp: withholding %d credential-shaped host variables from"
+                         " child processes: %s", len(withheld), ", ".join(sorted(withheld)))
+    env.update(config_env or {})
+    return env
 
 
 MCP_PROTOCOL_VERSION = "2025-11-25"
@@ -410,7 +467,8 @@ class StdioMcpClient:
         """Spawn the subprocess and complete the initialize handshake."""
         if self._process is not None:
             return self._server_info or {}
-        env = {**os.environ, **self.config.expanded_env()}
+        # Minimised deliberately: see child_env at the top of this module.
+        env = child_env(self.config.expanded_env())
         # The protocol is UTF-8 and this side reads UTF-8. A child on
         # Windows would otherwise default to the console codepage, and one
         # non-ASCII byte in a tool result becomes a decode error up here.
@@ -787,6 +845,12 @@ class McpToolAdapter(BaseTool):
 
     def __init__(self, client: StdioMcpClient, schema: Dict[str, Any]):
         self._client = client
+        # Where this server came from ("bundled-plugin", "user", "project"). The
+        # gate reads it to decide whether the server's output is untrusted: a
+        # server this project ships is our own code, while anything the user or a
+        # marketplace installed is not, and would otherwise taint every run that
+        # touched it.
+        self.mcp_source = str(getattr(getattr(client, "config", None), "source", "") or "")
         self._tool_name: str = schema.get("name", "mcp_unknown")
         # Default Kairos-visible name = wire name. The registry may
         # rewrite ``self.name`` after construction to namespace

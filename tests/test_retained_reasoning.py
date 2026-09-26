@@ -127,7 +127,9 @@ def test_build_messages_includes_summary_as_second_system_msg():
     ]
     msgs = agent._build_messages()
     assert msgs[0].role == "system"
-    assert msgs[0].content == "You are a test agent."  # base prompt
+    assert msgs[0].content.startswith("You are a test agent.")  # base prompt first
+    # ...followed by the standing rule about content from outside this machine.
+    assert "untrusted_content" in msgs[0].content
     assert msgs[1].role == "system"
     assert "Earlier: did X then Y." in msgs[1].content
     assert "compact summary" in msgs[1].content  # the header text

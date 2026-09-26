@@ -327,7 +327,9 @@ app.include_router(update_router, prefix="/api/update", tags=["update"])
 # R38.6 §34: P2 features — Verification / Approval mode / Events /
 # Async / LSP / Trajectory / A2A
 from api.routes import p2_features as p2_features_routes
+from api.routes import sentinel as sentinel_routes
 app.include_router(p2_features_routes.router, tags=["borrowed-p2"])
+app.include_router(sentinel_routes.router, tags=["sentinel"])
 
 # Global message stream — mounted at /api/messages (not under /projects
 # because FastAPI's path-param matching can shadow literal /messages

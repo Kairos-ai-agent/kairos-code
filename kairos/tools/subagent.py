@@ -85,6 +85,12 @@ class SubagentTool(BaseTool):
                 llm_config=self.parent_agent._llm_config,
                 message_bus=self.parent_agent.message_bus,
                 tools=self.parent_agent.tools,  # share tools
+                # Provenance is handed down, never reset: a child able to act on
+                # what its parent read would be a way around the gate. (The
+                # constructor would inherit it from the run context anyway; being
+                # explicit means it still holds wherever the child is built.)
+                taint=getattr(self.parent_agent, "taint", None),
+                sentinel=getattr(self.parent_agent, "sentinel", None),
             )
             child.MAX_TOOL_TURNS = min(int(max_turns), 25)
         except Exception as e:

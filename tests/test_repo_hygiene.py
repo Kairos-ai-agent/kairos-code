@@ -142,9 +142,16 @@ def test_a_comment_line_is_not_waived() -> None:
     every gate stayed green -- locally, in CI, and inside the release binary. Pin
     it with the pattern list itself so this file still carries no literal.
     """
-    name = FORBIDDEN[2]
-    for line in (f"# note: {name} ==> user", f"#   indented {name}",
-                 f"// {name} in a comment", f"    {name} bare"):
-        assert re.search(r"|".join(FORBIDDEN), line), line
-        assert not ALLOW.search(line), f"a comment must not be exempt: {line!r}"
+    # The marker is derived from the list itself, and the account-qualified one
+    # only when the guard actually armed it: on a CI runner the account is generic
+    # and skipped, so a hard-coded machine path here would fail where the guard is
+    # deliberately quiet.
+    markers = ["D_bak"]
+    if _OWN_ACCOUNT_MARKERS:
+        markers.append("C:" + "\\" + "Users" + "\\" + _ACCOUNT)
+    for name in markers:
+        for line in (f"# note: {name} ==> user", f"#   indented {name}",
+                     f"// {name} in a comment", f"    {name} bare"):
+            assert re.search(r"|".join(FORBIDDEN), line), line
+            assert not ALLOW.search(line), f"a comment must not be exempt: {line!r}"
 

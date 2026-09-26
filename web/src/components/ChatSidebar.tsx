@@ -45,7 +45,7 @@ import {
   AppstoreOutlined, ToolOutlined, SettingOutlined,
   SunOutlined, MoonOutlined, ShopOutlined,
   HistoryOutlined, DashboardOutlined, BranchesOutlined, SyncOutlined,
-  FieldTimeOutlined,
+  FieldTimeOutlined, FileTextOutlined,
 } from '@ant-design/icons';
 
 import { useChatStore } from '../stores/chatStore';
@@ -490,6 +490,8 @@ export const SidebarFooter: React.FC = () => {
                 t('nav.chat'), '/chat')}
         {navRow('footer-tasks', <FieldTimeOutlined style={FOOTER_ICON} />,
                 t('nav.tasks'), '/tasks')}
+        {navRow('footer-artifacts', <FileTextOutlined style={FOOTER_ICON} />,
+                t('nav.artifacts'), '/artifacts')}
       </NavGroup>
 
       <NavGroup label={t('nav.sectionExtensions')} hint={t('nav.sectionExtensionsHint')}>

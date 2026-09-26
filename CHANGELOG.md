@@ -8,6 +8,30 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Artifacts: what a run produced, as things you can answer.** A round's plan,
+  its result, a screenshot the browser tool took — the loop has always produced
+  these, and the UI has always shown them as lines scrolled past in a
+  transcript. `kairos/artifacts.py` keeps them as rows with a kind, a title, a
+  body and a thread; the durable tick writes one plan and one result per round,
+  and the browser tool's screenshot branch writes one per shot. `/artifacts`
+  lists them, opens them and takes comments, and `GET /api/artifacts/{id}/file`
+  serves the image behind a screenshot — only files under the app's own data
+  directory, and only images, because a path that came out of a database row is
+  not a promise. Best effort by construction: with no database, every producer
+  returns None rather than failing the round that produced it.
+
+- **An issue can become a project.** `POST /api/hooks/github` and
+  `POST /api/hooks/linear` take signed deliveries and create the project.
+  Verification is HMAC with a constant-time compare; secrets come from the
+  environment (`KAIROS_HOOK_GITHUB_SECRET`, `KAIROS_HOOK_LINEAR_SECRET`), and
+  with no secret configured the endpoint answers **503 instead of accepting
+  anything**. The project list is the ledger — the issue id is written into the
+  description as `[github#7]`, so a redelivery finds the project instead of
+  making a second one, and an event we do not act on is answered 200 so the
+  provider stops retrying. `GET /api/hooks/status` reports which doors are open
+  without echoing a secret. It deliberately does not start the loop: creating a
+  project is reversible, spending tokens is not.
+
 - **`har` could be resumed from a terminal only — now the app drives it.**
   `kairos/har.py` has been the durable-task contract since Round 29: a goal that
   does not change, a round count, a plan, a history, a lock. It had **no caller

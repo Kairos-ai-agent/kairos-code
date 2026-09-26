@@ -1,0 +1,23 @@
+{
+  "artifacts.title": { "zh": "产出物", "en": "Artifacts" },
+  "artifacts.subtitle": { "zh": "一轮跑出来的东西：计划、结论、截图、报告。它们有地址、可以被打开，也可以被评论。", "en": "What a run produced — plans, results, screenshots, reports. Things with an address: you can open them, and answer them." },
+  "artifacts.chooseProject": { "zh": "先选一个项目", "en": "Choose a project first" },
+  "artifacts.refresh": { "zh": "刷新", "en": "Refresh" },
+  "artifacts.produced": { "zh": "「{name}」的产出", "en": "Produced by {name}" },
+  "artifacts.count": { "zh": "{n} 件", "en": "{n} item(s)" },
+  "artifacts.none": { "zh": "还没有产出物。跑一轮循环，或让 agent 截个图。", "en": "Nothing produced yet. Run a loop round, or let the agent take a screenshot." },
+  "artifacts.detail": { "zh": "详情", "en": "Detail" },
+  "artifacts.pickOne": { "zh": "从左边挑一件看。", "en": "Pick one on the left." },
+  "artifacts.round": { "zh": "第 {n} 轮", "en": "round {n}" },
+  "artifacts.screenshotAlt": { "zh": "截图", "en": "Screenshot" },
+  "artifacts.comments": { "zh": "评论", "en": "Comments" },
+  "artifacts.noComments": { "zh": "还没有评论。", "en": "No comments yet." },
+  "artifacts.commentPlaceholder": { "zh": "这条计划哪里不对？", "en": "What is wrong with this plan?" },
+  "artifacts.send": { "zh": "发送", "en": "Send" },
+  "artifacts.allKinds": { "zh": "全部类型", "en": "All kinds" },
+  "artifacts.kind.plan": { "zh": "计划", "en": "plan" },
+  "artifacts.kind.report": { "zh": "报告", "en": "report" },
+  "artifacts.kind.screenshot": { "zh": "截图", "en": "screenshot" },
+  "artifacts.kind.summary": { "zh": "结论", "en": "result" },
+  "artifacts.kind.note": { "zh": "备注", "en": "note" }
+}

@@ -354,6 +354,14 @@ from api.routes import tasks as tasks_routes  # noqa: E402
 app.include_router(tasks_routes.router, tags=["tasks"])
 app.include_router(approvals_routes.router, tags=["approvals"])
 
+from api.routes import artifacts as artifacts_routes  # noqa: E402
+
+app.include_router(artifacts_routes.router, tags=["artifacts"])
+
+from api.routes import hooks as hooks_routes  # noqa: E402
+
+app.include_router(hooks_routes.router, tags=["hooks"])
+
 # Global message stream — mounted at /api/messages (not under /projects
 # because FastAPI's path-param matching can shadow literal /messages
 # routes). Used by the Collaboration page for the project-agnostic feed.

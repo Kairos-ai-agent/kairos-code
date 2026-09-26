@@ -188,6 +188,13 @@ class BrowserTool(BaseTool):
 
         if act == "screenshot":
             path = await mgr.save_screenshot(pid, full_page=full_page)
+            # The same PNG the model was handed is what a person wants to look
+            # at, so it becomes an artifact with an address (and a thread).
+            try:
+                from kairos import artifacts
+                artifacts.record_screenshot(pid, path)
+            except Exception:  # noqa: BLE001
+                pass
             size = Path(path).stat().st_size
             meta.update({"path": str(path), "bytes": size,
                          "full_page": bool(full_page)})

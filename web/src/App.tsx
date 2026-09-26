@@ -24,6 +24,7 @@ import Tools from './pages/Tools';
 import Marketplace from './pages/Marketplace';
 import Dashboard from './pages/Dashboard';
 import Tasks from './pages/Tasks';
+import Artifacts from './pages/Artifacts';
 import ApprovalPrompt from './components/ApprovalPrompt';
 import { connectWebSocket } from './api/client';
 
@@ -56,6 +57,7 @@ const App: React.FC = () => {
             linked to but no route ever served. */}
         <Route path="/tasks" element={<Tasks />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/artifacts" element={<Artifacts />} />
         <Route path="*" element={<Navigate to="/chat" replace />} />
       </Route>
     </Routes>

@@ -68,6 +68,34 @@ class Persistence:
             conn.execute('CREATE INDEX IF NOT EXISTS idx_fixes_project ON working_fixes(project_id)')
             conn.execute('CREATE INDEX IF NOT EXISTS idx_kb_project ON global_kb(project_id)')
 
+            # Artifacts: what a run produced, kept as a thing with an
+            # address so it can be reopened, linked and commented on.
+            conn.executescript("""
+                CREATE TABLE IF NOT EXISTS artifacts (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    session_id TEXT DEFAULT '',
+                    round_no INTEGER DEFAULT 0,
+                    kind TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    body TEXT DEFAULT '',
+                    path TEXT DEFAULT '',
+                    created_at REAL DEFAULT 0,
+                    meta TEXT DEFAULT '{}'
+                );
+                CREATE TABLE IF NOT EXISTS artifact_comments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    artifact_id TEXT NOT NULL,
+                    author TEXT DEFAULT 'user',
+                    body TEXT NOT NULL,
+                    created_at REAL DEFAULT 0
+                );
+            """)
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_artifacts_project '
+                         'ON artifacts(project_id, created_at)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_artifact_comments '
+                         'ON artifact_comments(artifact_id, created_at)')
+
     def add_preference(self, project_id: str, kind: str, rule: str) -> int:
         """Insert a style/rule preference for a project.
 
@@ -718,6 +746,95 @@ class Persistence:
             conn.row_factory = sqlite3.Row
             rows = conn.execute('\n                SELECT round, sha, score, approved, summary, created_at\n                FROM loop_checkpoints\n                WHERE project_id = ?\n                ORDER BY round DESC LIMIT ?\n            ', (project_id, limit)).fetchall()
         return [{'round': r['round'], 'sha': r['sha'], 'score': r['score'] or 0, 'approved': bool(r['approved']), 'summary': r['summary'] or '', 'ts': r['created_at'] or 0} for r in rows]
+
+    # -- artifacts ---------------------------------------------------------
+    # The writes come from kairos/artifacts.py; the reads from
+    # api/routes/artifacts.py. Bodies are capped there, not here: a row should
+    # stay a row, but the limit is the producer's business.
+
+    def add_artifact(self, artifact: dict) -> str:
+        """Store one produced thing. Idempotent on `id`."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                'INSERT OR REPLACE INTO artifacts '
+                '(id, project_id, session_id, round_no, kind, title, body, path, '
+                ' created_at, meta) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                (artifact['id'], artifact['project_id'],
+                 artifact.get('session_id') or '',
+                 int(artifact.get('round_no') or 0),
+                 artifact['kind'], artifact['title'],
+                 artifact.get('body') or '', artifact.get('path') or '',
+                 float(artifact.get('created_at') or time.time()),
+                 json.dumps(artifact.get('meta') or {}, ensure_ascii=False)))
+        return artifact['id']
+
+    def list_artifacts(self, project_id: str, kind: str = '',
+                       limit: int = 50) -> List[dict]:
+        """Newest first: the thing you just produced is the thing you want.
+
+        `meta` is stored as JSON text and comes back as a dict, so callers never
+        have to know that.
+        """
+        query = 'SELECT * FROM artifacts WHERE project_id = ?'
+        params = [project_id]
+        if kind:
+            query += ' AND kind = ?'
+            params.append(kind)
+        query += ' ORDER BY created_at DESC, id DESC LIMIT ?'
+        params.append(max(1, int(limit)))
+
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(query, tuple(params)).fetchall()
+        return [self._artifact_row(dict(r)) for r in rows]
+
+    def get_artifact(self, artifact_id: str) -> Optional[dict]:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute('SELECT * FROM artifacts WHERE id = ?',
+                               (artifact_id,)).fetchone()
+        return self._artifact_row(dict(row)) if row else None
+
+    def delete_artifact(self, artifact_id: str) -> bool:
+        """Delete an artifact and its thread. Comments outlive nothing."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute('DELETE FROM artifacts WHERE id = ?',
+                                  (artifact_id,))
+            conn.execute('DELETE FROM artifact_comments WHERE artifact_id = ?',
+                         (artifact_id,))
+        return bool(cursor.rowcount)
+
+    def add_artifact_comment(self, artifact_id: str, author: str,
+                             body: str) -> dict:
+        created = time.time()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                'INSERT INTO artifact_comments (artifact_id, author, body, '
+                'created_at) VALUES (?, ?, ?, ?)',
+                (artifact_id, author or 'user', body, created))
+        return {'id': cursor.lastrowid, 'artifact_id': artifact_id,
+                'author': author or 'user', 'body': body,
+                'created_at': created}
+
+    def list_artifact_comments(self, artifact_id: str,
+                               limit: int = 100) -> List[dict]:
+        """Oldest first: a thread reads top to bottom."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                'SELECT * FROM artifact_comments WHERE artifact_id = ? '
+                'ORDER BY created_at ASC, id ASC LIMIT ?',
+                (artifact_id, max(1, int(limit)))).fetchall()
+        return [dict(r) for r in rows]
+
+    @staticmethod
+    def _artifact_row(row: dict) -> dict:
+        """Decode the one column that is stored as text."""
+        try:
+            row['meta'] = json.loads(row.get('meta') or '{}')
+        except (json.JSONDecodeError, TypeError):
+            row['meta'] = {}
+        return row
 
     def delete_project_memory(self, project_id: str) -> None:
         """Wipe every per-project table when the project is deleted."""

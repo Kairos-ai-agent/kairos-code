@@ -161,6 +161,29 @@ def _score(entry: Dict[str, Any]) -> int:
     return 0
 
 
+def _record_artifacts(project_id: str, session: Any, round_no: int,
+                      summary: str, approved: bool, score: int,
+                      plan: str) -> None:
+    """Keep what the round produced where a person can read and answer it.
+
+    The transcript is not an archive: a plan scrolled past in a chat is gone in
+    the sense that matters, because nobody can link to it or reply to it.
+    Best effort by design -- see kairos/artifacts.py.
+    """
+    try:
+        from kairos import artifacts
+    except Exception:  # noqa: BLE001
+        return
+    session_id = str(getattr(session, "session_id", "") or "")
+    if plan:
+        artifacts.record_plan(project_id, plan, session_id=session_id,
+                              round_no=round_no)
+    if summary:
+        artifacts.record_summary(project_id, summary, session_id=session_id,
+                                 round_no=round_no, approved=approved,
+                                 score=score)
+
+
 async def resume(orchestrator: Any, project_id: str, *, ticks: int = 1,
                  timeout_s: float = TICK_TIMEOUT_S) -> Dict[str, Any]:
     """Run the project's loop up to `ticks` times, saving state after each.
@@ -225,6 +248,8 @@ async def resume(orchestrator: Any, project_id: str, *, ticks: int = 1,
             "summary": summary[:600],
             "session_id": getattr(session, "session_id", ""),
         }
+        _record_artifacts(project_id, session, new_state.round, summary,
+                          approved, score, plan)
         return new_state, history_entry
 
     try:

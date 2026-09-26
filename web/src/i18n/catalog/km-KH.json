@@ -592,6 +592,8 @@
   "preset.doubao.label": "Doubao (Volcano Ark)",
   "preset.fireworks.hint": "ការសន្និដ្ឋានម៉ូដែលបើកចំហរលឿន · $1 ឥតគិតថ្លៃ",
   "preset.fireworks.label": "Fireworks.ai",
+  "preset.freellmapi.hint": "Self-hosted · OpenAI-compatible, models fetched live",
+  "preset.freellmapi.label": "FreeLLMAPI (local router)",
   "preset.glm.hint": "glm-4-plus / glm-4-flash — Zhipu AI",
   "preset.glm.label": "GLM (Zhipu)",
   "preset.groq.hint": "ការសន្និដ្ឋាន LPU លឿនបំផុត · កម្រិតឥតគិតថ្លៃ",

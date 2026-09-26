@@ -592,6 +592,8 @@
   "preset.doubao.label": "Doubao (Volcano Ark)",
   "preset.fireworks.hint": "तेज़ ओपन-मॉडल इन्फ़रेंस · $1 मुफ़्त",
   "preset.fireworks.label": "Fireworks.ai",
+  "preset.freellmapi.hint": "सेल्फ-होस्टेड · OpenAI-संगत, मॉडल लाइव फ़ेच होते हैं",
+  "preset.freellmapi.label": "FreeLLMAPI (लोकल राउटर)",
   "preset.glm.hint": "glm-4-plus / glm-4-flash — Zhipu AI",
   "preset.glm.label": "GLM (Zhipu)",
   "preset.groq.hint": "अति-तेज़ LPU इन्फ़रेंस · मुफ़्त टियर",

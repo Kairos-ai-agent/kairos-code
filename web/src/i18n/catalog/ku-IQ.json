@@ -592,6 +592,8 @@
   "preset.doubao.label": "Doubao (Volcano Ark)",
   "preset.fireworks.hint": "خەمڵاندنی خێرای مۆدێلی کراوە · $1 خۆڕایی",
   "preset.fireworks.label": "Fireworks.ai",
+  "preset.freellmapi.hint": "خۆمێوانکراو · گونجاو لەگەڵ OpenAI، مۆدێلەکان بە زیندوویی دەهێنرێن",
+  "preset.freellmapi.label": "FreeLLMAPI (ڕاوتەری ناوخۆیی)",
   "preset.glm.hint": "glm-4-plus / glm-4-flash — Zhipu AI",
   "preset.glm.label": "GLM (Zhipu)",
   "preset.groq.hint": "خێراترین خەمڵاندنی LPU · پلانی خۆڕایی",

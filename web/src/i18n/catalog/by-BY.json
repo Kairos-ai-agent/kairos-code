@@ -592,6 +592,8 @@
   "preset.doubao.label": "Doubao (Volcano Ark)",
   "preset.fireworks.hint": "Хуткі вывад адкрытых мадэляў · $1 бясплатна",
   "preset.fireworks.label": "Fireworks.ai",
+  "preset.freellmapi.hint": "Self-hosted · сумяшчальны з OpenAI, мадэлі загружаюцца ў рэжыме рэальнага часу",
+  "preset.freellmapi.label": "FreeLLMAPI (лакальны роўтар)",
   "preset.glm.hint": "glm-4-plus / glm-4-flash — Zhipu AI",
   "preset.glm.label": "GLM (Zhipu)",
   "preset.groq.hint": "Звышхуткі вывад на LPU · бясплатны тарыф",

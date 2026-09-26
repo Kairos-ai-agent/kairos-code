@@ -592,6 +592,8 @@
   "preset.doubao.label": "Doubao (Volcano Ark)",
   "preset.fireworks.hint": "استدلال سريع للنماذج المفتوحة · $1 مجانًا",
   "preset.fireworks.label": "Fireworks.ai",
+  "preset.freellmapi.hint": "استضافة ذاتية · متوافق مع OpenAI، تُجلب النماذج مباشرة",
+  "preset.freellmapi.label": "FreeLLMAPI (موجّه محلي)",
   "preset.glm.hint": "glm-4-plus / glm-4-flash — Zhipu AI",
   "preset.glm.label": "GLM (Zhipu)",
   "preset.groq.hint": "استدلال LPU فائق السرعة · طبقة مجانية",

@@ -592,6 +592,8 @@
   "preset.doubao.label": "Doubao (Volcano Ark)",
   "preset.fireworks.hint": "Snabb inferens för öppna modeller · $1 gratis",
   "preset.fireworks.label": "Fireworks.ai",
+  "preset.freellmapi.hint": "Egenhostad · OpenAI-kompatibel, modeller hämtas live",
+  "preset.freellmapi.label": "FreeLLMAPI (lokal router)",
   "preset.glm.hint": "glm-4-plus / glm-4-flash — Zhipu AI",
   "preset.glm.label": "GLM (Zhipu)",
   "preset.groq.hint": "Blixtsnabb LPU-inferens · gratisnivå",

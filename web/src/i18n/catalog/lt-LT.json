@@ -592,6 +592,8 @@
   "preset.doubao.label": "Doubao (Volcano Ark)",
   "preset.fireworks.hint": "Greitas atvirų modelių apdorojimas · $1 nemokamai",
   "preset.fireworks.label": "Fireworks.ai",
+  "preset.freellmapi.hint": "Savarankiškai hostinamas · suderinamas su OpenAI, modeliai gaunami tiesiogiai",
+  "preset.freellmapi.label": "FreeLLMAPI (vietinis maršrutizatorius)",
   "preset.glm.hint": "glm-4-plus / glm-4-flash — Zhipu AI",
   "preset.glm.label": "GLM (Zhipu)",
   "preset.groq.hint": "Itin greitas LPU apdorojimas · nemokamas planas",

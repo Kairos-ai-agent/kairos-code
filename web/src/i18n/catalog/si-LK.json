@@ -592,6 +592,8 @@
   "preset.doubao.label": "Doubao (Volcano Ark)",
   "preset.fireworks.hint": "වේගවත් විවෘත-මොඩල් inference · $1 නොමිලේ",
   "preset.fireworks.label": "Fireworks.ai",
+  "preset.freellmapi.hint": "ස්වයං-සත්කාරක · OpenAI-අනුකූල, ආකෘති සජීවීව ලබාගනී",
+  "preset.freellmapi.label": "FreeLLMAPI (දේශීය රවුටරය)",
   "preset.glm.hint": "glm-4-plus / glm-4-flash — Zhipu AI",
   "preset.glm.label": "GLM (Zhipu)",
   "preset.groq.hint": "අතිවේගී LPU inference · නොමිලේ",

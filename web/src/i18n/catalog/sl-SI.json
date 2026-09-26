@@ -592,6 +592,8 @@
   "preset.doubao.label": "Doubao (Volcano Ark)",
   "preset.fireworks.hint": "Hitro sklepanje odprtih modelov · $1 brezplačno",
   "preset.fireworks.label": "Fireworks.ai",
+  "preset.freellmapi.hint": "Samostojno gostovanje · združljivo z OpenAI, modeli pridobljeni v živo",
+  "preset.freellmapi.label": "FreeLLMAPI (lokalni usmerjevalnik)",
   "preset.glm.hint": "glm-4-plus / glm-4-flash — Zhipu AI",
   "preset.glm.label": "GLM (Zhipu)",
   "preset.groq.hint": "Izjemno hitro sklepanje LPU · brezplačni paket",

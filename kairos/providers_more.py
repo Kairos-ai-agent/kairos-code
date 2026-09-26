@@ -156,6 +156,20 @@ PROVIDER_REGISTRY: List[ProviderInfo] = [
         docs_url="https://docs.cohere.com/",
         notes="Cohere via OpenAI-compat endpoint",
     ),
+    ProviderInfo(
+        id="freellmapi",
+        label="FreeLLMAPI (local router)",
+        base_url="http://localhost:3001/v1/chat/completions",
+        default_model="",
+        # Deliberately empty, and not an oversight: the router publishes its own live
+        # catalogue at /v1/models, so a copy here would be stale within the week --
+        # and enumerating what it aggregates is exactly the detail this entry is not
+        # for. Point the client at it and let the router answer.
+        models=[],
+        signup_url="https://freellmapi.co",
+        docs_url="https://github.com/tashfeenahmed/freellmapi",
+        notes="Self-hosted; many providers behind one OpenAI-compatible endpoint",
+    ),
 ]
 
 

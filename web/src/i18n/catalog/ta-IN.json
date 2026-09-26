@@ -592,6 +592,8 @@
   "preset.doubao.label": "Doubao (Volcano Ark)",
   "preset.fireworks.hint": "விரைவு திறந்த-மாடல் அனுமானம் · $1 இலவசம்",
   "preset.fireworks.label": "Fireworks.ai",
+  "preset.freellmapi.hint": "சுய-ஹோஸ்ட் · OpenAI-இணக்கமானது, மாடல்கள் நேரடியாகப் பெறப்படும்",
+  "preset.freellmapi.label": "FreeLLMAPI (உள்ளூர் ரூட்டர்)",
   "preset.glm.hint": "glm-4-plus / glm-4-flash — Zhipu AI",
   "preset.glm.label": "GLM (Zhipu)",
   "preset.groq.hint": "மீவிரைவு LPU அனுமானம் · இலவச அடுக்கு",

@@ -271,6 +271,14 @@
     "zh": "localhost:11434 — 本地离线",
     "en": "localhost:11434 — local, offline"
   },
+  "preset.freellmapi.label": {
+    "zh": "FreeLLMAPI（本地路由）",
+    "en": "FreeLLMAPI (local router)"
+  },
+  "preset.freellmapi.hint": {
+    "zh": "本地自托管 · OpenAI 兼容，模型实时拉取",
+    "en": "Self-hosted · OpenAI-compatible, models fetched live"
+  },
   "preset.groq.label": {
     "zh": "Groq",
     "en": "Groq"

@@ -154,6 +154,20 @@ export const LLM_PRESETS: LLMPreset[] = [
   // These presets populate the model dropdown + auto-detect
   // via URL / model-name matching.
   {
+    // A router the user runs themselves, which presents many providers behind one
+    // OpenAI-compatible endpoint (localhost:3001 by default). Its catalogue is the
+    // router's business: models come from its live /v1/models, so nothing here can
+    // go stale and nothing it aggregates is baked into Kairos. That is also why
+    // there is no `models` list next to this preset.
+    id: 'freellmapi',
+    label: 'preset.freellmapi.label',
+    hint: 'preset.freellmapi.hint',
+    endpointUrl: 'http://localhost:3001/v1/chat/completions',
+    defaultModel: '',
+    signupUrl: 'https://freellmapi.co',
+    docsUrl: 'https://github.com/tashfeenahmed/freellmapi',
+  },
+  {
     id: 'ollama-local',
     label: 'preset.ollamaLocal.label',
     hint: 'preset.ollamaLocal.hint',

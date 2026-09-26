@@ -592,6 +592,8 @@
   "preset.doubao.label": "Doubao (Volcano Ark)",
   "preset.fireworks.hint": "Kiire avatud mudelite järeldus · $1 tasuta",
   "preset.fireworks.label": "Fireworks.ai",
+  "preset.freellmapi.hint": "Ise hostitud · OpenAI-ühilduv, mudelid laaditakse reaalajas",
+  "preset.freellmapi.label": "FreeLLMAPI (kohalik ruuter)",
   "preset.glm.hint": "glm-4-plus / glm-4-flash — Zhipu AI",
   "preset.glm.label": "GLM (Zhipu)",
   "preset.groq.hint": "Ülikiire LPU-järeldus · tasuta plaan",

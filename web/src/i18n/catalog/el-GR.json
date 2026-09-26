@@ -592,6 +592,8 @@
   "preset.doubao.label": "Doubao (Volcano Ark)",
   "preset.fireworks.hint": "Γρήγορη 추론 ανοιχτών μοντέλων · $1 δωρεάν",
   "preset.fireworks.label": "Fireworks.ai",
+  "preset.freellmapi.hint": "Self-hosted · OpenAI-compatible, τα μοντέλα ανακτώνται ζωντανά",
+  "preset.freellmapi.label": "FreeLLMAPI (τοπικός router)",
   "preset.glm.hint": "glm-4-plus / glm-4-flash — Zhipu AI",
   "preset.glm.label": "GLM (Zhipu)",
   "preset.groq.hint": "Εξαιρετικά γρήγορη LPU 추론 · δωρεάν βαθμίδα",

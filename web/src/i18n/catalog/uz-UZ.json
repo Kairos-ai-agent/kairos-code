@@ -592,6 +592,8 @@
   "preset.doubao.label": "Doubao (Volcano Ark)",
   "preset.fireworks.hint": "Tez ochiq model inferens · $1 bepul",
   "preset.fireworks.label": "Fireworks.ai",
+  "preset.freellmapi.hint": "O'z serveringizda · OpenAI-mos, modellar real vaqtda olinadi",
+  "preset.freellmapi.label": "FreeLLMAPI (lokal router)",
   "preset.glm.hint": "glm-4-plus / glm-4-flash — Zhipu AI",
   "preset.glm.label": "GLM (Zhipu)",
   "preset.groq.hint": "Juda tez LPU inferens · bepul tarif",

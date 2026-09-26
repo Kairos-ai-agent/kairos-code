@@ -592,6 +592,8 @@
   "preset.doubao.label": "Doubao (Volcano Ark)",
   "preset.fireworks.hint": "Хурдан нээлттэй моделийн дүгнэлт · $1 үнэгүй",
   "preset.fireworks.label": "Fireworks.ai",
+  "preset.freellmapi.hint": "Өөрөө байршуулсан · OpenAI-тай нийцтэй, моделууд шууд татагдана",
+  "preset.freellmapi.label": "FreeLLMAPI (локал router)",
   "preset.glm.hint": "glm-4-plus / glm-4-flash — Zhipu AI",
   "preset.glm.label": "GLM (Zhipu)",
   "preset.groq.hint": "Хэт хурдан LPU дүгнэлт · үнэгүй багц",

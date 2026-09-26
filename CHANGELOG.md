@@ -8,6 +8,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **A preset for a router you host yourself.** FreeLLMAPI
+  ([`tashfeenahmed/freellmapi`](https://github.com/tashfeenahmed/freellmapi), MIT)
+  stacks the free tiers of many providers behind one OpenAI-compatible `/v1`.
+  Pointing Kairos at it is now a dropdown entry instead of a typed URL: the preset
+  fills `http://localhost:3001/v1/chat/completions` and deliberately leaves the
+  model field empty. Its catalogue belongs to the router — the list comes from the
+  router's live `/v1/models` — so nothing it aggregates is copied in here, neither
+  in the preset nor in `kairos/providers_more.py`, where the entry ships no models
+  either. Two tests hold that line, one on each side.
+
 - **Artifacts: what a run produced, as things you can answer.** A round's plan,
   its result, a screenshot the browser tool took — the loop has always produced
   these, and the UI has always shown them as lines scrolled past in a

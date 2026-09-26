@@ -592,6 +592,8 @@
   "preset.doubao.label": "Doubao (Volcano Ark)",
   "preset.fireworks.hint": "Tátal tapa samhail oscailte · $1 saor in aisce",
   "preset.fireworks.label": "Fireworks.ai",
+  "preset.freellmapi.hint": "Féin-óstáilte · Comhoiriúnach le OpenAI, samhlacha á bhfáil go beo",
+  "preset.freellmapi.label": "FreeLLMAPI (ródúdar áitiúil)",
   "preset.glm.hint": "glm-4-plus / glm-4-flash — Zhipu AI",
   "preset.glm.label": "GLM (Zhipu)",
   "preset.groq.hint": "Tátal LPU thar a bheith tapa · leibhéal saor in aisce",

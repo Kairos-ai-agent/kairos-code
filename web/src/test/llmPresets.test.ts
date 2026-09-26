@@ -63,3 +63,26 @@ describe('the Anthropic preset', () => {
     }
   });
 });
+
+describe('the self-hosted router preset', () => {
+  it('exists and speaks plain OpenAI', () => {
+    const p = getPreset('freellmapi');
+    expect(p.id).toBe('freellmapi');
+    expect(p.protocol ?? 'openai').toBe('openai');
+    expect(p.endpointUrl).toBe('http://localhost:3001/v1/chat/completions');
+  });
+
+  it('is recognised from its endpoint', () => {
+    expect(matchPreset('http://localhost:3001/v1/chat/completions', 'whatever')).toBe('freellmapi');
+  });
+
+  it('ships no model catalogue of its own', () => {
+    // The whole point of this preset is that the router owns its catalogue: the
+    // model list comes from its live /v1/models. A list baked in here would go
+    // stale, and enumerating what it aggregates is a detail we deliberately do
+    // not carry.
+    const p = getPreset('freellmapi') as unknown as Record<string, unknown>;
+    expect(p.defaultModel).toBe('');
+    expect(p.models).toBeUndefined();
+  });
+});

@@ -592,6 +592,8 @@
   "preset.doubao.label": "Doubao (Volcano Ark)",
   "preset.fireworks.hint": "Ātra atvērto modeļu infernce · $1 bez maksas",
   "preset.fireworks.label": "Fireworks.ai",
+  "preset.freellmapi.hint": "Pašmitināts · OpenAI-saderīgs, modeļi ielādēti tiešraidē",
+  "preset.freellmapi.label": "FreeLLMAPI (lokālais maršrutētājs)",
   "preset.glm.hint": "glm-4-plus / glm-4-flash — Zhipu AI",
   "preset.glm.label": "GLM (Zhipu)",
   "preset.groq.hint": "Ārkārtīgi ātra LPU infernce · bezmaksas līmenis",

@@ -592,6 +592,8 @@
   "preset.doubao.label": "Doubao (Volcano Ark)",
   "preset.fireworks.hint": "高速なオープンモデル推論 · $1 無料",
   "preset.fireworks.label": "Fireworks.ai",
+  "preset.freellmapi.hint": "セルフホスト · OpenAI互換、モデルはライブ取得",
+  "preset.freellmapi.label": "FreeLLMAPI（ローカルルーター）",
   "preset.glm.hint": "glm-4-plus / glm-4-flash — Zhipu AI",
   "preset.glm.label": "GLM (Zhipu)",
   "preset.groq.hint": "LPU による超高速推論 · 無料枠あり",

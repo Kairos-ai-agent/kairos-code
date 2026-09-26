@@ -592,6 +592,8 @@
   "preset.doubao.label": "Doubao (Volcano Ark)",
   "preset.fireworks.hint": "Hröð útreikningur opinnra módela · $1 ókeypis",
   "preset.fireworks.label": "Fireworks.ai",
+  "preset.freellmapi.hint": "Sjálfshýst · OpenAI-samhæft, líkön sótt í beinni",
+  "preset.freellmapi.label": "FreeLLMAPI (staðbundin router)",
   "preset.glm.hint": "glm-4-plus / glm-4-flash — Zhipu AI",
   "preset.glm.label": "GLM (Zhipu)",
   "preset.groq.hint": "Ofurhröð LPU-útreikningur · ókeypis þrep",

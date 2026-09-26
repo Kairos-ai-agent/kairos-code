@@ -592,6 +592,8 @@
   "preset.doubao.label": "Doubao (Volcano Ark)",
   "preset.fireworks.hint": "სწრაფი ღია მოდელების ინფერენსი · $1 უფასოდ",
   "preset.fireworks.label": "Fireworks.ai",
+  "preset.freellmapi.hint": "თვითგანთავსებული · OpenAI-თან თავსებადი, მოდელები ცოცხლად იტვირთება",
+  "preset.freellmapi.label": "FreeLLMAPI (ლოკალური როუტერი)",
   "preset.glm.hint": "glm-4-plus / glm-4-flash — Zhipu AI",
   "preset.glm.label": "GLM (Zhipu)",
   "preset.groq.hint": "ულტრასწრაფი LPU ინფერენსი · უფასო ტარიფი",

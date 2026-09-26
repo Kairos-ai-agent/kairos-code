@@ -6,6 +6,13 @@ imported-from: "codex"
 source-path: "imported"
 ---
 # Browser
+
+> **Reality check (Kairos Code).** This skill came from Codex and speaks in
+> Codex's vocabulary ("deferred tools", connector lookups). The surface it
+> describes — an in-app browser with the user's signed-in sessions — does exist
+> here (the Browser tab), and the agent reaches it through the `browser` tool:
+> navigate / click / type / key / evaluate / content / console / screenshot.
+> There is no connector registry to query.
 ## Stop: choose the right surface before any browser action
 
 Explicit browser intent wins: if the user names the in-app browser or Chrome, or asks to open, show, or navigate to a page; inspect its visual or interactive state; or interact with its UI, continue with Browser and do not substitute a connector.

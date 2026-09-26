@@ -8,6 +8,60 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Two capabilities the agent was promised and never had: `browser` and
+  `computer_use`.** `kairos/browser.py` and `kairos/computer_use.py` both
+  shipped with unit tests and **no caller** — the agent's toolset was twelve
+  tools and none of them was a browser — while the bundled `computer-use` skill
+  told every model "You have a `computer_use` tool that drives the user's
+  desktop". A skill that promises a tool the registry does not contain is not a
+  documentation bug: the model plans against it and fails at the first step.
+  Both are real tools now.
+
+  - `browser` drives the **same** per-project Chromium context the Browser tab
+    shows, so a navigation the model performs appears there live and its
+    screenshot is of the page the user is already looking at. Actions:
+    `navigate`/`open`, `click`, `type`, `key`, `evaluate`, `content`, `console`,
+    `current`, `screenshot`, `viewport`, `back`/`forward`/`reload`, `close`.
+    `content` exists because a text-only model cannot read a PNG — it returns
+    the page's visible text. URLs pass the lenient SSRF guard
+    (`validate_config_url`): the loopback and LAN hosts a developer legitimately
+    verifies are allowed, cloud metadata and unresolvable hosts are not.
+    Screenshots are written under the app's data directory, never into the
+    project workspace, so browsing cannot dirty the tree the Reviewer reads.
+  - `computer_use` exposes the desktop backend that already existed: `capture`,
+    `screen_size`, `click`, `move`, `type`, `key`, `scroll`, `history`, plus
+    `dry_run`. Every result names the backend that ran, because the default is
+    `MockComputerUse` — a mock that silently reports "clicked" is worse than no
+    tool at all.
+  - Both are wired in `Orchestrator._create_agents`: the Coder gets both, the
+    Reviewer gets the browser (verifying a UI is a review question). A machine
+    without Playwright degrades to a Coder without a browser, not to no Coder.
+
+- **The gate covers the new tools on the same terms as everything else.**
+  `browser` is a network tool, so reading a page taints the run; a screenshot is
+  not egress, but a navigation, a click or a keystroke is, and is refused in a
+  tainted run. `computer_use` is a new taint source (`screen`) — the pixels
+  belong to whatever application happens to be open — and capturing or reading
+  the history stays allowed while clicking and typing are egress. Judging these
+  two by tool name alone would have blocked the screenshot the agent needs to
+  describe its own work.
+
+- **The precheck runs a type check where the project is configured for one.**
+  mypy runs on the changed files when the project has a mypy config, and a
+  locally installed `tsc --noEmit` when `tsconfig.json` and
+  `node_modules/typescript` are both present. An unconfigured project gets no
+  type check — an unconfigured mypy reports hundreds of pre-existing complaints
+  the Coder cannot tell from its own — and nothing here can reach the network:
+  `npx tsc` would download the compiler, so it is never used.
+
+- **The bundled skill library is now checked against the tool registry.** 547 of
+  the bundled skills were imported from other harnesses, and the `computer-use`
+  skill was not the only one naming tools that do not exist here. A test freezes
+  the list of skills that reference a foreign vocabulary (Hermes' `mode="som"` /
+  `cua-driver`, Claude Code's `Task(` / `TodoWrite`), fails when a new import
+  adds one, and fails when the list rots. The three that promise a desktop or
+  browser tool carry a reality-check header naming what actually exists.
+
 - **A gate every tool call passes through — the idea is Muse's Sentinel, adapted
   to a local agent.** Meta's Muse runs each user in an isolated cloud VM with a
   separate authority that gates actions and network egress, which the agent can
@@ -55,6 +109,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **`computer-use` described a tool that is not this one.** The skill was
+  imported from Hermes verbatim, 382 lines of it: it taught a `mode="som"`
+  capture, element indices, `capture_after=True`, a `cua-driver` binary and a
+  background-delivery contract that never steals focus. None of that exists in
+  this project. The tool that does exist moves the real cursor, so the skill
+  now says so, and documents this tool's actions instead.
+
 - **A policy nothing consults is decoration.** `PermissionPolicy` and the
   approval ladder existed, were tested in isolation, and were wired to no
   execution path at all — `decide()` had no callers outside its own re-export.
@@ -70,8 +131,6 @@ All notable changes to this project are documented here. The format follows
   so it still passes), and credential-shaped variables are withheld even if one
   reaches the allowlist. `KAIROS_MCP_INHERIT_ENV=1` restores the old behaviour
   for a server that genuinely needs it.
-
-### Fixed
 
 - **A stale system proxy made the marketplace look offline.** Windows hands every
   process the proxy in the registry. A leftover entry — `ProxyEnable=1` pointing at

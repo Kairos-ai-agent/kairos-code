@@ -42,7 +42,7 @@ from api.routes.gate import router as gate_router
 # R38.6 §32: Browser panel — Playwright-backed per-project browser
 # sessions used by the 5th tab in the Workbench.
 from api.routes import browser as browser_routes
-from kairos.browser import BrowserManager
+from kairos.browser import BrowserManager, set_default_manager
 # R38.6 §33: Feishu (Lark) bot integration — push notifications
 # and remote-control commands.
 from api.routes import feishu as feishu_routes
@@ -82,6 +82,10 @@ async def lifespan(app: FastAPI):
         )
         await _browser_manager.start()
         browser_routes.set_manager(_browser_manager)
+        # The agent's `browser` tool drives this same manager, so a
+        # navigation the model performs is visible in the Browser tab and
+        # its screenshot is of the page the user is already looking at.
+        set_default_manager(_browser_manager)
         log.info("Browser manager started (R38.6 §32)")
         # R38.6.4: prime the long-running registry with the
         # message bus so async subagents / goals / autonomous

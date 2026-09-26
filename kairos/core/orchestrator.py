@@ -439,6 +439,25 @@ class Orchestrator:
         subagent_tool = SubagentTool(allowed_root=coder_root)
         coder_tools.append(subagent_tool)
 
+        # The two capabilities the agent was promised and never had. Both
+        # modules shipped with tests and no caller, and the bundled
+        # computer-use skill already told every model it had the tool.
+        # Non-fatal on purpose: a machine without Playwright must still get
+        # a working Coder, just without the browser.
+        try:
+            from kairos.tools.browser_tool import BrowserTool
+            coder_tools.append(BrowserTool(allowed_root=coder_root,
+                                           project_id=project.id))
+        except Exception as e:  # noqa: BLE001
+            logger.debug("browser tool unavailable: %s", e)
+            project.runtime.attach_errors.append(f"browser_tool: {e}")
+        try:
+            from kairos.tools.computer_tool import ComputerTool
+            coder_tools.append(ComputerTool(allowed_root=coder_root))
+        except Exception as e:  # noqa: BLE001
+            logger.debug("computer-use tool unavailable: %s", e)
+            project.runtime.attach_errors.append(f"computer_tool: {e}")
+
         # Apply Coder sub-mode (default / read_only / sandbox) to the
         # tool list. Sandbox mode keeps the tool but records the intent;
         # a real path-redirecting wrapper would replace mutating tools
@@ -466,6 +485,16 @@ class Orchestrator:
             GitTool(allowed_root=reviewer_root),
             TerminalTool(allowed_cwd=reviewer_root),
         ]
+
+        # The Reviewer gets the browser too: "does it actually render" is a
+        # verification question, and it cannot be answered from the diff.
+        # Desktop control stays with the Coder.
+        try:
+            from kairos.tools.browser_tool import BrowserTool
+            reviewer_tools.append(BrowserTool(allowed_root=reviewer_root,
+                                              project_id=project.id))
+        except Exception as e:  # noqa: BLE001
+            logger.debug("reviewer browser tool unavailable: %s", e)
 
         # Load MCP tools (best-effort). Tools are appended to both
         # roles' toolset so the agent can call them; the underlying

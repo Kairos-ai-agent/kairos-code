@@ -12,7 +12,10 @@ content that crossed a trust boundary --
 
   * a tool that reaches the network (a docs page, a search result, a tarball), and
   * a third-party MCP server's output: code this project did not write, whose
-    output can be steered by anything that server reads.
+    output can be steered by anything that server reads, and
+  * the user's screen (``computer_use``): pixels are written by whatever
+    application happens to be open, which is exactly the "can be steered by
+    something else" property that makes a page untrusted.
 
 Local reads and writes stay untainted -- that is the job the agent was given.
 
@@ -37,6 +40,14 @@ NETWORK_TOOL_PREFIXES: Tuple[str, ...] = (
     "market_", "install_extension", "extensions_install", "download",
 )
 
+# Tools that read the user's screen. A screen is an untrusted source for the
+# same reason a web page is: whatever is on it was put there by something else,
+# and a model that has read it can be steered by it. Prefix-matched like the
+# network set so ``computer_use`` and any future ``computer_use_*`` are covered.
+SCREEN_TOOL_PREFIXES: Tuple[str, ...] = (
+    "computer_use", "computer-use", "screen_capture", "screenshot",
+)
+
 # MCP tools are namespaced ``mcp_<server>__<tool>`` (see mcp_client).
 MCP_PREFIX = "mcp_"
 MCP_SEPARATOR = "__"
@@ -59,6 +70,8 @@ class TaintSource:
     def describe(self) -> str:
         if self.kind == "mcp" and self.detail:
             return f"MCP server {self.detail!r} via {self.tool}"
+        if self.kind == "screen":
+            return f"{self.tool} (the user's screen)"
         return f"{self.tool} (network)"
 
 
@@ -82,6 +95,13 @@ def is_network_tool(name: str) -> bool:
     return any(lowered.startswith(p) for p in NETWORK_TOOL_PREFIXES)
 
 
+def is_screen_tool(name: str) -> bool:
+    lowered = (name or "").lower()
+    if is_mcp_tool(lowered):
+        return False
+    return any(lowered.startswith(p) for p in SCREEN_TOOL_PREFIXES)
+
+
 def classify(name: str, tool: Any = None) -> Optional[str]:
     """Return the taint kind a call to ``name`` produces, or None.
 
@@ -94,6 +114,8 @@ def classify(name: str, tool: Any = None) -> Optional[str]:
         if getattr(tool, "mcp_source", "") in TRUSTED_MCP_SOURCES:
             return None
         return "mcp"
+    if is_screen_tool(name or ""):
+        return "screen"
     if is_network_tool(name or ""):
         return "network"
     return None

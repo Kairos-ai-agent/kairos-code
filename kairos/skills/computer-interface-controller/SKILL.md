@@ -7,6 +7,12 @@ source-path: "minimax/skills/computer-interface-controller/SKILL.md"
 ---
 # Computer Interface Controller
 
+> **Reality check (Kairos Code).** This skill was imported from MiniMax and its
+> "必需工具" (`mcp__…`) is not installed here. The desktop automation that does
+> exist is the `computer_use` tool: capture / click / move / type / key / scroll,
+> pixel coordinates, no OCR and no element indices. See the `computer-use` skill
+> for the real action list, and `browser` for anything on a web page.
+
 全功能电脑界面自主操控技能，支持鼠标、键盘、截图、OCR识别，可操控浏览器、桌面应用、文件系统和表单填写。
 
 ## 核心能力

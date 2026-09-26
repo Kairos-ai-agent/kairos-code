@@ -43,6 +43,7 @@ Resource limits
 from __future__ import annotations
 
 import asyncio
+import re
 import logging
 import os
 import time
@@ -270,6 +271,25 @@ class BrowserManager:
         return await proj.page.screenshot(full_page=full_page,
                                           type="png")
 
+    async def save_screenshot(self, project_id: str,
+                              full_page: bool = False) -> Path:
+        """Screenshot the project's page and write the PNG to disk.
+
+        The HTTP panel streams a live PNG instead, but an agent needs a
+        *path*: it goes into the transcript, the user can open it, and a
+        later verification step can point at the same file. Written under
+        the manager's data dir (never the project workspace) so a browsing
+        session cannot dirty the repository the Reviewer reads.
+        """
+        data = await self.screenshot(project_id, full_page=full_page)
+        safe = re.sub(r"[^A-Za-z0-9._-]", "_", project_id)[:64] or "default"
+        shots = self._profiles_dir / safe / "screenshots"
+        shots.mkdir(parents=True, exist_ok=True)
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        path = shots / ("shot-" + stamp + "-" + str(int(time.time() * 1000) % 1000).zfill(3) + ".png")
+        path.write_bytes(data)
+        return path
+
     async def current(self, project_id: str) -> Dict[str, Any]:
         proj = await self.get_or_create(project_id)
         return {
@@ -324,3 +344,38 @@ class BrowserManager:
         page (e.g. ``document.querySelectorAll('a').length``)."""
         proj = await self.get_or_create(project_id)
         return await proj.page.evaluate(expression)
+
+
+# ---------------------------------------------------------------------------
+# The process-wide default manager.
+#
+# The HTTP panel (api/routes/browser.py) and the agent's `browser` tool must
+# drive the *same* per-project Chromium context: when the agent navigates, the
+# user should watch it happen in the Browser tab, and the screenshot the agent
+# took should be the one already on screen. api/app.py calls
+# set_default_manager() during startup; the tool falls back to creating one
+# lazily so a CLI or an embedded run still works without an HTTP app.
+# ---------------------------------------------------------------------------
+_default_manager: Optional["BrowserManager"] = None
+
+
+def set_default_manager(mgr: "BrowserManager") -> None:
+    """Wire the process-wide manager (called once, from api/app.py)."""
+    global _default_manager
+    _default_manager = mgr
+
+
+def default_manager(data_dir: Optional[Path] = None) -> "BrowserManager":
+    """Return the shared manager, creating one on first use.
+
+    A lazily created manager is never `start()`ed here: the first real
+    action starts Playwright (see `get_or_create`), which keeps an unused
+    tool free of a ~100MB browser process.
+    """
+    global _default_manager
+    if _default_manager is None:
+        if data_dir is None:
+            from kairos.config.settings import settings
+            data_dir = settings.data_dir
+        _default_manager = BrowserManager(Path(data_dir))
+    return _default_manager

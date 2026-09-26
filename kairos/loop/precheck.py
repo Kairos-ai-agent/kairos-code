@@ -2,6 +2,7 @@
 
 Runs BEFORE the Reviewer each round:
 - ruff (Python lint) on changed files
+- a type check (mypy / tsc) when the project is configured for one
 - pytest on the workspace if a test command is configured
 - A simple "did tests fail last time?" check for self-debug mode
 
@@ -99,6 +100,7 @@ async def pre_check_workspace(
     Result shape:
         {
             "lint": {"ok": bool, "output": "..."},
+            "types": {"ok": bool, "output": "..."} | None,
             "tests": {"ok": bool, "output": "..."},
             "has_failures": bool,
             "summary": "2 lint errors; 1 test failure"
@@ -122,6 +124,9 @@ async def pre_check_workspace(
         )
         lint["changed_files"] = py_files
 
+    # ---- type check ----
+    types = await _type_check(workspace, py_files)
+
     # ---- tests ----
     tests = None
     if test_command is None:
@@ -132,21 +137,82 @@ async def pre_check_workspace(
     # ---- summarize ----
     has_failures = bool(
         (lint and not lint["ok"] and lint.get("code") not in (127,))
+        or (types and not types["ok"] and types.get("code") not in (127,))
         or (tests and not tests["ok"] and tests.get("code") not in (127,))
     )
     parts = []
     if lint and lint.get("code") not in (127, None):
         parts.append(f"{'pass' if lint['ok'] else 'fail'}: ruff")
+    if types and types.get("code") not in (127, None):
+        parts.append(f"{'pass' if types['ok'] else 'fail'}: types")
     if tests and tests.get("code") not in (127, None):
         parts.append(f"{'pass' if tests['ok'] else 'fail'}: tests")
     summary = "; ".join(parts) if parts else "no checks ran"
 
     return {
         "lint": lint,
+        "types": types,
         "tests": tests,
         "has_failures": has_failures,
         "summary": summary,
     }
+
+def _has_mypy_config(workspace: Path) -> bool:
+    """Is this project actually configured for mypy?
+
+    Running an unconfigured mypy on a few files reports dozens of pre-existing
+    complaints about third-party stubs and untyped defs. The Coder cannot tell
+    those from the ones it just caused, so an unconfigured project gets no type
+    check at all -- a check that cries wolf is worse than no check.
+    """
+    pyproject = workspace / "pyproject.toml"
+    if pyproject.exists():
+        try:
+            if "[tool.mypy]" in pyproject.read_text(encoding="utf-8", errors="replace"):
+                return True
+        except OSError:
+            pass
+    for name in ("mypy.ini", ".mypy.ini"):
+        if (workspace / name).exists():
+            return True
+    setup_cfg = workspace / "setup.cfg"
+    if setup_cfg.exists():
+        try:
+            if "[mypy]" in setup_cfg.read_text(encoding="utf-8", errors="replace"):
+                return True
+        except OSError:
+            pass
+    return False
+
+
+def _local_tsc(workspace: Path) -> Optional[List[str]]:
+    """Command for a *locally installed* TypeScript compiler, or None.
+
+    Never `npx tsc`: on a project without node_modules that downloads the
+    compiler, which turns a static check into a network call that hangs behind a
+    firewall. If the project has not installed TypeScript, it does not get a
+    type check.
+    """
+    if not (workspace / "tsconfig.json").exists():
+        return None
+    tsc = workspace / "node_modules" / "typescript" / "bin" / "tsc"
+    if not tsc.exists() or not shutil.which("node"):
+        return None
+    return ["node", "node_modules/typescript/bin/tsc", "--noEmit"]
+
+
+async def _type_check(workspace: Path, py_files: List[str]) -> Optional[Dict]:
+    """Type-check the changed files, when the project is set up for it."""
+    if py_files and _has_mypy_config(workspace) and shutil.which("mypy"):
+        return await _run(
+            ["mypy", "--no-error-summary", "--follow-imports=silent"] + py_files,
+            cwd=workspace, timeout=90,
+        )
+    tsc = _local_tsc(workspace)
+    if tsc:
+        return await _run(tsc, cwd=workspace, timeout=150)
+    return None
+
 
 def _auto_detect_test_command(workspace: Path) -> Optional[List[str]]:
     # Never start a test suite from inside one. The loop calls this every round, and the
@@ -175,6 +241,11 @@ def format_precheck_for_prompt(precheck: Dict) -> str:
                precheck["lint"].get("stderr", ""))
         lines.append(f"LINT (ruff):")
         lines.append(out[-1500:])  # last 1500 chars
+    if precheck.get("types") and not precheck["types"]["ok"]:
+        out = (precheck["types"].get("stdout", "") or
+               precheck["types"].get("stderr", ""))
+        lines.append("TYPES:")
+        lines.append(out[-1500:])
     if precheck.get("tests") and not precheck["tests"]["ok"]:
         out = (precheck["tests"].get("stdout", "") or
                precheck["tests"].get("stderr", ""))

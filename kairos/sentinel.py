@@ -147,8 +147,30 @@ def resource_of(tool: str, args: Any) -> str:
     return ""
 
 
+# Actions on the browser / desktop that only *read*. In a tainted run these stay
+# allowed: they are how the agent describes what it saw, and neither a screenshot
+# nor a console dump can carry data out. Everything else those two tools do can
+# (a navigation puts data in a URL, a click or a keystroke submits it somewhere).
+_READ_ONLY_SCREEN_ACTIONS = frozenset({
+    "screenshot", "capture", "current", "console", "history",
+    "screen_size", "content", "text", "close",
+})
+
+# Tools whose name says nothing about whether they are egress: `browser` matches
+# the network prefix rule and would be refused for *every* action, including the
+# screenshot the agent needs to verify its own work.
+_ACTION_JUDGED_TOOLS = ("browser", "computer_use")
+
+
 def is_egress(tool: str, args: Any) -> Tuple[bool, str]:
     """Does this call send data out (or pull code in)?"""
+    if tool in _ACTION_JUDGED_TOOLS:
+        action = ""
+        if isinstance(args, dict):
+            action = str(args.get("action") or "").strip().lower()
+        if action in _READ_ONLY_SCREEN_ACTIONS:
+            return False, ""
+        return True, f"{tool} {action or 'action'} can carry data out"
     if is_network_tool(tool):
         return True, f"{tool} reaches the network"
     if tool == "git":

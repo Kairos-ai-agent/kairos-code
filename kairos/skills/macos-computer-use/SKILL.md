@@ -8,6 +8,12 @@ source-path: "hermes/skills/apple/macos-computer-use/SKILL.md"
 ---
 # macOS Computer Use (universal, any-model)
 
+> **Reality check (Kairos Code).** This skill came from Hermes and describes a
+> macOS-only, background, cua-driver-backed `computer_use` tool. None of that is
+> true of the tool this app ships: there is no `cua-driver` here, this build runs
+> on Windows, and the real backend moves the user's actual cursor. Read
+> `computer-use` for the tool that exists — same name, different contract.
+
 You have a `computer_use` tool that drives the Mac in the **background**.
 Your actions do NOT move the user's cursor, steal keyboard focus, or switch
 Spaces. The user can keep typing in their editor while you click around in

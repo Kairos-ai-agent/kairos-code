@@ -87,6 +87,17 @@ async def lifespan(app: FastAPI):
         # its screenshot is of the page the user is already looking at.
         set_default_manager(_browser_manager)
         log.info("Browser manager started (R38.6 §32)")
+        # The gate can ask now. Before this line, the permission ladder's ASK
+        # verdict had to be resolved by policy -- there was no channel to ask
+        # through (see kairos/approvals.py). The UI polls /api/approvals and
+        # answers; a question nobody answers still resolves, to a refusal.
+        try:
+            from kairos import approvals
+            approvals.set_channel(
+                approvals.ApprovalChannel(message_bus=_orch().message_bus))
+            log.info("Approval channel ready")
+        except Exception as exc:  # noqa: BLE001
+            log.warning("approval channel unavailable: %s", exc)
         # R38.6.4: prime the long-running registry with the
         # message bus so async subagents / goals / autonomous
         # runs can publish subagent.completed events.
@@ -334,6 +345,14 @@ from api.routes import p2_features as p2_features_routes
 from api.routes import sentinel as sentinel_routes
 app.include_router(p2_features_routes.router, tags=["borrowed-p2"])
 app.include_router(sentinel_routes.router, tags=["sentinel"])
+
+# R2: durable/background tasks and the gate's approval channel. Both routers
+# carry their own prefix, like browser/borrowed/sentinel above.
+from api.routes import approvals as approvals_routes  # noqa: E402
+from api.routes import tasks as tasks_routes  # noqa: E402
+
+app.include_router(tasks_routes.router, tags=["tasks"])
+app.include_router(approvals_routes.router, tags=["approvals"])
 
 # Global message stream — mounted at /api/messages (not under /projects
 # because FastAPI's path-param matching can shadow literal /messages

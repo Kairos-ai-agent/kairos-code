@@ -3,6 +3,7 @@
     "zh": "运行",
     "en": "Run"
   },
+  "nav.tasks": { "zh": "任务", "en": "Tasks" },
   "nav.history": {
     "zh": "历史",
     "en": "History"

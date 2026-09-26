@@ -575,11 +575,18 @@ class KairosAgent:
                             args = json.loads(args)
                         except (json.JSONDecodeError, TypeError):
                             args = {}
-                ruling = self.sentinel.authorize(
-                    tool_call.name, args, taint=self.taint, origin="agent",
-                    agent_id=self.agent_id,
-                    project_id=getattr(self, "_current_project_id", ""),
-                )
+                # Prefer the async variant: it is the same ruling, except that
+                # an ASK becomes a question the user can answer instead of a
+                # verdict decided for them. A sentinel without it (a stub in a
+                # test, an older object) keeps the sync behaviour.
+                gate_kwargs = dict(taint=self.taint, origin="agent",
+                                   agent_id=self.agent_id,
+                                   project_id=getattr(self, "_current_project_id", ""))
+                async_gate = getattr(self.sentinel, "authorize_async", None)
+                if async_gate is not None:
+                    ruling = await async_gate(tool_call.name, args, **gate_kwargs)
+                else:
+                    ruling = self.sentinel.authorize(tool_call.name, args, **gate_kwargs)
                 if ruling.denied:
                     return ToolResult(success=False, output="",
                                       error=ruling.message(),

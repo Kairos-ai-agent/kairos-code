@@ -8,6 +8,47 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`har` could be resumed from a terminal only — now the app drives it.**
+  `kairos/har.py` has been the durable-task contract since Round 29: a goal that
+  does not change, a round count, a plan, a history, a lock. It had **no caller
+  outside its own CLI**, so "kick off a multi-day refactor, close the laptop,
+  pick it up tomorrow" meant opening a terminal. `kairos/durable.py` binds the
+  contract to the project's real Coder/Reviewer loop and `api/routes/tasks.py`
+  exposes it; `GET /api/tasks/{project}` also lists the background subagent
+  handles and autonomous jobs that were previously only discoverable if you
+  already knew the handle.
+
+  - `har.resume_async` is the same state machine with an **awaited** tick. The
+    sync `resume()` stays for the CLI and the tests; it could not be reused here
+    because the tick drives the project's loop, whose HTTP clients belong to the
+    app's event loop — hopping to a worker thread to satisfy a sync signature
+    hands those clients a different loop, which is a hang rather than an error.
+  - A tick is one run of the real loop, and state is saved after each one, so an
+    interrupted tick loses only the round in flight.
+
+- **The gate can ask.** `kairos/approval.py`'s ladder returns ASK for actions
+  that are neither clearly safe nor clearly forbidden, and until now an ASK had
+  to be resolved by policy: allowed when the gate is not strict (so the ladder
+  was only advice) or refused when it is (so the first file write deadlocks a
+  run). `kairos/sentinel.py`'s own docstring named the missing piece — "ASK mean
+  deny once an approval channel exists". `kairos/approvals.py` is that channel:
+  `Sentinel.authorize_async` publishes the question, the tool call waits up to
+  120 seconds, and the answer decides. Approving may record the same standing
+  rule `POST /api/sentinel/allow` writes; denying, or never answering, is a
+  refusal — an approval that never arrives must not become a permission. The
+  prompt is mounted with the layout, so the question follows the user to
+  whichever page they are on. The sync `authorize()` is untouched: a CLI run has
+  nobody to ask, and a call that parks on a question nobody will see is worse
+  than a verdict.
+
+- **A Tasks screen — and a page the sidebar had always linked to.** `/tasks`
+  shows the durable task (goal, round, score, approval, round history) with
+  one-round and five-round resume buttons, beside the background subagents and
+  autonomous jobs. It is deep-linkable (`?project=<id>`), like Run and History.
+  Adding it surfaced a dead link: the sidebar has linked `/dashboard` since
+  R38.13 and **no route ever served it** — the page existed, the route did not.
+  All 37 new strings are translated for all 63 languages (1281/1281 keys, 100%).
+
 - **Two capabilities the agent was promised and never had: `browser` and
   `computer_use`.** `kairos/browser.py` and `kairos/computer_use.py` both
   shipped with unit tests and **no caller** — the agent's toolset was twelve

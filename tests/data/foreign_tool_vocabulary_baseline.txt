@@ -1,0 +1,35 @@
+# Bundled skills that name a tool vocabulary this app does not ship:
+# params from Hermes' computer_use (mode="som", element=, cua-driver),
+# tool names from Claude Code (TodoWrite, Task(, mcp__). Most entries are
+# skills *about* another agent, where naming its tools is correct.
+# Frozen by tests/test_bundled_skill_tools.py: a new import must not add
+# one silently. Delete a line when you clean that skill up.
+ai-short-drama-director/SKILL.md
+claude-automation-recommender/SKILL.md
+claude-code/SKILL.md
+claude-security/SKILL.md
+command-development/SKILL.md
+computer-interface-controller/SKILL.md
+control-in-app-browser/SKILL.md
+create-docker-mcp-tunnel/SKILL.md
+create-plugin/SKILL.md
+desktop-app-automation/SKILL.md
+documents/SKILL.md
+dspy/SKILL.md
+feature-dev/SKILL.md
+felo-superagent/SKILL.md
+figma-use-slides/SKILL.md
+flask-api-proxy-tool/SKILL.md
+frontend-slides/SKILL.md
+hook-development/SKILL.md
+hookify/SKILL.md
+instructor/SKILL.md
+macos-computer-use/SKILL.md
+mcp-integration/SKILL.md
+mixpanelyst/SKILL.md
+music/SKILL.md
+openai-docs/SKILL.md
+subagent-driven-development/SKILL.md
+taskflow/SKILL.md
+using-superpowers/SKILL.md
+writing-skills/SKILL.md

@@ -27,6 +27,8 @@ Why JSONL for history? Same reason as ``data/alerts.jsonl`` (R28) and
 """
 from __future__ import annotations
 
+import inspect
+
 import argparse
 import json
 import logging
@@ -337,6 +339,72 @@ def resume(
     try:
         for i in range(max_rounds):
             new_state, entry = fn(state, contract)
+            save_state(h, new_state)
+            append_history(h, entry)
+            if new_state.plan_text and new_state.plan_text != state.plan_text:
+                save_plan(h, new_state.plan_text)
+            state = new_state
+            if stop_on_approve and entry.get("approved"):
+                final_msg = f"approved at round {state.round}; stopping"
+                rc = 4
+                break
+            if state.no_progress_count >= 3:
+                final_msg = (f"no progress for {state.no_progress_count} "
+                             f"rounds; stopping")
+                rc = 5
+                break
+        else:
+            final_msg = f"ran {max_rounds} round(s) without approval"
+        return rc, final_msg
+    finally:
+        release_lock(h)
+
+
+async def resume_async(
+    root: Path,
+    *,
+    max_rounds: int = 1,
+    tick_fn=None,
+    stop_on_approve: bool = True,
+) -> Tuple[int, str]:
+    """`resume()`, for a caller whose tick must be awaited.
+
+    Identical contract and return codes to :func:`resume`; `tick_fn` is an
+    async callable ``(state, contract) -> (new_state, history_entry)``.
+
+    The sync version exists for the CLI and for tests, where a plain callback is
+    enough. The app needs this one: its tick runs the project's Coder/Reviewer
+    loop, and that loop's HTTP clients belong to the app's event loop. Hopping
+    to a worker thread to satisfy a sync signature would hand those clients a
+    different loop, which is a hang rather than an error.
+
+    A tick that raises propagates, but the lock is always released -- a failed
+    tick must not wedge the task.
+    """
+    try:
+        contract, state, h = load_har(root)
+    except FileNotFoundError as e:
+        return 3, str(e)
+
+    pid = acquire_lock(h)
+    if pid is None:
+        return 2, "lock held by another process; refusing to resume"
+
+    fn = tick_fn
+    final_msg = "ok"
+    rc = 0
+    try:
+        for _ in range(max_rounds):
+            outcome = fn(state, contract)
+            if not inspect.isawaitable(outcome):
+                raise TypeError(
+                    "resume_async expects an async tick_fn; "
+                    + getattr(fn, "__name__", repr(fn))
+                    + " returned "
+                    + type(outcome).__name__
+                    + " instead. Use har.resume() for a synchronous tick."
+                )
+            new_state, entry = await outcome
             save_state(h, new_state)
             append_history(h, entry)
             if new_state.plan_text and new_state.plan_text != state.plan_text:

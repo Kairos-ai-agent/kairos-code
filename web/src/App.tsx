@@ -22,13 +22,18 @@ import Loop from './pages/Loop';
 import Trace from './pages/Trace';
 import Tools from './pages/Tools';
 import Marketplace from './pages/Marketplace';
+import Dashboard from './pages/Dashboard';
+import Tasks from './pages/Tasks';
+import ApprovalPrompt from './components/ApprovalPrompt';
 import { connectWebSocket } from './api/client';
 
 const App: React.FC = () => {
   useEffect(() => { connectWebSocket(); }, []);
   return (
     <Routes>
-      <Route element={<AppLayout />}>
+      {/* The approval prompt rides along with the layout: the gate can ask
+          from any page, and the tool call is waiting for the answer. */}
+      <Route element={<><AppLayout /><ApprovalPrompt /></>}>
         {/* Three primary views: Run (business output), History (receipts)
             and Settings (a drawer). Everything else lives under "Advanced"
             in the sidebar but keeps its own route. */}
@@ -47,6 +52,10 @@ const App: React.FC = () => {
         <Route path="/settings" element={<Navigate to="/chat" replace />} />
         <Route path="/projects" element={<ProjectPage />} />
         <Route path="/loop" element={<Loop />} />
+        {/* R2: durable/background work, and the page the sidebar has always
+            linked to but no route ever served. */}
+        <Route path="/tasks" element={<Tasks />} />
+        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="*" element={<Navigate to="/chat" replace />} />
       </Route>
     </Routes>

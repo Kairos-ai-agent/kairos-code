@@ -53,7 +53,7 @@ import os
 import re
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -580,6 +580,69 @@ class Sentinel:
             return make("allow", reason, f"strict-{ladder.value}")
 
         return make("allow", "no rule refused this call", "default-allow")
+
+    async def authorize_async(self, tool: str, args: Any, *,
+                              taint: Optional[TaintTracker] = None,
+                              origin: str = "agent", agent_id: str = "",
+                              project_id: str = "") -> Ruling:
+        """`authorize()`, except that an ASK becomes a real question.
+
+        The sync path stays as it is: it is what the CLI, the tests and any
+        background worker use, and it must not block on a UI that is not there.
+        This variant is for the one caller that *can* ask -- the agent's tool
+        dispatch -- and only when a channel is registered.
+
+        With a channel: the request is published, the call waits up to the
+        channel's timeout, and the answer decides. "Remember" records the same
+        standing rule the HTTP API writes, so the user is asked once rather than
+        every round. With no channel, or no answer, the previous behaviour
+        stands -- which for a non-strict gate is an allow, and for a strict one a
+        refusal. An approval that never arrives must not become a permission.
+        """
+        ruling = self.authorize(tool, args, taint=taint, origin=origin,
+                                agent_id=agent_id, project_id=project_id)
+        if ruling.denied or not self.enabled:
+            return ruling
+        try:
+            ladder, reason = self._ladder(tool, ruling.resource)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("ladder lookup failed for %s: %s", tool, exc)
+            return ruling
+        if ladder != Decision.ASK:
+            return ruling
+
+        from kairos import approvals
+        channel = approvals.get_channel()
+        if channel is None:
+            return ruling
+
+        answer = await channel.request(tool=tool, resource=ruling.resource,
+                                       reason=reason, project_id=project_id)
+        if answer.get("allow"):
+            if answer.get("remember"):
+                try:
+                    # The whole tool, not this one argument: "stop asking me
+                    # about curl" is what the user means by remember.
+                    write_allow_rule(tool, "*")
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("could not record the standing rule: %s", exc)
+            answered = replace(ruling, decision="allow",
+                               reason="the user approved this call",
+                               rule="approved-by-user")
+        else:
+            status = str(answer.get("status") or "unknown")
+            answered = replace(
+                ruling, decision="deny",
+                reason=("the user did not approve this call (" + status + "). "
+                        "The gate asked because no standing rule covers it"),
+                rule="approval-" + status,
+            )
+        try:
+            self.audit.record(answered, agent_id=agent_id,
+                              project_id=project_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("audit record failed: %s", exc)
+        return answered
 
     def _ladder(self, tool: str, resource: str) -> Tuple[Decision, str]:
         from kairos.approval import READ_ONLY_TOOLS, decide

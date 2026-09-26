@@ -14,6 +14,11 @@ web/dist/
 # Data
 workspace/
 data/
+# ...but tests/data/ is repository content, not runtime output. A baseline a
+# test reads has to be committed, or the test passes locally and fails on CI —
+# which is exactly how this exception came to be written.
+!tests/data/
+!tests/data/**
 *.db
 
 # Environment
@@ -81,3 +86,6 @@ _check_extract.py
 # The demo writes its report into the working directory; it is an output, not
 # source. One was committed by accident once.
 gate-report-*.html
+
+# Editor scratch directories left behind by the editor
+*.tmpdir/

@@ -154,3 +154,62 @@ def test_any_container_is_scanned_as_raw_bytes(tmp_path, name):
     art.write_bytes(b"\x00\x01" + REAL_SHAPED.encode() + b"\x02\x03")
 
     assert [h["where"] for h in scanner.scan(art, local_values=[])["hits"]] == ["raw"]
+
+# ---------------------------------------------------------------------------
+# the wiring: a scanner nobody calls is decoration
+# ---------------------------------------------------------------------------
+
+BUILD = Path(__file__).resolve().parents[1] / "scripts" / "build_binary.py"
+
+
+def _fake_build(tmp_path, monkeypatch, artefact_bytes, name="test-artefact"):
+    """Run build_binary.main() with PyInstaller replaced by a stub.
+
+    The tests above cover what the scanner refuses. This one covers whether the
+    refusal is reachable at all: the question it answers is "could a build that
+    carried a secret ever reach a user", and answering that means exercising the
+    build's own main(). Only the slow step is stubbed -- the scanner stays real.
+    """
+    import os as _os
+    import subprocess as sub
+    import sys as _sys
+
+    spec_b = importlib.util.spec_from_file_location("build_binary_under_test", BUILD)
+    module = importlib.util.module_from_spec(spec_b)
+    spec_b.loader.exec_module(module)
+
+    out = tmp_path / "dist"
+    real_run = sub.run
+
+    def fake_run(cmd, *a, **kw):
+        if any("PyInstaller" in str(part) for part in cmd):
+            artefact = out / (f"{name}.exe" if _os.name == "nt" else name)
+            artefact.parent.mkdir(parents=True, exist_ok=True)
+            artefact.write_bytes(artefact_bytes)
+            return sub.CompletedProcess(cmd, 0, b"", b"")
+        return real_run(cmd, *a, **kw)
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    monkeypatch.setattr(_sys, "argv", ["build_binary.py", "--out", str(out), "--name", name])
+    return module.main()
+
+
+def test_a_build_that_carries_a_secret_refuses_to_hand_it_over(tmp_path, monkeypatch, capsys):
+    code = _fake_build(tmp_path, monkeypatch, b"prefix" + REAL_SHAPED.encode())
+
+    printed = capsys.readouterr()
+    assert code == 1, "the build handed over an artefact that carried a secret"
+    assert "refusing" in printed.err
+    # and the refusal must not print what it found -- same rule as the scanner
+    assert REAL_SHAPED not in printed.out + printed.err
+
+
+def test_a_clean_build_still_succeeds(tmp_path, monkeypatch):
+    assert _fake_build(tmp_path, monkeypatch, b"an ordinary artefact") == 0
+
+
+def test_the_scan_runs_after_the_size_is_reported(tmp_path, monkeypatch, capsys):
+    """Order matters for diagnosis: the OK line must appear before a refusal."""
+    _fake_build(tmp_path, monkeypatch, b"prefix" + REAL_SHAPED.encode())
+    printed = capsys.readouterr()
+    assert "[build] OK" in printed.out, "the artefact size is reported before the scan"

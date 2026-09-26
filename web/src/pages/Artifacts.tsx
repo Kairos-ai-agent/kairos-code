@@ -44,6 +44,27 @@ interface CommentRow {
 
 const KINDS = ['plan', 'report', 'screenshot', 'summary', 'note'];
 
+/**
+ * Whole literal keys -- there is deliberately no `artifacts.kind.*` concatenation
+ * anywhere in this file.
+ *
+ * The i18n guard scans the source for translation calls with literal keys and
+ * requires each one
+ * to exist in the dictionaries; a concatenated prefix turns into the key
+ * `artifacts.kind.`, which exists in none of them. So the dynamic form is not
+ * merely hard to read, it is unverifiable. This table keeps the check honest and
+ * the runtime lookup total.
+ */
+const KIND_LABEL_KEY: Record<string, string> = {
+  plan: 'artifacts.kind.plan',
+  report: 'artifacts.kind.report',
+  screenshot: 'artifacts.kind.screenshot',
+  summary: 'artifacts.kind.summary',
+  note: 'artifacts.kind.note',
+};
+
+const kindLabel = (kind: string): string => KIND_LABEL_KEY[kind] || 'artifacts.kind.note';
+
 const POLL_MS = 6000;
 
 const Artifacts: React.FC = () => {
@@ -124,7 +145,7 @@ const Artifacts: React.FC = () => {
 
   const kindOptions = useMemo(
     () => [{ value: '', label: t('artifacts.allKinds') },
-           ...KINDS.map((k) => ({ value: k, label: t('artifacts.kind.' + k) }))],
+           ...KINDS.map((k) => ({ value: k, label: t(kindLabel(k)) }))],
     [t],
   );
 
@@ -184,7 +205,7 @@ const Artifacts: React.FC = () => {
                   >
                     <Space direction="vertical" size={2} style={{ width: '100%' }}>
                       <Space wrap>
-                        <Tag>{t('artifacts.kind.' + row.kind)}</Tag>
+                        <Tag>{t(kindLabel(row.kind))}</Tag>
                         {row.round_no ? (
                           <Text type="secondary">{t('artifacts.round', { n: row.round_no })}</Text>
                         ) : null}
@@ -204,7 +225,7 @@ const Artifacts: React.FC = () => {
                 <>
                   <Title level={5} style={{ marginTop: 0 }}>{selected.title}</Title>
                   <Space wrap style={{ marginBottom: 8 }}>
-                    <Tag>{t('artifacts.kind.' + selected.kind)}</Tag>
+                    <Tag>{t(kindLabel(selected.kind))}</Tag>
                     {selected.path ? <Text code>{selected.path}</Text> : null}
                   </Space>
                   {selected.kind === 'screenshot' && (

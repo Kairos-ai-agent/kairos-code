@@ -166,6 +166,7 @@ jobs:
         run: python scripts/build_binary.py --out dist
 
       - name: "Refuse to publish a build that carries a secret"
+        shell: bash
         run: |
           for artefact in dist/*; do
             [ -f "$artefact" ] || continue

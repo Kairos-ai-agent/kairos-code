@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-09-29
+
 ### Added
 
 - **A preset for a router you host yourself.** FreeLLMAPI

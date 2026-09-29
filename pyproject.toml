@@ -71,6 +71,11 @@ mcp = ["mcp[cli]>=1.0.0"]
 # without them — declaring them here makes the feature installable and documents
 # what it pulls in.
 voice = ["edge-tts>=6.1", "faster-whisper>=1.0", "pyttsx3>=2.90"]
+# Just the speech-out half of `voice`, deliberately kept small: the frozen
+# desktop build installs this one so voice mode works out of the box, and
+# `faster-whisper` (for speech *in*) would drag a model runtime into an
+# executable that does not need it.
+tts = ["edge-tts>=6.1"]
 memory = ["cognee", "graphiti-core"]
 browser = ["playwright>=1.40"]
 cloud = ["boto3>=1.34"]

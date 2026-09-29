@@ -329,9 +329,10 @@ def test_settingsstore_persisted_naming_uses_kairos_settings():
         "settingsStore persist should use the 'kairos-settings' "
         "localStorage key (distinct from 'kairos-chat')"
     )
-    # version: 1 — bump when the shape changes incompatibly.
-    assert "version: 1" in src, (
-        "settingsStore persist should have version: 1 so we can "
+    # version: 2 — bumped when voice mode added settings the v1 shape did not
+    # have, and cleared v1's hard-coded English default voice on the way.
+    assert "version: 2" in src, (
+        "settingsStore persist should have a version so we can "
         "invalidate the cache on schema changes"
     )
 

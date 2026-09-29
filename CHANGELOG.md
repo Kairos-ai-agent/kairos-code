@@ -6,6 +6,34 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Voice mode.** The synthesis engine has been in `kairos/voice.py` since early
+  on — several hundred neural voices, no key, no account to create — and nothing
+  called it: no endpoint, and a settings field that was a text box nobody read.
+  It is wired up now. `GET /api/voice/voices` serves the list, with the
+  browser's own voices kept as a second group and as the fallback for when the
+  server has no engine or no network; `POST /api/voice/speak` returns the audio
+  for a reply; the settings drawer picks from the real list instead of asking
+  you to type a voice name. Pace, pitch and volume reach the engine rather than
+  being accepted and dropped.
+
+  Voice mode is also a change of register, not just a speaker: with it on, the
+  chat path tells the agent its answer will be heard rather than read, so the
+  reply is written short and without Markdown in the first place. Whatever still
+  arrives as a wall of text is distilled on the way to the speaker —
+  `kairos/voice_text.py` drops fenced code, tables, links and list bullets,
+  keeps whole sentences up to a budget, and cuts at the `Details:` marker the
+  directive asks for, so the specifics stay on screen and the summary goes to
+  the ear. The reply itself is unchanged; only what is spoken is trimmed.
+
+  The frozen desktop build installs the new `tts` extra. `voice` also carries
+  the speech-*in* half (`faster-whisper`), and an executable that ships a model
+  runtime it never uses is larger for no reason. For the same class of reason
+  the persisted v1 voice setting is cleared on upgrade: it named an English
+  voice, which reads a Chinese reply in English. An empty name now means "match
+  the reply's language", and a voice the user actually chose is left alone.
+
 ## [0.1.7] - 2026-09-29
 
 ### Added

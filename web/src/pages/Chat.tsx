@@ -29,6 +29,8 @@ import {
 } from '@ant-design/icons';
 
 import { useChatStore } from '../stores/chatStore';
+import { useSettingsStore } from '../stores/settingsStore';
+import { speak } from '../lib/voicePlayback';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import { useT } from '../i18n';
 import ChatThread from '../components/ChatThread';
@@ -588,6 +590,37 @@ const Chat: React.FC = () => {
   //   - intent='task'  → POST /start (full Coder ↔ Reviewer loop)
   //   - intent='chat'  → POST /chat  (single-turn reply)
   //   - askState.pending always wins (answer the reviewer's question).
+  // -------------------------------------------------------------------------
+  // Voice mode: speak new replies.
+  //
+  // The thread is watched rather than a single call site, because a reply
+  // arrives one of two ways — streamed over the WebSocket, or appended from the
+  // REST response — and both end up as messages here. A streamed reply is only
+  // finished once it stops changing, so we wait for the text to sit still
+  // before reading it: otherwise the first token gets read out and the rest
+  // arrives over the top of it.
+  // -------------------------------------------------------------------------
+  const voiceMode = useSettingsStore((s) => s.voice.voiceMode);
+  const voice = useSettingsStore((s) => s.voice);
+  const spokenRef = useRef<string>('');
+  useEffect(() => {
+    if (!voiceMode) return;
+    const last = currentMessages[currentMessages.length - 1];
+    if (!last) return;
+    if ((last.sender || '').toLowerCase() === 'user') return;
+    const content = typeof last.content === 'string' ? last.content.trim() : '';
+    if (!content || content === spokenRef.current) return;
+    const timer = window.setTimeout(() => {
+      spokenRef.current = content;
+      void speak(content, {
+        voice: voice.ttsVoice, rate: voice.rate, pitch: voice.pitch,
+        volume: voice.volume, engine: voice.engine,
+      });
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [currentMessages, voiceMode, voice.ttsVoice, voice.rate, voice.pitch,
+      voice.volume, voice.engine]);
+
   const handleSubmit = async (text: string, attachments: ChatAttachment[] = []) => {
     if (!currentProject) {
       msgApi.warning(t('chat.page.pickProjectFirst'));
@@ -633,7 +666,14 @@ const Chat: React.FC = () => {
         // conversation. No loop is started.
         const r = await api.post<{ reply: string; mode: string; message?: string }>(
           `/projects/${currentProject.id}/chat`,
-          { message: text, attachments: relPaths });
+          {
+            message: text,
+            attachments: relPaths,
+            // Read the flag straight from the store: it can be toggled from the
+            // settings drawer while this submit is already in flight, and a
+            // captured value would send the previous state.
+            voice_mode: useSettingsStore.getState().voice.voiceMode,
+          });
         // R38.7: replace the optimistic bubble with the message the server
         // actually persisted (it appends the [附件] block) so a refresh and
         // the live thread show the same thing.

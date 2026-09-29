@@ -19,6 +19,7 @@ from kairos.sentinel import get_sentinel
 from kairos.taint import (TaintTracker, classify, current_tracker, mcp_server_of,
                           release_tracker, use_tracker)
 from kairos.tools.base import ToolResult
+from kairos.voice_text import VOICE_REPLY_DIRECTIVE
 
 logger = logging.getLogger(__name__)
 
@@ -1165,10 +1166,15 @@ class KairosAgent:
             self.total_turns = 0
             self.current_tool = None
 
-    async def chat(self, message: str) -> str:
-        """Direct chat with this agent (for UI interaction)."""
+    async def chat(self, message: str, *, voice_mode: bool = False) -> str:
+        """Direct chat with this agent (for UI interaction).
+
+        ``voice_mode`` tells the agent its answer will be read aloud, so it
+        writes for the ear — short, no Markdown — instead of leaving the
+        interface to trim a wall of text into something sayable.
+        """
         async with self._lock:
-            return await self._chat_impl(message)
+            return await self._chat_impl(message, voice_mode=voice_mode)
 
     async def agenerate(self, prompt: str) -> str:
         """Single-shot completion with NO memory/tool side effects.
@@ -1293,7 +1299,7 @@ class KairosAgent:
                     f"{ctx}")
         return base
 
-    async def _chat_impl(self, message: str) -> str:
+    async def _chat_impl(self, message: str, *, voice_mode: bool = False) -> str:
         """Internal chat implementation (called with lock held)."""
         user_msg = LLMMessage(role="user", content=message)
         self._memory.append(user_msg)
@@ -1302,6 +1308,11 @@ class KairosAgent:
 
         # Use conversational prompt for chat mode (not task-specific JSON prompt)
         chat_system = self._build_chat_system_prompt()
+        if voice_mode:
+            # Ask for a speakable answer up front. The interface also filters
+            # whatever it synthesizes, but this is what makes the reply itself
+            # brief — a long answer read aloud badly is still a bad answer.
+            chat_system += VOICE_REPLY_DIRECTIVE
 
         self.current_turn = 0
         self.total_turns = self.MAX_CHAT_TURNS

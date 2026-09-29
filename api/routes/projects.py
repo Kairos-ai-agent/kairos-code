@@ -225,7 +225,7 @@ async def chat(project_id: str, request: "ChatRequest"):
         # a simple "你好" — this fix routes the chat through
         # ``chat()`` so it's a single LLM call.
         try:
-            reply = await project.coder.chat(text)
+            reply = await project.coder.chat(text, voice_mode=request.voice_mode)
         except Exception as exc:
             # Summarise rather than interpolate: a provider that answers with an HTML
             # page (Cloudflare block, wrong base_url) puts that whole page in the
@@ -1230,6 +1230,10 @@ class ChatRequest(BaseModel):
     # Paths are relative to the project root; they are folded into the
     # message (and therefore into the persisted history) as an "[附件]" block.
     attachments: list[str] = []
+    # Voice mode: the reply will be read aloud, so the agent is asked to answer
+    # briefly and without Markdown. Sent per message rather than stored, so the
+    # switch in the interface is the only source of truth.
+    voice_mode: bool = False
 
 class RevertFileRequest(BaseModel):
     sha: str

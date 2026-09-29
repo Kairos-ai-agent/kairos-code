@@ -362,6 +362,11 @@ from api.routes import hooks as hooks_routes  # noqa: E402
 
 app.include_router(hooks_routes.router, tags=["hooks"])
 
+# Voice mode: speak the agent's replies. The synthesis engine lives in
+# kairos/voice.py; this exposes it to the interface.
+from api.routes import voice as voice_routes  # noqa: E402
+app.include_router(voice_routes.router, tags=["voice"])
+
 # Global message stream — mounted at /api/messages (not under /projects
 # because FastAPI's path-param matching can shadow literal /messages
 # routes). Used by the Collaboration page for the project-agnostic feed.

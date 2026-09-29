@@ -1083,6 +1083,50 @@
     "zh": "点击麦克风、或发送需要 agent 语音回复的文本时使用的语音服务商。",
     "en": "Voice providers used when you click the mic or send text that the agent should speak back."
   },
+  "settings.voiceMode": {
+    "zh": "语音模式",
+    "en": "Voice mode"
+  },
+  "settings.voiceModeHint": {
+    "zh": "回答只保留要点，并自动朗读",
+    "en": "Replies keep the essentials only, and are read aloud"
+  },
+  "settings.pickVoice": {
+    "zh": "音色（可选）",
+    "en": "Voice (pick any)"
+  },
+  "settings.voiceAuto": {
+    "zh": "自动（跟回答语言一致）",
+    "en": "Automatic (matches the reply's language)"
+  },
+  "settings.voiceGroupServer": {
+    "zh": "在线神经音色",
+    "en": "Online neural voices"
+  },
+  "settings.voiceGroupBrowser": {
+    "zh": "本机音色",
+    "en": "This machine's voices"
+  },
+  "settings.previewVoice": {
+    "zh": "试听",
+    "en": "Preview"
+  },
+  "settings.speechRate": {
+    "zh": "语速",
+    "en": "Speed"
+  },
+  "settings.speechPitch": {
+    "zh": "音调",
+    "en": "Pitch"
+  },
+  "settings.speechVolume": {
+    "zh": "音量",
+    "en": "Volume"
+  },
+  "settings.voiceListFailed": {
+    "zh": "音色列表加载失败，改用本机音色",
+    "en": "Could not load the voice list; using this machine's voices"
+  },
   "settings.whisperRequiresFasterWhisper": {
     "zh": "Whisper（需要 faster-whisper）",
     "en": "Whisper (requires faster-whisper)"

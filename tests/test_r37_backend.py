@@ -165,7 +165,7 @@ def test_chat_endpoint_runs_coder_once(monkeypatch):
 
     # Mock the coder to return a fixed reply. R38.6.3: the route calls
     # ``coder.chat()`` (single LLM turn), not ``coder.run()``.
-    async def fake_chat(task):
+    async def fake_chat(task, *, voice_mode=False):
         return "Sure, here's what I think."
     project.coder.chat = fake_chat
 
@@ -194,7 +194,7 @@ def test_chat_endpoint_persists_the_user_message(monkeypatch):
     orch, project = _make_mock_orch()
     orch._db = db
 
-    async def fake_chat(task):
+    async def fake_chat(task, *, voice_mode=False):
         return "pong"
     project.coder.chat = fake_chat
 
@@ -264,7 +264,7 @@ def test_chat_endpoint_500_on_coder_failure(monkeypatch):
     from api.routes import projects as projects_route
     orch, project = _make_mock_orch()
 
-    async def boom(task):
+    async def boom(task, *, voice_mode=False):
         raise RuntimeError("LLM down")
     project.coder.chat = boom
 

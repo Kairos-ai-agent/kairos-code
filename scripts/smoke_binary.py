@@ -241,6 +241,31 @@ def main() -> int:
         if not ok:
             return report(detail)
 
+        # Voice mode: the same lesson once more. A binary frozen without the
+        # `tts` extra still serves the picker and still answers every other
+        # check here — it simply cannot speak, and quietly falls back to the
+        # browser's voices, which reads as a design choice rather than the
+        # packaging mistake it is. So ask the engine, and require the packaged
+        # build to have one.
+        code, body = get(f"{base}/api/voice/status")
+        if code != 200:
+            return report(f"/api/voice/status -> {code} {body[:200]}")
+        voice_status = json.loads(body)
+        code, body = get(f"{base}/api/voice/voices")
+        try:
+            voice_count = len((json.loads(body) or {}).get("voices") or [])
+        except Exception:  # noqa: BLE001
+            voice_count = 0
+        if code != 200 or voice_count == 0:
+            return report(f"/api/voice/voices -> {code} with {voice_count} voices")
+        print(f"[smoke] voice: engine={voice_status.get('engine')} "
+              f"available={voice_status.get('available')} voices={voice_count}")
+        if not args.installed and not voice_status.get("available"):
+            return report(
+                "the packaged binary has no speech engine — the `tts` extra was "
+                "not installed when it was frozen, so voice mode can only fall "
+                "back to the browser's voices")
+
         print("PASS: the frozen binary serves the UI and its API")
         return 0
     finally:

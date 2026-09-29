@@ -160,7 +160,12 @@ jobs:
           # app that listed servers it could not start and spent 60 seconds of
           # every launch waiting for them to time out. It builds fine locally
           # because a development venv usually has the extra already.
-          pip install ".[mcp]" pyinstaller
+          #
+          # `tts` for the same reason: voice mode is the synthesis engine, and a
+          # binary without it can only fall back to the browser's own voices.
+          # `tts` (not `voice`) because the speech-*in* half would drag a model
+          # runtime into the executable.
+          pip install ".[mcp,tts]" pyinstaller
 
       - name: Freeze a standalone executable
         run: python scripts/build_binary.py --out dist

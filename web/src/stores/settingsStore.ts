@@ -5,6 +5,8 @@ export type CoderMode = 'default' | 'read_only' | 'sandbox';
 
 export type TtsProvider = 'mock' | 'edge';
 export type SttProvider = 'mock' | 'whisper';
+/** Where speech comes from: the app's engine, the browser's, or try then fall back. */
+export type VoiceEngine = 'auto' | 'server' | 'browser';
 
 // R37: LLM provider is now exclusively one of two custom endpoints
 // (OpenAI-compatible or Anthropic-compatible). The "ollama /
@@ -14,10 +16,25 @@ export type LlmProvider = 'openai' | 'anthropic';
 
 export interface VoiceSettings {
   ttsProvider: TtsProvider;
+  /** Engine voice name. Empty means "pick one that matches the reply's language". */
   ttsVoice: string;
   sttProvider: SttProvider;
   sttLanguage: string;
+  /** Read new replies aloud. Voice mode turns this on. */
   autoPlay: boolean;
+  /**
+   * Voice mode: the agent writes for the ear — short, no Markdown — and its
+   * replies are spoken. The flag is sent with each message, so the agent knows
+   * to answer briefly instead of the interface trimming a wall of text.
+   */
+  voiceMode: boolean;
+  /** Percent, -90..200. 0 keeps the engine's own pace. */
+  rate: number;
+  /** Hertz, -100..100. 0 keeps the engine's own pitch. */
+  pitch: number;
+  /** Percent, -100..100. */
+  volume: number;
+  engine: VoiceEngine;
 }
 
 export interface McpSettings {
@@ -105,10 +122,18 @@ const DEFAULT: Omit<SettingsState,
   coderMode: 'default',
   voice: {
     ttsProvider: 'edge',
-    ttsVoice: 'en-US-AriaNeural',
+    // Empty on purpose: the server then picks a voice that matches the reply's
+    // own language, so a Chinese answer is not read by an English voice. The
+    // voice picker overrides it.
+    ttsVoice: '',
     sttProvider: 'mock',
     sttLanguage: 'en',
     autoPlay: false,
+    voiceMode: false,
+    rate: 0,
+    pitch: 0,
+    volume: 0,
+    engine: 'auto',
   },
   mcp: {
     enabledServers: ['filesystem'],
@@ -147,7 +172,13 @@ export const useSettingsStore = create<SettingsState>()(
       openDrawer: () => set({ drawerOpen: true }),
       closeDrawer: () => set({ drawerOpen: false }),
       setCoderMode: (m) => set({ coderMode: m }),
-      setVoice: (patch) => set((s) => ({ voice: { ...s.voice, ...patch } })),
+      setVoice: (patch) => set((s) => {
+        const next = { ...s.voice, ...patch };
+        // Voice mode means "write for the ear *and* speak it". Switching it on
+        // sets the speaking switch too, so the two cannot disagree.
+        if (patch.voiceMode) next.autoPlay = true;
+        return { voice: next };
+      }),
       setMcp: (patch) => set((s) => ({ mcp: { ...s.mcp, ...patch } })),
       setCloud: (patch) => set((s) => ({ cloud: { ...s.cloud, ...patch } })),
       setMetrics: (patch) => set((s) => ({ metrics: { ...s.metrics, ...patch } })),
@@ -165,7 +196,16 @@ export const useSettingsStore = create<SettingsState>()(
       // explicit state.
       name: 'kairos-settings',
       storage: createJSONStorage(() => localStorage),
-      version: 1,
+      version: 2,
+      // v1 persisted a hard-coded English default voice, which reads a Chinese
+      // answer in English. Empty now means "match the reply's language", so
+      // only the untouched default is migrated — a voice the user chose stays.
+      migrate: (persisted: any, from: number) => {
+        if (from < 2 && persisted?.voice?.ttsVoice === 'en-US-AriaNeural') {
+          persisted.voice.ttsVoice = '';
+        }
+        return persisted;
+      },
       // partialize: only persist the user-configurable sections.
       // Live UI state (`drawerOpen`) is excluded — that should
       // always start closed on reload. `coderMode` is also

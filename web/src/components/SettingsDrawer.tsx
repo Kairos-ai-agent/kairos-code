@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Drawer, Tabs, Select, Switch, Input, Button, Divider, Tag, Space, Typography, message, Spin, Alert, Modal, App as AntdApp } from 'antd';
+import { Drawer, Tabs, Select, Switch, Input, Button, Divider, Tag, Space, Typography, message, Spin, Alert, Modal, Slider, App as AntdApp } from 'antd';
 import {
   SettingOutlined,
   CodeOutlined,
@@ -21,7 +21,8 @@ import { useSettingsStore, CoderMode, TtsProvider, SttProvider, LlmProvider, Pro
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import { LLM_PRESETS, LLMPreset, matchPreset, getPreset, CUSTOM_MODEL } from '../llm/presets';
-import api from '../api/client';
+import api, { getVoices, VoiceOption } from '../api/client';
+import { speak, stopSpeaking, browserVoices } from '../lib/voicePlayback';
 import { formatError } from '../utils/formatError';
 import { openFeedbackIssue } from '../utils/feedback';
 
@@ -139,8 +140,118 @@ const VoicePanel: React.FC = () => {
   const voice = useSettingsStore((s) => s.voice);
   const setVoice = useSettingsStore((s) => s.setVoice);
 
+  // The picker's sources. The server's list is the point of "pick any voice" —
+  // ~300 neural names, far more than any one machine ships. The browser's own
+  // voices are a second group so the picker still works with no engine and no
+  // network, which is also the path a locked-down install falls back to.
+  const [server, setServer] = useState<VoiceOption[]>([]);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [browser, setBrowser] = useState<VoiceOption[]>(() => browserVoices());
+  const [previewing, setPreviewing] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    getVoices()
+      .then((r) => {
+        if (!alive) return;
+        setServer(r.voices || []);
+        setLoadFailed(false);
+      })
+      .catch(() => {
+        if (alive) setLoadFailed(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Chrome fills its voice list asynchronously. Without this the "this machine"
+  // group is empty the first time the drawer is opened.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    const sync = () => setBrowser(browserVoices());
+    sync();
+    window.speechSynthesis.addEventListener?.('voiceschanged', sync);
+    return () => window.speechSynthesis.removeEventListener?.('voiceschanged', sync);
+  }, []);
+
+  // Grouped by language, because a flat list of ~300 names is a wall.
+  const options = useMemo(() => {
+    const groups = new Map<string, { value: string; label: string }[]>();
+    for (const v of server) {
+      const key = v.locale || 'other';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push({
+        value: v.name,
+        label: `${v.friendly || v.name}${v.gender ? ` · ${v.gender}` : ''}`,
+      });
+    }
+    const list: { label: string; options: { value: string; label: string }[] }[] = [
+      {
+        label: t('settings.voiceGroupServer'),
+        options: [{ value: '', label: t('settings.voiceAuto') }],
+      },
+    ];
+    for (const [locale, vs] of [...groups.entries()].sort()) {
+      list.push({ label: locale, options: vs });
+    }
+    if (browser.length) {
+      list.push({
+        label: t('settings.voiceGroupBrowser'),
+        options: browser.map((v) => ({
+          value: `browser:${v.name}`,
+          label: `${v.friendly}${v.locale ? ` · ${v.locale}` : ''}`,
+        })),
+      });
+    }
+    return list;
+  }, [server, browser, t]);
+
+  // An empty name means "let the engine match the reply's language". Picking a
+  // browser voice switches the engine with it, so the two controls cannot
+  // disagree and send a browser name to the server (which would just 502).
+  const value = voice.engine === 'browser' && voice.ttsVoice
+    ? `browser:${voice.ttsVoice}`
+    : voice.ttsVoice;
+
+  const onPickVoice = (picked: string) => {
+    if (picked.startsWith('browser:')) {
+      setVoice({ ttsVoice: picked.slice('browser:'.length), engine: 'browser' });
+    } else {
+      setVoice({ ttsVoice: picked, engine: 'auto' });
+    }
+  };
+
+  const sample = /zh|ja|ko|yue/i.test(voice.ttsVoice || '')
+    ? '你好，我是 Kairos。语音模式已开启。'
+    : 'Hello, this is Kairos. Voice mode is on.';
+
+  const preview = async () => {
+    setPreviewing(true);
+    try {
+      await speak(sample, {
+        voice: voice.ttsVoice, rate: voice.rate, pitch: voice.pitch,
+        volume: voice.volume, engine: voice.engine,
+      });
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
   return (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <Text style={{ color: tokens.labelPrimary }}>{t('settings.voiceMode')}</Text>
+          <div style={{ color: tokens.labelTertiary, fontSize: 11 }}>
+            {t('settings.voiceModeHint')}
+          </div>
+        </div>
+        <Switch
+          checked={voice.voiceMode}
+          onChange={(checked) => setVoice({ voiceMode: checked })}
+        />
+      </div>
       <Text style={{ color: tokens.labelSecondary }}>
         {t('settings.voiceProvidersUsedWhenYouClickTheMicOrSendTextTh')}
       </Text>
@@ -157,16 +268,53 @@ const VoicePanel: React.FC = () => {
         />
       </div>
       <div>
-        <Text style={{ color: tokens.labelPrimary }}>{t('settings.ttsVoice')}</Text>
-        <Input
-          style={{ marginTop: 4 }}
-          value={voice.ttsVoice}
-          onChange={(e) => setVoice({ ttsVoice: e.target.value })}
-          placeholder={t('settings.eGEnUSAriaNeuralZhCNXiaoxiaoNeural')}
+        <Text style={{ color: tokens.labelPrimary }}>{t('settings.pickVoice')}</Text>
+        <Select
+          style={{ width: '100%', marginTop: 4 }}
+          value={value}
+          showSearch
+          optionFilterProp="label"
+          onChange={onPickVoice}
+          options={options as never}
+          placeholder={t('settings.voiceAuto')}
         />
-        <Text style={{ color: tokens.labelTertiary, fontSize: 11 }}>
-          {t('settings.commonVoicesEnUSAriaNeuralZhCNXiaoxiaoNeuralJaJP')}
-        </Text>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+          <Button size="small" onClick={preview} loading={previewing}>
+            {t('settings.previewVoice')}
+          </Button>
+          {loadFailed && (
+            <Text style={{ color: tokens.labelTertiary, fontSize: 11 }}>
+              {t('settings.voiceListFailed')}
+            </Text>
+          )}
+        </div>
+      </div>
+      <div>
+        <Text style={{ color: tokens.labelPrimary }}>{t('settings.speechRate')}</Text>
+        <Slider
+          min={-90}
+          max={200}
+          value={voice.rate}
+          onChange={(v) => setVoice({ rate: v as number })}
+        />
+      </div>
+      <div>
+        <Text style={{ color: tokens.labelPrimary }}>{t('settings.speechPitch')}</Text>
+        <Slider
+          min={-100}
+          max={100}
+          value={voice.pitch}
+          onChange={(v) => setVoice({ pitch: v as number })}
+        />
+      </div>
+      <div>
+        <Text style={{ color: tokens.labelPrimary }}>{t('settings.speechVolume')}</Text>
+        <Slider
+          min={-100}
+          max={100}
+          value={voice.volume}
+          onChange={(v) => setVoice({ volume: v as number })}
+        />
       </div>
       <div>
         <Text style={{ color: tokens.labelPrimary }}>{t('settings.sttProvider')}</Text>

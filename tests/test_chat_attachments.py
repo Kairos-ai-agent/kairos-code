@@ -45,7 +45,7 @@ class _FakeCoder:
     def __init__(self) -> None:
         self.seen: list[str] = []
 
-    async def chat(self, text: str) -> str:
+    async def chat(self, text: str, *, voice_mode: bool = False) -> str:
         self.seen.append(text)
         return "ok"
 

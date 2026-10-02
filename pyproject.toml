@@ -82,6 +82,8 @@ cloud = ["boto3>=1.34"]
 llm = ["litellm>=1.40"]
 telemetry = ["opentelemetry-api>=1.20", "opentelemetry-sdk>=1.20"]
 daemon = ["psutil>=5.9"]
+# 企业微信「自建应用」回调的 AES-256-CBC 加解密（pycryptodome 亦可）。
+wecom = ["cryptography>=41"]
 # Everything needed to run the test suite the way CI does.
 dev = [
     "pytest>=8.0",
@@ -94,6 +96,8 @@ dev = [
     "textual>=0.80,<1.0",
     "prometheus-client>=0.20.0",
     "mcp[cli]>=1.0.0",
+    # 企业微信通道测试需要 AES-256-CBC 后端（生产可换 pycryptodome）。
+    "cryptography>=41",
 ]
 all = [
     "kairos-code[ollama,dashscope,zhipuai,tui,metrics,mcp,voice,memory,browser,cloud,llm,telemetry,daemon]",

@@ -48,6 +48,10 @@ from kairos.browser import BrowserManager, set_default_manager
 from api.routes import feishu as feishu_routes
 from kairos.feishu import (FeishuBindingStore, FeishuBot,
                              FeishuEventForwarder)
+# R38.6 §35: 企业微信「自建应用」双向通道（收消息回调 + 主动发送）。
+from api.routes import wecom as wecom_routes
+from kairos.wecom import (WeComBindingStore, WeComBot, WeComConfig,
+                          WeComEventForwarder)
 # R38.6 §34: Borrowed features from top AI agents (Plan Mode,
 # Approval, Hooks, Skills invoke, Sandbox, Session Fork, IM
 # platforms, FTS5 memory, more LLM providers).
@@ -68,6 +72,8 @@ _browser_manager: BrowserManager | None = None
 _feishu_bot: FeishuBot | None = None
 _feishu_store: FeishuBindingStore | None = None
 _feishu_forwarder: FeishuEventForwarder | None = None
+# R38.6 §35: WeCom self-built-app forwarder (agent events → a member).
+_wecom_forwarder: WeComEventForwarder | None = None
 # Per-account IM store; None until the lifespan wires it.
 _im_store: IMAccountStore | None = None
 
@@ -176,6 +182,37 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # noqa: BLE001
         log.warning("Feishu setup failed: %s", exc)
 
+    # R38.6 §35: 企业微信自建应用。配置由 settings_store 持有；这里
+    # 只把 bot / 绑定表 / 事件转发器建起来并注入路由。转发器只在用户
+    # 启用后启动（它需要收件人 UserID，未启用时无需空转）。
+    global _wecom_forwarder
+    try:
+        from kairos.config.settings import settings as kairos_settings
+        from kairos.settings_store import get_store as _get_settings
+        wecom_db = kairos_settings.data_dir / "wecom.db"
+        _wecom_bindings = WeComBindingStore(db_path=wecom_db)
+        await _wecom_bindings.init()
+        w = _get_settings().get().wecom
+        _wecom_cfg = WeComConfig(
+            corp_id=w.corp_id, corp_secret=w.corp_secret,
+            agent_id=w.agent_id, token=w.token,
+            encoding_aes_key=w.encoding_aes_key, enabled=w.enabled)
+        _wecom_bot = WeComBot(config=_wecom_cfg)
+        _wecom_forwarder = WeComEventForwarder(bot=_wecom_bot)
+        if _wecom_cfg.enabled:
+            try:
+                _wecom_forwarder.attach(orchestrator.message_bus)
+                await _wecom_forwarder.start()
+            except Exception as exc:  # noqa: BLE001
+                log.debug("wecom forwarder bus attach failed: %s", exc)
+        wecom_routes.set_dependencies(
+            bot=_wecom_bot, bindings=_wecom_bindings,
+            forwarder=_wecom_forwarder,
+        )
+        log.info("WeCom self-app integration ready (R38.6 §35)")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("WeCom setup failed: %s", exc)
+
     # Per-account IM: the account / binding / queue store the
     # connectors talk to. No connector runs here -- they live
     # outside the repository and authenticate as one account each.
@@ -236,6 +273,11 @@ async def lifespan(app: FastAPI):
     if _feishu_forwarder is not None:
         try:
             await _feishu_forwarder.stop()
+        except Exception:  # noqa: BLE001
+            pass
+    if _wecom_forwarder is not None:
+        try:
+            await _wecom_forwarder.stop()
         except Exception:  # noqa: BLE001
             pass
     log.info("Shutting down: closing LLM provider clients...")
@@ -355,6 +397,8 @@ app.include_router(gate_router, prefix="/api/projects", tags=["gate"])
 app.include_router(browser_routes.router, tags=["browser"])
 # R38.6 §33: Feishu (Lark) bot — push notifications + remote commands
 app.include_router(feishu_routes.router, tags=["feishu"])
+# R38.6 §35: 企业微信自建应用 — 回调收消息 + 主动发送
+app.include_router(wecom_routes.router, tags=["wecom"])
 app.include_router(im_routes.router, tags=["im"])
 # R38.6 §34: Borrowed features — Plan / Approval / Hooks / Skills /
 # Sandbox / Fork / IM / Memory / Providers

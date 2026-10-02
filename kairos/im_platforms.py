@@ -48,6 +48,13 @@ class IMConfig:
     dingtalk_secret: str = ""        # optional signing
     # WeCom (group robot)
     wecom_webhook: str = ""
+    # WeCom (self-built app, two-way) — R38.6 §35. The 5 values the user
+    # copies out of the 企业微信 admin console; see kairos/wecom.py.
+    wecom_corp_id: str = ""
+    wecom_corp_secret: str = ""
+    wecom_agent_id: str = ""
+    wecom_token: str = ""
+    wecom_encoding_aes_key: str = ""
     # Slack (incoming webhook)
     slack_webhook: str = ""
     # Telegram (bot API)
@@ -232,8 +239,23 @@ async def send_to_platform(platform: str, cfg: IMConfig,
     if platform == "dingtalk" and cfg.dingtalk_webhook:
         return await dingtalk_send(
             cfg.dingtalk_webhook, text, cfg.dingtalk_secret)
-    if platform == "wecom" and cfg.wecom_webhook:
-        return await wecom_send(cfg.wecom_webhook, text)
+    if platform == "wecom":
+        # Prefer the self-built app when its credentials are present: it
+        # can address a specific member (chat_id = 企业微信 UserID), which
+        # the group-robot webhook cannot.
+        if cfg.wecom_corp_id and cfg.wecom_agent_id:
+            from kairos.wecom import WeComBot, WeComConfig
+            bot = WeComBot(WeComConfig(
+                corp_id=cfg.wecom_corp_id,
+                corp_secret=cfg.wecom_corp_secret,
+                agent_id=cfg.wecom_agent_id,
+                token=cfg.wecom_token,
+                encoding_aes_key=cfg.wecom_encoding_aes_key,
+                enabled=True,
+            ))
+            return await bot.send_text(chat_id, text)
+        if cfg.wecom_webhook:
+            return await wecom_send(cfg.wecom_webhook, text)
     if platform == "slack" and cfg.slack_webhook:
         return await slack_send(cfg.slack_webhook, text)
     if platform == "telegram" and cfg.telegram_bot_token:

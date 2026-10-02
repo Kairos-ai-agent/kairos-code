@@ -82,6 +82,24 @@ class MetricsSettings:
 
 
 @dataclass
+class WeComSettings:
+    """企业微信「自建应用」双向通道配置 (R38.6 §35).
+
+    只保存用户在企业微信后台创建自建应用时得到的 5 个值 + 一个启用
+    开关，全部不硬编码。``corp_secret`` / ``token`` /
+    ``encoding_aes_key`` 是敏感值：读取配置的 API 必须脱敏后再返回，
+    也绝不能写进日志。字段名与 ``kairos/wecom.py:WeComConfig`` 对齐，
+    方便互相映射。
+    """
+    corp_id: str = ""
+    corp_secret: str = ""
+    agent_id: str = ""
+    token: str = ""
+    encoding_aes_key: str = ""
+    enabled: bool = False
+
+
+@dataclass
 class OpenAIProviderConfig:
     """R37+: per-provider config (OpenAI-compatible).
 
@@ -114,6 +132,9 @@ class Settings:
     cloud: CloudSettings = field(default_factory=CloudSettings)
     metrics: MetricsSettings = field(default_factory=MetricsSettings)
     updates: UpdateSettings = field(default_factory=UpdateSettings)
+    # R38.6 §35: 企业微信自建应用双向通道。5 个凭据 + 启用开关，
+    # 由 /api/wecom/config 写入、由回调路由读取。
+    wecom: WeComSettings = field(default_factory=WeComSettings)
     ollama_base_url: str = ""          # http://127.0.0.1:11434 by default
     # New: free-form provider config keyed by model name. Used by
     # the cost / provider system to look up the API key env var.
@@ -339,6 +360,9 @@ def _to_dict(s: Settings) -> dict:
         "cloud": asdict(s.cloud),
         "metrics": asdict(s.metrics),
         "updates": asdict(s.updates),
+        # R38.6 §35: 企业微信自建应用配置（含敏感值，落盘在 data/，
+        # 不回显、不打日志；GET /api/wecom/config 会脱敏）。
+        "wecom": asdict(s.wecom),
         "ollama_base_url": s.ollama_base_url,
         "provider_env_map": dict(s.provider_env_map),
         "active_provider": s.active_provider,
@@ -374,6 +398,17 @@ def _from_dict(d: dict) -> Settings:
     cloud = CloudSettings(**(d.get("cloud") or {}))
     metrics = MetricsSettings(**(d.get("metrics") or {}))
     updates = UpdateSettings(**(d.get("updates") or {}))
+    # R38.6 §35: 企业微信配置。只取已知字段，避免旧文件里出现未知键
+    # 时把整个 settings 加载搞崩。
+    wecom_raw = d.get("wecom") or {}
+    wecom = WeComSettings(
+        corp_id=str(wecom_raw.get("corp_id") or ""),
+        corp_secret=str(wecom_raw.get("corp_secret") or ""),
+        agent_id=str(wecom_raw.get("agent_id") or ""),
+        token=str(wecom_raw.get("token") or ""),
+        encoding_aes_key=str(wecom_raw.get("encoding_aes_key") or ""),
+        enabled=bool(wecom_raw.get("enabled", False)),
+    )
     # Provider panel: prefer nested ``provider`` object; fall back to
     # the flat ``active_provider`` field (older settings.json files).
     nested_provider = d.get("provider") or {}
@@ -393,6 +428,7 @@ def _from_dict(d: dict) -> Settings:
     )
     return Settings(
         voice=voice, mcp=mcp, cloud=cloud, metrics=metrics, updates=updates,
+        wecom=wecom,
         ollama_base_url=str(d.get("ollama_base_url", "")),
         provider_env_map=dict(d.get("provider_env_map") or {}),
         active_provider=str(

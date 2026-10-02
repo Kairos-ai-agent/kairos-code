@@ -93,3 +93,9 @@ gate-report-*.html
 # Written by scripts/im_connector_sim.py pair: a live account secret,
 # deliberately kept out of the tree.
 .im-connector-secret.json
+
+# The WeChat connector is local-only, on purpose. It injects into one
+# specific desktop client build and carries that client's login state, so
+# neither it nor the secret file it writes belongs in the public tree.
+# (tests/test_wechat_connector.py skips when it is absent.)
+connectors/

@@ -8,7 +8,45 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- **`code_search`: 让 agent 按「意思」找代码，而不是靠 grep 猜关键字。**
+- **长会话不再「死于上下文」：超限自动压缩重试、旧工具结果按需回收、子代理改回摘要。**
+  上下文是 agent 唯一真正稀缺的资源，而这轮之前 Kairos 在它上面有三处硬伤：
+  ① 提供方回答 `400 prompt is too long` 时异常直接抛出、整个 run 以「Error: ...」
+  结束——对方明明已经告诉我们哪里不对；② 几十轮前的工具原始输出仍然每一轮都在
+  花 token，而它对当前推理几乎已无价值；③ 子代理花几万 token 探索回来，父 agent
+  拿到的是**硬截断的前 5000 字符**，那不是摘要，只是碰巧排在前面的一段。
+
+  - **超限即压缩重试。** 新增 `kairos/llm/errors.is_context_length_error()` 识别
+    各家各种写法的「太长」（`context_length_exceeded`、`prompt is too long`、
+    `maximum context length`、HTTP 413……，也能看穿 `ResilientProvider` 的重试包装）。
+    run 循环与 chat 路径收到它之后各重试一次：把 token 预算减半（下限 8k，让
+    `_truncate_memory` 从此更克制）、立刻重生成 running summary，再用
+    `shrink_for_overflow()` 构造一个**严格更小**的请求。第二次仍被拒才照常报错。
+    非超限错误（连接重置、401、429）行为完全不变。
+  - **旧工具结果清理（最轻量的压缩）。** 新增 `kairos/context_governor.py`：组装
+    请求时把最近 4 条以外的 `role="tool"` 消息正文换成一行占位说明，`tool_call_id`
+    与 `name` 原样保留，因此工具调用配对不受影响。**纯函数、不改动已存记忆**——
+    会话仍留着全文，随时可以重跑工具或再读一次；这也是它能每一轮都做、而不必等到
+    着火才做的原因。
+  - **子代理改为「带回结论，原文留在磁盘」。** `spawn_subagent` 的结果先用父
+    agent 自己的模型蒸馏成结论式摘要（保留答案、文件:行号、命令、未决问题；丢弃
+    过程叙述），完整报告写到 `<data_dir>/subagent_outputs/<child>.md` 并把路径一并
+    返回，需要细节时按需读取。落盘前过 `sentinel.redact()`，旧报告按 14 天 /
+    200 份自动清理。短结果直接透传（不做无意义的一次 round-trip），蒸馏失败则
+    退回原来的定长截断——只会比过去更好。
+  - **修复：循环器里的 compaction 从来没有真正跑过。** `loop_runner.py` 以
+    `maybe_compact(msgs, rounds=...)` 调用并解包成两个返回值，而该函数的签名是
+    `maybe_compact(history, *, threshold, keep_recent)`、返回单个列表——每次调用都
+    抛 `TypeError`，被外层 `except` 吞成 debug 日志，算出的结果也被丢弃。现在由
+    agent 自己的 `compact_now()` 承担（run 循环里另一个 LLM 就在手边），返回值明确
+    表示是否真的压缩了，日志级别也从 debug 提到 info。
+  - `compact_now()` / `_maybe_summarize_memory(force=)` / `maybe_compact()` 三层都
+    承诺**永不抛出**：压缩是优化，一个能把长循环杀掉的优化是 bug。
+  - 新增 4 个离线测试文件（34 项）：`test_context_governor.py`、
+    `test_overflow_recovery.py`（假的「窗口很小」提供方，重试若不更小会再次被拒，
+    因此这些测试**不可能**在没有真压缩的情况下通过）、`test_subagent_distill.py`、
+    `test_compact_now.py`。
+
+- **`code_search`：让 agent 按「意思」找代码，而不是靠 grep 猜关键字。**
   agent 探索代码库一直是 grep + read——先猜一个标识符，再整篇整篇读文件。知道
   名字时又快又准，不知道时又贵又慢。新增的 `code_search` 工具用 MIT 许可的
   [semble](https://github.com/MinishLab/semble)（纯 CPU、无 API key、无需 GPU 的

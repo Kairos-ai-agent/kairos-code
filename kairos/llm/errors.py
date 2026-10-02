@@ -41,6 +41,53 @@ _AUTH_HINT = (
     "provider.apiKeyEnv"
 )
 
+# --- Context-window exhaustion ------------------------------------------------
+#
+# Every provider reports "your request is bigger than my window" its own way,
+# and the wording changes with the model. Kairos needs to recognise it because
+# the correct response is NOT to fail: it is to compact and try again (see
+# kairos.context_governor). A missed match means a dead session, so the marker
+# list errs wide — a false positive only costs one wasted compaction attempt.
+_CONTEXT_LENGTH_MARKERS = (
+    "context_length_exceeded",
+    "context length exceeded",
+    "maximum context length",
+    "max context length",
+    "exceeds the maximum",
+    "prompt is too long",
+    "prompt too long",
+    "input is too long",
+    "too many tokens",
+    "too many total tokens",
+    "reduce the length of the messages",
+    "reduce your prompt",
+    "request entity too large",
+    "string too long",
+    "context window",
+)
+
+
+def is_context_length_error(exc: BaseException) -> bool:
+    """True when *exc* means "this request did not fit in the context window".
+
+    Works on the raw provider exception and on ``ResilientProvider``'s
+    ``RuntimeError("LLM call failed after N retries: <original>")`` wrapper,
+    because the wrapper keeps the original text in its message.
+    """
+    code = getattr(exc, "status_code", None)
+    if code is None:
+        code = getattr(getattr(exc, "response", None), "status_code", None)
+    if code == 413:
+        return True
+
+    body = _body_of(exc).lower()
+    if not any(marker in body for marker in _CONTEXT_LENGTH_MARKERS):
+        return False
+    # A 400 that names the context window is the canonical shape. Any other
+    # status (or none, e.g. the retry wrapper) still counts when the text is
+    # this specific — the cost of being wrong is one compaction round-trip.
+    return True
+
 
 def _body_of(exc: BaseException) -> str:
     """The response body if the exception carries one, else the exception text."""

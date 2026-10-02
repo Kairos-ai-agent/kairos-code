@@ -10,9 +10,17 @@ the model sees a stable, bounded context on subsequent rounds.
 The compaction strategy is intentionally simple — we don't ask
 the LLM to summarize (which would add latency + cost), we just
 keep the most recent N rounds verbatim and squish the older
-ones into a single digest record with score trend + key issues.
-The agent prompt can opt to read this digest instead of the
-full history.
+ones into a single digest record with score trend + key issues
++ the last few rounds' own conclusions. Semantic summarisation
+lives one layer up, in the agent's running summary
+(``KairosAgent._maybe_summarize_memory``); this module is the
+structural layer that must keep working even when nothing else
+does.
+
+:func:`maybe_compact` never raises: a fold that fails returns
+the history unchanged, because the caller is usually a loop
+that has already been running for a long time and must not be
+killed by its own housekeeping.
 
 Triggers:
   - :func:`maybe_compact` is called once per round; it
@@ -42,6 +50,10 @@ class CompactedDigest:
     issues_signature: List[str] = field(default_factory=list)
     last_approve: bool = False
     summary: str = ""
+    #: What the folded rounds actually did, newest last. Statistics say
+    #: whether the loop was converging; this says what it was working on, and
+    #: it is the part an agent needs to carry on after the round is gone.
+    work_log: list[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -85,11 +97,28 @@ def _issues_of(entry: Dict[str, Any]) -> List[str]:
     return sigs
 
 
+def _work_of(entry: dict[str, Any], limit: int = 240) -> str:
+    """One line describing what a round did, from the Coder's own output."""
+    text = entry.get("coder") or entry.get("summary") or ""
+    if not isinstance(text, str) or not text.strip():
+        return ""
+    collapsed = " ".join(text.split())
+    return collapsed[:limit] + (" …" if len(collapsed) > limit else "")
+
+
 def build_digest(rounds_to_compact: List[Dict[str, Any]]) -> CompactedDigest:
     """Fold *rounds_to_compact* into a single :class:`CompactedDigest`.
 
     Caller is responsible for choosing which rounds to fold (typically
     ``session.history[:-DEFAULT_KEEP_RECENT]``).
+
+    The digest is deliberately rule-based rather than LLM-written: it runs on
+    every fold, including inside a loop that is already under pressure, and a
+    summarisation call there would add latency and cost to the one path that
+    must never fail. The agent's own running summary (see
+    ``KairosAgent._maybe_summarize_memory``) covers the semantic side; this
+    keeps the structural facts and, since the folded rounds' own conclusions
+    are the thing most likely to be needed later, a short work log.
     """
     if not rounds_to_compact:
         return CompactedDigest(summary="(empty)")
@@ -109,12 +138,19 @@ def build_digest(rounds_to_compact: List[Dict[str, Any]]) -> CompactedDigest:
     top_sigs = sorted(sig_counter.items(), key=lambda x: -x[1])[:5]
     top_sig_list = [f"{sig}({n}x)" for sig, n in top_sigs]
 
+    # Keep the most recent conclusions verbatim-ish, newest last.
+    work_log = [w for w in (_work_of(e) for e in rounds_to_compact[-3:]) if w]
+
     avg = sum(scores) / n if n else 0.0
     summary = (
         f"Compacted {n} round(s): scores {min(scores):.0f}-{max(scores):.0f} "
         f"(avg {avg:.0f}), {approve_count} approved, "
         f"top issues: {', '.join(top_sig_list) or 'none'}"
     )
+    if work_log:
+        summary += "\nRecent work folded in:\n" + "\n".join(
+            f"- {w}" for w in work_log
+        )
     return CompactedDigest(
         rounds=n,
         rounds_covered=[int(e.get("round", 0)) for e in rounds_to_compact],
@@ -126,6 +162,7 @@ def build_digest(rounds_to_compact: List[Dict[str, Any]]) -> CompactedDigest:
         last_approve=bool(rounds_to_compact[-1].get("review", {}).get("approve", False))
             if rounds_to_compact else False,
         summary=summary,
+        work_log=work_log,
     )
 
 
@@ -148,22 +185,30 @@ def maybe_compact(
       - ``keep_recent >= len(history)`` → nothing to fold; return as-is
       - ``len(history) < threshold`` → no compaction; return as-is
 
-    Always returns a new list — never mutates the input.
+    Always returns a new list — never mutates the input, and never raises:
+    a fold that fails returns the history unchanged, which is exactly the
+    behaviour the caller would have had without compaction.
     """
     if not history or len(history) < threshold:
         return list(history)
     if keep_recent >= len(history):
         return list(history)
 
-    if keep_recent <= 0:
-        to_compact = list(history)
-        to_keep: list = []
-    else:
-        to_compact = history[:-keep_recent]
-        to_keep = history[-keep_recent:]
+    try:
+        if keep_recent <= 0:
+            to_compact = list(history)
+            to_keep: list = []
+        else:
+            to_compact = history[:-keep_recent]
+            to_keep = history[-keep_recent:]
 
-    digest = build_digest(to_compact)
-    return [digest.to_dict()] + list(to_keep)
+        digest = build_digest(to_compact)
+        return [digest.to_dict()] + list(to_keep)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "compaction failed (%s); returning history unchanged", exc,
+        )
+        return list(history)
 
 
 def compaction_stats(history: List[Dict[str, Any]]) -> Dict[str, Any]:

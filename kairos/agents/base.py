@@ -13,7 +13,13 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel
 
 from kairos.llm.base import LLMConfig, LLMMessage, LLMResponse, ToolCall
+from kairos.llm.errors import is_context_length_error
 from kairos.llm.provider_registry import create_provider
+from kairos.context_governor import (
+    DEFAULT_KEEP_RECENT_TOOL_RESULTS,
+    elide_old_tool_results,
+    shrink_for_overflow,
+)
 from kairos.core.message_bus import Message, MessageBus
 from kairos.sentinel import get_sentinel
 from kairos.taint import (TaintTracker, classify, current_tracker, mcp_server_of,
@@ -299,6 +305,11 @@ class KairosAgent:
         self._memory: List[LLMMessage] = []
         self._max_tokens = 80000  # Token budget
         self._keep_recent = 4     # Always keep last N messages
+        # How many of the newest tool results stay verbatim when the request
+        # is assembled. Older bodies are stubbed out (see
+        # kairos.context_governor) — they cost tokens on every request and
+        # have almost always been superseded by the agent's own summaries.
+        self._keep_recent_tool_results = DEFAULT_KEEP_RECENT_TOOL_RESULTS
 
         # the cloud task-Harness-style retained reasoning: a running summary of
         # older conversation turns is kept alongside the raw recent
@@ -765,16 +776,81 @@ class KairosAgent:
                     f"{self._memory_summary}"
                 ),
             ))
-        msgs.extend(self._sanitize_memory(self._memory))
+        msgs.extend(self._sanitize_memory(self._elided_memory()))
         return msgs
 
-    async def _maybe_summarize_memory(self, current_turn: int) -> None:
+    def _elided_memory(self) -> list[LLMMessage]:
+        """``self._memory`` with the older tool bodies stubbed out.
+
+        Elision happens on the way out, never on the stored list: the session
+        keeps every byte, so a later turn can still be answered from a tool
+        result that has scrolled out of the window. Returns the stored list
+        unchanged when there is nothing worth eliding.
+        """
+        elided, report = elide_old_tool_results(
+            self._memory, keep_recent=self._keep_recent_tool_results,
+        )
+        if report:
+            logger.debug(
+                "%s: context elision — %s", self.agent_id, report.summary(),
+            )
+        return elided
+
+    async def _recover_context_overflow(self, task: AgentTask | None = None) -> None:
+        """React to a provider that rejected the request as too large.
+
+        Called with the offending request already built. Two things happen:
+
+        1. the token budget is halved (floor 8k) so ``_truncate_memory``
+           drops more of the oldest turns from now on — the provider has
+           told us our estimate was wrong, and this is the cheapest way to
+           believe it;
+        2. the running summary is regenerated immediately instead of waiting
+           for the periodic trigger, so the turns that are about to be
+           dropped leave their conclusions behind.
+
+        Both steps are best-effort: recovery must never be the thing that
+        kills the run.
+        """
+        before = self._max_tokens
+        self._max_tokens = max(8000, self._max_tokens // 2)
+        logger.warning(
+            "%s: provider rejected the request as too long — compacting "
+            "and retrying (budget %d → %d)",
+            self.agent_id, before, self._max_tokens,
+        )
+        try:
+            await self.message_bus.publish(Message(
+                sender=self.agent_id,
+                topic="agent.progress",
+                content=(
+                    "Context window exceeded — compacting the conversation "
+                    "and retrying."
+                ),
+                msg_type="text",
+                metadata={"task_id": getattr(task, "id", ""),
+                          "reason": "context_overflow"},
+            ))
+        except Exception:
+            logger.debug("overflow notice publish failed", exc_info=True)
+        try:
+            self._truncate_memory()
+            await self._maybe_summarize_memory(self.current_turn or 1,
+                                               force=True)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("%s: compaction during recovery failed: %s",
+                           self.agent_id, exc)
+
+    async def _maybe_summarize_memory(self, current_turn: int,
+                                      force: bool = False) -> None:
         """Periodically condense the older memory into a running summary.
 
         Triggered every `_summarize_every_n` turns OR when memory has
-        grown past 80% of the token budget. The summary is *added to*
-        (not replaced) so we don't lose information between snapshots:
-        new turns contribute a delta on top of the prior summary.
+        grown past 80% of the token budget; `force=True` (used by
+        :meth:`compact_now` and by overflow recovery) skips both checks.
+        The summary is *added to* (not replaced) so we don't lose information
+        between snapshots: new turns contribute a delta on top of the prior
+        summary.
 
         We always keep the most recent `_keep_recent` messages verbatim
         so the model can reference the latest tool calls without having
@@ -790,7 +866,7 @@ class KairosAgent:
             self._count_tokens(m.content) for m in self._memory
         )
         over_budget = token_total > int(self._max_tokens * 0.8)
-        if current_turn < threshold_turn and not over_budget:
+        if not force and current_turn < threshold_turn and not over_budget:
             return
 
         # Pick the older half to compact. The most recent slice is
@@ -848,6 +924,49 @@ class KairosAgent:
                 "%s: memory summarization failed: %s",
                 self.agent_id, exc,
             )
+
+    async def compact_now(self, reason: str = "") -> bool:
+        """Compact the conversation on demand. Never raises.
+
+        The loop runner calls this every few rounds, and anything else that
+        wants to bound a long session can too. Two steps:
+
+        1. fold the older turns into the running summary *now* instead of
+           waiting for the periodic trigger — this is the LLM summary, and
+           it is what preserves conclusions once the raw turns are gone;
+        2. drop the oldest messages past the retention window, keeping the
+           recent turns and the summary.
+
+        Returns True when something was actually compacted. A failure is
+        logged and reported as False: compaction is an optimisation, and an
+        optimisation that can kill the run is a bug.
+        """
+        try:
+            before = len(self._memory)
+            await self._maybe_summarize_memory(
+                self._last_summarized_at_turn + self._summarize_every_n + 1,
+                force=True,
+            )
+            # Retention window: the summary carries what the dropped turns
+            # concluded, so this only has to keep enough raw material for the
+            # next few turns to work with.
+            keep = max(self._keep_recent * 4, 16)
+            if len(self._memory) > keep:
+                self._memory = self._memory[-keep:]
+            after = len(self._memory)
+            if after < before:
+                logger.info(
+                    "%s: compacted %d → %d messages%s",
+                    self.agent_id, before, after,
+                    f" ({reason})" if reason else "",
+                )
+                return True
+            return False
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "%s: compaction failed (non-fatal): %s", self.agent_id, exc,
+            )
+            return False
 
     async def run(self, task: AgentTask, plan_mode: bool = False) -> str:
         """Main agent loop with tool-calling support.
@@ -927,13 +1046,32 @@ class KairosAgent:
                 # Per-call timeout so a hung provider can't tie up the whole
                 # dispatch. asyncio.TimeoutError surfaces as a clear failure
                 # to the UI instead of an opaque 2-minute freeze.
-                try:
-                    response = await asyncio.wait_for(
-                        self._stream_complete(messages, tool_schemas, task, turn + 1),
-                        timeout=self._llm_timeout_s,
-                    )
-                except asyncio.TimeoutError:
-                    timed_out = True
+                #
+                # A "prompt is too long" rejection is retried once from a
+                # strictly smaller request instead of being reported. The
+                # provider is telling us how to succeed; an error path is
+                # only a failure path if we let it be one.
+                response = None
+                timed_out = False
+                for _attempt in range(2):
+                    try:
+                        response = await asyncio.wait_for(
+                            self._stream_complete(messages, tool_schemas, task, turn + 1),
+                            timeout=self._llm_timeout_s,
+                        )
+                        break
+                    except asyncio.TimeoutError:
+                        timed_out = True
+                        break
+                    except Exception as exc:
+                        if _attempt == 0 and is_context_length_error(exc):
+                            await self._recover_context_overflow(task)
+                            messages = shrink_for_overflow(
+                                self._build_messages()
+                            )[0]
+                            continue
+                        raise
+                if timed_out:
                     # This is a timeout, NOT a tool-call-limit: clear the
                     # sentinel so the post-loop block below doesn't overwrite
                     # our timeout message with "Tool call limit reached".
@@ -951,6 +1089,10 @@ class KairosAgent:
                                   "reason": "llm_timeout"},
                     ))
                     break
+                if response is None:
+                    raise RuntimeError(
+                        f"LLM call returned no response on turn {turn + 1}"
+                    )
 
                 # Store assistant response in memory (always, even if content is empty but has tool_calls)
                 self._memory.append(LLMMessage(
@@ -1320,24 +1462,38 @@ class KairosAgent:
         for turn in range(self.MAX_CHAT_TURNS):
             self.current_turn = turn + 1
             self._truncate_memory()
-            messages = [LLMMessage(role="system", content=chat_system)] + self._sanitize_memory(self._memory)
-            try:
-                with self._traced_llm_call(messages, tool_schemas) as _trace_span:
-                    response = await asyncio.wait_for(
-                        self._llm.complete(messages, tools=tool_schemas, temperature=self.temperature),
-                        timeout=self._llm_timeout_s,
+            messages = [LLMMessage(role="system", content=chat_system)] + self._sanitize_memory(self._elided_memory())
+            # Same overflow contract as the run loop: the provider saying
+            # "too long" buys one compaction + retry, not an error bubble.
+            response = None
+            for _attempt in range(2):
+                try:
+                    with self._traced_llm_call(messages, tool_schemas) as _trace_span:
+                        response = await asyncio.wait_for(
+                            self._llm.complete(messages, tools=tool_schemas, temperature=self.temperature),
+                            timeout=self._llm_timeout_s,
+                        )
+                    _trace_span.set_output(
+                        content=(response.content or "")[:500],
+                        prompt_tokens=response.usage.get("prompt_tokens", 0),
+                        completion_tokens=response.usage.get("completion_tokens", 0),
+                        finish_reason=response.finish_reason,
                     )
-                _trace_span.set_output(
-                    content=(response.content or "")[:500],
-                    prompt_tokens=response.usage.get("prompt_tokens", 0),
-                    completion_tokens=response.usage.get("completion_tokens", 0),
-                    finish_reason=response.finish_reason,
-                )
-            except asyncio.TimeoutError:
-                return (
-                    f"[chat timed out after {self._llm_timeout_s:.0f}s "
-                    f"on turn {turn + 1}/{self.MAX_CHAT_TURNS}]"
-                )
+                    break
+                except asyncio.TimeoutError:
+                    return (
+                        f"[chat timed out after {self._llm_timeout_s:.0f}s "
+                        f"on turn {turn + 1}/{self.MAX_CHAT_TURNS}]"
+                    )
+                except Exception as exc:
+                    if _attempt == 0 and is_context_length_error(exc):
+                        await self._recover_context_overflow()
+                        messages = shrink_for_overflow(
+                            [LLMMessage(role="system", content=chat_system)]
+                            + self._sanitize_memory(self._elided_memory())
+                        )[0]
+                        continue
+                    raise
 
             last_response = response
             self._memory.append(LLMMessage(role="assistant", content=response.content or "", tool_calls=response.tool_calls))

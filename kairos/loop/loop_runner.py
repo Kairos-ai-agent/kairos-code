@@ -990,29 +990,21 @@ async def run_loop(session, requirement, *, unbounded: bool = False):
         while not session.user_stopped and cap_check():
             session.round += 1
             round_no = session.round
-            # R38.6 §34: Claude-style three-layer context
-            # compression. When the agent's context grows past
-            # DEFAULT_THRESHOLD_ROUNDS (50), collapse the
-            # earlier turns into a digest so the LLM gets a
-            # compact summary instead of a 100k-token wall.
+            # Context governance between rounds.
+            #
+            # This block used to call kairos.compaction.maybe_compact() with a
+            # signature that does not exist ("rounds=", unpacked into two
+            # values) and then discard the result — so it raised TypeError on
+            # every call, got swallowed by the except below, and never
+            # compacted anything. The agent owns context governance now; its
+            # return value says whether anything actually changed.
             try:
                 if (session.coder and
                         round_no % 10 == 0 and
-                        hasattr(session.coder, "_memory") and
-                        session.coder._memory and
-                        len(session.coder._memory) > 30):
-                    from kairos.compaction import (
-                        maybe_compact, compaction_stats,
-                    )
-                    msgs = [{"role": m.role, "content": m.content}
-                            for m in session.coder._memory
-                            if hasattr(m, "role")]
-                    compacted, digest = maybe_compact(
-                        msgs, rounds=round_no)
-                    logger.info(
-                        "compaction: %d → %d msgs (digest %d chars)",
-                        len(msgs), len(compacted),
-                        len(digest) if digest else 0)
+                        hasattr(session.coder, "compact_now") and
+                        len(getattr(session.coder, "_memory", None) or []) > 30):
+                    if await session.coder.compact_now(f"round {round_no}"):
+                        logger.info("context compacted at round %d", round_no)
             except Exception as exc:
                 logger.debug("compaction skipped: %s", exc)
             try:

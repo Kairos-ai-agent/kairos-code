@@ -164,6 +164,15 @@ def main() -> int:
         "--collect-submodules", "mcp.server",
         "--collect-submodules", "mcp.client",
         "--collect-data", "kairos",
+        # code_search's backend (kairos/tools/code_search.py) imports semble
+        # lazily, and model2vec/vicinity load tokenizers and index internals
+        # through paths PyInstaller's static analysis does not follow. Collecting
+        # them whole is cheap insurance: without it the frozen app degrades to
+        # "semble is not installed" for that one tool while the source checkout
+        # keeps working — a failure that only shows up in the shipped binary.
+        "--collect-all", "semble",
+        "--collect-all", "model2vec",
+        "--collect-all", "vicinity",
         LAUNCHER.name,
     ]
 

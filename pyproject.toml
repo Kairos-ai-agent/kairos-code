@@ -53,6 +53,10 @@ dependencies = [
     # that happens at import time — meaning the server died on startup from a
     # clean install. Found by the first release dry run, on all three platforms.
     "python-multipart>=0.0.9",
+    # 微信 iLink 登录二维码：api/routes/weixin.py 用 segno 直接把二维码渲染成
+    # PNG（`GET /api/weixin/login/qr.png`），前端因此不用引入 QR 库。纯 Python、
+    # 无原生依赖；只在这里被懒导入，缺了也只让那一个接口 503。
+    "segno>=1.6",
 ]
 
 [project.optional-dependencies]

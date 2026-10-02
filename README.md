@@ -277,6 +277,8 @@ History lists one row per run, with the delta against the run before it:
 - Windows computer-use tools, speech-to-text / text-to-speech, Feishu & Slack
   webhooks, and a two-way 企业微信「自建应用」channel
   ([setup](docs/IM_WECOM.md))
+- 微信官方 ClawBot / iLink 通道：扫码登录 + 多账号隔离，纯 Python 原生实现
+  （无 OpenClaw / npm / Docker）([setup](docs/WEIXIN_ILINK.md))
 - **63-language UI**, RTL-aware, one locale per language
 
 ## Agent roles

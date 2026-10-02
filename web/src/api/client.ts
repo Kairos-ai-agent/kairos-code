@@ -250,3 +250,81 @@ export async function deleteImBinding(
   );
   return r.data;
 }
+
+// ---------------------------------------------------------------------------
+// WeChat (official ClawBot / iLink channel)
+// ---------------------------------------------------------------------------
+// This is the *native* WeChat channel, not a connector that lives outside the
+// app: `POST /api/weixin/login/start` opens a real scan-login against WeChat's
+// iLink gateway, and the server holds the bot token. The UI only ever sees the
+// QR (as a PNG the server renders) and the desensitized account list — the
+// token is never sent to the browser.
+
+/** A bound WeChat account. `id`/`account_id` are the same value; there is no
+ *  `token` field here by design. */
+export interface WeixinAccount {
+  id: string;
+  account_id?: string;
+  name: string;
+  user_id: string;
+  status: string; // online | offline | error
+  online?: boolean;
+  enabled?: boolean;
+  /** True while the server's long-poll loop for this account is running. */
+  running?: boolean;
+  last_error?: string;
+  created_at?: number;
+}
+
+/** The login QR plus the id to poll `login/status` with. The id comes from the
+ *  `X-Weixin-Qrcode` response header, so one GET gets both the image and the
+ *  handle — the panel never has to call `login/start` first. */
+export interface WeixinQr {
+  blob: Blob;
+  qrcode: string;
+}
+
+/** The login session's public state. Never contains the token. */
+export interface WeixinLoginState {
+  qrcode: string | null;
+  qrcode_url: string | null;
+  status: string;
+  connected: boolean;
+  already_connected?: boolean;
+  account_id?: string | null;
+  user_id?: string | null;
+  error?: string;
+  expired?: boolean;
+  need_verifycode?: boolean;
+}
+
+export async function weixinQrPng(qrcode?: string): Promise<WeixinQr> {
+  const r = await api.get('/weixin/login/qr.png', {
+    params: qrcode ? { qrcode } : {},
+    responseType: 'blob',
+  });
+  return {
+    blob: r.data as Blob,
+    qrcode: String(r.headers['x-weixin-qrcode'] || qrcode || ''),
+  };
+}
+
+export async function weixinLoginStatus(
+  qrcode: string,
+  verifyCode?: string,
+): Promise<WeixinLoginState> {
+  const r = await api.get('/weixin/login/status', {
+    params: { qrcode, ...(verifyCode ? { verify_code: verifyCode } : {}) },
+  });
+  return r.data;
+}
+
+export async function listWeixinAccounts(): Promise<{ accounts: WeixinAccount[] }> {
+  const r = await api.get('/weixin/accounts');
+  return r.data;
+}
+
+export async function deleteWeixinAccount(accountId: string): Promise<any> {
+  const r = await api.delete(`/weixin/accounts/${encodeURIComponent(accountId)}`);
+  return r.data;
+}

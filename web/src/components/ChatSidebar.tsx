@@ -46,6 +46,7 @@ import {
   SunOutlined, MoonOutlined, ShopOutlined,
   HistoryOutlined, DashboardOutlined, BranchesOutlined, SyncOutlined,
   FieldTimeOutlined, FileTextOutlined, AudioOutlined, ApiOutlined,
+  MobileOutlined,
 } from '@ant-design/icons';
 
 import { useChatStore } from '../stores/chatStore';
@@ -54,6 +55,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import { useT, type TFunc } from '../i18n';
 import { VoicePanel, RobotPanel } from './SettingsDrawer';
+import { WeixinDrawer } from './WeixinPanel';
 import api from '../api/client';
 import { formatError } from '../utils/formatError';
 import NewChatButton from './NewChatButton';
@@ -386,6 +388,10 @@ export const SidebarFooter: React.FC = () => {
   const mode = useThemeStore((s) => s.mode);
   const toggle = useThemeStore((s) => s.toggle);
   const openSettings = useSettingsStore((s) => s.openDrawer);
+  // The WeChat channel opens as a right-hand drawer (unlike voice/bots, which
+  // are popovers): its QR is something you hold a phone up to, and the account
+  // list grows, so it wants the full height of the window.
+  const [weixinOpen, setWeixinOpen] = useState(false);
 
   // Match the visual weight of the existing ProjectRow / SessionRow
   // buttons (padding 7px 10px, borderRadius 8, fontSize 13). This
@@ -541,6 +547,10 @@ export const SidebarFooter: React.FC = () => {
           {navRow('footer-bots', <ApiOutlined style={FOOTER_ICON} />,
                   t('settings.robot'), null)}
         </Popover>
+        {/* The native WeChat channel. Opens a drawer rather than a popover —
+            the QR has to be big, and the account list can grow. */}
+        {navRow('footer-weixin', <MobileOutlined style={FOOTER_ICON} />,
+                t('weixin.title'), null, () => setWeixinOpen(true))}
         {navRow('footer-settings', <SettingOutlined style={FOOTER_ICON} />,
                 t('common.settings'), null, openSettings)}
         <button
@@ -562,6 +572,8 @@ export const SidebarFooter: React.FC = () => {
           </span>
         </button>
       </NavGroup>
+
+      <WeixinDrawer open={weixinOpen} onClose={() => setWeixinOpen(false)} />
     </div>
   );
 };

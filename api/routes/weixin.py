@@ -1,0 +1,386 @@
+"""微信官方 ClawBot / iLink 通道的 HTTP 接口。
+
+路由一览::
+
+    POST   /api/weixin/login/start              取二维码（点一下出码）
+    GET    /api/weixin/login/status?qrcode=<id> 轮询扫码状态（扫码后自动建账号）
+    GET    /api/weixin/login/qr.png?qrcode=<id> 登录二维码 PNG（可扫；省略 qrcode 则现取一张）
+    GET    /api/weixin/accounts                 列出账号（脱敏，无 token）
+    DELETE /api/weixin/accounts/{id}            删除账号（停轮询 + 清数据）
+    POST   /api/weixin/accounts/{id}/send       用某账号主动发一条（测试用）
+    GET    /api/weixin/bindings                 列出 账号+聊天对象 → 项目 的绑定
+
+安全：``token`` 是密钥，本路由**绝不**把它放进任何响应（含错误响应），
+也不写日志。``/login/status`` 只回 :meth:`WeixinLoginSession.public_state`
+（结构里没有 token 字段）；``/accounts`` 用 ``WeixinAccount.to_dict()``。
+
+扫描登录的完整流：``login/start`` 拿到二维码 id 和图片内容（前端渲染成
+QR），前端轮询 ``login/status``；服务端每次 ``poll()`` 一次。当状态变为
+``confirmed`` 时，token 落库（``WeixinAccountStore``）、该账号的后台长轮询
+协程启动，接口只回账号 id。
+"""
+from __future__ import annotations
+
+import io
+import logging
+from typing import Any, Callable, Dict, List, Optional
+
+from fastapi import APIRouter, HTTPException, Query, Response
+from pydantic import BaseModel
+
+from kairos.feishu import parse_command
+from kairos.weixin_ilink import (
+    DEFAULT_BOT_TYPE,
+    ILinkClient,
+    ILinkError,
+    WeixinAccountStore,
+    WeixinChannel,
+    WeixinLoginSession,
+)
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/weixin", tags=["weixin"])
+
+# 运行期依赖，由 api/app.py 的 lifespan 注入。
+_channel: Optional[WeixinChannel] = None
+_store: Optional[WeixinAccountStore] = None
+# 取二维码 / 轮询登录时用的客户端工厂（测试可指向本地 mock）。
+_login_client_factory: Optional[Callable[[], ILinkClient]] = None
+# 进行中的登录会话：qrcode id → WeixinLoginSession。
+_sessions: Dict[str, WeixinLoginSession] = {}
+# 二维码 PNG 缓存：qrcode id → PNG 字节，同一张码只渲染一次。
+# 键是二维码 id，刷新后 id 会变，所以旧图自动失效；容量上限防止无限增长。
+_qr_png_cache: Dict[str, bytes] = {}
+_QR_PNG_CACHE_MAX = 32
+
+
+def set_dependencies(channel: Optional[WeixinChannel] = None,
+                     store: Optional[WeixinAccountStore] = None,
+                     login_client_factory: Optional[Callable[[], ILinkClient]] = None
+                     ) -> None:
+    """由 api/app.py 的 lifespan 调用，注入运行期依赖。"""
+    global _channel, _store, _login_client_factory
+    if channel is not None:
+        _channel = channel
+    if store is not None:
+        _store = store
+    if login_client_factory is not None:
+        _login_client_factory = login_client_factory
+
+
+def reset_dependencies() -> None:
+    """测试用：清空注入的依赖与会话。"""
+    global _channel, _store, _login_client_factory
+    _channel = None
+    _store = None
+    _login_client_factory = None
+    _sessions.clear()
+    _qr_png_cache.clear()
+
+
+def _check() -> WeixinAccountStore:
+    if _channel is None or _store is None:
+        raise HTTPException(status_code=503, detail="weixin not initialized")
+    return _store
+
+
+def _make_login_client() -> ILinkClient:
+    if _login_client_factory is not None:
+        return _login_client_factory()
+    return ILinkClient()
+
+
+def _purge_sessions() -> None:
+    """丢掉过期 / 已完成的登录会话，避免长时间累积。"""
+    for qid, session in list(_sessions.items()):
+        if session.connected or session.is_expired():
+            _sessions.pop(qid, None)
+
+
+def _render_qr_png(content: str) -> bytes:
+    """把二维码内容渲染成 PNG 字节（segno：纯 Python，无原生依赖）。
+
+    编码的内容就是 ``qrcode_img_content``（``liteapp.weixin.qq.com`` 的链接），
+    **不是** token。``segno`` 是运行依赖，但这里懒导入：缺了只让这一个接口
+    返回 503，不拖垮整个 app 的导入。
+    """
+    import segno  # noqa: PLC0415 —— 懒导入，见上
+
+    buf = io.BytesIO()
+    # error="m" 是微信登录码通常用的纠错级别；scale=8（每模块 8px）+ border=4
+    # （规范要求的 4 模块静默区）确保手机在缩略图/强光下也能扫到。
+    segno.make(content, error="m").save(buf, kind="png", scale=8, border=4)
+    return buf.getvalue()
+
+
+def _qr_png_cached(qrcode: str, content: str) -> bytes:
+    """按二维码 id 缓存 PNG；同一张码不重复渲染。"""
+    png = _qr_png_cache.get(qrcode)
+    if png is None:
+        png = _render_qr_png(content)
+        # 简单 LRU 兜底：满了先丢最旧的那个键（dict 保序）。
+        while len(_qr_png_cache) >= _QR_PNG_CACHE_MAX:
+            _qr_png_cache.pop(next(iter(_qr_png_cache)), None)
+        _qr_png_cache[qrcode] = png
+    return png
+
+
+async def _session_for_qr(qrcode: str) -> WeixinLoginSession:
+    """找（或现取）一个登录会话。
+
+    - 带 ``qrcode``：命中已有会话；未知则 404。
+    - 省略 ``qrcode``：等价于先调一次 ``login/start``，把新会话放进表里。
+    """
+    if qrcode:
+        session = _sessions.get(qrcode)
+        if session is None:
+            raise HTTPException(status_code=404, detail="未知或已结束的登录会话")
+        return session
+    _purge_sessions()
+    session = WeixinLoginSession(_make_login_client(),
+                                 bot_type=DEFAULT_BOT_TYPE)
+    try:
+        await session.start()
+    except ILinkError as exc:
+        raise HTTPException(status_code=502,
+                            detail=f"取二维码失败: {exc}") from exc
+    if not session.qrcode:
+        raise HTTPException(status_code=502, detail="服务器未返回二维码")
+    _sessions[session.qrcode] = session
+    return session
+
+
+# ---------------------------------------------------------------------------
+# 分发：账号 + 聊天对象 → 独立项目 → agent
+# ---------------------------------------------------------------------------
+
+def make_dispatch(orchestrator, store: WeixinAccountStore
+                  ) -> Callable[[str, str, str], Any]:
+    """构造 channel 用的 dispatch 回调。
+
+    与 ``api/routes/wecom.py:_dispatch`` 同构：普通文本走 agent，``/`` 开头
+    的命令同上；每个「账号 + 聊天对象」映射到**独立的 Kairos 项目**（首次
+    发消息时自动创建，绑定记录在 store）。
+    """
+
+    async def dispatch(account_id: str, chat_id: str, text: str) -> str:
+        cmd, args = parse_command(text)
+        if cmd == "noop":
+            return ""
+        if cmd == "help":
+            return ("/status · /projects · /use <id> · /chat <text> · /help\n"
+                    "直接发消息即与当前项目的 agent 对话。")
+        if cmd == "use":
+            if not args:
+                return "用法: /use <project_id>"
+            await store.bind(account_id, chat_id, args[0])
+            return f"已绑定当前会话 → {args[0]}"
+        if cmd == "projects":
+            try:
+                projs = orchestrator.list_projects()
+            except Exception as exc:  # noqa: BLE001
+                return f"获取项目失败: {exc}"
+            if not projs:
+                return "还没有项目。"
+            return "\n".join(f"• {p.id}  {p.name}" for p in projs[:20])
+        if cmd == "status":
+            project_id = await store.lookup(account_id, chat_id)
+            return (f"当前项目: {project_id}" if project_id
+                    else "尚未绑定项目，先 /use <id> 或直接发消息自动创建。")
+
+        prompt = " ".join(args) if cmd == "chat" else text
+        project = await _resolve_project(orchestrator, store, account_id, chat_id)
+        coder = getattr(project, "coder", None) if project is not None else None
+        if coder is None:
+            return "当前会话还没有可用的 agent。"
+        try:
+            reply = await coder.chat(prompt)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("weixin: agent chat failed for %s/%s",
+                             account_id, chat_id)
+            return f"agent 出错: {type(exc).__name__}"
+        return reply or ""
+
+    return dispatch
+
+
+async def _resolve_project(orchestrator, store: WeixinAccountStore,
+                           account_id: str, chat_id: str):
+    """找到（必要时创建）这个「账号 + 聊天对象」对应的项目。"""
+    project_id = await store.lookup(account_id, chat_id)
+    if project_id:
+        project = orchestrator.get_project(project_id)
+        if project is not None:
+            return project
+    try:
+        project = orchestrator.create_project(
+            name=f"微信 · {account_id} · {chat_id}"[:60],
+            description=f"微信 iLink 会话 (账号 {account_id} / 聊天对象 {chat_id})",
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("weixin: create_project failed for %s/%s",
+                         account_id, chat_id)
+        return None
+    if getattr(project, "id", None):
+        await store.bind(account_id, chat_id, project.id)
+    return project
+
+
+# ---------------------------------------------------------------------------
+# 登录
+# ---------------------------------------------------------------------------
+
+class LoginStartBody(BaseModel):
+    bot_type: str = DEFAULT_BOT_TYPE
+
+
+@router.post("/login/start")
+async def login_start(body: Optional[LoginStartBody] = None):
+    """取一张登录二维码，返回二维码 id + 图片内容（前端渲染 QR）。"""
+    bot_type = (body.bot_type if body else DEFAULT_BOT_TYPE) or DEFAULT_BOT_TYPE
+    _purge_sessions()
+    client = _make_login_client()
+    session = WeixinLoginSession(client, bot_type=bot_type)
+    try:
+        await session.start()
+    except ILinkError as exc:
+        raise HTTPException(status_code=502,
+                            detail=f"取二维码失败: {exc}") from exc
+    if not session.qrcode:
+        raise HTTPException(status_code=502, detail="服务器未返回二维码")
+    _sessions[session.qrcode] = session
+    state = session.public_state()
+    return {"qrcode": state["qrcode"], "qrcode_url": state["qrcode_url"],
+            "status": state["status"], "bot_type": bot_type}
+
+
+@router.get("/login/status")
+async def login_status(qrcode: str = Query(...),
+                       verify_code: str = Query(default="")):
+    """轮询扫码状态；``confirmed`` 时落库并启动该账号的后台轮询。
+
+    **响应里没有 token** —— 只有 ``public_state()`` 的公开字段。
+    """
+    session = _sessions.get(qrcode)
+    if session is None:
+        raise HTTPException(status_code=404, detail="未知或已结束的登录会话")
+    if verify_code.strip():
+        session.set_verify_code(verify_code.strip())
+    try:
+        await session.poll()
+    except ILinkError as exc:
+        raise HTTPException(status_code=502,
+                            detail=f"轮询失败: {exc}") from exc
+
+    state = session.public_state()
+
+    if session.connected and _store is not None:
+        # token 落库（脱敏视图之外），启动后台长轮询，然后结束这个登录会话。
+        await _store.upsert_account(
+            session.account_id or "",
+            token=session.token,
+            user_id=session.user_id or "",
+            base_url=session.base_url_resolved or "",
+            status="online",
+        )
+        if _channel is not None and session.account_id:
+            try:
+                await _channel.start_account(session.account_id)
+            except ILinkError:
+                logger.exception("weixin: 启动账号轮询失败 %s", session.account_id)
+        _sessions.pop(qrcode, None)
+        state = dict(state)
+        state["status"] = "confirmed"
+
+    return state
+
+
+@router.get("/login/qr.png")
+async def login_qr_png(qrcode: str = Query(default="")):
+    """登录二维码的可扫 PNG（前端直接 ``<img>``，不需要前端 QR 库）。
+
+    - 带 ``qrcode``：用该登录会话的二维码出图（同 id 命中缓存，不重复渲染）。
+    - 省略 ``qrcode``：内部先取一张新码，一次请求就拿到图和
+      ``X-Weixin-Qrcode`` 响应头（前端拿这个 id 去轮询 ``login/status``）。
+
+    **响应里没有 token** —— 编码的内容是 ``qrcode_url``（``liteapp.weixin.qq.com``
+    链接），图片里也没有任何密钥。
+    """
+    session = await _session_for_qr(qrcode)
+    if not session.qrcode or not session.qrcode_url:
+        raise HTTPException(status_code=502, detail="服务器未返回二维码内容")
+    try:
+        png = _qr_png_cached(session.qrcode, session.qrcode_url)
+    except ImportError as exc:  # segno 未安装
+        raise HTTPException(status_code=503,
+                            detail="服务端缺少二维码依赖 segno") from exc
+    return Response(
+        content=png,
+        media_type="image/png",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Weixin-Qrcode": session.qrcode,
+            "X-Weixin-Status": session.status,
+            # 允许前端（同源/跨源调试）读这两个头。
+            "Access-Control-Expose-Headers": "X-Weixin-Qrcode, X-Weixin-Status",
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# 账号
+# ---------------------------------------------------------------------------
+
+@router.get("/accounts")
+async def list_accounts():
+    """列出账号（脱敏：无 token），并标注轮询是否在跑。"""
+    store = _check()
+    running = set(_channel.running_accounts()) if _channel else set()
+    accounts = await store.list_accounts()
+    out: List[Dict[str, Any]] = []
+    for acct in accounts:
+        view = acct.to_dict()
+        view["running"] = acct.account_id in running
+        out.append(view)
+    return {"accounts": out}
+
+
+@router.delete("/accounts/{account_id}")
+async def delete_account(account_id: str):
+    store = _check()
+    if _channel is not None:
+        try:
+            await _channel.stop_account(account_id)
+        except Exception:  # noqa: BLE001 - 停不掉也要把数据删了
+            logger.exception("weixin: 停止账号失败 %s", account_id)
+    await store.delete_account(account_id)
+    return {"ok": True}
+
+
+class SendBody(BaseModel):
+    to: str = ""
+    text: str
+
+
+@router.post("/accounts/{account_id}/send")
+async def send_test_message(account_id: str, body: SendBody):
+    """用某个账号给一个聊天对象主动发文本（测试用）。"""
+    _check()
+    if not body.to.strip():
+        raise HTTPException(status_code=400, detail="缺少收件人 to")
+    try:
+        result = await _channel.send_text(account_id, body.to.strip(), body.text)
+    except ILinkError as exc:
+        raise HTTPException(status_code=502, detail=f"发送失败: {exc}") from exc
+    return {"ok": True, "message_id": (result or {}).get("message_id")}
+
+
+# ---------------------------------------------------------------------------
+# 绑定（账号 + 聊天对象 → 项目）
+# ---------------------------------------------------------------------------
+
+@router.get("/bindings")
+async def list_bindings(account_id: str = Query(default="")):
+    store = _check()
+    return {"bindings": await store.list_bindings(account_id or None)}

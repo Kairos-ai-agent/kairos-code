@@ -9,6 +9,7 @@ gate/ledger model and the install paths.
 |---|---|
 | [`SANDBOX_ISOLATION.md`](SANDBOX_ISOLATION.md) | What the sandbox actually contains: argv-only execution, the command allowlist, Landlock on Linux, Job Objects on Windows — and the gaps that remain. |
 | [`IM_WECOM.md`](IM_WECOM.md) | 企业微信「自建应用」双向通道：怎么建应用、5 个值在哪、回调 URL 填什么。 |
+| [`WEIXIN_ILINK.md`](WEIXIN_ILINK.md) | 微信官方 ClawBot / iLink 通道：扫码登录、多账号隔离、协议字段表（纯 Python 重写腾讯 MIT 插件）。 |
 | [`KAIROS_INDEX.md`](KAIROS_INDEX.md) | Module-by-module map of `kairos/` — useful when you are about to change something. |
 | [`OSS_ADOPTION_ROADMAP.md`](OSS_ADOPTION_ROADMAP.md) | Where the project is going: what a first-time user should see in 60 seconds, what is deliberately out of scope. |
 | [`assets/`](assets) | Screenshots used by the README (Gate Report, Run view, History view). |

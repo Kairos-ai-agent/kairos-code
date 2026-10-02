@@ -8,6 +8,25 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **微信官方 ClawBot / iLink 通道有了桌面入口，二维码改由后端直接出图。**
+  这条通道的后端（扫码登录 / 多账号 / 长轮询收发）上一步已经完成，但只能用
+  curl 调；这轮把它放到了用户面前，同时去掉了「前端得自己渲染二维码」的需要：
+
+  - `GET /api/weixin/login/qr.png` 用 `segno`（纯 Python，进了运行依赖）把登录
+    二维码渲染成 PNG —— 手机能扫的真二维码，8px/模块 + 规范要求的 4 模块静默
+    区。省略 `qrcode` 时内部先取一张新码再出图，一次请求就拿到图，并在
+    `X-Weixin-Qrcode` 响应头里给出轮询用的 id；带 `?qrcode=<id>` 则复用会话并按
+    id 缓存，不重复渲染。图片编码的只是 `liteapp.weixin.qq.com` 链接，响应里
+    没有 token。
+  - 左下角新增 **📱 微信** 入口（在 `SidebarFooter`，和语音 / 机器人并排），点开
+    是右侧弹层 `WeixinPanel`：一键出码、轮询扫码状态（等待扫码 / 已扫码待确认 /
+    需要配对码 / 过期重生成 / 已绑定）、二维码可点开放大、已绑定账号列表与删除、
+    多账号「再扫一个」。任何未识别的 `status` 都落到「等待中」的提示上，不会白屏；
+    后端不可达 / 超时 / 非 200 时显示可读错误，不抛异常。
+  - 新增 30 个 i18n 键（`web/src/i18n/parts/weixin.json`），组件里没有硬编码中文。
+    61 个 catalog 因此暂时从 100% 降到 1336/1366（约 97.8%），缺口恰好是这些新键，
+    未翻译前按既有回退规则显示英文。
+
 - **Voice mode.** The synthesis engine has been in `kairos/voice.py` since early
   on — several hundred neural voices, no key, no account to create — and nothing
   called it: no endpoint, and a settings field that was a text box nobody read.

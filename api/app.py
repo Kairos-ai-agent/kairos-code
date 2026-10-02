@@ -60,6 +60,9 @@ from api.routes import borrowed as borrowed_routes
 # deployment, each conversation bound to its own workspace.
 from api.routes import im as im_routes
 from kairos.im_accounts import IMAccountStore
+# 微信官方 ClawBot / iLink 通道：纯 Python 原生实现（无 OpenClaw/npm）。
+from api.routes import weixin as weixin_routes
+from kairos.weixin_ilink import WeixinAccountStore, WeixinChannel
 
 log = logging.getLogger(__name__)
 
@@ -76,6 +79,9 @@ _feishu_forwarder: FeishuEventForwarder | None = None
 _wecom_forwarder: WeComEventForwarder | None = None
 # Per-account IM store; None until the lifespan wires it.
 _im_store: IMAccountStore | None = None
+# 微信 iLink 通道：账号存储 + 每账号一条后台长轮询协程。
+_weixin_store: WeixinAccountStore | None = None
+_weixin_channel: WeixinChannel | None = None
 
 
 @asynccontextmanager
@@ -227,6 +233,32 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # noqa: BLE001
         log.warning("IM store setup failed: %s", exc)
 
+    # 微信官方 ClawBot / iLink 通道（纯 Python，无 OpenClaw/npm）：多账号
+    # 扫码登录 + 每账号一条独立长轮询协程。账号/游标/绑定落在 data/weixin.db；
+    # 只有已登录（有 token）且启用的账号才会在启动时起轮询。
+    global _weixin_store, _weixin_channel
+    try:
+        from kairos.config.settings import settings as _kairos_settings
+        _weixin_store = WeixinAccountStore(
+            db_path=_kairos_settings.data_dir / "weixin.db")
+        await _weixin_store.init()
+        _weixin_channel = WeixinChannel(
+            _weixin_store,
+            dispatch=weixin_routes.make_dispatch(orchestrator, _weixin_store))
+        weixin_routes.set_dependencies(
+            channel=_weixin_channel, store=_weixin_store)
+        for _acct in await _weixin_store.list_accounts():
+            _creds = await _weixin_store.get_credentials(_acct.account_id)
+            if _acct.enabled and _creds and _creds.get("token"):
+                try:
+                    await _weixin_channel.start_account(_acct.account_id)
+                except Exception as exc:  # noqa: BLE001
+                    log.debug("weixin account start failed %s: %s",
+                              _acct.account_id, exc)
+        log.info("WeChat iLink channel ready")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("WeChat iLink setup failed: %s", exc)
+
     # MCP servers are configured by the user, so they can hang: a command
     # that is not installed, or one that has to fetch something over a
     # blocked network. Starting them on a background task keeps the port
@@ -278,6 +310,12 @@ async def lifespan(app: FastAPI):
     if _wecom_forwarder is not None:
         try:
             await _wecom_forwarder.stop()
+        except Exception:  # noqa: BLE001
+            pass
+    # 微信 iLink：停掉每个账号的长轮询协程（并尽量通知服务端会话结束）。
+    if _weixin_channel is not None:
+        try:
+            await _weixin_channel.stop_all()
         except Exception:  # noqa: BLE001
             pass
     log.info("Shutting down: closing LLM provider clients...")
@@ -400,6 +438,8 @@ app.include_router(feishu_routes.router, tags=["feishu"])
 # R38.6 §35: 企业微信自建应用 — 回调收消息 + 主动发送
 app.include_router(wecom_routes.router, tags=["wecom"])
 app.include_router(im_routes.router, tags=["im"])
+# 微信官方 ClawBot / iLink 通道 — 扫码登录 + 多账号
+app.include_router(weixin_routes.router, tags=["weixin"])
 # R38.6 §34: Borrowed features — Plan / Approval / Hooks / Skills /
 # Sandbox / Fork / IM / Memory / Providers
 app.include_router(borrowed_routes.router, tags=["borrowed"])

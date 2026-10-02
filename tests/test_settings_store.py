@@ -545,3 +545,50 @@ def test_model_router_picks_active_provider_from_settings(tmp_path: Path, monkey
     assert active is not None
     assert active.provider == "anthropic"
     assert active.model == "claude"
+
+# ---------------------------------------------------------------------------
+# 遮罩 key 回归（真 bug：抽屉回传 "sk-12...cd" 曾把真 key 覆盖成假值）
+# ---------------------------------------------------------------------------
+
+
+def test_masked_api_key_round_trip_does_not_clobber_real_key(tmp_path: Path):
+    """抽屉回传遮罩串时，磁盘上的真密钥必须原样保留。"""
+    s = SettingsStore(path=tmp_path / "s.json")
+    real = "sk-" + "a" * 30 + "9876"
+    s.update({"provider": {"openai": {"apiKey": real, "model": "deepseek-chat"}}})
+    stored = json.loads((tmp_path / "s.json").read_text(encoding="utf-8"))
+    assert stored["provider_openai"]["apiKey"] == real
+
+    masked = real[:6] + "." * 3 + real[-4:]
+    s.update({"provider": {"openai": {"apiKey": masked}}})
+
+    stored = json.loads((tmp_path / "s.json").read_text(encoding="utf-8"))
+    assert stored["provider_openai"]["apiKey"] == real, "masked key clobbered the real one"
+    assert stored["provider"]["openai"]["apiKey"] == real
+
+    # 同一个补丁里的其他字段照旧生效
+    s.update({"provider": {"openai": {"apiKey": masked, "model": "deepseek-reasoner"}}})
+    stored = json.loads((tmp_path / "s.json").read_text(encoding="utf-8"))
+    assert stored["provider_openai"]["model"] == "deepseek-reasoner"
+    assert stored["provider_openai"]["apiKey"] == real
+
+
+def test_masked_api_key_top_level_section_also_protected(tmp_path: Path):
+    """``provider_openai`` 顶层段（抽屉的另一种写法）同样受保护。"""
+    s = SettingsStore(path=tmp_path / "s.json")
+    real = "sk-" + "b" * 28
+    # 顶层 provider_openai 是由嵌套 provider.openai 镜像过去的
+    s.update({"provider": {"openai": {"apiKey": real}}})
+    s.update({"provider_openai": {"apiKey": "sk-12" + "." * 3 + "cd"}})
+    stored = json.loads((tmp_path / "s.json").read_text(encoding="utf-8"))
+    assert stored["provider_openai"]["apiKey"] == real
+
+
+def test_empty_api_key_does_not_clear_stored_key(tmp_path: Path):
+    """空串按「抽屉没动过」处理，不清掉已存的密钥。"""
+    s = SettingsStore(path=tmp_path / "s.json")
+    real = "sk-" + "c" * 20
+    s.update({"provider": {"openai": {"apiKey": real}}})
+    s.update({"provider": {"openai": {"apiKey": ""}}})
+    stored = json.loads((tmp_path / "s.json").read_text(encoding="utf-8"))
+    assert stored["provider_openai"]["apiKey"] == real

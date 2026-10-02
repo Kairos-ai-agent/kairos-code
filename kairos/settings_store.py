@@ -257,6 +257,13 @@ class SettingsStore:
         with self._lock:
             current = _to_dict(self._settings)
             for section, sub in patch.items():
+                if isinstance(sub, dict):
+                    # 遮罩占位串（抽屉回传）绝不能覆盖磁盘上的真密钥。
+                    sub = _strip_masked_keys(sub)
+                    for _nested_name in ("openai", "anthropic"):
+                        if isinstance(sub.get(_nested_name), dict):
+                            sub[_nested_name] = _strip_masked_keys(
+                                sub[_nested_name])
                 if section == "ollama_base_url" or section == "provider_env_map":
                     current[section] = sub
                     continue
@@ -348,6 +355,34 @@ class SettingsStore:
 # ---------------------------------------------------------------------------
 # (de)serialization
 # ---------------------------------------------------------------------------
+
+
+_MASK_MARKERS = ('...', '***', '…', '•')
+
+
+def _looks_like_masked_key(value: Any) -> bool:
+    """``True`` 当 value 是遮罩后的占位串（或空串），不是真密钥。
+
+    Settings 抽屉把密钥渲染成 ``sk-1234...abcd`` 形状；保存抽屉状态时
+    这个占位串会被 POST 回来。早期代码把它盲目 merge 进 settings.json，
+    真密钥就被假值覆盖，下一次 LLM 调用直接 401（AuthenticationError）。
+    空串同样按「没填」处理 —— 抽屉没动过的字段不该清掉已存的值。
+    """
+    if not isinstance(value, str):
+        return False
+    text = value.strip()
+    if not text:
+        return True
+    return any(marker in text for marker in _MASK_MARKERS)
+
+
+def _strip_masked_keys(sub: dict) -> dict:
+    """从传入的补丁里摘掉遮罩 / 空的 ``apiKey``（其余字段照旧）。"""
+    out = dict(sub)
+    for field_name in ("apiKey", "api_key"):
+        if field_name in out and _looks_like_masked_key(out[field_name]):
+            out.pop(field_name, None)
+    return out
 
 
 def _to_dict(s: Settings) -> dict:

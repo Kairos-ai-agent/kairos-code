@@ -142,6 +142,18 @@ All notable changes to this project are documented here. The format follows
   to its idle state when the recogniser stops on its own — silence, a refused
   permission — not only when the user clicks it off.
 
+### Fixed
+
+- **在设置里保存一次，真密钥就可能被遮罩串覆盖，下一次 LLM 调用 401。**
+  Settings 抽屉把 `apiKey` 渲染成 `sk-1234...abcd` 的形状，保存时回传的是这个
+  占位串；`SettingsStore.update()` 之前对该字段不做校验地 merge，占位串会被当成
+  真值写回 `settings.json` —— 下一次调用就是 `AuthenticationError`。现在在补丁
+  入口统一摘掉「看起来是遮罩（含 `...` / `***` / `…` / `•`）或为空」的 `apiKey`，
+  保留磁盘上已有的值；同一个补丁里的其他字段（model / baseUrl / endpointUrl 等）
+  照旧生效。注意这是有意的取舍：**清空密钥字段不再能删掉已存的密钥**，需要清空
+  请直接改 `settings.json`。覆盖 3 个回归测试：嵌套 `provider.openai` 写法、
+  顶层 `provider_openai` 写法、以及空串不清空。
+
 ## [0.1.7] - 2026-09-29
 
 ### Added

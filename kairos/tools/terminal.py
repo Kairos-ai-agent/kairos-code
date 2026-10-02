@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
 
+from kairos.access_control import is_full_access
 from kairos.tools.base import BaseTool, ToolResult
 
 
@@ -166,6 +167,13 @@ class TerminalTool(BaseTool):
                           "powershell", "cmd", "reg", "sc", "bcdedit",
                           "diskpart", "shutdown", "reboot", "sudo", "su"}
 
+    # Heads that stay blocked even when full access is on: these do not
+    # sandbox the agent, they destroy the machine (partition tables, the
+    # boot config, a whole-disk wipe). The user asked for "any command",
+    # not "any way to brick the box", so this minimal set is retained.
+    FULL_ACCESS_ALWAYS_DENY_HEADS = {"format", "mkfs", "diskpart", "shred",
+                                     "bcdedit"}
+
     def __init__(self, allowed_cwd: str | Path = ".",
                  enable_build_commands: bool | None = None):
         self._allowed_cwd = Path(allowed_cwd).resolve()
@@ -184,6 +192,8 @@ class TerminalTool(BaseTool):
 
     def _is_safe_command(self, command: str) -> Optional[str]:
         """Return the rule that blocked the command, or None if allowed."""
+        if is_full_access():
+            return self._is_safe_command_full_access(command)
         # 1. Parse with shlex so spacing tricks ("rm  -rf /") collapse.
         #    ``_split_command`` is Windows-aware (CommandLineToArgvW) so
         #    backslash paths aren't mangled.
@@ -271,8 +281,47 @@ class TerminalTool(BaseTool):
                         return tok
         return None
 
+    @classmethod
+    def _is_retained_deny_head(cls, head: str) -> bool:
+        """True if *head* is one of the always-denied disk-destroy tools.
+
+        Matches the bare executable name and its stem so
+        ``C:\\Windows\\System32\\format.com`` and ``/sbin/mkfs.ext4`` are
+        both caught.
+        """
+        base = Path(head).name.lower()
+        stem = base.split(".", 1)[0]
+        return (base in cls.FULL_ACCESS_ALWAYS_DENY_HEADS
+                or stem in cls.FULL_ACCESS_ALWAYS_DENY_HEADS)
+
+    def _is_safe_command_full_access(self, command: str) -> Optional[str]:
+        """Validation used only when ``is_full_access()`` is True.
+
+        The command allow-list, the shell-operator ban, the head
+        deny-list, the per-head argument rules and the cwd/argument
+        escape checks are all lifted — the user explicitly opted into
+        running arbitrary commands (shell pipelines included) on their
+        own machine. Only the minimal disk-destroy deny survives
+        (``FULL_ACCESS_ALWAYS_DENY_HEADS``) plus the regex deny-list,
+        which also covers whole-disk patterns such as ``format C:``.
+        """
+        try:
+            tokens = _split_command(command)
+        except ValueError:
+            tokens = []
+        if tokens and self._is_retained_deny_head(tokens[0]):
+            return (f"head '{tokens[0].lower()}' is on the permanent deny "
+                    f"list")
+        normalized = re.sub(r"\s+", " ", command).strip()
+        for pat in self.DENY_PATTERNS:
+            if re.search(pat, normalized, re.IGNORECASE):
+                return f"blocked by deny pattern: {pat}"
+        return None
+
     def _resolve_cwd(self, cwd: Optional[str]) -> Path:
         target = Path(cwd).resolve() if cwd else self._allowed_cwd
+        if is_full_access():
+            return target
         try:
             target.relative_to(self._allowed_cwd)
         except ValueError:
@@ -370,7 +419,12 @@ class TerminalTool(BaseTool):
             # is the *actual* executable and shell chaining/redirection is
             # impossible. The parsed argv is regenerated here (the parse in
             # ``_is_safe_command`` is only used for validation).
-            argv = _split_command(command)
+            #
+            # Full access instead goes through the OS shell (``cmd /c`` on
+            # Windows, ``/bin/sh -c`` on POSIX) so pipelines, redirection
+            # and ``&&`` / ``;`` work as the user expects.
+            full_access = is_full_access()
+            argv = None if full_access else _split_command(command)
 
             popen_kwargs = {
                 "stdout": asyncio.subprocess.PIPE,
@@ -396,14 +450,24 @@ class TerminalTool(BaseTool):
                 popen_kwargs.pop("__kairos_seatbelt_profile", None)
 
             try:
-                process = await asyncio.create_subprocess_exec(*argv, **popen_kwargs)
+                if full_access:
+                    process = await asyncio.create_subprocess_shell(
+                        command, **popen_kwargs)
+                else:
+                    process = await asyncio.create_subprocess_exec(
+                        *argv, **popen_kwargs)
             except (TypeError, ValueError):
                 # Some asyncio loops / Popen builds reject preexec_fn/pass_fds;
                 # retry without them so the command still runs (at reduced
                 # isolation) rather than failing outright.
                 for k in ("preexec_fn", "pass_fds"):
                     popen_kwargs.pop(k, None)
-                process = await asyncio.create_subprocess_exec(*argv, **popen_kwargs)
+                if full_access:
+                    process = await asyncio.create_subprocess_shell(
+                        command, **popen_kwargs)
+                else:
+                    process = await asyncio.create_subprocess_exec(
+                        *argv, **popen_kwargs)
 
             # Wire the OS-level sandbox for this child (Windows Job Object
             # KILL_ON_JOB_CLOSE; called in the child for Linux via the

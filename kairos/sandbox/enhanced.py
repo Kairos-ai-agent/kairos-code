@@ -16,6 +16,8 @@ import os
 import time
 from contextlib import contextmanager
 
+from kairos.access_control import is_full_access
+
 # Try to import resource (Unix-only), provide fallback for Windows
 try:
     import resource
@@ -141,10 +143,12 @@ class EnhancedSandbox:
     def scoped_workspace(self, subpath: str = ""):
         """Context manager for operating within a subdirectory."""
         target = (self.workspace / subpath).resolve()
-        try:
-            target.relative_to(self.workspace)
-        except ValueError:
-            raise PermissionError(f"Path outside workspace: {target}")
+        # Full-access mode lifts the workspace confinement.
+        if not is_full_access():
+            try:
+                target.relative_to(self.workspace)
+            except ValueError:
+                raise PermissionError(f"Path outside workspace: {target}")
         
         old_cwd = os.getcwd()
         os.chdir(target)

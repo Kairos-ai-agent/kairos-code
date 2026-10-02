@@ -8,6 +8,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel
 
+from kairos.access_control import is_full_access
+
 class ToolResult(BaseModel):
     """Result of a tool execution."""
 
@@ -51,6 +53,10 @@ class BaseTool(ABC):
         try:
             target.relative_to(self._allowed_root)
         except ValueError:
+            # Full-access mode lifts the project-directory confinement:
+            # the user opted into running the agent on their own machine.
+            if is_full_access():
+                return target
             raise PermissionError(f"Path outside project directory: {target}")
         return target
 

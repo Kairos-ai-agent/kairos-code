@@ -54,6 +54,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
+from kairos.access_control import is_full_access
+
 logger = logging.getLogger(__name__)
 
 # Hidden subdir under .kairos/. We pick a different name than
@@ -110,13 +112,20 @@ class AutoCheckpointer:
             # Resolve and validate the path is inside the
             # project (defense in depth — the file tools
             # already resolve safely, but we double-check).
+            full_access = is_full_access()
             rel = rel_path.replace("\\", "/").lstrip("/")
-            if not rel or rel.startswith("..") or "/../" in ("/" + rel):
+            if not full_access and (
+                    not rel or rel.startswith("..") or "/../" in ("/" + rel)):
                 return "path traversal rejected"
             target = (self.project_dir / rel).resolve()
             try:
                 target.relative_to(self.project_dir)
             except ValueError:
+                if full_access:
+                    # Full access allows writes outside the project root;
+                    # there is nothing to back up under the project root,
+                    # so skip the snapshot instead of erroring.
+                    return None
                 return "path outside project root"
             if not target.exists() or not target.is_file():
                 return None  # nothing to back up (new file)

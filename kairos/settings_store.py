@@ -162,6 +162,12 @@ class Settings:
     # "session" are kept in-memory only for the current loop.
     memory_user_path: str = ""        # file path; "" → default
     memory_project_path: str = ""     # file path; "" → default
+    # Global sandbox switch (see kairos/access_control.py). When True the
+    # terminal + file tools stop confining themselves to the project
+    # directory and may touch any file / run any command (shell pipelines
+    # included). The KAIROS_FULL_ACCESS env var forces it on regardless of
+    # this value. Defaults to False so behaviour is unchanged.
+    fullAccess: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +270,8 @@ class SettingsStore:
                         if isinstance(sub.get(_nested_name), dict):
                             sub[_nested_name] = _strip_masked_keys(
                                 sub[_nested_name])
-                if section == "ollama_base_url" or section == "provider_env_map":
+                if section in ("ollama_base_url", "provider_env_map",
+                               "fullAccess"):
                     current[section] = sub
                     continue
                 if section == "active_provider":
@@ -420,6 +427,7 @@ def _to_dict(s: Settings) -> dict:
         "provider_anthropic": asdict(s.provider_anthropic),
         "memory_user_path": s.memory_user_path,
         "memory_project_path": s.memory_project_path,
+        "fullAccess": bool(s.fullAccess),
     }
 
 
@@ -490,6 +498,7 @@ def _from_dict(d: dict) -> Settings:
         provider_anthropic=AnthropicProviderConfig(**anthropic_raw),
         memory_user_path=str(d.get("memory_user_path") or ""),
         memory_project_path=str(d.get("memory_project_path") or ""),
+        fullAccess=bool(d.get("fullAccess", False)),
     )
 
 

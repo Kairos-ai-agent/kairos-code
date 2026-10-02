@@ -118,6 +118,48 @@ All notable changes to this project are documented here. The format follows
   one real answer, and a speech-to-text provider and language box configuring a
   path nothing used — the composer's mic runs the browser's own recogniser.
 
+- **新增全局「完全放开沙箱」开关：环境变量 `KAIROS_FULL_ACCESS` 或
+  `settings.json` 的 `fullAccess` 字段，任一为真即生效。** 默认关闭，关闭时
+  行为与之前逐字一致。这是给「自己出题、自有机器、内部使用」的用户准备的
+  逃生门：开启后 agent 的终端与文件工具不再被限制在项目目录内，可以读写
+  本机任意路径、执行任意命令（含 `&&` / `|` / `>` 等 shell 语法）。两条
+  来源都收敛到新模块 `kairos/access_control.py:is_full_access()`：
+
+  - 环境变量 `KAIROS_FULL_ACCESS` 取 `1` / `true` / `yes` / `on`（大小写
+    不敏感）；
+  - `settings.json` 的 `fullAccess` 布尔字段，已加入 `Settings` 数据类
+    （默认 `False`，`_to_dict` / `_from_dict` 与 `SettingsStore.update` 均已
+    支持），可经现有 `GET/POST /api/projects/settings` 读写。环境变量为
+    假值时不会强制关闭——仍会继续读 settings，符合「任一为真即开启」。
+
+  开启后放开的是下面 8 处（每一处都只在开关为真时跳过，关闭时原样保留）：
+
+  - `kairos/tools/base.py`：`_resolve_safe` 抛出的
+    `PermissionError("Path outside project directory")`——`file_read` /
+    `file_write` / `file_edit_replace` / `multi_edit` / `find` / `grep`
+    全部走这条路径；
+  - `kairos/tools/terminal.py`：`SHELL_OPERATORS` 拦截、`ALWAYS_DENY_HEADS`
+    拦截、命令白名单（`not on the command allowlist`）与按 head 的参数
+    限制、`_escapes_cwd()` 的项目外路径检查、`_resolve_cwd()` 的 cwd 越界
+    检查；执行方式也一并改为 `create_subprocess_shell`（Windows 上即
+    `cmd /c`，POSIX 上 `/bin/sh -c`），管道 / 重定向 / `&&` 才真正可用——
+    开关关闭时仍走原来的 `create_subprocess_exec`（无 shell），行为不变；
+  - `kairos/sandbox/enhanced.py`：`scoped_workspace` 的
+    `PermissionError("Path outside workspace")`；
+  - `kairos/auto_checkpoint.py`：`before_write` 的
+    `path outside project root` 与 `path traversal rejected` 两个短路返回。
+
+  刻意保留、不随开关放开的是「防毁机器」而非「防越权」的那几条：`format`
+  / `mkfs` / `diskpart` / `shred` / `bcdedit` 的 head 在 full access 下仍
+  被拒（`kairos/tools/terminal.py:FULL_ACCESS_ALWAYS_DENY_HEADS`，叠加原有
+  的 `DENY_PATTERNS` 扫描）。用户明确只要求「任意命令」，没有要求连整盘
+  擦除也要能跑。
+
+  **安全取舍（务必知悉）**：开启后微信 / IM 等外部输入通道可能被诱导，
+  让 agent 以本机权限执行任意命令、读写任意文件——沙箱消失后，提示注入的
+  后果从「跑不出项目目录」变成「跑得动整台机器」。该开关只应在用户自己的
+  机器、面向可信输入时打开；默认关闭即为此。
+
 ### Fixed
 
 - **A reply asked to be spoken is no longer silently dropped.** The server

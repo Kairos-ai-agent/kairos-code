@@ -45,7 +45,7 @@ import {
   AppstoreOutlined, ToolOutlined, SettingOutlined,
   SunOutlined, MoonOutlined, ShopOutlined,
   HistoryOutlined, DashboardOutlined, BranchesOutlined, SyncOutlined,
-  FieldTimeOutlined, FileTextOutlined, AudioOutlined, ApiOutlined,
+  FieldTimeOutlined, FileTextOutlined, AudioOutlined,
   MobileOutlined,
 } from '@ant-design/icons';
 
@@ -54,7 +54,7 @@ import { useThemeStore } from '../stores/themeStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import { useT, type TFunc } from '../i18n';
-import { VoicePanel, RobotPanel } from './SettingsDrawer';
+import { VoicePanel } from './SettingsDrawer';
 import { WeixinDrawer } from './WeixinPanel';
 import api from '../api/client';
 import { formatError } from '../utils/formatError';
@@ -525,10 +525,10 @@ export const SidebarFooter: React.FC = () => {
           else: they are one click, and pretending they need a different
           chrome was the thing that made the footer look uneven. */}
       <NavGroup label={t('nav.sectionPreferences')} hint={t('nav.sectionPreferencesHint')}>
-        {/* Voice mode and the bot connector open from here, not from a tab
-            inside the settings drawer: both are things you reach for while
-            working, and they belong with the rest of the rail's controls --
-            one click, bottom-left, where the user asked for them. */}
+        {/* Voice mode opens from here, not from a tab inside the settings
+            drawer: it is something you reach for while working, so it sits
+            with the rest of the rail's controls -- one click, bottom-left,
+            where the user asked for it. */}
         <Popover
           content={<div style={{ width: 320 }}><VoicePanel /></div>}
           trigger="click"
@@ -537,15 +537,6 @@ export const SidebarFooter: React.FC = () => {
         >
           {navRow('footer-voice', <AudioOutlined style={FOOTER_ICON} />,
                   t('settings.voiceMode'), null)}
-        </Popover>
-        <Popover
-          content={<div style={{ width: 380 }}><RobotPanel /></div>}
-          trigger="click"
-          placement="rightBottom"
-          title={t('settings.robot')}
-        >
-          {navRow('footer-bots', <ApiOutlined style={FOOTER_ICON} />,
-                  t('settings.robot'), null)}
         </Popover>
         {/* The native WeChat channel. Opens a drawer rather than a popover —
             the QR has to be big, and the account list can grow. */}

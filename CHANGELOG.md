@@ -154,6 +154,13 @@ All notable changes to this project are documented here. The format follows
   请直接改 `settings.json`。覆盖 3 个回归测试：嵌套 `provider.openai` 写法、
   顶层 `provider_openai` 写法、以及空串不清空。
 
+### Removed
+
+- **左下角的「机器人」入口（通用连接器配对）。** 个人微信现在走原生 iLink 通道
+  （📱 微信），这个入口只剩一条通往通用连接器 API 的死路，按用户要求去掉。同组
+  的语音、微信、设置、主题都在原位；`RobotPanel` 的实现仍留在 `SettingsDrawer.tsx`
+  里，但已经没有入口能到达它。
+
 ## [0.1.7] - 2026-09-29
 
 ### Added

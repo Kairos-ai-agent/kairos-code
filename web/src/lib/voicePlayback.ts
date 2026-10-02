@@ -167,10 +167,19 @@ export async function speak(text: string, opts: SpeakRequest = {}): Promise<Spok
       });
       if (result === null) return 'silent';           // nothing speakable
       if (result.engine && result.engine !== 'mock') { // a real engine answered
-        store.setState(true, 'server');
-        await playBlob(result.blob);
-        store.setState(false, null);
-        return 'server';
+        try {
+          store.setState(true, 'server');
+          await playBlob(result.blob);
+          return 'server';
+        } catch {
+          // The audio element refused to start. Autoplay policy does exactly
+          // this before anything has been played from the origin, and a reply
+          // that is silently dropped is the failure this module exists to
+          // prevent -- so fall through to the browser voice instead of going
+          // quiet. The user still hears the answer, just in the other voice.
+        } finally {
+          store.setState(false, null);
+        }
       }
       // A mock engine returns silence — fall through to the browser instead of
       // playing it, which would look like voice mode being broken.

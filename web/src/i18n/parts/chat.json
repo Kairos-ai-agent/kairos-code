@@ -59,6 +59,14 @@
     "zh": "发送",
     "en": "Send"
   },
+  "chat.composer.dictate": {
+    "zh": "语音输入",
+    "en": "Dictate"
+  },
+  "chat.composer.dictateStop": {
+    "zh": "停止语音输入",
+    "en": "Stop dictating"
+  },
   "chat.composer.sendAsChat": {
     "zh": "以聊天发送（单轮回复）",
     "en": "Send as chat (single-turn reply)"

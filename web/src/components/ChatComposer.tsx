@@ -28,12 +28,12 @@
  *   │  Enter to send · Shift+Enter for newline            │
  *   └─────────────────────────────────────────────────────┘
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Tooltip, App as AntdApp } from 'antd';
 import {
   ArrowUpOutlined, PaperClipOutlined, ThunderboltOutlined,
   MessageOutlined, RobotOutlined, SettingOutlined,
-  CloseOutlined, FileOutlined, LoadingOutlined,
+  CloseOutlined, FileOutlined, LoadingOutlined, AudioOutlined,
 } from '@ant-design/icons';
 
 import api from '../api/client';
@@ -41,6 +41,7 @@ import { useThemeTokens } from '../hooks/useThemeTokens';
 import { useChatStore } from '../stores/chatStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { classifyIntent } from '../utils/intent';
+import { startDictation, isSpeechInputSupported, type Dictation } from '../lib/speechInput';
 import FolderPicker from './FolderPicker';
 import { useT } from '../i18n';
 
@@ -70,6 +71,10 @@ interface Props {
 
 const MAX_TEXTAREA_HEIGHT = 240;
 
+/** Quiet time that ends a spoken phrase in voice mode. Long enough to think
+ * mid-sentence, short enough that the reply does not feel held back. */
+const VOICE_SILENCE_MS = 5000;
+
 function humanSize(n: number): string {
   const val = Number(n) || 0;
   if (val < 1024) return `${val} B`;
@@ -94,6 +99,78 @@ const ChatComposer: React.FC<Props> = ({
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [uploading, setUploading] = useState(0);
   const [dragOver, setDragOver] = useState(false);
+  /* Dictation uses the browser's own recogniser, not the server: sttProvider
+     is "mock" and no engine is installed, while the Chromium kernel this
+     desktop build ships has one built in. Nothing is uploaded by us -- the
+     words arrive as text and land in the box the user is already typing in.
+     Hidden entirely where there is no recogniser (Firefox, jsdom).
+
+     With voice mode on it runs hands-free: the mic opens by itself whenever the
+     agent is idle, a phrase is submitted once the speaker has been quiet for
+     VOICE_SILENCE_MS, and the mic is taken away until the reply is finished --
+     otherwise the recogniser would pick up the agent's own voice. */
+  const voiceMode = useSettingsStore((s) => s.voice.voiceMode);
+  const [dictating, setDictating] = useState(false);
+  const dictationRef = useRef<Dictation | null>(null);
+  const speechSupported = useRef(isSpeechInputSupported()).current;
+  // A refused microphone must not be retried: the effect below would otherwise
+  // reopen it on every render and turn one denial into a loop.
+  const micRefusedRef = useRef(false);
+
+  const startListening = useCallback(() => {
+    if (dictationRef.current) return;
+    const session = startDictation({
+      language: navigator.language,
+      // Hands-free ends a phrase on silence; a mic clicked without voice mode
+      // is push-to-talk and has no timer -- stopping is the user's job there.
+      silenceMs: voiceMode ? VOICE_SILENCE_MS : 0,
+      onText: (transcript) => setText(transcript),
+      onSettle: (transcript) => {
+        const said = transcript.trim();
+        if (!said) return; // quiet, with nothing said: stay where we are
+        setText('');
+        void submitRef.current(said);
+      },
+      onEnd: (error) => {
+        dictationRef.current = null;
+        setDictating(false);
+        if (error) micRefusedRef.current = true;
+      },
+    });
+    if (!session) return;
+    dictationRef.current = session;
+    setDictating(true);
+  }, [voiceMode]);
+
+  // The conversation cycle: listen while the agent is idle, hand the mic back
+  // the moment it starts working, and reopen it when the reply is done. The
+  // user never has to reach for the mouse.
+  useEffect(() => {
+    if (!speechSupported) return;
+    const shouldListen = voiceMode && !busy && !disabled && !micRefusedRef.current;
+    if (!shouldListen) {
+      dictationRef.current?.stop();
+      return;
+    }
+    if (!dictationRef.current) {
+      setText(''); // every round starts from an empty box
+      startListening();
+    }
+  }, [speechSupported, voiceMode, busy, disabled, startListening]);
+
+  const onMicClick = () => {
+    if (dictating) {
+      // In voice mode the click means "I am done, send it now"; without voice
+      // mode it is simply the stop button.
+      if (voiceMode) dictationRef.current?.finishNow();
+      else dictationRef.current?.stop();
+      return;
+    }
+    setText('');
+    startListening();
+  };
+
+  useEffect(() => () => { dictationRef.current?.stop(); }, []);
   // R38: read the active provider's model from the settings store so
   // we can show it on the action row. The provider switches the
   // model in real-time (the user can change it in Settings → LLM
@@ -162,8 +239,10 @@ const ChatComposer: React.FC<Props> = ({
     }
   };
 
-  const submit = async () => {
-    const trimmed = text.trim();
+  // `override` lets the voice loop submit the phrase the recogniser just
+  // finished; the box's own text is the normal source.
+  const submit = async (override?: string) => {
+    const trimmed = (override ?? text).trim();
     if ((!trimmed && attachments.length === 0) || disabled || busy
         || uploading > 0) return;
     try {
@@ -174,6 +253,12 @@ const ChatComposer: React.FC<Props> = ({
       // Caller surfaces the error; keep text + attachments so the user can retry.
     }
   };
+
+  // The voice loop submits from a recogniser callback that is created once per
+  // voice-mode change, so it reads the latest submit through a ref rather than
+  // closing over a stale one.
+  const submitRef = useRef(submit);
+  submitRef.current = submit;
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -356,6 +441,25 @@ const ChatComposer: React.FC<Props> = ({
             </span>
           </Tooltip>
           <div style={{ flex: 1 }} />
+          {speechSupported && (
+            <Tooltip
+              title={dictating
+                ? t('chat.composer.dictateStop')
+                : t('chat.composer.dictate')}
+            >
+              <Button
+                type="text"
+                icon={<AudioOutlined />}
+                onClick={onMicClick}
+                disabled={disabled || busy}
+                style={{ color: dictating ? tokens.danger : tokens.labelTertiary }}
+                data-testid="composer-mic"
+                aria-label={dictating
+                  ? t('chat.composer.dictateStop')
+                  : t('chat.composer.dictate')}
+              />
+            </Tooltip>
+          )}
           <Tooltip
             title={projectId
               ? t('chat.composer.attachHint')
@@ -376,7 +480,7 @@ const ChatComposer: React.FC<Props> = ({
               type="primary"
               shape="circle"
               icon={isTask ? <ThunderboltOutlined /> : <ArrowUpOutlined />}
-              onClick={submit}
+              onClick={() => { void submit(); }}
               disabled={disabled || busy || uploading > 0
                         || (!text.trim() && attachments.length === 0)}
               loading={busy}

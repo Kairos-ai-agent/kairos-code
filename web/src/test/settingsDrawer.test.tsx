@@ -1,13 +1,19 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
-import { ConfigProvider } from 'antd';
+import { App as AntdApp, ConfigProvider } from 'antd';
 import { SettingsDrawer } from '../components/SettingsDrawer';
 import { useSettingsStore } from '../stores/settingsStore';
 
 function renderDrawer() {
+  // antd's <App> is part of the real tree (AppLayout renders it), and it is
+  // what makes App.useApp()'s message/modal actually render. Without it the
+  // panel's "why was this refused" feedback is invisible to a test -- and a
+  // test that cannot see the feedback cannot assert it exists.
   return render(
     <ConfigProvider>
-      <SettingsDrawer open={true} onClose={() => {}} />
+      <AntdApp>
+        <SettingsDrawer open={true} onClose={() => {}} />
+      </AntdApp>
     </ConfigProvider>
   );
 }
@@ -151,4 +157,10 @@ describe('SettingsDrawer', () => {
     // And it replaced the bare text input rather than sitting beside it.
     expect(screen.queryByPlaceholderText(/claude-3-5-sonnet/i)).toBeNull();
   });
+
+  // The voice controls existed for a while with no tab rendering them, so
+  // "turn on voice mode" had no button anywhere in the UI -- while the
+  // panel's own tests kept passing, because they rendered VoicePanel
+  // directly. These two ask the drawer instead, which is the thing the
+  // user actually has to find.
 });

@@ -14,8 +14,8 @@ All notable changes to this project are documented here. The format follows
   It is wired up now. `GET /api/voice/voices` serves the list, with the
   browser's own voices kept as a second group and as the fallback for when the
   server has no engine or no network; `POST /api/voice/speak` returns the audio
-  for a reply; the settings drawer picks from the real list instead of asking
-  you to type a voice name. Pace, pitch and volume reach the engine rather than
+  for a reply; the voice panel picks from the real list instead of asking you to
+  type a voice name. Pace, pitch and volume reach the engine rather than
   being accepted and dropped.
 
   Voice mode is also a change of register, not just a speaker: with it on, the
@@ -33,6 +33,95 @@ All notable changes to this project are documented here. The format follows
   the persisted v1 voice setting is cleared on upgrade: it named an English
   voice, which reads a Chinese reply in English. An empty name now means "match
   the reply's language", and a voice the user actually chose is left alone.
+
+  With voice mode on, the chat is hands-free. The mic opens by itself whenever
+  the agent is idle; a phrase is submitted after five seconds of quiet rather
+  than when the user reaches for the mouse; the mic is taken away while the
+  agent works — otherwise the recogniser transcribes the agent's own voice and
+  sends it back — and reopened when the reply is done. The box is emptied for
+  each turn, and a refused microphone is never retried: one denial would
+  otherwise become a restart loop.
+
+- **Bots: many IM accounts, one deployment, and no crossed wires.** A connector
+  that drives a chat client — a personal WeChat login, say — lives outside this
+  repository on purpose: it holds a login, it injects into one desktop client
+  build, and neither belongs in an open-source tree. What the app owes it is a
+  protocol, and what the user owes themselves is a way to see it. Both are here:
+  `kairos/im_accounts.py` holds the accounts, the per-conversation bindings and
+  the reply queue, and `api/routes/im.py` exposes them.
+
+  Two small, load-bearing decisions make "several accounts at once" safe.
+  Bindings are keyed `(account_id, chat_id)` rather than by chat id alone — the
+  Feishu table keys on `chat_id`, and two accounts that happen to see the same
+  opaque id would silently share a workspace. And the app never sends anything
+  itself: it queues the reply and the connector that owns that account's login
+  collects it, so a message cannot physically leave through the wrong account.
+  Collection does not consume — the connector acknowledges after sending, so a
+  crash mid-send repeats a line instead of losing one — and both the queue and
+  the acknowledgement are scoped to a single account, since an unscoped ack
+  would let one connector mark another's mail as delivered.
+
+  Every conversation gets its own project, which already means its own workspace
+  directory, agent instance and checkpoints; that is the isolation boundary, not
+  a second mechanism beside it. Connectors authenticate as exactly one account,
+  with an HMAC over the timestamp and body that is keyed by that account's own
+  secret (five-minute window, so a captured request is not replayable), and fail
+  closed on every count: unknown account 404, disabled account 403, account with
+  no secret 403, bad or stale signature 401.
+
+  Voice mode and the bot connector open from the **bottom-left of the rail**,
+  next to Settings and the theme switch: both are things you reach for while
+  working, and the drawer had grown a tab for each. The connector panel shows
+  the three endpoints — inbound, outbound, acknowledge — before it shows
+  anything else, with a real account id filled in once one exists: an endpoint
+  you cannot find is an endpoint that does not exist. `scripts/im_connector_sim.py` is the reference
+  connector, and runs the whole path (create an account, send a message, collect
+  the reply) with no chat client involved.
+
+  Connecting is **one button and one QR code**. The user clicks; the app makes a
+  five-minute pairing; the connector on their machine claims it, uploads the
+  chat client's own login QR, and reports the account it is now logged in as;
+  the account exists, with a secret this side generated and handed over in that
+  same handshake. Nobody has to invent an account id before their chat client
+  has even logged in, and nobody copies a secret into a config file. The account
+  id, the secret and the endpoints stay on the panel — they are what the
+  *connector* needs, not what the user should have to produce. The simulator's
+  `pair` command plays the connector's half, so the whole handshake can be
+  walked through locally.
+
+  Both this panel and the Voice one above are worth a note on their own account:
+  each existed as a component while nothing mounted it, so neither could be
+  reached from the UI at all — and the tests that did exist rendered the panel
+  directly, which cannot see that. Their tests ask the rail now, and assert why
+  the panel exists (the endpoints, the switch) rather than that it renders.
+
+  The voice panel also lost three knobs it never needed: an engine dropdown with
+  one real answer, and a speech-to-text provider and language box configuring a
+  path nothing used — the composer's mic runs the browser's own recogniser.
+
+### Fixed
+
+- **A reply asked to be spoken is no longer silently dropped.** The server
+  engine answered, the audio went to an `<audio>` element, and `play()` refused
+  — which is what autoplay policy does before anything has been played from the
+  origin. The rejection propagated instead of falling back, so the one failure
+  this module exists to cover (voice mode on, nothing audible) was the one it
+  did not survive. It now falls through to the browser voice and always clears
+  its "speaking" state.
+- **Saving the voice panel no longer fails.** The drawer saves all five settings
+  sections in one request, and the panel's five new fields (`voiceMode`, `rate`,
+  `volume`, `pitch`, `engine`) were not declared on the server-side
+  `VoiceSettings`. The request answered 500 with `TypeError: VoiceSettings.__init__()
+  got an unexpected keyword argument 'voiceMode'` — and because the sections
+  travel together, the provider keys in that same payload were lost with it.
+  Both halves now have a test that posts exactly what the panel posts.
+- **The chat page has a microphone.** The composer's mic runs the browser's own
+  recogniser, because there is no server-side speech-to-text to call
+  (`sttProvider` is `"mock"` and no engine ships): it writes what it hears into
+  the message box the user was already typing in, and records nothing. It is
+  absent where no recogniser exists rather than present and inert, and it returns
+  to its idle state when the recogniser stops on its own — silence, a refused
+  permission — not only when the user clicks it off.
 
 ## [0.1.7] - 2026-09-29
 

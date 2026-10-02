@@ -89,3 +89,7 @@ gate-report-*.html
 
 # Editor scratch directories left behind by the editor
 *.tmpdir/
+
+# Written by scripts/im_connector_sim.py pair: a live account secret,
+# deliberately kept out of the tree.
+.im-connector-secret.json

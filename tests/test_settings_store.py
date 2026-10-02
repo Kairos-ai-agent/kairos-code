@@ -44,6 +44,35 @@ def test_defaults(tmp_path: Path):
     assert settings.metrics.showInFooter is True
 
 
+def test_the_voice_panel_payload_round_trips(tmp_path: Path):
+    """The five fields the panel adds are why this test exists at all.
+
+    They are read back on every synthesis request (api/routes/voice.py takes
+    rate/volume/pitch per call), so the panel's sliders are their only source.
+    """
+    s = SettingsStore(path=tmp_path / "s.json")
+    panel = {
+        "ttsProvider": "edge",
+        "ttsVoice": "zh-CN-XiaoxiaoNeural",
+        "sttProvider": "mock",
+        "sttLanguage": "zh",
+        "autoPlay": True,
+        "voiceMode": True,
+        "rate": 20,
+        "volume": -10,
+        "pitch": 5,
+        "engine": "edge",
+    }
+    s.update({"voice": panel, "cloud": {"s3Bucket": "keep-me"}})
+    out = s.get()
+    for key, value in panel.items():
+        assert getattr(out.voice, key) == value, key
+    assert out.cloud.s3Bucket == "keep-me"  # same request, other section
+    again = SettingsStore(path=tmp_path / "s.json").get()
+    assert again.voice.voiceMode is True
+    assert again.voice.rate == 20
+
+
 def test_update_section_merges(tmp_path: Path):
     s = SettingsStore(path=tmp_path / "s.json")
     s.update({"voice": {"ttsVoice": "zh-CN-XiaoxiaoNeural", "autoPlay": True}})
@@ -173,6 +202,38 @@ def test_api_post_global_settings_merges(client):
     assert body["cloud"]["s3Bucket"] == "my-bucket"
     # unchanged fields preserved
     assert body["voice"]["ttsProvider"] == "edge"
+
+
+def test_api_post_the_panel_payload_does_not_500(client):
+    """The body the settings drawer sends, field for field.
+
+    The drawer saves every section in one request, so a voice field it persists
+    and the store does not declare does not merely fail to save that field: the
+    whole request answers 500, and anything else in it -- provider keys
+    included -- is lost with it.
+    """
+    payload = {
+        "voice": {
+            "ttsProvider": "edge",
+            "ttsVoice": "zh-CN-XiaoxiaoNeural",
+            "sttProvider": "mock",
+            "sttLanguage": "zh",
+            "autoPlay": True,
+            "voiceMode": True,
+            "rate": 20,
+            "volume": -10,
+            "pitch": 5,
+            "engine": "edge",
+        },
+        "cloud": {"s3Bucket": "keep-me"},
+    }
+    r = client.post("/api/projects/settings", json=payload)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    for key, value in payload["voice"].items():
+        assert body["voice"][key] == value, key
+    assert body["cloud"]["s3Bucket"] == "keep-me"
+    assert body["mcp"]  # sections the panel did not mention survive too
 
 
 def test_api_get_settings_then_post_roundtrip(client):

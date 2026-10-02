@@ -37,7 +37,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { Button, Spin, Empty, Tooltip, Popconfirm, Input, App as AntdApp } from 'antd';
+import { Button, Spin, Empty, Tooltip, Popconfirm, Input, Popover, App as AntdApp } from 'antd';
 import {
   MessageOutlined, ThunderboltOutlined,
   CheckCircleFilled, CloseCircleFilled, DownOutlined,
@@ -45,7 +45,7 @@ import {
   AppstoreOutlined, ToolOutlined, SettingOutlined,
   SunOutlined, MoonOutlined, ShopOutlined,
   HistoryOutlined, DashboardOutlined, BranchesOutlined, SyncOutlined,
-  FieldTimeOutlined, FileTextOutlined,
+  FieldTimeOutlined, FileTextOutlined, AudioOutlined, ApiOutlined,
 } from '@ant-design/icons';
 
 import { useChatStore } from '../stores/chatStore';
@@ -53,6 +53,7 @@ import { useThemeStore } from '../stores/themeStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import { useT, type TFunc } from '../i18n';
+import { VoicePanel, RobotPanel } from './SettingsDrawer';
 import api from '../api/client';
 import { formatError } from '../utils/formatError';
 import NewChatButton from './NewChatButton';
@@ -518,6 +519,28 @@ export const SidebarFooter: React.FC = () => {
           else: they are one click, and pretending they need a different
           chrome was the thing that made the footer look uneven. */}
       <NavGroup label={t('nav.sectionPreferences')} hint={t('nav.sectionPreferencesHint')}>
+        {/* Voice mode and the bot connector open from here, not from a tab
+            inside the settings drawer: both are things you reach for while
+            working, and they belong with the rest of the rail's controls --
+            one click, bottom-left, where the user asked for them. */}
+        <Popover
+          content={<div style={{ width: 320 }}><VoicePanel /></div>}
+          trigger="click"
+          placement="rightBottom"
+          title={t('settings.voiceMode')}
+        >
+          {navRow('footer-voice', <AudioOutlined style={FOOTER_ICON} />,
+                  t('settings.voiceMode'), null)}
+        </Popover>
+        <Popover
+          content={<div style={{ width: 380 }}><RobotPanel /></div>}
+          trigger="click"
+          placement="rightBottom"
+          title={t('settings.robot')}
+        >
+          {navRow('footer-bots', <ApiOutlined style={FOOTER_ICON} />,
+                  t('settings.robot'), null)}
+        </Popover>
         {navRow('footer-settings', <SettingOutlined style={FOOTER_ICON} />,
                 t('common.settings'), null, openSettings)}
         <button

@@ -21,7 +21,12 @@ import { useSettingsStore, CoderMode, TtsProvider, SttProvider, LlmProvider, Pro
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import { LLM_PRESETS, LLMPreset, matchPreset, getPreset, CUSTOM_MODEL } from '../llm/presets';
-import api, { getVoices, VoiceOption } from '../api/client';
+import api, {
+  getVoices, VoiceOption,
+  listImAccounts, upsertImAccount, deleteImAccount,
+  listImBindings, deleteImBinding, ImAccount, ImBinding,
+  createImPairing, getImPairing, cancelImPairing, imPairingQrUrl, ImPairing,
+} from '../api/client';
 import { speak, stopSpeaking, browserVoices } from '../lib/voicePlayback';
 import { formatError } from '../utils/formatError';
 import { openFeedbackIssue } from '../utils/feedback';
@@ -134,7 +139,7 @@ const CoderModePanel: React.FC = () => {
 // Section: Voice
 // ---------------------------------------------------------------------------
 
-const VoicePanel: React.FC = () => {
+export const VoicePanel: React.FC = () => {
   const t = useT();
   const tokens = useThemeTokens();
   const voice = useSettingsStore((s) => s.voice);
@@ -248,6 +253,7 @@ const VoicePanel: React.FC = () => {
           </div>
         </div>
         <Switch
+          data-testid="voice-mode-switch"
           checked={voice.voiceMode}
           onChange={(checked) => setVoice({ voiceMode: checked })}
         />
@@ -255,18 +261,9 @@ const VoicePanel: React.FC = () => {
       <Text style={{ color: tokens.labelSecondary }}>
         {t('settings.voiceProvidersUsedWhenYouClickTheMicOrSendTextTh')}
       </Text>
-      <div>
-        <Text style={{ color: tokens.labelPrimary }}>{t('settings.ttsProvider')}</Text>
-        <Select
-          style={{ width: '100%', marginTop: 4 }}
-          value={voice.ttsProvider}
-          onChange={(v: TtsProvider) => setVoice({ ttsProvider: v })}
-          options={[
-            { value: 'edge', label: t('settings.microsoftEdgeOnlineFreeHighQuality') },
-            { value: 'mock', label: t('settings.mockOfflineSilentPlaceholder') },
-          ]}
-        />
-      </div>
+      {/* The engine choice used to sit here. "edge" is the only provider that
+          ships, so it was a dropdown with one real answer -- and this panel is a
+          small popover off the rail now, not a settings page. */}
       <div>
         <Text style={{ color: tokens.labelPrimary }}>{t('settings.pickVoice')}</Text>
         <Select
@@ -316,27 +313,9 @@ const VoicePanel: React.FC = () => {
           onChange={(v) => setVoice({ volume: v as number })}
         />
       </div>
-      <div>
-        <Text style={{ color: tokens.labelPrimary }}>{t('settings.sttProvider')}</Text>
-        <Select
-          style={{ width: '100%', marginTop: 4 }}
-          value={voice.sttProvider}
-          onChange={(v: SttProvider) => setVoice({ sttProvider: v })}
-          options={[
-            { value: 'mock', label: t('settings.mockOfflineDeterministicPlaceholder') },
-            { value: 'whisper', label: t('settings.whisperRequiresFasterWhisper') },
-          ]}
-        />
-      </div>
-      <div>
-        <Text style={{ color: tokens.labelPrimary }}>{t('settings.sttLanguage')}</Text>
-        <Input
-          style={{ marginTop: 4 }}
-          value={voice.sttLanguage}
-          onChange={(e) => setVoice({ sttLanguage: e.target.value })}
-          placeholder={t('settings.eGEnZhJa')}
-        />
-      </div>
+      {/* Speech-to-text has nothing to configure any more: the composer's mic
+          runs the browser's own recogniser (web/src/lib/speechInput.ts), so the
+          mock/whisper choice and the language box were two dead knobs. */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text style={{ color: tokens.labelPrimary }}>{t('settings.autoPlayResponseAudio')}</Text>
         <Switch
@@ -1526,6 +1505,432 @@ const AboutPanel: React.FC = () => {
 // Drawer
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Section: Bots -- the connector side of the app
+// ---------------------------------------------------------------------------
+//
+// A WeChat connector lives outside this app: it holds a login, and it
+// authenticates as one account. What this panel owes the user is therefore
+// two plain things -- where to point the connector, and what it is doing.
+// An endpoint you cannot find is an endpoint that does not exist, and a
+// queue nobody can see is a silent failure. So the three URLs come first,
+// with the account id already filled in once there is one.
+
+export const RobotPanel: React.FC = () => {
+  const t = useT();
+  const tokens = useThemeTokens();
+  const { message, modal } = AntdApp.useApp();
+
+  const [accounts, setAccounts] = useState<ImAccount[]>([]);
+  const [bindings, setBindings] = useState<ImBinding[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState({ account_id: '', name: '', secret: '' });
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [a, b] = await Promise.all([listImAccounts(), listImBindings()]);
+      setAccounts(a.accounts || []);
+      setBindings(b.bindings || []);
+    } catch {
+      // Leave the lists empty and keep rendering: "where do I point the
+      // connector" is answerable before any account exists.
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const origin = window.location.origin;
+  const shownId = accounts[0]?.account_id || '{account_id}';
+  const endpoints = [
+    { method: 'POST', url: `${origin}/api/im/${shownId}/inbound` },
+    { method: 'GET', url: `${origin}/api/im/${shownId}/outbound` },
+    { method: 'POST', url: `${origin}/api/im/${shownId}/outbound/ack` },
+  ];
+
+  const copy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      message.success(t('common.copied'));
+    } catch {
+      message.error(t('common.failed'));
+    }
+  };
+
+  const idLooksValid = /^[A-Za-z0-9._-]*$/.test(form.account_id);
+
+  const addAccount = async () => {
+    if (!form.account_id.trim() || !idLooksValid) {
+      message.error(t('settings.robotIdInvalid'));
+      return;
+    }
+    if (!form.secret.trim()) {
+      message.error(t('settings.robotSecretHint'));
+      return;
+    }
+    setBusy(true);
+    try {
+      await upsertImAccount({
+        account_id: form.account_id.trim(),
+        name: form.name.trim() || form.account_id.trim(),
+        secret: form.secret,
+      });
+      setForm({ account_id: '', name: '', secret: '' });
+      message.success(t('common.saved'));
+      await load();
+    } catch {
+      message.error(t('common.failed'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggle = async (account: ImAccount, enabled: boolean) => {
+    try {
+      await upsertImAccount({
+        account_id: account.account_id,
+        name: account.name,
+        enabled,
+      });
+      await load();
+    } catch {
+      message.error(t('common.failed'));
+    }
+  };
+
+  const removeAccount = (account: ImAccount) => {
+    modal.confirm({
+      title: `${t('common.delete')} ${account.name || account.account_id}?`,
+      okText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        await deleteImAccount(account.account_id);
+        await load();
+      },
+    });
+  };
+
+  const removeBinding = async (b: ImBinding) => {
+    try {
+      await deleteImBinding(b.account_id, b.chat_id);
+      await load();
+    } catch {
+      message.error(t('common.failed'));
+    }
+  };
+
+  /* Connecting is one button and one QR code. The endpoints, the account id
+     and the secret stay on this panel because the *connector* needs them --
+     they are not what the user should have to produce. */
+  const [pairing, setPairing] = useState<ImPairing | null>(null);
+
+  const startPairing = async () => {
+    try {
+      setPairing(await createImPairing());
+    } catch (err) {
+      message.error(formatError(err, t('settings.robotConnect')));
+    }
+  };
+
+  const cancelPairing = async () => {
+    const current = pairing;
+    setPairing(null);
+    if (current) await cancelImPairing(current.pairing_id).catch(() => {});
+  };
+
+  // Watch the handshake. The connector's side is the slow one -- it has to log
+  // a chat client in -- so the panel asks for the state instead of waiting on
+  // a call that would hold a connection open for a minute.
+  useEffect(() => {
+    if (!pairing || pairing.status === 'bound') return;
+    const timer = window.setInterval(async () => {
+      try {
+        const fresh = await getImPairing(pairing.pairing_id);
+        setPairing(fresh);
+        if (fresh.status === 'bound') {
+          void load();
+          message.success(t('settings.robotConnected'));
+        }
+      } catch {
+        /* cancelled from under us: keep the last thing we knew */
+      }
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [pairing?.pairing_id, pairing?.status, load]);
+
+  const box: React.CSSProperties = {
+    border: `1px solid ${tokens.border}`,
+    background: tokens.bgLay1,
+    borderRadius: 8,
+    padding: 12,
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <Text style={{ color: tokens.labelSecondary }}>
+        {t('settings.robotIntro')}
+      </Text>
+
+      {/* Scan first. This is the whole connection: click, scan, bound. */}
+      <div
+        style={{
+          ...box,
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', gap: 12, padding: 16,
+        }}
+      >
+        {!pairing && (
+          <>
+            <Button type="primary" size="large" onClick={startPairing}
+                    data-testid="robot-connect">
+              {t('settings.robotConnect')}
+            </Button>
+            <Text style={{ color: tokens.labelTertiary, fontSize: 11, textAlign: 'center' }}>
+              {t('settings.robotScanHint')}
+            </Text>
+          </>
+        )}
+        {pairing && pairing.status !== 'bound' && (
+          <>
+            {pairing.has_qr ? (
+              <img
+                data-testid="robot-qr"
+                src={imPairingQrUrl(pairing.pairing_id)}
+                alt={t('settings.robotConnect')}
+                width={220}
+                height={220}
+                style={{
+                  background: '#fff', padding: 8, borderRadius: 8,
+                  border: `1px solid ${tokens.border}`,
+                }}
+              />
+            ) : (
+              <Spin />
+            )}
+            <Text style={{ color: tokens.labelSecondary, textAlign: 'center' }}>
+              {pairing.expired || pairing.status === 'expired'
+                ? t('settings.robotQrExpired')
+                : pairing.status === 'scanned'
+                  ? t('settings.robotScanned')
+                  : pairing.status === 'waiting'
+                    ? t('settings.robotWaiting')
+                    : t('settings.robotScanHint')}
+            </Text>
+            <Space>
+              {(pairing.expired || pairing.status === 'expired') && (
+                <Button size="small" onClick={startPairing}>
+                  {t('settings.robotNewQr')}
+                </Button>
+              )}
+              <Button size="small" onClick={cancelPairing} data-testid="robot-cancel">
+                {t('common.cancel')}
+              </Button>
+            </Space>
+          </>
+        )}
+      </div>
+
+      {/* Endpoints first: this is the part people come here for. */}
+      <div style={box}>
+        <div style={{ fontWeight: 600, color: tokens.labelPrimary, marginBottom: 8 }}>
+          {t('settings.robotEndpoints')}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {endpoints.map((e) => (
+            <div key={e.url} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span
+                style={{
+                  fontFamily: 'monospace',
+                  fontSize: 11,
+                  color: tokens.brand,
+                  minWidth: 42,
+                }}
+              >
+                {e.method}
+              </span>
+              <code
+                style={{
+                  flex: 1,
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                  color: tokens.labelPrimary,
+                  background: tokens.bgLay2,
+                  border: `1px solid ${tokens.border}`,
+                  borderRadius: 4,
+                  padding: '3px 6px',
+                  overflowX: 'auto',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {e.url}
+              </code>
+              <Button size="small" onClick={() => copy(e.url)}>
+                {t('common.copy')}
+              </Button>
+            </div>
+          ))}
+        </div>
+        <Text style={{ color: tokens.labelTertiary, fontSize: 11, display: 'block', marginTop: 8 }}>
+          {t('settings.robotEndpointHint')}
+        </Text>
+      </div>
+
+      <Divider style={{ margin: 0 }} />
+
+      {/* Add an account */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ fontWeight: 600, color: tokens.labelPrimary }}>
+          {t('common.add')} · {t('settings.robotAccountId')}
+        </div>
+        <Space wrap>
+          <Input
+            data-testid="robot-account-id"
+            placeholder={t('settings.robotAccountId')}
+            value={form.account_id}
+            status={idLooksValid ? undefined : 'error'}
+            style={{ width: 170 }}
+            onChange={(e) => setForm({ ...form, account_id: e.target.value })}
+          />
+          <Input
+            data-testid="robot-account-name"
+            placeholder={t('common.name')}
+            value={form.name}
+            style={{ width: 170 }}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+          />
+          <Input
+            data-testid="robot-account-secret"
+            placeholder={t('settings.robotSecret')}
+            value={form.secret}
+            style={{ width: 220 }}
+            onChange={(e) => setForm({ ...form, secret: e.target.value })}
+          />
+          <Button
+            onClick={() =>
+              setForm({
+                ...form,
+                secret: Array.from(crypto.getRandomValues(new Uint8Array(24)))
+                  .map((b) => b.toString(16).padStart(2, '0'))
+                  .join(''),
+              })
+            }
+          >
+            {t('settings.robotGenerate')}
+          </Button>
+          <Button
+            type="primary"
+            data-testid="robot-add-account"
+            loading={busy}
+            onClick={addAccount}
+          >
+            {t('common.add')}
+          </Button>
+        </Space>
+        <Text style={{ color: tokens.labelTertiary, fontSize: 11 }}>
+          {t('settings.robotSecretHint')}
+        </Text>
+      </div>
+
+      {/* Accounts */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ fontWeight: 600, color: tokens.labelPrimary }}>
+          {t('settings.robot')}
+        </div>
+        {loading ? (
+          <Spin size="small" />
+        ) : accounts.length === 0 ? (
+          <Text style={{ color: tokens.labelTertiary }}>
+            {t('settings.robotNoAccounts')}
+          </Text>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {accounts.map((a) => (
+              <div
+                key={a.account_id}
+                style={{ ...box, display: 'flex', alignItems: 'center', gap: 10 }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: tokens.labelPrimary }}>
+                    {a.name || a.account_id}
+                    <span
+                      style={{
+                        fontFamily: 'monospace',
+                        fontSize: 11,
+                        color: tokens.labelTertiary,
+                        marginLeft: 8,
+                      }}
+                    >
+                      {a.account_id}
+                    </span>
+                  </div>
+                  <Space size={6} style={{ marginTop: 4 }}>
+                    <Tag color={a.pending > 0 ? 'orange' : undefined}>
+                      {t('common.pending')}: {a.pending}
+                    </Tag>
+                    <Tag>
+                      {t('common.projects')}: {a.conversations}
+                    </Tag>
+                  </Space>
+                </div>
+                <Space>
+                  <Text style={{ color: tokens.labelSecondary, fontSize: 12 }}>
+                    {t('common.enabled')}
+                  </Text>
+                  <Switch
+                    size="small"
+                    data-testid={`robot-enabled-${a.account_id}`}
+                    checked={a.enabled}
+                    onChange={(checked) => toggle(a, checked)}
+                  />
+                  <Button
+                    danger
+                    size="small"
+                    onClick={() => removeAccount(a)}
+                  >
+                    {t('common.delete')}
+                  </Button>
+                </Space>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Which conversation is which workspace */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ fontWeight: 600, color: tokens.labelPrimary }}>
+          {t('settings.robotBindings')}
+        </div>
+        {bindings.length === 0 ? (
+          <Text style={{ color: tokens.labelTertiary }}>{t('common.empty')}</Text>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {bindings.map((b) => (
+              <div
+                key={`${b.account_id}/${b.chat_id}`}
+                style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+              >
+                <code style={{ flex: 1, fontFamily: 'monospace', fontSize: 12, color: tokens.labelSecondary }}>
+                  {b.account_id} · {b.chat_id} → {b.project_id}
+                </code>
+                <Button size="small" onClick={() => removeBinding(b)}>
+                  {t('common.remove')}
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
   const tokens = useThemeTokens();
   const { t, lang, setLang } = useI18n();
@@ -1773,12 +2178,14 @@ export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
         tabPosition="top"
         style={{ padding: '0 16px' }}
         items={[
-          // R38.6.3: 8 tabs → 3. Voice / MCP / Cloud / Metrics /
-          // Skills / Coder advanced panels removed. Power users
-          // can call those APIs directly via /api/config/* and
-          // /api/borrowed/*. The 3 remaining tabs cover the
-          // 95% daily-use path: pick a model, pick a mode,
-          // and (rarely) reset / inspect.
+          // R38.6.3 cut this drawer from 8 tabs to 3 (Voice / MCP /
+          // Cloud / Metrics / Skills / Coder advanced panels were
+          // removed). Voice is back now that voice mode is real: it is
+          // a daily-use switch rather than an advanced panel, and a
+          // setting with no route to it is a setting that does not
+          // exist -- VoicePanel sat rendered nowhere for a while, so
+          // "turn voice mode on" had no button at all. The other panels
+          // stay reachable through /api/config/* and /api/borrowed/*.
           {
             key: 'provider',
             label: <span><RobotOutlined /> {t('settings.provider')}</span>,

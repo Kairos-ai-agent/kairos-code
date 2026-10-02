@@ -266,6 +266,21 @@ def main() -> int:
                 "not installed when it was frozen, so voice mode can only fall "
                 "back to the browser's voices")
 
+        # The IM account endpoints have to be mounted in the frozen build
+        # too: they are what an outside connector (a WeChat hook, say)
+        # talks to, and a route that only exists in a development tree is
+        # a feature that did not ship -- the 0.1.5 shape, where the bundled
+        # MCP servers were listed but could not start.
+        code, body = get(f"{base}/api/im/status")
+        if code != 200:
+            return report(f"/api/im/status -> {code} {body[:200]}")
+        im_status = json.loads(body)
+        if not im_status.get("initialized"):
+            return report(f"/api/im/status -> not initialized: {body[:200]}")
+        print(f"[smoke] im: accounts={im_status.get('accounts')} "
+              f"conversations={im_status.get('conversations')} "
+              f"pending={im_status.get('pending')}")
+
         print("PASS: the frozen binary serves the UI and its API")
         return 0
     finally:

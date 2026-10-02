@@ -1107,6 +1107,78 @@
     "zh": "本机音色",
     "en": "This machine's voices"
   },
+  "settings.robot": {
+    "zh": "机器人",
+    "en": "Bots"
+  },
+  "settings.robotConnect": {
+    "zh": "连接微信",
+    "en": "Connect WeChat"
+  },
+  "settings.robotScanHint": {
+    "zh": "点一下出现二维码，用微信扫一扫即可绑定，不用填任何东西",
+    "en": "One click shows a QR code — scan it with WeChat and it binds itself. Nothing to fill in."
+  },
+  "settings.robotWaiting": {
+    "zh": "正在等待连接器…（请确认它已在运行）",
+    "en": "Waiting for the connector… (make sure it is running)"
+  },
+  "settings.robotScanned": {
+    "zh": "已扫码，请在手机上确认",
+    "en": "Scanned — confirm on your phone"
+  },
+  "settings.robotQrExpired": {
+    "zh": "二维码已过期，换一张",
+    "en": "The code expired — get a new one"
+  },
+  "settings.robotNewQr": {
+    "zh": "换一张",
+    "en": "New code"
+  },
+  "settings.robotConnected": {
+    "zh": "已连接",
+    "en": "Connected"
+  },
+  "settings.robotIntro": {
+    "zh": "一个微信号 = 一个独立账号；每个联系人/群 = 一个独立工作区（各自的文件、记忆、队列互不相通）。",
+    "en": "One account per WeChat login; every contact or group gets its own workspace, with separate files, memory and queue."
+  },
+  "settings.robotEndpoints": {
+    "zh": "接入地址（给连接器用）",
+    "en": "Endpoints (for your connector)"
+  },
+  "settings.robotEndpointHint": {
+    "zh": "连接器用账号自己的密钥给每个请求签名，签名规则见仓库里的 scripts/im_connector_sim.py。",
+    "en": "Your connector signs every request with that account's own secret; scripts/im_connector_sim.py in the repository is the reference."
+  },
+  "settings.robotAccountId": {
+    "zh": "账号 ID",
+    "en": "Account ID"
+  },
+  "settings.robotSecret": {
+    "zh": "密钥",
+    "en": "Secret"
+  },
+  "settings.robotSecretHint": {
+    "zh": "只在添加时输入一次，之后不再回显",
+    "en": "Entered once, never shown again"
+  },
+  "settings.robotGenerate": {
+    "zh": "随机生成",
+    "en": "Generate"
+  },
+  "settings.robotBindings": {
+    "zh": "会话 → 工作区",
+    "en": "Chat → workspace"
+  },
+  "settings.robotNoAccounts": {
+    "zh": "还没有账号。加一个，再把上面的地址给连接器。",
+    "en": "No accounts yet. Add one, then point your connector at the endpoints above."
+  },
+  "settings.robotIdInvalid": {
+    "zh": "账号 ID 只能用字母、数字、- _ .",
+    "en": "Account ID may only use letters, digits, '-', '_' and '.'"
+  },
   "settings.previewVoice": {
     "zh": "试听",
     "en": "Preview"

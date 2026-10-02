@@ -153,3 +153,100 @@ export const synthesizeSpeech = async (
     spokenChars: Number(resp.headers['x-spoken-chars'] ?? 0),
   };
 };
+
+// ---------------------------------------------------------------------------
+// Bots (IM connectors: WeChat and friends)
+// ---------------------------------------------------------------------------
+// These are the calls the *operator* of a connector makes: manage accounts,
+// see which conversation maps to which workspace, and inspect the reply
+// queue. The connector itself lives outside this app (it holds a WeChat
+// login), and talks to the signed /api/im/{account}/... endpoints directly.
+export interface ImAccount {
+  account_id: string;
+  name: string;
+  enabled: boolean;
+  created_at: number;
+  pending: number;
+  conversations: number;
+}
+
+export interface ImBinding {
+  account_id: string;
+  chat_id: string;
+  project_id: string;
+  updated_at: number;
+}
+
+/** A pairing: the click-to-scan way to connect a chat client.
+ *
+ * The UI only ever *reads* one of these. The pairing's secret goes to whoever
+ * claimed the code (the connector on this machine), and the account's real
+ * secret is handed over in the same handshake, so neither is ever typed,
+ * copied, or displayed here.
+ */
+export interface ImPairing {
+  pairing_id: string;
+  status: 'waiting' | 'claimed' | 'qr' | 'scanned' | 'bound' | 'expired';
+  expires_at: number;
+  account_id: string;
+  display_name: string;
+  has_qr: boolean;
+  expired: boolean;
+}
+
+export async function createImPairing(): Promise<ImPairing> {
+  return (await api.post('/im/pairings')).data;
+}
+
+export async function getImPairing(pairingId: string): Promise<ImPairing> {
+  return (await api.get(`/im/pairings/${pairingId}`)).data;
+}
+
+export async function cancelImPairing(pairingId: string): Promise<void> {
+  await api.delete(`/im/pairings/${pairingId}`);
+}
+
+/** The QR is served as an image, so the panel can point an <img> at it. */
+export function imPairingQrUrl(pairingId: string): string {
+  const origin = typeof window === 'undefined' ? '' : window.location.origin;
+  return `${origin}/api/im/pairings/${pairingId}/qr.png`;
+}
+
+export async function listImAccounts(): Promise<{ accounts: ImAccount[] }> {
+  const r = await api.get('/im/accounts');
+  return r.data;
+}
+
+export async function upsertImAccount(body: {
+  account_id: string;
+  name?: string;
+  secret?: string;
+  enabled?: boolean;
+}): Promise<{ ok: boolean }> {
+  const r = await api.post('/im/accounts', body);
+  return r.data;
+}
+
+export async function deleteImAccount(accountId: string): Promise<any> {
+  const r = await api.delete(`/im/accounts/${encodeURIComponent(accountId)}`);
+  return r.data;
+}
+
+export async function listImBindings(
+  accountId?: string,
+): Promise<{ bindings: ImBinding[] }> {
+  const r = await api.get('/im/bindings', {
+    params: accountId ? { account_id: accountId } : {},
+  });
+  return r.data;
+}
+
+export async function deleteImBinding(
+  accountId: string,
+  chatId: string,
+): Promise<any> {
+  const r = await api.delete(
+    `/im/bindings/${encodeURIComponent(accountId)}/${encodeURIComponent(chatId)}`,
+  );
+  return r.data;
+}

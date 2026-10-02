@@ -38,6 +38,18 @@ class VoiceSettings:
     sttProvider: str = "mock"          # "mock" | "whisper"
     sttLanguage: str = "en"
     autoPlay: bool = False
+    # The settings drawer's voice panel persists these five alongside the
+    # rest, and every one of them is read back on each synthesis request
+    # (api/routes/voice.py takes rate/volume/pitch per call, and the panel's
+    # sliders are the only place they can come from). A field the front end
+    # writes and this dataclass does not declare is not a missing feature --
+    # it is a save that dies with a TypeError and takes the whole settings
+    # payload down with it, including the parts that did work.
+    voiceMode: bool = False
+    rate: int = 0            # percent, -90..200, engine reads "+10%"
+    volume: int = 0          # percent, -100..100
+    pitch: int = 0           # Hz offset, -100..100
+    engine: str = "auto"     # "auto" | "edge"
 
 
 @dataclass

@@ -52,6 +52,10 @@ from kairos.feishu import (FeishuBindingStore, FeishuBot,
 # Approval, Hooks, Skills invoke, Sandbox, Session Fork, IM
 # platforms, FTS5 memory, more LLM providers).
 from api.routes import borrowed as borrowed_routes
+# Per-account IM (WeChat and friends): many accounts on one
+# deployment, each conversation bound to its own workspace.
+from api.routes import im as im_routes
+from kairos.im_accounts import IMAccountStore
 
 log = logging.getLogger(__name__)
 
@@ -64,6 +68,8 @@ _browser_manager: BrowserManager | None = None
 _feishu_bot: FeishuBot | None = None
 _feishu_store: FeishuBindingStore | None = None
 _feishu_forwarder: FeishuEventForwarder | None = None
+# Per-account IM store; None until the lifespan wires it.
+_im_store: IMAccountStore | None = None
 
 
 @asynccontextmanager
@@ -169,6 +175,20 @@ async def lifespan(app: FastAPI):
         log.info("Feishu integration ready (R38.6 §33)")
     except Exception as exc:  # noqa: BLE001
         log.warning("Feishu setup failed: %s", exc)
+
+    # Per-account IM: the account / binding / queue store the
+    # connectors talk to. No connector runs here -- they live
+    # outside the repository and authenticate as one account each.
+    global _im_store
+    try:
+        from kairos.config.settings import settings as _kairos_settings
+        _im_store = IMAccountStore(
+            db_path=_kairos_settings.data_dir / "im.db")
+        await _im_store.init()
+        im_routes.set_store(_im_store)
+        log.info("IM account store ready")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("IM store setup failed: %s", exc)
 
     # MCP servers are configured by the user, so they can hang: a command
     # that is not installed, or one that has to fetch something over a
@@ -335,6 +355,7 @@ app.include_router(gate_router, prefix="/api/projects", tags=["gate"])
 app.include_router(browser_routes.router, tags=["browser"])
 # R38.6 §33: Feishu (Lark) bot — push notifications + remote commands
 app.include_router(feishu_routes.router, tags=["feishu"])
+app.include_router(im_routes.router, tags=["im"])
 # R38.6 §34: Borrowed features — Plan / Approval / Hooks / Skills /
 # Sandbox / Fork / IM / Memory / Providers
 app.include_router(borrowed_routes.router, tags=["borrowed"])

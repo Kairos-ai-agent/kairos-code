@@ -98,3 +98,46 @@ def test_the_description_can_be_updated_too(client, orch):
     assert r.status_code == 200
     assert r.json()["description"] == "说明"
     assert orch._db.saved[-1][2] == "说明"
+
+def test_the_working_directory_can_be_repointed(client, orch, tmp_path):
+    """repointing work_dir is what lets the agent work in a real folder."""
+    target = tmp_path / "erp"
+    target.mkdir()
+    r = client.patch("/api/projects/p1", json={"work_dir": str(target)})
+    assert r.status_code == 200
+    assert r.json()["work_dir"] == str(target)
+    assert orch.projects["p1"].work_dir == str(target)
+    assert orch._db.saved[-1][0] == "p1"          # written through
+
+
+def test_a_missing_working_directory_is_refused(client, orch, tmp_path):
+    r = client.patch("/api/projects/p1",
+                     json={"work_dir": str(tmp_path / "does-not-exist")})
+    assert r.status_code == 400
+    assert "工作目录不可访问" in r.json()["detail"]
+    assert orch._db.saved == []                    # nothing written
+
+
+def test_an_empty_working_directory_falls_back_to_the_workspace(client, orch, tmp_path):
+    target = tmp_path / "erp"
+    target.mkdir()
+    client.patch("/api/projects/p1", json={"work_dir": str(target)})
+    r = client.patch("/api/projects/p1", json={"work_dir": ""})
+    assert r.status_code == 200
+    assert orch.projects["p1"].work_dir == ""
+
+
+def test_a_work_dir_only_patch_is_not_nothing_to_update(client, orch, tmp_path):
+    target = tmp_path / "x"
+    target.mkdir()
+    r = client.patch("/api/projects/p1", json={"work_dir": str(target)})
+    assert r.status_code == 200                    # not the 400 "Nothing to update"
+
+
+def test_a_rename_still_leaves_work_dir_alone(client, orch, tmp_path):
+    target = tmp_path / "erp"
+    target.mkdir()
+    client.patch("/api/projects/p1", json={"work_dir": str(target)})
+    client.patch("/api/projects/p1", json={"name": "新名字"})
+    assert orch.projects["p1"].work_dir == str(target)
+    assert orch.projects["p1"].name == "新名字"

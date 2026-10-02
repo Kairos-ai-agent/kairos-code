@@ -161,6 +161,16 @@ All notable changes to this project are documented here. The format follows
   的语音、微信、设置、主题都在原位；`RobotPanel` 的实现仍留在 `SettingsDrawer.tsx`
   里，但已经没有入口能到达它。
 
+### Added
+
+- **工作目录可以在项目建好之后再改**（`PATCH /api/projects/{id}` 现在接受
+  `work_dir`）。agent 的终端工具在构造时就被绑定到项目工作目录
+  （`TerminalTool(allowed_cwd=...)`），所以建项目时没填目录的项目会一直被困在
+  自动生成的空工作区里，任何解析到别处的路径参数都会被拒
+  （`argument '...' resolves to a path outside the project directory`）。之前只能
+  重建项目才能换目录，现在原地改就行；目录必须已存在（否则 400
+  `工作目录不可访问`），下次重建 agent 时生效。覆盖 5 个回归测试。
+
 ## [0.1.7] - 2026-09-29
 
 ### Added

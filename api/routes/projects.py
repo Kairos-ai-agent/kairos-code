@@ -588,13 +588,32 @@ async def rename_project(project_id: str, patch: dict):
         project.name = name
     if "description" in body:
         project.description = str(body.get("description") or "")
-    if "name" not in body and "description" not in body:
+    if "work_dir" in body:
+        # The agent's terminal tool is bound to this directory at
+        # construction time (``TerminalTool(allowed_cwd=...)``), so a
+        # project created without one runs pinned inside its auto-generated
+        # workspace and every path argument that resolves elsewhere is
+        # refused. Being able to repoint it is the difference between
+        # "the agent can help with this folder" and "the agent can only
+        # see an empty scratch dir"; it takes effect on the next rebuild.
+        raw_dir = str(body.get("work_dir") or "").strip()
+        if raw_dir:
+            wd = Path(raw_dir).expanduser()
+            if not wd.is_dir():
+                raise HTTPException(status_code=400,
+                                    detail=f"工作目录不可访问: {raw_dir}")
+            project.work_dir = str(wd)
+        else:
+            project.work_dir = ""
+    if ("name" not in body and "description" not in body
+            and "work_dir" not in body):
         raise HTTPException(status_code=400, detail="Nothing to update")
     _orch()._db.save_project(project)
     return {
         "id": project_id,
         "name": project.name,
         "description": getattr(project, "description", "") or "",
+        "work_dir": getattr(project, "work_dir", "") or "",
     }
 
 

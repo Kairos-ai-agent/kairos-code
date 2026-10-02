@@ -172,7 +172,7 @@ const ChatSidebar: React.FC = () => {
     <div style={{
       height: `calc(100vh - 52px)`,
       display: 'flex', flexDirection: 'column',
-      padding: '12px 8px',
+      padding: '10px 8px',
       boxSizing: 'border-box',
     }}>
       <NewChatButton />
@@ -180,7 +180,7 @@ const ChatSidebar: React.FC = () => {
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 4px', minHeight: 0 }}>
         {/* ------------------- Projects list ------------------- */}
         {projects.length > 0 && (
-          <div data-testid="project-list" style={{ marginBottom: 12 }}>
+          <div data-testid="project-list" style={{ marginBottom: 8 }}>
             <div data-testid="project-list-header" style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '6px 8px 4px',
@@ -273,7 +273,7 @@ const ChatSidebar: React.FC = () => {
               />
             )}
             {!loading && grouped.map((group) => (
-              <div key={group.label} style={{ marginBottom: 8 }}>
+              <div key={group.label} style={{ marginBottom: 6 }}>
                 <div style={{
                   padding: '4px 8px 2px', fontSize: 10,
                   color: tokens.labelTertiary,
@@ -357,7 +357,7 @@ const NavGroup: React.FC<{
           letterSpacing: '0.06em',
           textTransform: 'uppercase',
           color: tokens.labelTertiary,
-          padding: '0 4px 4px',
+          padding: '0 4px 2px',
           userSelect: 'none',
         }}
       >
@@ -371,7 +371,7 @@ const NavGroup: React.FC<{
           // columns gave ~52px and truncated them — the grid has to be sized by
           // the longest word it must hold, not by how many items look tidy.
           gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-          gap: 4,
+          gap: 3,
         }}
       >
         {children}
@@ -414,8 +414,8 @@ export const SidebarFooter: React.FC = () => {
   // cell width, and the grid stays a grid instead of a flex row that happens to
   // align at the left edge.
   const baseBtn = {
-    padding: '6px 2px',
-    borderRadius: 8,
+    padding: '4px 2px',
+    borderRadius: 6,
     background: 'transparent',
     border: 'none',
     color: tokens.labelSecondary,
@@ -425,7 +425,7 @@ export const SidebarFooter: React.FC = () => {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
+    gap: 2,
     minWidth: 0,
     cursor: 'pointer',
     transition: 'background 0.12s, color 0.12s',
@@ -476,11 +476,11 @@ export const SidebarFooter: React.FC = () => {
       data-testid="sidebar-footer"
       style={{
         borderTop: `1px solid ${tokens.border}`,
-        marginTop: 8,
-        paddingTop: 8,
+        marginTop: 6,
+        paddingTop: 6,
         display: 'flex',
         flexDirection: 'column',
-        gap: 10,
+        gap: 6,
       }}
     >
       {/* Destination groups. R38.13: the old footer hid six destinations

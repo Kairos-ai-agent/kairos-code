@@ -335,7 +335,16 @@ bar
 """,
         encoding="utf-8",
     )
-    loader = SkillsLoader(project_dir=proj, bundled_dir=_NO_BUNDLED)
+    loader = SkillsLoader(
+        project_dir=proj,
+        bundled_dir=_NO_BUNDLED,
+        # `~/.kairos/skills` is a third input this test doesn't control: on a
+        # machine that has user skills without a `when` clause they match every
+        # context, so "nothing matches" stops holding. Point the global scope
+        # at an empty dir so the assertion tests the loader, not the developer's
+        # home directory.
+        global_dir=tmp_path / "no-global-skills",
+    )
     out = loader.for_context({"description": "needs foo"})
     assert "bar" in out
     # No match → empty string

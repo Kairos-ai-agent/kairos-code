@@ -25,9 +25,34 @@ def test_reload_skills_handles_project_without_work_dir():
     assert "error" in result
 
 
-def test_reload_skills_discovers_md_files(tmp_path: Path):
+def _isolate_global_skills(monkeypatch, tmp_path: Path) -> None:
+    """Point the loader's global scope at an empty dir for one test.
+
+    ``reload_skills`` loads ``~/.kairos/skills`` as well as the project's own
+    ``.kairos/skills`` — that is the documented "user + project" scope. A user
+    skill without a ``when`` clause matches every context, so on a machine that
+    has one the project-only counts asserted below stop holding. The tests are
+    about project-local discovery, so scope the global dir out explicitly
+    rather than depending on the developer's home directory.
+    """
+    import kairos.skills as skills_mod
+
+    empty = tmp_path / "no-global-skills"
+    empty.mkdir(exist_ok=True)
+    base = skills_mod.SkillsLoader
+
+    class _ScopedLoader(base):  # keeps base._SKIP_BUNDLED
+        def __init__(self, *args, **kwargs):
+            kwargs.setdefault("global_dir", empty)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(skills_mod, "SkillsLoader", _ScopedLoader)
+
+
+def test_reload_skills_discovers_md_files(tmp_path: Path, monkeypatch):
     """A real .kairos/skills/ tree on disk is found by reload_skills."""
     from kairos.core.orchestrator import Orchestrator
+    _isolate_global_skills(monkeypatch, tmp_path)
     skills_dir = tmp_path / ".kairos" / "skills"
     skills_dir.mkdir(parents=True)
     (skills_dir / "debug.md").write_text(
@@ -48,9 +73,10 @@ def test_reload_skills_discovers_md_files(tmp_path: Path):
     assert set(result["names"]) == {"debug", "lint"}
 
 
-def test_reload_skills_handles_missing_skills_dir(tmp_path: Path):
+def test_reload_skills_handles_missing_skills_dir(tmp_path: Path, monkeypatch):
     """Work dir exists but no .kairos/skills/ -> count=0, no error."""
     from kairos.core.orchestrator import Orchestrator
+    _isolate_global_skills(monkeypatch, tmp_path)
     orch = Orchestrator.__new__(Orchestrator)
     project = type("P", (), {"id": "p1", "work_dir": str(tmp_path)})()
     orch._projects = {"p1": project}

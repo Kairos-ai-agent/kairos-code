@@ -25,6 +25,7 @@ from kairos.core.message_bus import MessageBus
 from kairos.core.persistence import Persistence
 from kairos.llm.model_router import ModelRouter
 from kairos.tools.base import ToolResult
+from kairos.tools.code_search import CodeSearchTool
 from kairos.tools.file_edit import FileEditReplaceTool, FileEditTool, MultiEditTool
 from kairos.tools.file_read import FileReadTool
 from kairos.tools.find import FindTool
@@ -387,6 +388,7 @@ class ProjectFactory:
             MultiEditTool(allowed_root=root),
             GrepTool(allowed_root=root),
             FindTool(allowed_root=root),
+            CodeSearchTool(allowed_root=root),
             GitTool(allowed_root=root),
             TerminalTool(allowed_cwd=root),
             WebFetchTool(),
@@ -434,6 +436,7 @@ class ProjectFactory:
             FileReadTool(allowed_root=root),
             GrepTool(allowed_root=root),
             FindTool(allowed_root=root),
+            CodeSearchTool(allowed_root=root),
             GitTool(allowed_root=root),
             TerminalTool(allowed_cwd=root),
         ]

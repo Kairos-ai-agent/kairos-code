@@ -8,6 +8,30 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`code_search`: 让 agent 按「意思」找代码，而不是靠 grep 猜关键字。**
+  agent 探索代码库一直是 grep + read——先猜一个标识符，再整篇整篇读文件。知道
+  名字时又快又准，不知道时又贵又慢。新增的 `code_search` 工具用 MIT 许可的
+  [semble](https://github.com/MinishLab/semble)（纯 CPU、无 API key、无需 GPU 的
+  本地语义检索）把「哪里处理了 X」变成几段真正相关的代码片段，每段带
+  `文件:起始行-结束行` 和相似度分数，而不是一个文件；在真实代码库上相比
+  grep + read 约省 99% token。首次搜索会建一次本地索引（略慢），之后走缓存。
+
+  - **没装 semble 也不会弄崩 Kairos。** 后端只在真正调用时才懒导入，工具的构造
+    阶段完全不碰它；缺失时只由这一个工具返回一条可读错误，服务照常启动。
+  - **阻塞不卡事件循环。** 建索引和检索都是 CPU 密集、可能耗秒的操作，整体丢进
+    `asyncio.to_thread` 的工作线程。
+  - **结果在工具这一层限长。** 每段按 `max_snippet_lines` 截断，整个 payload 上限
+    50000 字符（与 grep 一致），避免一次搜索淹没上下文。
+  - 索引由 semble 自动做磁盘缓存与增量重建（Windows 落在
+    `%LOCALAPPDATA%\semble\Cache`）；`refresh=true` 可强制重建。
+  - 注册进 Coder 与 Reviewer 的两处工具列表（`orchestrator.py` 与
+    `project_factory.py`），并加入只读工具允许清单（`coder_modes`、`approval`）
+    与 tainted-run 的禁读机密名单（`sentinel`），使这个只读工具在 read-only 模式
+    下不会被默认拒绝。
+  - 依赖 `semble` 声明进主 `dependencies`（不是 optional extra，要打进冻结 exe），
+    其运行时依赖 `numpy` 一并显式列出。新增 `tests/test_code_search_tool.py` 共
+    22 个离线测试：全部注入假索引，不联网、不加载真实模型。
+
 - **微信官方 ClawBot / iLink 通道有了桌面入口，二维码改由后端直接出图。**
   这条通道的后端（扫码登录 / 多账号 / 长轮询收发）上一步已经完成，但只能用
   curl 调；这轮把它放到了用户面前，同时去掉了「前端得自己渲染二维码」的需要：

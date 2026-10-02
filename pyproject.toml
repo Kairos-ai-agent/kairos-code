@@ -57,6 +57,15 @@ dependencies = [
     # PNG（`GET /api/weixin/login/qr.png`），前端因此不用引入 QR 库。纯 Python、
     # 无原生依赖；只在这里被懒导入，缺了也只让那一个接口 503。
     "segno>=1.6",
+    # code_search 工具的语义代码检索后端（kairos/tools/code_search.py）。纯
+    # CPU、无 API key、不需要 GPU；首次会从 HuggingFace 拉一个 ~16M 的小模型
+    # 并缓存到 %LOCALAPPDATA%\semble\Cache。懒导入——没装它 Kairos 照样启动，
+    # 只是 code_search 返回一条可读的错误。放进主依赖（而非 extra）是因为要打进
+    # 冻结的 exe。它会带入 model2vec + vicinity + numpy。
+    "semble>=0.6.1",
+    # semble / model2vec 的运行时依赖。此处显式声明而非依赖传递解析，是为了让
+    # 冻结构建（PyInstaller）的依赖闭包一目了然。
+    "numpy>=1.24",
 ]
 
 [project.optional-dependencies]

@@ -55,6 +55,7 @@ from kairos.core.persistence import Persistence
 from kairos.llm.base import LLMConfig
 from kairos.llm.model_router import ModelRouter
 from kairos.tools.base import ToolResult
+from kairos.tools.code_search import CodeSearchTool
 from kairos.tools.file_edit import FileEditReplaceTool, FileEditTool, MultiEditTool
 from kairos.tools.file_read import FileReadTool
 from kairos.tools.find import FindTool
@@ -414,6 +415,7 @@ class Orchestrator:
             MultiEditTool(allowed_root=coder_root),
             GrepTool(allowed_root=coder_root),
             FindTool(allowed_root=coder_root),
+            CodeSearchTool(allowed_root=coder_root),
             GitTool(allowed_root=coder_root),
             TerminalTool(allowed_cwd=coder_root),
             WebFetchTool(),
@@ -482,6 +484,7 @@ class Orchestrator:
             FileReadTool(allowed_root=reviewer_root),
             GrepTool(allowed_root=reviewer_root),
             FindTool(allowed_root=reviewer_root),
+            CodeSearchTool(allowed_root=reviewer_root),
             GitTool(allowed_root=reviewer_root),
             TerminalTool(allowed_cwd=reviewer_root),
         ]

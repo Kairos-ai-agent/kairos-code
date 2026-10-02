@@ -567,7 +567,7 @@ class Sentinel:
             if egress:
                 return make("deny", f"tainted egress — {why}", "tainted-egress")
             secret = _matches_any(probe, SECRET_FILE_MARKERS)
-            if secret and tool in ("file_read", "grep", "find", "terminal"):
+            if secret and tool in ("file_read", "grep", "find", "code_search", "terminal"):
                 return make("deny",
                             f"tainted run reading {secret!r}, which may hold secrets",
                             "tainted-secret-read")

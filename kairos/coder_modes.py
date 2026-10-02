@@ -70,7 +70,7 @@ _MUTATING_TOOL_NAMES: Set[str] = {
 _READ_ONLY_ALLOW: Set[str] = {
     "file_read", "read_file", "list_files", "list_directory",
     "grep", "find", "git_status", "git_log", "git_diff",
-    "glob", "search", "stat",
+    "glob", "search", "stat", "code_search",
 }
 
 

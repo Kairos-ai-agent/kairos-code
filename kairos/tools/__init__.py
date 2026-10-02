@@ -5,6 +5,7 @@ the project's workspace + message bus). This module exposes the
 factories.
 """
 from kairos.tools.checkpoint import CheckpointTool, checkpoint_round, list_checkpoints, checkout_checkpoint, ensure_repo
+from kairos.tools.code_search import CodeSearchTool
 from kairos.tools.file_edit import FileEditReplaceTool, FileEditTool, MultiEditTool
 from kairos.tools.file_read import FileReadTool
 from kairos.tools.find import FindTool
@@ -23,6 +24,7 @@ __all__ = [
     "FileEditReplaceTool",
     "FileEditTool",
     "MultiEditTool",
+    "CodeSearchTool",
     "FileReadTool",
     "FindTool",
     "GitTool",

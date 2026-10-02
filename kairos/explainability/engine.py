@@ -137,6 +137,7 @@ class ExplainabilityEngine:
             "file_edit_replace": "Making targeted changes to existing code",
             "multi_edit": "Applying coordinated changes across multiple files",
             "grep": "Searching for patterns across the codebase",
+            "code_search": "Finding relevant code by meaning when the exact name is unknown",
             "find": "Locating files matching a glob pattern",
             "git": "Interacting with version control (diff, log, status)",
             "terminal": "Executing commands to run tests, build, install deps",

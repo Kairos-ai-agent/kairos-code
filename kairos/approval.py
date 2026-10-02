@@ -61,7 +61,7 @@ class ApprovalMode(str, enum.Enum):
 
 # Tools considered "read-only" — silent in SUGGEST and EDIT modes.
 READ_ONLY_TOOLS: frozenset = frozenset({
-    "file_read", "grep", "find", "git_diff", "git_log", "git_show",
+    "file_read", "grep", "find", "code_search", "git_diff", "git_log", "git_show",
     "webfetch", "list_skills", "list_agents",
 })
 

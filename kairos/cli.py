@@ -61,6 +61,10 @@ EXIT_OK = 0
 EXIT_FAILED = 1
 EXIT_TIMEOUT = 2
 EXIT_BAD_INPUT = 3
+# The work is understood but not safe to start unattended (dangerous subject
+# matter, or nothing to verify against). A caller that dispatches work must be
+# able to tell this apart from success and from failure.
+EXIT_NEEDS_CONFIRMATION = 4
 
 
 # ---------------------------------------------------------------------------
@@ -166,6 +170,61 @@ def build_parser() -> argparse.ArgumentParser:
         help="SQLite path (default: the app's data dir).",
     )
     p_gate_report.add_argument("--quiet", action="store_true")
+
+    # ---- worker (identity: one repo is one worker) ----------------------
+    p_worker = sub.add_parser(
+        "worker",
+        help="Bind a repository to a single long-lived worker session, so "
+             "each dispatched task does not start over from scratch.",
+    )
+    worker_sub = p_worker.add_subparsers(dest="worker_command")
+    for name, helptext in (
+        ("attach", "Bind this repository (creating the binding once)."),
+        ("status", "Show the worker bound to a repository."),
+        ("forget", "Detach the worker from a repository (history is kept)."),
+    ):
+        sub_parser = worker_sub.add_parser(name, help=helptext)
+        sub_parser.add_argument(
+            "--repo", default=".",
+            help="Repository the worker is attached to (default: cwd).",
+        )
+        sub_parser.add_argument(
+            "--name", default="", help="Display name (attach only).",
+        )
+        sub_parser.add_argument(
+            "--json", action="store_true", dest="json_output",
+            help="Emit JSON instead of readable text.",
+        )
+
+    # ---- accept (read a task document of any shape) ----------------------
+    p_accept = sub.add_parser(
+        "accept",
+        help="Read a task document and report what it asks for. Accepts any "
+             "format — no template, no frontmatter, no keywords.",
+    )
+    p_accept.add_argument(
+        "file", help="The task document (Markdown, prose, anything).",
+    )
+    p_accept.add_argument(
+        "--repo", default=None,
+        help="Repository the task belongs to (default: the document's dir).",
+    )
+    p_accept.add_argument(
+        "--task-id", default="",
+        help="Override the task id (default: derived from the filename).",
+    )
+    p_accept.add_argument(
+        "--out", default=None,
+        help="Where to write our record (default: <repo>/.kairos/outbox).",
+    )
+    p_accept.add_argument(
+        "--no-model", action="store_true",
+        help="Read it structurally, with no model call at all.",
+    )
+    p_accept.add_argument(
+        "--json", action="store_true", dest="json_output",
+        help="Emit the task record as JSON.",
+    )
 
     # ---- demo (see the gate with no API key) ----------------------------
     p_demo = sub.add_parser(
@@ -424,7 +483,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         print(f"kairos-code {__version__}")
         return 0
-    if not argv or argv[0] not in ("serve", "exec", "gate", "demo", "-h", "--help"):
+    if not argv or argv[0] not in ("serve", "exec", "gate", "demo", "worker",
+                                   "accept", "-h", "--help"):
         # Bare command (or unknown) → legacy server mode
         return _serve_legacy()
 
@@ -450,6 +510,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         return _run_gate(args)
     if args.command == "demo":
         return _run_demo(args)
+    if args.command == "worker":
+        return _run_worker(args)
+    if args.command == "accept":
+        try:
+            return asyncio.run(run_accept(args))
+        except KeyboardInterrupt:
+            print("\n[kairos] interrupted", file=sys.stderr)
+            return 130
     return EXIT_BAD_INPUT
 
 
@@ -466,6 +534,185 @@ def _run_demo(args: argparse.Namespace) -> int:
         *(["--json"] if args.json_output else []),
         *(["--quiet"] if args.quiet else []),
     ])
+
+
+def _run_worker(args: argparse.Namespace) -> int:
+    """Dispatch ``kairos worker <attach|status|forget>``.
+
+    Identity only: this reads and writes ``<repo>/.kairos/worker.json`` and
+    never constructs the agent stack, so it is instant and works with no key
+    configured. The project row itself is created on the first real dispatch.
+    """
+    from pathlib import Path as _Path
+
+    from kairos import worker_identity
+
+    repo = _Path(args.repo).expanduser().resolve()
+    command = getattr(args, "worker_command", None) or "status"
+
+    if command in ("attach", "status") and not repo.exists():
+        print(f"error: no such directory: {repo}", file=sys.stderr)
+        return EXIT_BAD_INPUT
+
+    if command == "forget":
+        removed = worker_identity.forget(repo)
+        payload = {"repo": str(repo), "detached": removed}
+        _emit_worker(args, payload, (
+            f"[kairos] worker detached from {repo}" if removed
+            else f"[kairos] no worker was bound to {repo}"
+        ))
+        return EXIT_OK
+
+    if command == "attach":
+        binding = worker_identity.bind(repo, name=args.name or "")
+        payload = {
+            "repo": binding.repo, "project_id": binding.project_id,
+            "name": binding.name, "dispatches": binding.dispatches,
+            "binding": binding.path, "created": not binding.is_persisted,
+        }
+        _emit_worker(args, payload, (
+            f"[kairos] worker bound to {repo}\n"
+            f"  project id : {binding.project_id}\n"
+            f"  binding    : {binding.path or '(not persisted)'}\n"
+            f"  dispatches : {binding.dispatches}\n"
+            f"  → 这个仓库的每次派发都会落到同一个会话（不会每来一个任务就新建）。"
+        ))
+        return EXIT_OK
+
+    if command == "status":
+        binding = worker_identity.load(repo)
+        if binding is None:
+            payload = {"repo": str(repo), "bound": False}
+            _emit_worker(args, payload,
+                         f"[kairos] no worker bound to {repo} "
+                         f"(run `kairos worker attach --repo {repo}`)")
+            return EXIT_OK
+        payload = {
+            "repo": binding.repo, "bound": True,
+            "project_id": binding.project_id, "name": binding.name,
+            "dispatches": binding.dispatches,
+            "first_task_id": binding.first_task_id,
+            "last_task_id": binding.last_task_id,
+            "binding": binding.path,
+        }
+        _emit_worker(args, payload, (
+            f"[kairos] worker for {repo}\n"
+            f"  project id : {binding.project_id}\n"
+            f"  dispatches : {binding.dispatches}\n"
+            f"  tasks      : {binding.first_task_id or '(none)'} … "
+            f"{binding.last_task_id or '(none)'}"
+        ))
+        return EXIT_OK
+
+    print(f"error: unknown worker command {command!r}", file=sys.stderr)
+    return EXIT_BAD_INPUT
+
+
+def _emit_worker(args: argparse.Namespace, payload: dict, text: str) -> None:
+    if getattr(args, "json_output", False):
+        sys.stdout.write(json.dumps(payload, ensure_ascii=False, indent=2))
+        sys.stdout.write("\n")
+    else:
+        sys.stdout.write(text + "\n")
+    sys.stdout.flush()
+
+
+def _intake_llm():
+    """Best-effort provider for reading the task document.
+
+    Returns ``None`` when no model is configured — the intake then reads the
+    document structurally, which is the whole point of the fallback. Never
+    raises: a missing key must not stop a dispatch.
+    """
+    try:
+        from pathlib import Path
+
+        from kairos import config as _pkg_config
+        from kairos.llm.model_router import ModelRouter
+
+        cfg = Path(_pkg_config.__file__).parent / "models_config.yaml"
+        router = ModelRouter(config_path=cfg.resolve())
+        return router.get_provider_for_role("team_leader")
+    except Exception as exc:  # noqa: BLE001 - degrade to structural reading
+        logger.info("no model for intake (%s); reading the document "
+                    "structurally", exc)
+        return None
+
+
+async def run_accept(args: argparse.Namespace) -> int:
+    """Read a task document and report what it asks for.
+
+    Writes our own record next to the repository (``.kairos/outbox``), so the
+    understanding is auditable and the answers we still need are a file the
+    caller can reply to in prose. Returns:
+
+      0  understood
+      3  nothing actionable in the document
+      4  understood, but not safe to start unattended — see the questions
+    """
+    from pathlib import Path as _Path
+
+    from kairos.intake import (
+        Intake,
+        RepoFacts,
+        render_questions,
+        render_understanding,
+    )
+
+    document = _Path(args.file).expanduser()
+    if not document.exists() or not document.is_file():
+        print(f"error: no such task document: {document}", file=sys.stderr)
+        return EXIT_BAD_INPUT
+
+    try:
+        text = document.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        print(f"error: cannot read {document}: {exc}", file=sys.stderr)
+        return EXIT_BAD_INPUT
+
+    repo = _Path(args.repo).expanduser().resolve() if args.repo \
+        else document.resolve().parent
+    facts = RepoFacts.gather(repo)
+    llm = None if args.no_model else _intake_llm()
+    cache_dir = repo / ".kairos" / "intake"
+    intake = Intake(llm, cache_dir=cache_dir)
+
+    result = await intake.accept(
+        text, source_file=document.name, facts=facts,
+        task_id=args.task_id or "",
+    )
+
+    out_dir = _Path(args.out).expanduser() if args.out \
+        else repo / ".kairos" / "outbox"
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / f"{result.task_id}.intake.json").write_text(
+            result.model_dump_json(indent=2), encoding="utf-8")
+        (out_dir / f"{result.task_id}.understanding.md").write_text(
+            render_understanding(result), encoding="utf-8")
+        if result.questions:
+            (out_dir / f"{result.task_id}.questions.md").write_text(
+                render_questions(result), encoding="utf-8")
+    except OSError as exc:
+        print(f"[kairos] could not write the record ({exc})", file=sys.stderr)
+
+    if getattr(args, "json_output", False):
+        sys.stdout.write(result.model_dump_json(indent=2))
+        sys.stdout.write("\n")
+    else:
+        sys.stdout.write(render_understanding(result))
+        if result.questions:
+            sys.stdout.write("\n### 需要你确认\n")
+            for index, question in enumerate(result.questions, 1):
+                sys.stdout.write(f"{index}. {question}\n")
+        sys.stdout.write(f"\n→ 记录已写入 {out_dir}\n")
+    sys.stdout.flush()
+
+    if result.blocked:
+        return EXIT_BAD_INPUT
+    if result.needs_confirmation:
+        return EXIT_NEEDS_CONFIRMATION
+    return EXIT_OK
 
 
 def _run_gate(args: argparse.Namespace) -> int:

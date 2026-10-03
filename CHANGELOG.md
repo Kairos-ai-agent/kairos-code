@@ -8,6 +8,36 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Kairos 可以作为团队成员被别的 agent 派活：一个仓库 = 一个常驻工人，且不要求对方遵守任何文档格式。**
+  场景是主 agent（Claude Code / Codex / 人或 CI）把项目切成模块、出任务文档给 Kairos，
+  Kairos 干完交代码回去审核。这条路原先有三处硬伤：`create_project` 每次
+  `uuid4()` 生成新项目，等于每来一个任务就换一个失忆的同事；`kairos exec` 用临时目录
+  加临时 SQLite，跑完什么都不剩；而任务文档的形状又不可能要求对方统一。
+
+  - **一个仓库 = 一个工人。** 新增 `kairos/worker_identity.py` 与
+    `<repo>/.kairos/worker.json`：从仓库路径派生稳定的 project id，第一次派发时写下来，
+    以后每次都落到**同一个项目**。因为项目在启动时会从库里重新装配，而笔记、偏好、
+    检查点、技能、`memory_kb.json` 全都按 project id 索引，「同一个 id」就是
+    「同一个会话」——跨任务，也跨重启。`Orchestrator.attach_project()` 是幂等的；
+    `create_project()` 行为不变（人点「新建项目」仍然是新的）。
+  - **收任意形状的任务文档。** 新增 `kairos/intake.py`，**不要求任何格式**：
+    没有 frontmatter、没有标题、没有关键字也照收。需要的信息按「文档说了 → 去仓库里查
+    （AGENTS.md / README / 目录 / git log）→ 保守默认并**记为假设**」的顺序补齐。
+    范围、权限、验收这三样不猜：要么文档写了，要么变成一条问题。
+  - **原文可核验。** 每个任务单元带 `source_quote`，引用**必须真的出现在原文里**
+    （子串校验，不是判断题）；查不出来的引用丢弃并下调把握度。这条挡住了
+    「模型替我们臆想出一个没被要求过的任务」。
+  - **降级而不是失败。** 没有模型、模型报错、模型返回不可解析的内容，都会退化为
+    `heuristic_units()` 的结构切分，并如实标注是机械切分再附一条问题，让定时任务
+    继续往前走而不是死掉。
+  - **危险内容只标记、不否决。** 出现删除 / 格式化 / 凭据 / 提权等会记为 `cautions`、
+    抬高风险并要求确认（退出码 4），但**不**因为一句话里有 `.env` 就拒绝干活——
+    任务文档完全可能是在**禁止**碰凭据。
+  - **CLI：`kairos worker attach|status|forget` 与 `kairos accept <文件>`。**
+    前者只管身份（不构造 agent 栈，没 key 也能瞬间返回）；后者读一份文档后把
+    「我这样理解的」「我替你做的默认」「需要你确认的问题」写进
+    `<repo>/.kairos/outbox/`，退出码 0 = 明白 / 3 = 没有可执行内容 / 4 = 需要确认。
+    `.kairos/.gitignore` 写 `*`，保证工人的簿记**不会出现在主 agent 要审的 diff 里**。
 - **长会话不再「死于上下文」：超限自动压缩重试、旧工具结果按需回收、子代理改回摘要。**
   上下文是 agent 唯一真正稀缺的资源，而这轮之前 Kairos 在它上面有三处硬伤：
   ① 提供方回答 `400 prompt is too long` 时异常直接抛出、整个 run 以「Error: ...」

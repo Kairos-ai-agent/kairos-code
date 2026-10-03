@@ -368,14 +368,52 @@ class Orchestrator:
             logger.info("_load_projects: loaded=%d skipped=%d",
                         loaded, skipped)
 
-    def create_project(self, name: str, description: str, work_dir: str = "") -> Project:
-        project_id = uuid.uuid4().hex[:8]
+    def create_project(self, name: str, description: str, work_dir: str = "",
+                       *, project_id: str = "") -> Project:
+        project_id = project_id or uuid.uuid4().hex[:8]
         workspace = self.workspace_base / project_id
         workspace.mkdir(parents=True, exist_ok=True)
         project = Project(project_id, name, description, workspace, work_dir, db=self._db)
         self._projects[project_id] = project
         self._db.save_project(project)
         self._create_agents(project)
+        return project
+
+    def attach_project(self, repo: str, *, name: str = "",
+                       persist: bool = True) -> Project:
+        """Find-or-create the single worker bound to a repository.
+
+        A main agent dispatching a second task must land on the same session
+        as the first, otherwise the worker is a colleague who forgets
+        everything between tasks. The binding (repo → project id) is written
+        once under ``.kairos/worker.json`` and reused from then on; because
+        projects are rehydrated from the database at startup, the same id
+        means the same notes, preferences, checkpoints and history.
+
+        Unlike ``create_project`` this is idempotent: calling it twice for one
+        repo returns the same project rather than a second one.
+        """
+        from kairos import worker_identity
+
+        binding = worker_identity.bind(repo, name=name, persist=persist)
+        project = self._projects.get(binding.project_id)
+        if project is not None:
+            # Keep the row honest if the working copy moved.
+            resolved = str(Path(repo).expanduser().resolve())
+            if resolved and project.work_dir != resolved:
+                project.work_dir = resolved
+                self._db.save_project(project)
+            logger.debug("attached to existing worker %s for %s",
+                         binding.project_id, repo)
+            return project
+
+        project = self.create_project(
+            name=binding.name or Path(repo).name or "worker",
+            description=f"Worker bound to {binding.repo}",
+            work_dir=str(Path(repo).expanduser().resolve()),
+            project_id=binding.project_id,
+        )
+        logger.info("bound worker %s to %s", binding.project_id, binding.repo)
         return project
 
     def _create_agents(self, project: Project):

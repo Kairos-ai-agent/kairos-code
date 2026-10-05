@@ -445,9 +445,14 @@ const Loop: React.FC = () => {
         </Card>
       )}
 
-      <Row gutter={12} style={{ marginBottom: 12 }}>
-        <Col span={6}>
-          <Card title={t('common.projects')} size="small" bodyStyle={{ padding: 4, maxHeight: 200, overflow: 'auto' }}>
+      {/* The three role cards share the column grid of the row below — projects
+          over the activity stream, coder over stats, reviewer over review — so
+          the dividers line up instead of landing 40px apart, and stretch so the
+          row has one bottom edge rather than three. */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 12,
+                    alignItems: 'stretch' }}>
+        <div style={{ flex: '1 0 320px', minWidth: 320 }}>
+          <Card title={t('common.projects')} size="small" style={{ height: '100%' }} bodyStyle={{ padding: 4, maxHeight: 200, overflow: 'auto' }}>
             <List
               size="small"
               dataSource={projects}
@@ -471,9 +476,9 @@ const Loop: React.FC = () => {
               )}
             />
           </Card>
-        </Col>
-        <Col span={9}>
-          <Card title={t('loop.role.coder')} size="small">
+        </div>
+        <div style={{ flex: '0 1 380px', minWidth: 280 }}>
+          <Card title={t('loop.role.coder')} size="small" style={{ height: '100%' }}>
             <Space direction="vertical" size={4} style={{ width: '100%' }}>
               <Space>
                 <Badge dot color={statusColors[coder?.status || 'idle'] || '#d9d9d9'}>
@@ -505,9 +510,9 @@ const Loop: React.FC = () => {
               )}
             </Space>
           </Card>
-        </Col>
-        <Col span={9}>
-          <Card title={t('loop.role.reviewer')} size="small">
+        </div>
+        <div style={{ flex: '0 1 360px', minWidth: 260 }}>
+          <Card title={t('loop.role.reviewer')} size="small" style={{ height: '100%' }}>
             <Space direction="vertical" size={4} style={{ width: '100%' }}>
               <Space>
                 <Badge dot color={statusColors[reviewer?.status || 'idle'] || '#d9d9d9'}>
@@ -524,12 +529,13 @@ const Loop: React.FC = () => {
               <Text type="secondary" style={{ fontSize: 11 }}>{reviewer?.model || ''}</Text>
             </Space>
           </Card>
-        </Col>
-      </Row>
+        </div>
+      </div>
 
       <div style={{ flex: 1, display: 'flex', gap: 12, minHeight: 0 }}>
         {/* Center: activity stream */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+        <div style={{ flex: '1 0 320px', minWidth: 320, display: 'flex',
+                      flexDirection: 'column', gap: 12 }}>
           {precheckHint && (
             <Alert
               type={precheckHint.fixes.length > 0 ? 'warning' : 'error'}
@@ -606,10 +612,15 @@ const Loop: React.FC = () => {
             </div>
           </Card>
 
-          {/* Start / Stop controls */}
+          {/* Start / Stop controls. The textarea gets a row of its own and the
+              button a row of its own: side by side, the textarea was squeezed to
+              a few dozen pixels — the column is sized by the window (the shell's
+              task rail takes 360px of every page) and an autoSize textarea has
+              no intrinsic width to defend itself with. */}
           <Card size="small" bodyStyle={{ padding: 8 }}>
-            <Space.Compact style={{ width: '100%' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <TextArea
+                style={{ width: '100%' }}
                 value={requirement}
                 onChange={(e) => setRequirement(e.target.value)}
                 placeholder={t('loop.requirement.placeholder')}
@@ -617,21 +628,23 @@ const Loop: React.FC = () => {
                 disabled={loop?.running}
                 onPressEnter={(e) => { if (!e.shiftKey && !loop?.running) { e.preventDefault(); handleStart(); } }}
               />
-              {loop?.running ? (
-                <Button danger icon={<StopOutlined />} onClick={handleStop} loading={stopping}>
-                  {t('common.stop')}
-                </Button>
-              ) : (
-                <Button type="primary" icon={<PlayCircleOutlined />} onClick={handleStart} loading={starting}>
-                  {t('loop.start.button')}
-                </Button>
-              )}
-            </Space.Compact>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                {loop?.running ? (
+                  <Button danger icon={<StopOutlined />} onClick={handleStop} loading={stopping}>
+                    {t('common.stop')}
+                  </Button>
+                ) : (
+                  <Button type="primary" icon={<PlayCircleOutlined />} onClick={handleStart} loading={starting}>
+                    {t('loop.start.button')}
+                  </Button>
+                )}
+              </div>
+            </div>
           </Card>
         </div>
 
         {/* Middle: stats, plan viz, diff, checkpoints */}
-        <div style={{ width: 380, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ flex: '0 1 380px', minWidth: 280, display: 'flex', flexDirection: 'column', gap: 8 }}>
 
           {/* Bug chart + cost */}
           {stats && (
@@ -850,8 +863,9 @@ const Loop: React.FC = () => {
         </Modal>
 
         {/* Right: latest review */}
-        <div style={{ width: 360, flexShrink: 0 }}>
-          <Card title={t('loop.review.title')} size="small" style={{ height: '100%', overflow: 'auto' }}
+        <div style={{ flex: '0 1 360px', minWidth: 260, display: 'flex',
+                      flexDirection: 'column', gap: 8 }}>
+          <Card title={t('loop.review.title')} size="small" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}
             bodyStyle={{ padding: 8 }}>
             {lastIssues.length === 0 && !lastSummary ? (
               <Text type="secondary">{t('loop.review.empty')}</Text>

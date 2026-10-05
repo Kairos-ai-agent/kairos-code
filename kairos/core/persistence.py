@@ -354,38 +354,21 @@ class Persistence:
         except sqlite3.OperationalError:
             return int(time.time() * 1000)
 
-    def record_working_fix(self, project_id: str, issue: str, fix: str,
-                             severity: str = "MAJOR",
-                             source: str = "loop") -> int:
-        """R38.6.4 #6: write a known-issue row into working_fixes.
-
-        Called by the Coder run loop when:
-        - the Reviewer issues a CRITICAL verdict, or
-        - the loop terminates with outcome=failed (no_progress_count
-          exceeded, user_stopped with no approve, etc.)
-
-        Future rounds of the same project read these rows from
-        ``_build_chat_system_prompt`` (already injected as "Known
-        issues to avoid"), so the Coder doesn't re-step on the same
-        rake.
-        """
-        if not issue or not fix:
-            return 0
-        with sqlite3.connect(self.db_path) as conn:
-            cur = conn.execute(
-                "INSERT INTO working_fixes "
-                "(project_id, issue, fix, severity, source, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (project_id, issue[:200], fix[:500], severity,
-                 source, time.time()))
-            return cur.lastrowid or 0
-
     def list_working_fixes(self, project_id: str, limit: int = 5) -> List[dict]:
-        """R38.6.4 #6: fetch the most recent N fixes for a project."""
+        """Return the most recent N working-fix rows for a project.
+
+        The previous implementation selected ``issue`` / ``fix`` /
+        ``severity`` — columns that do not exist on ``working_fixes``
+        (the live schema is ``from_signature`` / ``fix_body`` /
+        ``issue_category``) — so every call raised and was swallowed by
+        the caller. It also had a sibling ``record_working_fix`` that
+        INSERTed the same fictitious columns; both had zero callers. The
+        canonical writer is ``add_working_fix``.
+        """
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
-                "SELECT issue, fix, severity, created_at "
+                "SELECT from_signature, fix_body, issue_category, created_at "
                 "FROM working_fixes WHERE project_id = ? "
                 "ORDER BY created_at DESC LIMIT ?",
                 (project_id, limit)).fetchall()

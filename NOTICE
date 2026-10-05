@@ -35,4 +35,4 @@ Python and Node dependencies keep their own licenses; see `pyproject.toml`
 
 The Kairos name, logo and icon assets (`kairos-icon*.png`, `web/public/branding/*`)
 are original work by the Kairos Code authors and are covered by the project's
-MIT license.
+AGPL-3.0-or-later license.

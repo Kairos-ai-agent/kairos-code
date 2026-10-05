@@ -261,8 +261,9 @@ History lists one row per run, with the delta against the run before it:
 
 **Models**
 - Per-role routing: bind any model profile to the Coder or the Reviewer
-- 8 direct providers (OpenAI, Anthropic, DeepSeek, Gemini, OpenRouter, Ollama,
-  DashScope, ZhipuAI) plus LiteLLM for 100+ more, plus any OpenAI-compatible
+- Direct providers OpenAI, Anthropic and Ollama, plus LiteLLM for 100+ more;
+  built-in OpenAI-compatible presets for DeepSeek, OpenRouter, DashScope,
+  ZhipuAI, Fireworks and SiliconFlow, plus any custom OpenAI-compatible
   endpoint
 - A deterministic **scripted provider** for offline demos and tests
   (`kairos/llm/scripted.py`)
@@ -391,10 +392,10 @@ status (Landlock on Linux, Job Objects on Windows) and what is still missing.
 
 ## Status
 
-`0.1.0` — alpha. Workable, tested (1800+ Python tests, 120+ frontend tests), and
+`0.1.7` — alpha. Workable, tested (2600+ Python tests, 300+ frontend tests), and
 honest about what is not done: no public benchmark scores (we claim process, not
 code quality), a significant mock/offline layer used by the demo, no cloud
-parallel sandbox, no IDE plugin beyond `ide/protocol.py`, and no GitHub App that
+parallel sandbox, no IDE plugin, and no GitHub App that
 opens PRs. See [CHANGELOG.md](CHANGELOG.md) for what changed and
 `docs/OSS_ADOPTION_ROADMAP.md` for where it is going.
 

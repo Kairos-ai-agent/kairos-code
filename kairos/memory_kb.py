@@ -1,7 +1,6 @@
-"""Cognee-style 4-op memory layer for Kairos.
+"""Cognee-style 4-op memory layer for Kairos — the single memory store.
 
-A drop-in replacement / alternative for ``kairos.memory_hierarchy``
-that exposes the four atomic memory operations from
+Exposes the four atomic memory operations from
 ``topoteretes/cognee`` (Apache 2.0, 27K stars):
 
     remember(key, value, scope="project", tags=())
@@ -14,14 +13,11 @@ The four operations are atomic per call, and the file is rewritten
 on every mutation with a `.tmp` + `os.replace` rename so a crash
 mid-write doesn't corrupt prior state.
 
-Compared to ``kairos.memory_hierarchy``:
-  - 3 tiers (user / project / session) → 3 scopes (user / project / session)
-  - File-per-tier vs single file
-  - No "recall_always" / "recall_never" shortcuts (round 8 added those;
-    we leave the more general "recall" + "remember" interface)
-
-Designed so the next round can swap the backend for graphiti / cognee
-without changing the public API: the ``MemoryKB`` class is the seam.
+This is the one memory store the live path uses. Earlier prototypes
+(``kairos.memory_hierarchy`` and the ``kairos.memory_4op`` dispatcher)
+were removed so there is a single implementation to reason about. The
+``MemoryKB`` class is the seam a future round can swap for graphiti /
+cognee without changing the public API.
 """
 from __future__ import annotations
 

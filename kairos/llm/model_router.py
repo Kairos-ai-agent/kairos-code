@@ -335,7 +335,7 @@ class ModelRouter:
             config = self._create_dynamic_config(model_name)
         if config is None:
             config = self._model_configs.get("default", LLMConfig(
-                provider="openai", model="gpt-4o", api_key="«redacted:sk-…»",
+                provider="openai", model="gpt-4o", api_key="",
             ))
 
         # R38.7: never hand an agent a provider it cannot authenticate with.
@@ -412,7 +412,7 @@ class ModelRouter:
             api_key = api_keys.get("deepseek", "")
             return LLMConfig(
                 provider="openai", model=actual_model,
-                api_key=api_key or "sk-placeholder",
+                api_key=api_key,
                 base_url="https://api.deepseek.com/v1",
             )
 

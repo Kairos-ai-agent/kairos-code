@@ -96,7 +96,7 @@ servers:
   # -------------------------------------------------------------------
   # 8. memory — official knowledge-graph memory backend
   #    https://github.com/modelcontextprotocol/servers
-  #    Drop-in replacement for the current flat-file memory_hierarchy;
+  #    An optional external knowledge-graph memory backend;
   #    see docs/OSS_ADOPTION_ROADMAP.md § "Memory migration" for
   #    the trade-offs vs. Zep / Graphiti / Cognee.
   # -------------------------------------------------------------------

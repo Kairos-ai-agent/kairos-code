@@ -49,7 +49,7 @@ in the last 90 days.
 
 ## Tier 2 — strong candidates, 1-2 weeks each
 
-### 2.1 Memory / RAG (replaces `kairos/memory_hierarchy.py`)
+### 2.1 Memory / RAG (upgrade beyond `kairos/memory_kb.py`)
 
 | Project | Stars / signal | When to pick | Integration cost |
 |---|---|---|---|

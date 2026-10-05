@@ -969,7 +969,7 @@ ATTACHMENTS_DIRNAME = "attachments"
 def _project_root(project) -> Path:
     """Directory the Coder's file tools are sandboxed to.
 
-    Mirrors ``project_factory`` (``work_dir`` when set, else ``workspace``)
+    Mirrors the orchestrator's project bootstrap (``work_dir`` when set, else ``workspace``)
     so an attachment written here is readable by ``file_read`` with a plain
     relative path.
     """

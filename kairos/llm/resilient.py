@@ -147,6 +147,7 @@ class ResilientProvider(BaseLLMProvider):
         # so we delegate to non-streaming .complete() under the hood.
         # The caller loses the typewriter effect but gains reliability.
         provider = self._provider_to_use()
+        last_exc = None
         for attempt in range(self.max_retries):
             try:
                 response = await provider.complete(
@@ -166,6 +167,7 @@ class ResilientProvider(BaseLLMProvider):
                     })
                 return
             except Exception as e:
+                last_exc = e
                 if not _is_retryable(e):
                     raise
                 self._consecutive_failures += 1

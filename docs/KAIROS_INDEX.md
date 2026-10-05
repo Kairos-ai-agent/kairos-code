@@ -77,9 +77,7 @@ as a map when you come back to this codebase after a break.
 
 | Module | Round | What |
 |---|---|---|
-| `kairos/memory_hierarchy.py` | R8 | 3-tier (user / project / session) |
-| `kairos/memory_kb.py` | R10 | Cognee-style 4-op memory (local backend) |
-| `kairos/memory_4op.py` | R15 | Multi-backend dispatcher (local / cognee / graphiti / mock) |
+| `kairos/memory_kb.py` | R10 | Cognee-style 4-op memory (the single live store) |
 
 ### Eval (regression detection)
 

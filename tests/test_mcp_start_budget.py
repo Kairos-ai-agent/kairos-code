@@ -224,7 +224,7 @@ def test_the_import_time_path_never_blocks_on_servers():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1]
-    for rel in ("kairos/core/orchestrator.py", "kairos/core/project_factory.py"):
+    for rel in ("kairos/core/orchestrator.py",):
         text = (root / rel).read_text(encoding="utf-8")
         # Deferring is opt-in (the API layer asks for it); a caller with no
         # loop and no app still starts servers inline as it always did.

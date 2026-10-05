@@ -6,21 +6,26 @@ The 3-tier safety strategy:
      line. Cheap, runs in-process, catches the most obvious
      foot-guns (rm -rf /, del /f /s C:\\Windows, curl|sh, etc.).
 
-  2. **Landlock (Linux)** — kernel-level filesystem + network access
-     control. Once a Landlock ruleset is applied, even a compromised
-     subprocess can't read or write outside `allowed_root`, and we
-     can block network egress entirely. Requires Linux 5.13+ and
-     `PR_SET_NO_NEW_PRIVS` (so the agent can't drop into a suid
-     shell to escape). Falls back to deny-list only if Landlock
-     isn't available (older kernel, unprivileged container, etc.).
+  2. **Landlock (Linux, kernel 5.13+)** — kernel-level *filesystem*
+     access control. A ruleset confines the child to the project tree
+     (allow-list, path-beneath) and sets `PR_SET_NO_NEW_PRIVS` so it
+     can't regain privilege through a setuid binary. Network is NOT
+     confined (`handled_access_net=0`): a build script can still reach
+     the network even with FS confinement. If Landlock can't be
+     applied (older kernel, unprivileged container), the child runs
+     with the deny-list only — isolation degrades silently.
 
-  3. **Job Object (Windows)** — kernel-level process tree isolation
-     via `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` + restricted token
-     (sandboxed logon). Prevents the subprocess from spawning
-     processes that outlive the parent. Network restriction on
-     Windows requires a firewall rule (out of scope here) but the
-     process-kill-on-close guarantee alone stops the most common
-     "agent forgot to clean up" leak.
+  3. **Job Object (Windows)** — a Job Object with
+     `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` only: the subprocess tree
+     dies with the parent. Windows gets NO filesystem or network
+     confinement here (no restricted token / AppContainer), so treat
+     a Windows build command as full host access.
+
+macOS Seatbelt profiles can be generated but the terminal does not
+invoke `sandbox-exec`, so macOS is NOT confined. gVisor / Firecracker
+/ nsjail are detection-only: the helpers report whether the binary is
+on PATH and print install instructions; no execution path wraps a
+command in them. See `docs/SANDBOX_ISOLATION.md` for the full status.
 
 The interface is intentionally a single function, `apply_to_subprocess`,
 so callers (currently just `TerminalTool.execute`) don't have to know

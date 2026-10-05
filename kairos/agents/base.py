@@ -1410,25 +1410,24 @@ class KairosAgent:
                             f"- R{r.get('round','?')}: {cs[:200]}")
                 if len(lines) > 1:
                     blocks.append("\n".join(lines))
+            # working_fixes rows: the old path read ``db.conn`` — a
+            # Persistence has no such attribute — and selected columns that
+            # do not exist, so it raised AttributeError on every call and was
+            # swallowed; the "Known issues to avoid" block never appeared.
+            # Use the real accessor and the real schema instead.
             try:
-                fixes = db._get_log_path()  # type: ignore[attr-defined]
+                wf_rows = db.list_working_fixes(self.project_id, limit=5)
             except Exception:
-                fixes = None
-            # working_fixes rows: pull via a small helper if present
-            try:
-                wf_rows = db.conn.execute(  # type: ignore[attr-defined]
-                    "SELECT issue, fix, severity, created_at "
-                    "FROM working_fixes WHERE project_id = ? "
-                    "ORDER BY created_at DESC LIMIT 5",
-                    (self.project_id,)).fetchall()
-            except Exception:
+                logger.debug("chat prompt: list_working_fixes failed", exc_info=True)
                 wf_rows = []
             if wf_rows:
                 lines = ["### Known issues to avoid"]
-                for issue, fix, sev, _ts in wf_rows:
-                    lines.append(
-                        f"- [{sev}] {issue[:80]} — fix: {fix[:120]}")
-                blocks.append(" ".join(lines))
+                for row in wf_rows:
+                    sev = (row.get("issue_category") or "general")
+                    sig = (row.get("from_signature") or "")[:80]
+                    fix = (row.get("fix_body") or "")[:120]
+                    lines.append(f"- [{sev}] {sig} — fix: {fix}")
+                blocks.append("\n".join(lines))
 
         # 4) assemble
         base = ("You are a helpful assistant. Respond "

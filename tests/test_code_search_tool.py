@@ -304,23 +304,6 @@ def test_orchestrator_wires_code_search_into_both_roles(tmp_path, monkeypatch):
     assert "code_search" in [t.name for t in seen["reviewer"]]
 
 
-def test_project_factory_wires_code_search_into_both_roles(tmp_path, monkeypatch):
-    monkeypatch.setenv("KAIROS_NO_BUNDLED_MCP", "1")
-    from kairos.core.persistence import Persistence
-    from kairos.core.project_factory import Project, ProjectFactory
-
-    factory = ProjectFactory(model_router=_Router(),
-                             workspace_base=tmp_path / "ws",
-                             db=Persistence(tmp_path / "kairos.db"))
-    project = Project("p2", "n", "d", tmp_path / "ws" / "p2", db=factory._db)
-    monkeypatch.setattr(factory, "_attach_mcp", lambda *a, **k: [])
-
-    coder = [t.name for t in factory._build_coder_tools(str(tmp_path), project)]
-    reviewer = [t.name for t in factory._build_reviewer_tools(str(tmp_path))]
-    assert "code_search" in coder
-    assert "code_search" in reviewer
-
-
 # ---------------------------------------------------------------------------
 # HuggingFace 端点兜底：huggingface.co 在国内不通，首次建索引会失败
 # ---------------------------------------------------------------------------

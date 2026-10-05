@@ -848,6 +848,11 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
         usage = getattr(last_response, "usage", None) or {}
         reasoning_tokens = (usage.get("completion_tokens_details") or {}).get(
             "reasoning_tokens")
+        # Providers that don't report reasoning_tokens still tell us the model
+        # thought: the stream counts the hidden-reasoning characters it saw.
+        # Without this fallback a thinking model on such an endpoint got the
+        # vague "no content" notice instead of the accurate one.
+        reasoning_chars = int(getattr(last_response, "reasoning_chars", 0) or 0)
         finish_reason = getattr(last_response, "finish_reason", "") or "?"
         logger.warning(
             "%s: chat produced an EMPTY reply — model=%s finish_reason=%s "
@@ -858,11 +863,13 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
             bool(getattr(last_response, "tool_calls", None)),
             usage,
         )
-        if finish_reason == "length" and reasoning_tokens:
+        if finish_reason == "length" and (reasoning_tokens or reasoning_chars):
+            spent = (f"reasoning_tokens={reasoning_tokens}" if reasoning_tokens
+                     else f"{reasoning_chars} 字符的思考内容")
             notice = (
                 f"⚠️ 模型 {model} 没有返回正文：它把整个输出预算（"
                 f"{usage.get('completion_tokens', '?')} tokens，其中 "
-                f"reasoning_tokens={reasoning_tokens}）都花在了内部思考上，"
+                f"{spent}）都花在了内部思考上，"
                 "没有产出回答。\n"
                 "这通常意味着当前配置的是「思考型 / 推理型」模型，不适合直接聊天。\n"
                 "解决办法：打开设置把模型换成非思考模型（例如 deepseek-chat）"

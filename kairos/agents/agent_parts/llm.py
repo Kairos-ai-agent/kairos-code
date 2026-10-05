@@ -46,6 +46,7 @@ class AgentLLMMixin:
         finish_reason = ""
         model_name = self._llm_config.model
         usage = {}
+        reasoning_chars = 0
         chunk_seq = 0
 
         try:
@@ -69,11 +70,20 @@ class AgentLLMMixin:
         # parse out. Other providers may differ; we tolerate either.
         try:
             async for chunk in stream_ctx:
+                # The stream contract is "plain text deltas plus typed JSON
+                # envelopes". Only *known* envelope types are consumed;
+                # anything else — including content that merely starts with
+                # "{" — falls through and is treated as text, exactly as it
+                # was before.
                 if isinstance(chunk, str) and chunk.startswith("{"):
-                    # Final tool_calls payload from OpenAI streaming.
+                    parsed = None
                     try:
                         parsed = json.loads(chunk)
-                        if isinstance(parsed, dict) and parsed.get("type") == "tool_calls":
+                    except (json.JSONDecodeError, ValueError):
+                        parsed = None
+                    if isinstance(parsed, dict):
+                        kind = parsed.get("type")
+                        if kind == "tool_calls":
                             for tc in parsed.get("tool_calls") or []:
                                 args = tc.get("arguments")
                                 if isinstance(args, str):
@@ -87,8 +97,23 @@ class AgentLLMMixin:
                                     arguments=args if args is not None else "",
                                 ))
                             continue
-                    except (json.JSONDecodeError, ValueError):
-                        pass
+                        if kind == "stream_meta":
+                            # What the provider only knows at the end of the
+                            # stream: why it stopped, how much hidden thinking
+                            # it did, and the token usage the cost ledger
+                            # needs. Without this every streamed call was
+                            # recorded as 0 tokens and an empty reply could
+                            # not say why it was empty.
+                            finish_reason = (
+                                parsed.get("finish_reason") or finish_reason
+                            )
+                            reasoning_chars = int(
+                                parsed.get("reasoning_chars") or reasoning_chars
+                            )
+                            stream_usage = parsed.get("usage") or {}
+                            if stream_usage:
+                                usage = stream_usage
+                            continue
                 # Plain text delta — emit as stream.chunk and accumulate.
                 accumulated_text += chunk
                 chunk_seq += 1
@@ -140,6 +165,7 @@ class AgentLLMMixin:
             usage=usage,
             finish_reason=finish_reason,
             tool_calls=accumulated_tool_calls if accumulated_tool_calls else None,
+            reasoning_chars=reasoning_chars,
         )
 
     def _traced_llm_call(self, messages, tools=None):

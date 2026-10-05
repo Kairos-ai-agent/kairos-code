@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from typing import AsyncIterator, List, Optional
@@ -10,6 +11,8 @@ from typing import AsyncIterator, List, Optional
 from kairos.llm.base import BaseLLMProvider, LLMConfig, LLMMessage, LLMResponse, ToolCall
 from kairos.llm.provider_registry import ProviderRegistry
 from kairos.llm.providers.base import format_messages_for_openai
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_openai_base_url(url: str) -> str:
@@ -55,6 +58,30 @@ class OpenAIProvider(BaseLLMProvider):
         if ua:
             kwargs["default_headers"] = {"User-Agent": ua}
         self._client = AsyncOpenAI(**kwargs)
+        # ``stream_options.include_usage`` is how OpenAI-compatible endpoints
+        # report token counts for streamed calls — and streaming is the path
+        # the agent loop actually uses, so without it every streamed call was
+        # accounted as 0 tokens in the cost ledger. Endpoints that don't know
+        # the field reject the whole request rather than ignoring it, so the
+        # capability is negotiated once per provider instance in ``stream``.
+        self._stream_usage_supported = True
+
+    @staticmethod
+    def _rejects_stream_options(exc: Exception) -> bool:
+        """True when ``exc`` looks like "I don't know stream_options".
+
+        Only decides whether to retry the same request without the field. A
+        false positive costs one extra request before the real error surfaces,
+        so the check is deliberately generous; a false negative would only
+        mean losing usage reporting again, never a wrong result.
+        """
+        text = str(exc).lower()
+        if "stream_options" in text:
+            return True
+        return any(word in text for word in (
+            "unknown", "unrecognized", "unexpected", "extra fields",
+            "invalid request", "unsupported",
+        ))
 
     async def complete(
         self,
@@ -111,6 +138,10 @@ class OpenAIProvider(BaseLLMProvider):
             usage=response.usage.model_dump() if response.usage else {},
             finish_reason=choice.finish_reason or "",
             tool_calls=tool_calls,
+            # Thinking models put their hidden reasoning on a separate field.
+            # Counting it is what lets an empty answer be explained instead of
+            # looking like a silent failure.
+            reasoning_chars=len(getattr(choice.message, "reasoning_content", "") or ""),
         )
 
     async def stream(
@@ -130,11 +161,58 @@ class OpenAIProvider(BaseLLMProvider):
         if tools:
             kwargs["tools"] = [{"type": "function", "function": t} for t in tools]
             kwargs["tool_choice"] = "auto"
-        response = await self._client.chat.completions.create(**kwargs)
+        if self._stream_usage_supported:
+            kwargs["stream_options"] = {"include_usage": True}
+        try:
+            response = await self._client.chat.completions.create(**kwargs)
+        except Exception as exc:
+            if not (self._stream_usage_supported
+                    and self._rejects_stream_options(exc)):
+                raise
+            # The endpoint doesn't know the field. Drop it for good and send
+            # the same request again: this costs one extra round trip on the
+            # first call of a provider that lacks support, and nothing after.
+            logger.info(
+                "endpoint rejects stream_options; token usage will not be "
+                "reported for streamed calls (model=%s): %s",
+                self.config.model, exc,
+            )
+            self._stream_usage_supported = False
+            kwargs.pop("stream_options", None)
+            response = await self._client.chat.completions.create(**kwargs)
+
         # Accumulate tool_call deltas
         tool_calls_by_index: dict = {}
+        finish_reason = ""
+        reasoning_chars = 0
+        usage: dict = {}
         async for chunk in response:
-            delta = chunk.choices[0].delta
+            # Some endpoints attach usage to the last content chunk; others
+            # send a trailing chunk with no choices at all.
+            chunk_usage = getattr(chunk, "usage", None)
+            if chunk_usage is not None:
+                usage = (chunk_usage.model_dump()
+                         if hasattr(chunk_usage, "model_dump")
+                         else dict(chunk_usage))
+            choices = getattr(chunk, "choices", None) or []
+            if not choices:
+                continue
+            choice = choices[0]
+            if getattr(choice, "finish_reason", None):
+                finish_reason = choice.finish_reason or finish_reason
+            delta = getattr(choice, "delta", None)
+            if delta is None:
+                continue
+            # Thinking models stream hidden reasoning on its own channel
+            # (DeepSeek's ``reasoning_content``). Count it: an empty answer
+            # that spent its budget thinking is explainable, one with no
+            # evidence at all is not. Never merge it into the reply —
+            # thinking is not an answer — but do not drop it without trace
+            # either, or the caller cannot tell "said nothing" from
+            # "thought hard and said nothing".
+            reasoning = getattr(delta, "reasoning_content", None)
+            if reasoning:
+                reasoning_chars += len(reasoning)
             if delta.content:
                 yield delta.content
             if delta.tool_calls:
@@ -160,6 +238,15 @@ class OpenAIProvider(BaseLLMProvider):
                     args = tc["arguments"]
                 calls.append({"id": tc["id"], "name": tc["name"], "arguments": args})
             yield json.dumps({"type": "tool_calls", "tool_calls": calls})
+        # Trailing metadata envelope. The stream contract is "plain text
+        # deltas plus typed JSON envelopes"; the consumer recognises the
+        # ``type`` and never renders this as text.
+        yield json.dumps({
+            "type": "stream_meta",
+            "finish_reason": finish_reason,
+            "reasoning_chars": reasoning_chars,
+            "usage": usage,
+        })
 
     async def close(self):
         await self._client.close()

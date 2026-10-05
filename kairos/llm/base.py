@@ -67,6 +67,10 @@ class LLMResponse(BaseModel):
     usage: dict = {}
     finish_reason: str = ""
     tool_calls: Optional[List[ToolCall]] = None
+    # Characters a thinking model streamed on its hidden-reasoning channel
+    # (DeepSeek's ``reasoning_content``). Deliberately a count, not the text:
+    # it exists so an empty reply can be explained, not to be replayed.
+    reasoning_chars: int = 0
 
 class BaseLLMProvider(ABC):
     """Abstract base class for LLM providers."""

@@ -278,11 +278,11 @@ const ChatThread: React.FC<Props> = ({ messages, emptyHint, showRawToggle = fals
   );
 };
 
-export default ChatThread;
+export default React.memo(ChatThread);
 
 // ------------------------------------------------------------------ turn
 
-const TurnView: React.FC<{ turn: Turn; mdStyle: MarkdownStyle }> = ({ turn, mdStyle }) => {
+const TurnViewBase: React.FC<{ turn: Turn; mdStyle: MarkdownStyle }> = ({ turn, mdStyle }) => {
   // A turn with no reply yet is still running: its process stays open so the
   // user can watch the steps land, then folds away once the answer arrives.
   const running = turn.replies.length === 0;
@@ -300,6 +300,12 @@ const TurnView: React.FC<{ turn: Turn; mdStyle: MarkdownStyle }> = ({ turn, mdSt
     </div>
   );
 };
+
+// The thread re-renders on every poll tick (every 2s) and on every streamed
+// chunk, and a finished turn has nothing new to show: memo stops the markdown
+// of every settled turn being walked again. `turns` and `mdStyle` are already
+// memoised in this component, so the comparison actually hits.
+const TurnView = React.memo(TurnViewBase);
 
 // ------------------------------------------------------------------ process
 

@@ -36,6 +36,7 @@ import { useT } from '../i18n';
 import ChatThread from '../components/ChatThread';
 import ChatComposer, { ChatAttachment } from '../components/ChatComposer';
 import { classifyIntent } from '../utils/intent';
+import { keepIfSame } from '../utils/equal';
 import api, { onWebSocketMessage, onWebSocketState } from '../api/client';
 import type { Message, LoopSession, SessionRound } from '../types';
 
@@ -551,11 +552,11 @@ const Chat: React.FC = () => {
     const tick = () => {
       api.get<{ pending: boolean; text: string; decision: string | null;
                 round: number }>(`/projects/${currentProject.id}/plan`)
-        .then((r) => setPlanState(r.data || null))
+        .then((r) => setPlanState((prev) => keepIfSame(prev, r.data || null)))
         .catch(() => {});
       api.get<{ pending: boolean; question: string; context: string;
                 round: number }>(`/projects/${currentProject.id}/ask`)
-        .then((r) => setAskState(r.data || null))
+        .then((r) => setAskState((prev) => keepIfSame(prev, r.data || null)))
         .catch(() => {});
     };
     tick();

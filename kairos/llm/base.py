@@ -34,6 +34,11 @@ class LLMConfig(BaseModel):
     max_tokens: int = 8192
     temperature: float = 0.7
     timeout: int = 120
+    # The model's real context window, when we know it (settings, env, or a
+    # provider that told us). Compaction has to fire *before* the request is
+    # rejected, and a fixed budget cannot do that for a window it has never
+    # been told about. None = unknown, keep the agent's own budget.
+    context_window: Optional[int] = None
 
     @field_validator("base_url")
     @classmethod

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 from enum import Enum
 from pathlib import Path
@@ -14,7 +15,7 @@ from pydantic import BaseModel
 
 from kairos.agents.identity import KAIROS_IDENTITY
 from kairos.llm.base import LLMConfig, LLMMessage, LLMResponse, ToolCall
-from kairos.llm.errors import is_context_length_error
+from kairos.llm.errors import context_limit_of, is_context_length_error
 from kairos.llm.provider_registry import create_provider
 from kairos.context_governor import (
     DEFAULT_KEEP_RECENT_TOOL_RESULTS,
@@ -202,7 +203,12 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
 
         # Memory with token counting
         self._memory: List[LLMMessage] = []
-        self._max_tokens = 80000  # Token budget
+        self._max_tokens = 80000  # Token budget when the window is unknown
+        # The model's real window, when it is known: from config/env now, or
+        # from the provider telling us in a rejection later. Compaction has to
+        # fire *before* the request is rejected, and a fixed budget cannot do
+        # that for a window nobody ever told it about. None = unchanged.
+        self._context_window: Optional[int] = self._resolve_context_window()
         self._keep_recent = 4     # Always keep last N messages
         # How many of the newest tool results stay verbatim when the request
         # is assembled. Older bodies are stubbed out (see
@@ -354,7 +360,37 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
                 return _label_untrusted(tool_call.name, result, tool)
         return ToolResult(success=False, output="", error=f"Unknown tool: {tool_call.name}")
 
-    async def _recover_context_overflow(self, task: AgentTask | None = None) -> None:
+    def _resolve_context_window(self) -> Optional[int]:
+        """The model's real context window: config first, then the environment.
+
+        None when nobody knows it, in which case the fixed budget stands and
+        the behaviour is exactly what it was before this existed.
+        """
+        configured = getattr(self._llm_config, "context_window", None)
+        if configured:
+            try:
+                return int(configured)
+            except (TypeError, ValueError):
+                pass
+        raw = os.environ.get("KAIROS_CONTEXT_WINDOW", "").strip()
+        if raw.isdigit() and int(raw) > 0:
+            return int(raw)
+        return None
+
+    def _context_budget(self) -> int:
+        """Tokens this agent may carry into a request before compacting.
+
+        The smaller of its own budget and the model's window minus the room the
+        answer needs. An unknown window leaves the budget alone — the old
+        behaviour, deliberately unchanged.
+        """
+        if not self._context_window:
+            return self._max_tokens
+        reserve = getattr(self._llm_config, "max_tokens", 0) or 8192
+        return max(8000, min(self._max_tokens, self._context_window - int(reserve)))
+
+    async def _recover_context_overflow(self, task: AgentTask | None = None,
+                                        exc: BaseException | None = None) -> None:
         """React to a provider that rejected the request as too large.
 
         Called with the offending request already built. Two things happen:
@@ -372,6 +408,16 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
         """
         before = self._max_tokens
         self._max_tokens = max(8000, self._max_tokens // 2)
+        # If the provider named its window, believe it: that is the one number
+        # that makes the next request fit instead of failing the same way again.
+        stated = context_limit_of(exc) if exc is not None else None
+        if stated and stated != self._context_window:
+            self._context_window = stated
+            logger.warning(
+                "%s: the provider stated a %d-token context window — "
+                "compacting against it from now on",
+                self.agent_id, stated,
+            )
         logger.warning(
             "%s: provider rejected the request as too long — compacting "
             "and retrying (budget %d → %d)",
@@ -496,7 +542,7 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
                         break
                     except Exception as exc:
                         if _attempt == 0 and is_context_length_error(exc):
-                            await self._recover_context_overflow(task)
+                            await self._recover_context_overflow(task, exc)
                             messages = shrink_for_overflow(
                                 self._build_messages()
                             )[0]
@@ -786,7 +832,7 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
                     )
                 except Exception as exc:
                     if _attempt == 0 and is_context_length_error(exc):
-                        await self._recover_context_overflow()
+                        await self._recover_context_overflow(exc=exc)
                         messages = shrink_for_overflow(
                             [LLMMessage(role="system", content=chat_system)]
                             + self._sanitize_memory(self._elided_memory())

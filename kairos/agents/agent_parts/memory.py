@@ -72,7 +72,7 @@ class AgentMemoryMixin:
     def _truncate_memory(self):
         """Truncate memory to fit within token budget, keeping recent messages."""
         total = sum(self._count_tokens(m.content) for m in self._memory)
-        while len(self._memory) > self._keep_recent and total > self._max_tokens:
+        while len(self._memory) > self._keep_recent and total > self._context_budget():
             removed = self._memory.pop(0)
             total -= self._count_tokens(removed.content)
 
@@ -286,7 +286,7 @@ class AgentMemoryMixin:
         token_total = sum(
             self._count_tokens(m.content) for m in self._memory
         )
-        over_budget = token_total > int(self._max_tokens * 0.8)
+        over_budget = token_total > int(self._context_budget() * 0.8)
         if not force and current_turn < threshold_turn and not over_budget:
             return
 

@@ -10,6 +10,7 @@ fact — an HTML page came back, not JSON — buried inside it.
 from __future__ import annotations
 
 import re
+from typing import Optional
 
 _WHITESPACE = re.compile(r"\s+")
 _TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
@@ -87,6 +88,44 @@ def is_context_length_error(exc: BaseException) -> bool:
     # status (or none, e.g. the retry wrapper) still counts when the text is
     # this specific — the cost of being wrong is one compaction round-trip.
     return True
+
+
+# Providers state the real window in the rejection, and it differs per model:
+# "This model's maximum context length is 32768 tokens". Reading the number out
+# of the message is the only way to learn a ceiling nobody configured — and a
+# learned ceiling stops the next request failing for the same reason.
+_STATED_LIMIT_PATTERNS = (
+    re.compile(r"maximum context length is\s*(\d+)", re.I),
+    re.compile(r"context length is\s*(\d+)", re.I),
+    re.compile(r"context length of\s*(\d+)", re.I),
+    re.compile(r"max(?:imum)?\s+(?:context\s+)?(?:length|tokens)\D{0,24}?(\d{3,9})", re.I),
+)
+
+# Below this, a number is a per-request cap (``max_tokens: 1024``) rather than a
+# window; above it, a typo. Either would poison the budget it gets learned into.
+_MIN_PLAUSIBLE_WINDOW = 2_000
+_MAX_PLAUSIBLE_WINDOW = 10_000_000
+
+
+def context_limit_of(exc: BaseException) -> Optional[int]:
+    """The context-window size the provider stated, if it stated one.
+
+    None when the message names no number or names an implausible one. The
+    caller only ever uses this to make its budget smaller and truer, never to
+    raise it, so a miss costs nothing.
+    """
+    body = _body_of(exc)
+    for pattern in _STATED_LIMIT_PATTERNS:
+        match = pattern.search(body)
+        if not match:
+            continue
+        try:
+            value = int(match.group(1))
+        except (TypeError, ValueError):
+            continue
+        if _MIN_PLAUSIBLE_WINDOW <= value <= _MAX_PLAUSIBLE_WINDOW:
+            return value
+    return None
 
 
 def _body_of(exc: BaseException) -> str:

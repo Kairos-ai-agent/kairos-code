@@ -40,6 +40,12 @@ ELIDED_PLACEHOLDER = (
 #: Tool results newer than this many are never touched.
 DEFAULT_KEEP_RECENT_TOOL_RESULTS = 4
 
+# Consecutive failed summary attempts after which the agent stops asking. A
+# transcript the provider rejects will be rejected identically next round, and
+# every attempt costs a whole LLM call (up to the per-call timeout), so past
+# this point the retention window does the bounding instead.
+MAX_SUMMARIZE_FAILURES = 3
+
 #: Bodies shorter than this are left alone — a stub would save nothing and
 #: only make the transcript harder to read.
 DEFAULT_MIN_ELIDE_CHARS = 240

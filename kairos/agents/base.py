@@ -210,6 +210,12 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
         # that for a window nobody ever told it about. None = unchanged.
         self._context_window: Optional[int] = self._resolve_context_window()
         self._keep_recent = 4     # Always keep last N messages
+        # Consecutive failed summarisation attempts. A transcript the provider
+        # rejects will be rejected again next round — the prompt is the same
+        # size — and each attempt costs a full LLM call, so a few in a row move
+        # the agent to skipping the summary and letting the retention window do
+        # the bounding instead of paying for a guaranteed failure forever.
+        self._summarize_failures = 0
         # How many of the newest tool results stay verbatim when the request
         # is assembled. Older bodies are stubbed out (see
         # kairos.context_governor) — they cost tokens on every request and

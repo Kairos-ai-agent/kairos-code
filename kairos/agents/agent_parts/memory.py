@@ -14,6 +14,7 @@ from kairos.llm.provider_registry import create_provider
 from kairos.memory.retrieval import MEMORY_DRIFT_WARNING, _age_suffix
 from kairos.context_governor import (
     DEFAULT_KEEP_RECENT_TOOL_RESULTS,
+    MAX_SUMMARIZE_FAILURES,
     elide_old_tool_results,
     shrink_for_overflow,
 )
@@ -280,6 +281,11 @@ class AgentMemoryMixin:
         # Don't bother until there's something to summarize.
         if len(self._memory) <= self._keep_recent:
             return
+        # A summary that keeps failing is a summary that will keep failing: the
+        # transcript only grows, so the next attempt is the same request with
+        # the same outcome — for the price of a whole LLM call. Stop asking.
+        if self._summarize_failures >= MAX_SUMMARIZE_FAILURES:
+            return
         threshold_turn = (
             self._last_summarized_at_turn + self._summarize_every_n
         )
@@ -334,6 +340,7 @@ class AgentMemoryMixin:
             if new_summary:
                 self._memory_summary = new_summary
                 self._last_summarized_at_turn = current_turn
+                self._summarize_failures = 0
                 logger.debug(
                     "%s: memory summarized at turn %d (%d chars)",
                     self.agent_id, current_turn, len(new_summary),
@@ -341,9 +348,12 @@ class AgentMemoryMixin:
         except Exception as exc:
             # Summarization is best-effort. A failure here shouldn't
             # break the agent loop.
+            self._summarize_failures += 1
             logger.warning(
-                "%s: memory summarization failed: %s",
-                self.agent_id, exc,
+                "%s: memory summarization failed (%d in a row, giving up at "
+                "%d): %s",
+                self.agent_id, self._summarize_failures,
+                MAX_SUMMARIZE_FAILURES, exc,
             )
 
     async def compact_now(self, reason: str = "") -> bool:

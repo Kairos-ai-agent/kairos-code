@@ -87,6 +87,8 @@ async def test_env_override_can_unset(term, tmp_path: Path):
     assert "UNSET_VAR=<<absent>>" in res.output
 
 
+@pytest.mark.skipif(sys.platform == "win32",
+                    reason="uses the POSIX `echo` builtin (not an executable on Windows)")
 @pytest.mark.asyncio
 async def test_env_overrides_recorded_in_metadata(term):
     res = await term.execute(
@@ -115,6 +117,8 @@ async def test_custom_timeout_shorter_than_default(term):
     assert elapsed < 3.0, f"timeout should have fired fast, took {elapsed:.1f}s"
 
 
+@pytest.mark.skipif(sys.platform == "win32",
+                    reason="uses the POSIX `echo` builtin (not an executable on Windows)")
 @pytest.mark.asyncio
 async def test_default_timeout_backwards_compatible(term):
     """Without timeout_s, default 60s applies — short command still works."""
@@ -261,6 +265,8 @@ async def test_exit_code_propagated_in_metadata(term, tmp_path: Path):
     assert "command" in res.metadata
 
 
+@pytest.mark.skipif(sys.platform == "win32",
+                    reason="uses the POSIX `echo` builtin (not an executable on Windows)")
 @pytest.mark.asyncio
 async def test_command_metadata_truncates_long_input(term):
     long_cmd = "echo " + ("x" * 2000)

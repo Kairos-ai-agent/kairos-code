@@ -271,6 +271,8 @@ async def test_disk_destroy_commands_still_blocked_with_settings(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(sys.platform == "win32",
+                    reason="uses the POSIX `echo` builtin (not an executable on Windows)")
 @pytest.mark.asyncio
 async def test_default_allowlisted_command_still_runs(tmp_path):
     term = TerminalTool(allowed_cwd=str(tmp_path))

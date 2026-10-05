@@ -756,16 +756,18 @@ const Loop: React.FC = () => {
             <CostDashboard />
           </div>
 
+          {/* Round 25: trend panel — multi-run pass_rate / cost
+              over time, plus a per-case flaky list. Kept ABOVE the eval panel:
+              it is the first thing you look at in this column, and below the
+              eval panel it fell past the fold on a 1000px-tall window. */}
+          <div style={{ marginBottom: 12 }}>
+            <TrendPanel />
+          </div>
+
           {/* Round 19: eval panel — list datasets, record/replay/derive
               from the web without touching the CLI. */}
           <div style={{ marginBottom: 12 }}>
             <EvalPanel />
-          </div>
-
-          {/* Round 25: trend panel — multi-run pass_rate / cost
-              over time, plus a per-case flaky list. */}
-          <div style={{ marginBottom: 12 }}>
-            <TrendPanel />
           </div>
 
           {/* Diff viewer */}

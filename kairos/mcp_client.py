@@ -531,10 +531,22 @@ class StdioMcpClient:
         except ProcessLookupError:
             pass
         if self._reader_task and not self._reader_task.done():
+            # Force the pipe reader to observe EOF, then cancel it. On Windows
+            # a Proactor pipe read parked in ``stdout.readline()`` does not
+            # honour task cancellation, and awaiting the task unbounded is
+            # exactly what hung the test suite's teardown: the event loop
+            # could not finish cancelling tasks (asyncio ``run_forever`` stuck
+            # in ``_cancel_all_tasks``). feed_eof() unblocks the read, and the
+            # bounded ``asyncio.wait`` guarantees close() always returns.
+            try:
+                if self._process is not None and self._process.stdout is not None:
+                    self._process.stdout.feed_eof()
+            except Exception:
+                pass
             self._reader_task.cancel()
             try:
-                await self._reader_task
-            except (asyncio.CancelledError, Exception):
+                await asyncio.wait({self._reader_task}, timeout=2.0)
+            except Exception:
                 pass
         self._process = None
         self._reader_task = None

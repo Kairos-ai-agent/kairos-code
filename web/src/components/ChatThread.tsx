@@ -61,7 +61,13 @@ interface Turn {
   key: string;
   user?: Message;
   steps: Step[];
-  reply?: Message;
+  /**
+   * Every reply in the turn, in arrival order. A turn can produce more than
+   * one (a streamed answer plus a follow-up message); keeping only the first
+   * and pushing the rest into `others` — which renders *above* the reply —
+   * showed a turn's answers backwards.
+   */
+  replies: Message[];
   /** Additional bubbles that are neither user, process nor reply. */
   others: Message[];
 }
@@ -112,13 +118,13 @@ function groupIntoTurns(messages: Message[]): Turn[] {
   messages.forEach((m, i) => {
     const sender = (m.sender || '').toLowerCase();
     if (sender === 'user' || sender === 'human') {
-      current = { key: keyOf(m, i), user: m, steps: [], others: [] };
+      current = { key: keyOf(m, i), user: m, steps: [], replies: [], others: [] };
       turns.push(current);
       return;
     }
     if (isProcessTopic(m)) {
       if (!current) {
-        current = { key: keyOf(m, i), steps: [], others: [] };
+        current = { key: keyOf(m, i), steps: [], replies: [], others: [] };
         turns.push(current);
       }
       const topic = (m.topic || '').toLowerCase();
@@ -160,13 +166,14 @@ function groupIntoTurns(messages: Message[]): Turn[] {
       }
       return;
     }
-    if (isReply(m) && current && !current.reply) {
-      current.reply = m;
+    if (isReply(m) && current) {
+      // Keep every reply, in the order the agent produced them.
+      current.replies.push(m);
       return;
     }
     if (current) current.others.push(m);
     else {
-      const t: Turn = { key: keyOf(m, i), steps: [], others: [m] };
+      const t: Turn = { key: keyOf(m, i), steps: [], replies: [m], others: [] };
       turns.push(t);
       current = t;
     }
@@ -278,7 +285,7 @@ export default ChatThread;
 const TurnView: React.FC<{ turn: Turn; mdStyle: MarkdownStyle }> = ({ turn, mdStyle }) => {
   // A turn with no reply yet is still running: its process stays open so the
   // user can watch the steps land, then folds away once the answer arrives.
-  const running = !turn.reply;
+  const running = turn.replies.length === 0;
   return (
     <div data-testid="chat-turn">
       {turn.user && <UserBubble message={turn.user} />}
@@ -286,10 +293,10 @@ const TurnView: React.FC<{ turn: Turn; mdStyle: MarkdownStyle }> = ({ turn, mdSt
       {turn.others.map((m, i) => (
         <MessageBubble key={m.id || i} message={m} mdStyle={mdStyle} />
       ))}
-      {turn.reply && (
-        <AssistantBubble message={turn.reply} mdStyle={mdStyle}
+      {turn.replies.map((m, i) => (
+        <AssistantBubble key={m.id || i} message={m} mdStyle={mdStyle}
                          running={false} />
-      )}
+      ))}
     </div>
   );
 };

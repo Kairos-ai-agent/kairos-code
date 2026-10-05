@@ -5,7 +5,8 @@
  *   1. a tool call is paired with its OWN result, so the duration shown is that
  *      call's and not the next one's;
  *   2. a call with no result yet reads as running and claims no duration;
- *   3. a finished turn folds its process away, while a running turn stays open.
+ *   3. a finished turn folds its process away, while a running turn stays open;
+ *   4. a turn that answers more than once keeps every reply, in order.
  *
  * Note for future edits: a folded block does not render its step rows at all,
  * so tests that inspect steps must open it first — that is the helper below,
@@ -180,6 +181,22 @@ describe('ChatThread turn grouping', () => {
     openProcess(container);
     const step = screen.getAllByTestId('process-step')[0];
     expect(step.textContent).toContain('let me consider');
+  });
+
+  it('shows every reply of a turn, in the order the agent produced them', () => {
+    const { container } = render(
+      <ChatThread messages={[
+        question('q'),
+        reply('first answer'),
+        reply('second answer'),
+      ]} />,
+    );
+    // Both must be present: the second used to be pushed into `others`, which
+    // renders *above* the reply, so a turn that answered twice read backwards.
+    const bubbles = container.querySelectorAll('[data-testid="assistant-bubble"]');
+    expect(bubbles.length).toBe(2);
+    expect(bubbles[0].textContent).toContain('first answer');
+    expect(bubbles[1].textContent).toContain('second answer');
   });
 });
 

@@ -133,7 +133,7 @@ def test_gitignore_does_not_hide_source_files() -> None:
     untracked = [p for p in required if p not in tracked]
     assert not untracked, (
         f"these files exist locally but are NOT tracked (a broad .gitignore rule?): {untracked}"
-    )
+    )
 
 def test_a_comment_line_is_not_waived() -> None:
     """The hole that let a leak ship: `^#` exempted every comment.

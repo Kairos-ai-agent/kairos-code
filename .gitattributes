@@ -1,3 +1,8 @@
+# Normalize line endings to LF in the repository. Windows launchers that need
+# CRLF are pinned further down; everything else lives as LF so diffs stay clean
+# and the working tree does not drift back to CRLF on a Windows checkout.
+* text=auto eol=lf
+
 # Keep the repository's language stats honest and the diffs readable.
 #
 # The i18n dictionaries are machine-generated: 63 languages x ~1100 lines would

@@ -62,7 +62,9 @@ def test_a_success_clears_the_run_of_failures():
     asyncio.run(agent._maybe_summarize_memory(10, force=True))
 
     assert agent._summarize_failures == 0
-    assert agent._memory_summary == "a terse summary"
+    # The stored summary is the model's text plus the code-written pointer to
+    # how far back it reaches (see test_summary_pointer.py).
+    assert agent._memory_summary.startswith("a terse summary")
 
 
 def test_giving_up_is_quiet():

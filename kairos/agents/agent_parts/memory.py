@@ -309,11 +309,18 @@ class AgentMemoryMixin:
             prior = self._memory_summary
             prompt = (
                 "You are compressing a long agent transcript into a "
-                "running summary. Preserve:\n"
+                "running summary. Preserve, in this order:\n"
                 "  1. Decisions made and the rationale\n"
-                "  2. Tools called and the paths/files they touched\n"
-                "  3. Errors hit and how they were resolved\n"
-                "  4. Open questions and remaining work\n"
+                "  2. Decisions rejected, and why — so they are not retried\n"
+                "  3. Files and paths created, changed or read\n"
+                "  4. Commands and tools that worked, with the exact invocation\n"
+                "  5. Errors hit and how they were resolved\n"
+                "  6. Constraints and instructions the user gave\n"
+                "  7. State of the work: what is finished, what is in flight\n"
+                "  8. Open questions and remaining work\n"
+                "  9. Anything the next turn would otherwise redo\n"
+                "Drop: restated tool output, reasoning that led nowhere, and "
+                "anything already visible in the files themselves.\n"
                 "Be terse. Use bullet points. Target 200-400 words.\n\n"
             )
             if prior:
@@ -338,7 +345,15 @@ class AgentMemoryMixin:
                 )
             new_summary = (response.content or "").strip()
             if new_summary:
-                self._memory_summary = new_summary
+                # The pointer is written here, not asked of the model: how far
+                # back the raw transcript reaches is a fact the code knows and
+                # the summary should carry, so a later run can tell whether the
+                # detail it wants is inside the summary or older than it.
+                self._memory_summary = (
+                    f"{new_summary}\n\n"
+                    f"_(earlier turns compressed up to turn {current_turn}; "
+                    f"{len(older)} messages)_"
+                )
                 self._last_summarized_at_turn = current_turn
                 self._summarize_failures = 0
                 logger.debug(

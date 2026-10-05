@@ -552,35 +552,21 @@ const Chat: React.FC = () => {
     loadHistory(pid, sessionId || null);
   }, [currentProject, sessionId, loadHistory]);
 
-  // R38.6.4: when a project is selected but no session is chosen
-  // (e.g. right after switching projects in the sidebar, where the
-  // user lands on /chat with no sessionId in the URL), auto-open
-  // the most recent session so the previous conversation is
-  // restored instead of the thread looking empty / "history lost".
-  // If the project has no history yet the API returns [] and the
-  // effect no-ops — the user sees a fresh empty thread, which is
-  // correct for a brand-new project.
+  // R38.6.4 / R40: keep the session list fresh (the sidebar and the
+  // background strip read it) but do **not** auto-open the newest one.
+  //
+  // Every loop run creates a session, so "open the most recent session"
+  // made the agent's own transcript the landing page: open the app and
+  // you are reading the task's reply thread, not your project thread.
+  // That is the same complaint as the loop stealing the view mid-read —
+  // just on a page load instead of on an event. Nothing here navigates;
+  // a session opens only when the user picks it (sidebar, or the strip's
+  // "查看" link).
   useEffect(() => {
     if (!currentProject || sessionId) return;
     const projectId = currentProject.id;
     api.get<{ sessions: LoopSession[] }>(`/projects/${projectId}/sessions`)
-      .then((r) => {
-        const list = (r.data && r.data.sessions) || [];
-        setSessions(list);
-        // Backend returns sessions sorted newest first; open the
-        // most recent one. Skip if the user already picked a session
-        // between the get() and the then().
-        const latest = list[0];
-        if (latest?.session_id && !useChatStore.getState().currentSessionId) {
-          setCurrentSessionId(latest.session_id);
-          navigate(`/chat/${latest.session_id}`, { replace: true });
-          // R38.6.5: no explicit history load here — changing
-          // ``sessionId`` re-runs the effect above, which loads the
-          // session's rounds on top of the project-level history that
-          // is already in flight. Loading twice raced two responses
-          // into ``setCurrentMessages``.
-        }
-      })
+      .then((r) => setSessions((r.data && r.data.sessions) || []))
       .catch(() => { /* offline / first paint — sidebar will retry */ });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject?.id, sessionId]);

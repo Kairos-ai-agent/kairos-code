@@ -132,10 +132,19 @@ class TerminalTool(BaseTool):
         r"\bmkfs\b",
         r"\bchmod\s+-R\s+777",
         r"\bchown\s+-R\b",
+        # The home tree, however it is spelled. The ``[/~]`` anchor above only
+        # matches a *literal* path, so ``rm -rf $HOME`` (and the Windows
+        # spellings) went straight through — the variable only becomes the
+        # whole home tree at run time, and under full access this list is the
+        # last net: there is no approval step left to catch it.
+        r"""\brm\s+-[a-z]*[rf][a-z]*\s+["']?(?:\$\{?HOME\}?|%USERPROFILE%|\$USERPROFILE)(?![A-Za-z0-9_])""",
+        r"""\brm\s+-[a-z]*[rf][a-z]*\s+["']?/(?:home|Users)/?["']?\s*$""",
         # Recursive delete / format on Windows
         r"\bdel\s+/[fFsS].*C:\\",
         r"\bformat\s+[C-Z]:",
         r"\brd\s+/s\s+/q\s+[C-Z]:",
+        r"\bdel\s+/[fFsS].*%USERPROFILE%",
+        r"\brd\s+/s\s+/q\s+%USERPROFILE%",
         # Privilege escalation / system mods
         r"\bsudo\b",
         r"\breg\s+delete\b",
@@ -152,7 +161,10 @@ class TerminalTool(BaseTool):
         r"\bwget\s+.*\|\s*(bash|sh)",
         # Disk-level wipes
         r"\bshred\b",
-        r"\b:\s*>\s*/dev/(sd|nvme|hd)",
+        # Any raw-device redirect, with or without the ``: >`` idiom. Covers
+        # ``mmcblk`` too — removable media is a real target here, not a
+        # hypothetical one.
+        r">\s*/dev/(sd|nvme|hd|mmcblk)",
         # Network exfiltration / shells
         r"\bnc\s+-e\b",
         r"\bbash\s+-i\b.*>/dev/tcp/",

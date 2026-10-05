@@ -108,11 +108,17 @@ class PermissionRule:
 
     @classmethod
     def from_str(cls, raw: str, default_decision: Decision) -> "PermissionRule":
-        """Parse ``Tool(pattern)`` shorthand, e.g. ``Bash(git diff:*)``.
+        """Parse ``Tool(pattern)`` shorthand, e.g. ``terminal(git diff*)``.
 
         If the string doesn't contain ``(`` we treat it as a bare
         tool name with ``*`` pattern (i.e. "any use of this tool").
         Whitespace inside the parentheses is preserved.
+
+        The only wildcard is ``*`` and the match covers the whole resource, so
+        ``terminal(git diff*)`` matches ``git diff --stat``. A colon is an
+        ordinary character here — the ``git diff:*`` spelling copied from tools
+        that use it compiles to a pattern demanding a literal colon, which no
+        real command line has, so the rule silently never fires.
         """
         s = raw.strip()
         # Match `<tool>(<pattern>)` with optional whitespace

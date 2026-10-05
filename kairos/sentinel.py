@@ -345,6 +345,43 @@ def load_allow_rules(path: Optional[Path] = None) -> List[PermissionRule]:
     return rules
 
 
+# Programs where a standing "always allow" is indistinguishable from a licence
+# to destroy the machine: remembering one of these turns a single approval into
+# a permanent grant, so the gate keeps asking instead. Asking is the point.
+NEVER_REMEMBER_PROGRAMS = frozenset({
+    "rm", "rmdir", "del", "rd", "dd", "mkfs", "format", "diskpart", "shred",
+    "shutdown", "reboot", "bcdedit", "reg", "sc", "taskkill", "pkill", "kill",
+    "sudo", "su", "chmod", "chown", "curl", "wget", "ssh", "scp", "nc",
+})
+
+
+def narrowest_pattern(tool: str, resource: str) -> Optional[str]:
+    """The narrowest standing rule that still covers the call just approved.
+
+    ``remember`` means "stop asking me about *this*", and for a shell tool
+    "this" is the program plus its subcommand: approving ``git diff --stat``
+    writes ``git diff*`` and leaves ``git push --force`` still gated. Returns
+    ``"*"`` (the whole tool) only when the resource is not a command line, and
+    ``None`` for the programs above, where the gate must keep asking.
+
+    The pattern keeps the program spelled exactly as the user typed it, because
+    the rule is matched against the same command text next time.
+    """
+    if tool != "terminal":
+        return "*"
+    tokens = (resource or "").split()
+    if not tokens:
+        return "*"
+    first = tokens[0]
+    program = Path(first.replace("\\", "/")).name.lower()
+    if (program in NEVER_REMEMBER_PROGRAMS
+            or program.split(".")[0] in NEVER_REMEMBER_PROGRAMS):
+        return None
+    if len(tokens) > 1 and not tokens[1].startswith("-"):
+        return f"{first} {tokens[1]}*"
+    return f"{first}*"
+
+
 def write_allow_rule(tool: str, pattern: str = "*",
                      decision: str = "allow") -> Path:
     """Record a standing rule the user granted, so the gate stops asking."""
@@ -621,9 +658,14 @@ class Sentinel:
         if answer.get("allow"):
             if answer.get("remember"):
                 try:
-                    # The whole tool, not this one argument: "stop asking me
-                    # about curl" is what the user means by remember.
-                    write_allow_rule(tool, "*")
+                    # "Stop asking me about this", not "about this tool
+                    # forever": `git diff --stat` records `git diff*` and
+                    # leaves `git push --force` gated. Nothing is recorded at
+                    # all for the programs where a standing grant would be a
+                    # licence to destroy the machine (see the helper).
+                    pattern = narrowest_pattern(tool, ruling.resource)
+                    if pattern:
+                        write_allow_rule(tool, pattern)
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("could not record the standing rule: %s", exc)
             answered = replace(ruling, decision="allow",

@@ -87,7 +87,9 @@ def test_summarize_runs_every_n_turns():
     assert provider.call_count == 0
     asyncio.run(agent._maybe_summarize_memory(current_turn=2))   # trigger
     assert provider.call_count == 1
-    assert agent._memory_summary == "SUMMARY-A"
+    # Stored as the model's text plus the code-written pointer to how far back
+    # the summary reaches (see tests/test_summary_pointer.py).
+    assert agent._memory_summary.startswith("SUMMARY-A")
     asyncio.run(agent._maybe_summarize_memory(current_turn=3))   # too early
     assert provider.call_count == 1
     asyncio.run(agent._maybe_summarize_memory(current_turn=4))   # trigger again
@@ -103,7 +105,8 @@ def test_summarize_runs_when_memory_overflows_budget():
         agent._memory.append(LLMMessage(role="user", content="x" * 100))
     asyncio.run(agent._maybe_summarize_memory(current_turn=1))   # early by turn, but over budget
     assert provider.call_count == 1
-    assert agent._memory_summary == "EMERGENCY-SUMMARY"
+    # Same wrap as above: the pointer rides along with the model's text.
+    assert agent._memory_summary.startswith("EMERGENCY-SUMMARY")
 
 
 def test_summarize_does_not_crash_on_provider_error():

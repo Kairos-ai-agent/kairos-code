@@ -126,8 +126,9 @@ Download the archive for your platform from
 run it:
 
 ```bash
-./kairos-code                 # starts the server and opens the UI in your browser
+./kairos-code                 # starts the server and opens the UI in its own window
 ./kairos-code --port 9100     # pick a port
+./kairos-code --shell browser  # open the UI in your default browser instead
 ./kairos-code --no-browser    # server only
 ```
 

@@ -51,8 +51,87 @@ def _pick_port(preferred: int) -> int:
             return s.getsockname()[1]
 
 
-def _open_browser_when_ready(url: str, timeout: float = 30.0) -> None:
-    """Open the default browser once the HTTP server is actually serving.
+#: Where an ``--shell app`` window keeps its browser profile. Next to the
+#: browser.log this module already writes, so everything stays in one place.
+_WINDOW_PROFILE = Path.home() / ".kairos-code" / "window-profile"
+
+
+def _find_app_shell():
+    """Path to a Chromium-family browser we can drive as a chrome-less window.
+
+    Edge ships with Windows and Chrome with most desktop Linux installs. On a
+    machine with neither, return None and the caller falls back to the default
+    browser -- the UI must never depend on which browser is installed.
+    """
+    import shutil
+    import sys
+
+    candidates = []
+    if sys.platform == "win32":
+        for base in (os.environ.get("PROGRAMFILES(X86)"), os.environ.get("PROGRAMFILES"),
+                     os.environ.get("LOCALAPPDATA")):
+            if base:
+                candidates.append(str(Path(base) / "Microsoft" / "Edge"
+                                      / "Application" / "msedge.exe"))
+                candidates.append(str(Path(base) / "Google" / "Chrome"
+                                      / "Application" / "chrome.exe"))
+    elif sys.platform == "darwin":
+        candidates.append("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge")
+        candidates.append("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    for name in ("msedge", "microsoft-edge", "google-chrome", "chromium",
+                 "chromium-browser"):
+        found = shutil.which(name)
+        if found:
+            candidates.append(found)
+    for path in candidates:
+        if path and Path(path).exists():
+            return path
+    return None
+
+
+def _open_app_window(url: str) -> bool:
+    """Open *url* as its own window: no tabs, no address bar, own taskbar entry.
+
+    ``--app=`` is the whole trick -- Chromium draws a plain window around the
+    page and nothing else, which is what "looks like a desktop app" means in
+    practice. The window gets a dedicated profile so it starts clean (no
+    extensions, no history) and does not care which browser the user has as
+    default. Returns False when no Chromium-family browser is available, or
+    when the launch itself failed.
+    """
+    import subprocess
+
+    exe = _find_app_shell()
+    if not exe:
+        return False
+    cmd = [
+        exe,
+        f"--app={url}",
+        f"--user-data-dir={_WINDOW_PROFILE}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--window-size=1440,900",
+    ]
+    try:
+        _WINDOW_PROFILE.mkdir(parents=True, exist_ok=True)
+        subprocess.Popen(
+            cmd,
+            close_fds=True,
+            creationflags=(subprocess.DETACHED_PROCESS
+                           | subprocess.CREATE_NEW_PROCESS_GROUP) if os.name == "nt" else 0,
+        )
+        return True
+    except Exception:
+        return False
+
+
+def _open_browser_when_ready(url: str, timeout: float = 30.0, shell: str = "app") -> None:
+    """Open the UI once the HTTP server is actually serving.
+
+    ``shell="app"`` opens it as its own window (no tabs, no address bar);
+    ``shell="browser"`` keeps the old behaviour -- a tab in the default
+    browser. Both paths fall back to ``webbrowser.open`` so the UI still comes
+    up on a machine without Edge or Chrome.
 
     uvicorn's ``Server.run()`` blocks the main thread, so the browser must
     be opened from a daemon thread. We poll ``/api/health`` until it returns
@@ -83,11 +162,20 @@ def _open_browser_when_ready(url: str, timeout: float = 30.0) -> None:
                     break
         except Exception:
             time.sleep(0.5)
+    opened = False
+    if shell == "app":
+        try:
+            opened = _open_app_window(url)
+        except Exception:
+            opened = False
     try:
         with open(_log, "a", encoding="utf-8") as _f:
-            _f.write(f"server ready={reached}, opening {url}\n")
+            _f.write(f"server ready={reached}, shell={shell}, "
+                     f"app_window={opened}, opening {url}\n")
     except Exception:
         pass
+    if opened:
+        return
     try:
         webbrowser.open(url)
     except Exception:
@@ -130,6 +218,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(prog="kairos-code")
     parser.add_argument("--port", type=int, default=9527)
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument(
+        "--shell", choices=("app", "browser"), default="app",
+        help="open the UI as its own window (default) or as a tab in your "
+             "default browser",
+    )
     parser.add_argument("--host", default="127.0.0.1")
     args = parser.parse_args()
 
@@ -184,7 +277,7 @@ def main() -> int:
         # up. The thread still opens the browser when the budget expires,
         # so a genuinely broken start is visible rather than silent.
         threading.Thread(target=_open_browser_when_ready,
-                         args=(url, 180.0), daemon=True).start()
+                         args=(url, 180.0, args.shell), daemon=True).start()
 
     # R38.6.4 packaging: pre-load kairos submodules (with per-module
     # try/except + a log file the user can inspect post-mortem;

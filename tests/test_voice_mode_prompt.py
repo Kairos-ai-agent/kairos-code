@@ -19,6 +19,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from kairos.agents.base import KairosAgent
+from kairos.context_governor import DEFAULT_KEEP_RECENT_TOOL_RESULTS
 from kairos.voice_text import VOICE_REPLY_DIRECTIVE
 
 
@@ -92,6 +93,9 @@ def _agent():
     agent.current_turn = 0
     agent.total_turns = 0
     agent.current_tool = None
+    # _chat_impl -> _elided_memory reads this; the real __init__ sets it, and
+    # this harness deliberately skips __init__.
+    agent._keep_recent_tool_results = DEFAULT_KEEP_RECENT_TOOL_RESULTS
     return agent
 
 

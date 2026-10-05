@@ -63,11 +63,25 @@ def fake_db():
 
 @pytest.fixture
 def orch(mock_router, fake_db, tmp_path):
-    """Build an Orchestrator with a mocked DB and router."""
+    """Build an Orchestrator with a mocked DB and router.
+
+    Teardown closes the runtime. Without this, the SkillsWatcher's
+    background task (and any project runtime) stays pending on the test
+    event loop; pytest-asyncio's loop teardown then hangs on Windows --
+    asyncio's run_forever gets stuck in _cancel_all_tasks cancelling a
+    task that never settles.
+    """
     from kairos.core.orchestrator import Orchestrator
     with patch("kairos.core.orchestrator.Persistence", return_value=fake_db):
-        yield Orchestrator(model_router=mock_router,
-                            workspace_base=tmp_path)
+        o = Orchestrator(model_router=mock_router,
+                         workspace_base=tmp_path)
+        try:
+            yield o
+        finally:
+            try:
+                o.close_sync()
+            except Exception:
+                pass
 
 
 def _git_init(path: Path) -> None:

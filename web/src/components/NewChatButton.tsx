@@ -1,47 +1,35 @@
 /**
  * NewChatButton — the primary "New chat" CTA at the top of the sidebar.
  *
- * Behaviour is context-sensitive:
- *   - **Current project exists** → primary click starts a fresh session
- *     in that project. Right-side chevron opens a dropdown with
- *     "New project from folder…" so the user can also pick a new
- *     folder to start fresh.
- *   - **No project yet** → the button becomes a single "Add a folder to
- *     start" CTA that opens the FolderPicker modal directly. (The
- *     dropdown would be empty otherwise.)
+ * One button, one purpose: clicking it creates a fresh project in a default
+ * directory and lands you on an empty thread.
  *
- * The "New project from folder" item in the dropdown is the new home
- * for the create-project flow that used to live in the avatar menu
- * ("New project → /projects"). The user wanted those two entry points
- * merged into one — the "New chat" button — so creating a project is
- * a one-click action when no project exists, and a one-click option
- * from the dropdown when one already does.
+ * There used to be a chevron on its right whose dropdown held a single entry,
+ * "Pick existing folder…". That duplicated the FolderPicker that already sits
+ * above the chat input (see ChatComposer), so the chevron is gone: the folder
+ * flow lives in one place, next to where you type.
  */
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Dropdown, App as AntdApp, Tooltip } from 'antd';
-import {
-  PlusOutlined, DownOutlined, FolderOpenOutlined,
-} from '@ant-design/icons';
+import { Button, App as AntdApp } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
 
 import api from '../api/client';
 import { useChatStore } from '../stores/chatStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import { useT } from '../i18n';
 import type { Project } from '../types';
-import FolderPicker from './FolderPicker';
 
 const NewChatButton: React.FC = () => {
   const t = useT();
   const tokens = useThemeTokens();
   const navigate = useNavigate();
   const { message: msgApi } = AntdApp.useApp();
-  const [folderOpen, setFolderOpen] = useState(false);
 
   const startNewSession = async () => {
     // R38.6.4: every "New chat" click creates a brand-new project
-    // in a default directory and starts a fresh thread. We no
-    // longer reuse the current project — the user said the old
+    // in a default directory and starts a fresh thread. We do
+    // no longer reuse the current project — the user said the old
     // "new session in current project" behavior was surprising
     // and made the chat page unresponsive when the active project
     // was stale. The new flow:
@@ -103,23 +91,6 @@ const NewChatButton: React.FC = () => {
     }
   };
 
-  const openFolder = () => {
-    setFolderOpen(true);
-  };
-
-  // R38.6.4: the button is now single-purpose — every click creates
-  // a new project in the default directory. The chevron dropdown
-  // only has the "Pick existing folder" entry, since picking an
-  // existing folder is the only remaining alternative workflow.
-  const menuItems = [
-    {
-      key: 'new_project',
-      icon: <FolderOpenOutlined />,
-      label: t('shell.newChat.pickExistingFolder'),
-      onClick: openFolder,
-    },
-  ];
-
   return (
     <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
       <Button
@@ -135,29 +106,6 @@ const NewChatButton: React.FC = () => {
       >
         {t('shell.newChat.newChat')}
       </Button>
-      <Dropdown
-        menu={{ items: menuItems }}
-        trigger={['click']}
-        placement="bottomRight"
-      >
-        <Tooltip title={t('shell.newChat.moreOptions')}>
-          <Button
-            type="primary"
-            data-testid="new-chat-options"
-            icon={<DownOutlined />}
-            style={{
-              background: tokens.labelPrimary, color: tokens.bgBase,
-              border: 'none', flex: '0 0 auto',
-              padding: '0 10px',
-            }}
-            aria-label={t('shell.newChat.options')}
-          />
-        </Tooltip>
-      </Dropdown>
-      <FolderPicker
-        open={folderOpen}
-        onClose={() => setFolderOpen(false)}
-      />
     </div>
   );
 };

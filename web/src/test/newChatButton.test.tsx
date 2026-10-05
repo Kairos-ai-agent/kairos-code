@@ -3,15 +3,17 @@
  * Contract under test (asserted through testids so the copy can keep changing
  * with the 63-language dictionary, and so a refactor of the label does not
  * silently break the test):
- *   - a primary "new chat" button and a chevron options button are rendered;
- *   - the primary button starts a new session in the current project;
- *   - the chevron opens a dropdown offering "pick an existing folder", which
- *     opens the FolderPicker.
+ *   - exactly one button is rendered: the primary "new chat" action;
+ *   - clicking it starts a brand-new project;
+ *   - there is NO chevron/options button. Its dropdown held a single entry,
+ *     "pick an existing folder", which duplicated the FolderPicker that
+ *     already sits above the chat input (ChatComposer) — the user asked for
+ *     the duplicate to go. The folder flow is covered by
+ *     folderPicker.test.tsx and the composer.
  *
  * History: this file used to assert an English "Add folder to start" label and
- * a two-item dropdown. Both were retired (the button is single-purpose now, and
- * the dropdown kept only the folder entry), so the assertions were rewritten to
- * the current contract instead of deleted.
+ * a two-item dropdown; both were retired, and now the chevron itself is gone,
+ * so its assertions went with it rather than being left to rot.
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -25,17 +27,6 @@ vi.mock('../api/client', () => ({
     post: vi.fn((_url?: string) => Promise.resolve({ data: {} })),
   },
   connectWebSocket: vi.fn(),
-}));
-
-// Render the real FolderPicker but expose its open state through a testid so the
-// assertion does not depend on antd Modal internals.
-vi.mock('../components/FolderPicker', () => ({
-  default: (props: { open?: boolean; onClose?: () => void }) => (
-    <div data-testid="folder-picker-mock"
-         data-open={props.open ? 'true' : 'false'}>
-      <button onClick={props.onClose}>close</button>
-    </div>
-  ),
 }));
 
 import api from '../api/client';
@@ -66,10 +57,10 @@ describe('NewChatButton', () => {
     useChatStore.getState().reset();
   });
 
-  it('renders the primary new-chat button and the options chevron', () => {
+  it('renders only the primary new-chat button — no chevron', () => {
     renderInRouter(<NewChatButton />);
     expect(screen.getByTestId('new-chat-button')).toBeInTheDocument();
-    expect(screen.getByTestId('new-chat-options')).toBeInTheDocument();
+    expect(screen.queryByTestId('new-chat-options')).not.toBeInTheDocument();
   });
 
   it('clicking the primary button starts a brand-new chat project', async () => {
@@ -83,32 +74,6 @@ describe('NewChatButton', () => {
     await waitFor(() => {
       expect(vi.mocked(api.post)).toHaveBeenCalledWith(
         '/projects', expect.anything());
-    });
-  });
-
-  it('the chevron opens a dropdown with the folder entry', async () => {
-    useChatStore.getState().setProjects([fakeProject]);
-    useChatStore.getState().setCurrentProject(fakeProject);
-    renderInRouter(<NewChatButton />);
-    fireEvent.click(screen.getByTestId('new-chat-options'));
-    // antd renders the menu in a portal. Assert the entry rather than its copy:
-    // there is exactly one item and it is the folder one.
-    const items = await screen.findAllByRole('menuitem');
-    expect(items).toHaveLength(1);
-  });
-
-  it('the dropdown folder entry opens the FolderPicker', async () => {
-    useChatStore.getState().setProjects([fakeProject]);
-    useChatStore.getState().setCurrentProject(fakeProject);
-    renderInRouter(<NewChatButton />);
-    expect(screen.getByTestId('folder-picker-mock').getAttribute('data-open'))
-      .toBe('false');
-    fireEvent.click(screen.getByTestId('new-chat-options'));
-    const [item] = await screen.findAllByRole('menuitem');
-    fireEvent.click(item);
-    await waitFor(() => {
-      expect(screen.getByTestId('folder-picker-mock').getAttribute('data-open'))
-        .toBe('true');
     });
   });
 });

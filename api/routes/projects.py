@@ -593,6 +593,57 @@ async def get_session_rounds(project_id: str, session_id: str):
     return {"project_id": project_id, "session_id": session_id, "rounds": rows}
 
 
+@router.get("/{project_id}/rounds")
+async def get_project_rounds(
+    project_id: str,
+    limit: int = Query(500, ge=1, le=5000),
+):
+    """Every loop round of a project, oldest first — no session needed.
+
+    The chat thread could only rebuild the *loop* half of a conversation
+    when a session happened to be selected (``/sessions/{id}/rounds``).
+    The page no longer jumps into the newest session on load — doing so
+    yanked the user out of whatever they were reading, and the loop view
+    has its own bar — so with nothing selected the thread silently lost
+    every round: one real project's 6268 stored rows came back as the 2
+    bubbles that happened to sit under a chat topic.
+
+    Rounds are keyed by ``session_id`` inside ``loop_rounds``, but the
+    project is the right scope for a thread, and
+    ``load_loop_rounds(project_id)`` already loads them that way.
+    """
+    from api.deps import orchestrator as _orch
+    project = _orch.get_project(project_id)
+    if project is None:
+        raise HTTPException(
+            status_code=404, detail=f"Project not found: {project_id}")
+    rows = _orch._db.load_loop_rounds(project_id, limit=limit)  # type: ignore[attr-defined]
+    # The in-memory session can be ahead of disk (a round still in
+    # flight); append whatever it has that the table does not.
+    sess = getattr(project, "loop_session", None)
+    session_id = getattr(sess, "session_id", "") if sess else ""
+    if sess and getattr(sess, "history", None):
+        seen = {(r.get("session_id"), int(r.get("round", -1))) for r in rows}
+        for h in sess.history:
+            rnd = int(h.get("round", -1))
+            if (session_id, rnd) in seen:
+                continue
+            review = h.get("review") or {}
+            rows.append({
+                "project_id": project_id,
+                "session_id": session_id,
+                "round": rnd,
+                "coder_summary": h.get("coder_summary", ""),
+                "review_summary": (review.get("summary") or ""),
+                "review_json": json.dumps(review) if review else None,
+                "score": int(review.get("score", 0) or 0),
+                "approve": 1 if review.get("approve") else 0,
+                "created_at": float(h.get("created_at", 0) or 0),
+            })
+    rows.sort(key=lambda r: (r.get("created_at", 0), r.get("round", 0)))
+    return {"project_id": project_id, "rounds": rows}
+
+
 @router.get("/{project_id}/settings")
 async def get_project_settings(project_id: str):
     """Per-project settings (currently just the Coder sub-mode + env overrides)."""

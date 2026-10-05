@@ -199,43 +199,65 @@ const Chat: React.FC = () => {
   const loadHistory = useCallback(async (pid: string, sid: string | null) => {
     lastLoadedRef.current = `${pid}:${sid || ''}`;
     const msgs: Message[] = [];
+    // Rounds carry the Coder summary + Reviewer verdict for each loop turn
+    // — the loop half of the conversation. The id includes the round's own
+    // session: one project can hold several sessions whose round numbers
+    // repeat, and a collision there makes mergeHistory silently drop the
+    // second copy.
+    const pushRounds = (rounds: SessionRound[], fallbackScope: string) => {
+      for (const rd of rounds) {
+        const scope = rd.session_id || fallbackScope;
+        if (rd.coder_summary) {
+          msgs.push({
+            id: `${scope}-${rd.round}-coder`,
+            sender: 'coder',
+            receiver: 'user',
+            topic: 'coder.summary',
+            content: rd.coder_summary,
+            msg_type: 'text',
+            timestamp: rd.created_at,
+            metadata: { round: rd.round },
+          });
+        }
+        if (rd.review_summary || rd.score) {
+          msgs.push({
+            id: `${scope}-${rd.round}-reviewer`,
+            sender: 'reviewer',
+            receiver: 'coder',
+            topic: 'reviewer.summary',
+            content: rd.review_summary,
+            msg_type: 'text',
+            timestamp: rd.created_at,
+            metadata: {
+              round: rd.round,
+              score: rd.score,
+              approve: !!rd.approve,
+            },
+          });
+        }
+      }
+    };
     if (sid) {
       try {
         const r = await api.get<{ rounds: SessionRound[] }>(
           `/projects/${pid}/sessions/${sid}/rounds`);
-        const rounds = r.data.rounds || [];
-        for (const rd of rounds) {
-          if (rd.coder_summary) {
-            msgs.push({
-              id: `${sid}-${rd.round}-coder`,
-              sender: 'coder',
-              receiver: 'user',
-              topic: 'coder.summary',
-              content: rd.coder_summary,
-              msg_type: 'text',
-              timestamp: rd.created_at,
-              metadata: { round: rd.round },
-            });
-          }
-          if (rd.review_summary || rd.score) {
-            msgs.push({
-              id: `${sid}-${rd.round}-reviewer`,
-              sender: 'reviewer',
-              receiver: 'coder',
-              topic: 'reviewer.summary',
-              content: rd.review_summary,
-              msg_type: 'text',
-              timestamp: rd.created_at,
-              metadata: {
-                round: rd.round,
-                score: rd.score,
-                approve: !!rd.approve,
-              },
-            });
-          }
-        }
+        pushRounds(r.data.rounds || [], sid);
       } catch {
         /* no rounds yet / offline — chat messages below still load */
+      }
+    } else {
+      // R40: with no session selected the thread must still show the loop
+      // history. It used to arrive only through the session route above,
+      // so once the page stopped auto-opening the newest session (that
+      // yanked the user out of whatever they were reading) every round
+      // silently disappeared: a project holding 6268 rows showed the 2
+      // bubbles that happened to sit under a chat topic.
+      try {
+        const r = await api.get<{ rounds: SessionRound[] }>(
+          `/projects/${pid}/rounds`);
+        pushRounds(r.data.rounds || [], 'project');
+      } catch {
+        /* no rounds yet / offline */
       }
     }
     let dbMsgs: Message[] = [];

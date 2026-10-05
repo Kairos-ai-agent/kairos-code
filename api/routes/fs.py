@@ -50,6 +50,7 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from kairos.access_control import is_full_access
 from kairos.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -197,6 +198,15 @@ def _fs_allow_roots() -> Optional[list]:
             p = Path(part)
             roots.append(p if p.is_absolute() else (Path.cwd() / p).resolve())
         return roots
+    # The global sandbox switch (``KAIROS_FULL_ACCESS`` env or
+    # ``settings.json:fullAccess``) is what lets the agent touch any file. The
+    # picker used to keep a *separate* boundary of its own, so a user who had
+    # already switched the sandbox off still saw home + workspace here — and on
+    # Windows that is a single drive letter, because both of those live on
+    # ``C:``, while the other drives were filtered out of the roots row
+    # entirely. One switch, one answer: full access means every root.
+    if is_full_access():
+        return None
     roots = []
     ws = settings.workspace_dir
     ws_abs = ws if ws.is_absolute() else (Path.cwd() / ws).resolve()
@@ -206,13 +216,23 @@ def _fs_allow_roots() -> Optional[list]:
 
 
 def _list_path_allowed(p: Path) -> bool:
-    """True iff ``p`` is under an allowed root (or all are allowed)."""
+    """True iff ``p`` is under an allowed root (or all are allowed).
+
+    Ancestors of an allowed root count too. ``_root_reaches_allowed``
+    keeps them in the roots row on purpose (so the picker can be seeded
+    at ``C:\\`` and walked down towards home), and a row the user can
+    click but not open is a trap — that was the old asymmetry: ``C:\\``
+    was listed, then answered 403. Descending *away* from an allowed
+    root still 403s, so the boundary itself is unchanged.
+    """
     allowed = _fs_allow_roots()
     if allowed is None:
         return True
     resolved = p.resolve()
     return any(
-        resolved == ar.resolve() or resolved.is_relative_to(ar.resolve())
+        resolved == ar.resolve()
+        or resolved.is_relative_to(ar.resolve())
+        or ar.resolve().is_relative_to(resolved)
         for ar in allowed
     )
 

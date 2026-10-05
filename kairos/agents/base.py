@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
+from kairos.agents.identity import KAIROS_IDENTITY
 from kairos.llm.base import LLMConfig, LLMMessage, LLMResponse, ToolCall
 from kairos.llm.errors import is_context_length_error
 from kairos.llm.provider_registry import create_provider
@@ -149,7 +150,14 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
         self.agent_id = agent_id
         self.name = name
         self.role = role
-        self.system_prompt = system_prompt
+        # The identity goes in front of every agent's prompt (Coder,
+        # Reviewer, subagents) so no role has to remember to state it: the
+        # model behind a relay may otherwise introduce itself as whatever it
+        # was trained to say. See kairos/agents/identity.py.
+        self.system_prompt = (
+            f"{KAIROS_IDENTITY}\n\n{system_prompt}" if system_prompt
+            else KAIROS_IDENTITY
+        )
         self.message_bus = message_bus
         self.tools = tools or []
 

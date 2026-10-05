@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel
 from kairos.llm.base import LLMConfig, LLMMessage, LLMResponse, ToolCall
 from kairos.llm.errors import is_context_length_error
+from kairos.agents.identity import KAIROS_IDENTITY
 from kairos.llm.provider_registry import create_provider
 from kairos.context_governor import (
     DEFAULT_KEEP_RECENT_TOOL_RESULTS,
@@ -73,7 +74,7 @@ class AgentChatMixin:
         """
         if not self.project_id:
             # No project context: fall back to the generic prompt.
-            return ("You are a helpful assistant. Respond "
+            return (KAIROS_IDENTITY + " Respond "
                     "conversationally to the user's message. Use "
                     "tools when helpful.")
         try:
@@ -97,7 +98,11 @@ class AgentChatMixin:
         if project is not None:
             name = getattr(project, "name", "") or project.id
             desc = (getattr(project, "description", "") or "").strip()
-            head = f'You are the Coder for project {name}.'
+            # "You are the Coder for project X" made the model think its
+            # *identity* was a Coder environment (it answered "I am Claude,
+            # running in a Coder environment"). It is a role in this project,
+            # not who it is — the identity is stated in ``base`` above.
+            head = f'You are working as the Coder for project {name}.'
             if desc:
                 head += f"  {desc[:200]}"
             blocks.append(head)
@@ -151,7 +156,7 @@ class AgentChatMixin:
                 blocks.append("\n".join(lines))
 
         # 4) assemble
-        base = ("You are a helpful assistant. Respond "
+        base = (KAIROS_IDENTITY + " Respond "
                 "conversationally to the user's message. Use "
                 "tools when helpful.")
         if blocks:

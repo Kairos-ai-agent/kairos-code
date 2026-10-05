@@ -1303,18 +1303,24 @@ _INTENT_TEST_JS = r"""
 const { classifyIntent } = await import('./intent.ts');
 
 const CASES = [
-  // Chinese imperatives → task
-  ['帮我修一下这个 bug',                       'task'],
-  ['实现一个 REST API',                        'task'],
-  ['写一下单元测试',                           'task'],
+  // 长任务 → loop：范围词 / 多要求 / 点名走 loop
   ['重构这个文件',                             'task'],
-  ['删掉旧代码',                              'task'],
-  // English imperatives → task
-  ['fix the bug in auth.py',                  'task'],
+  ['重构整个项目的数据库层',                   'task'],
+  ['实现一个 REST API',                        'task'],
+  ['迁移到新的构建系统',                       'task'],
+  ['把整个仓库的日志都换成结构化输出',          'task'],
+  ['帮我做一个订单管理系统',                   'task'],
+  ['走 loop 把这个做完',                       'task'],
+  ['请按这三点改：\n1) 修登录\n2) 加日志\n3) 补测试', 'task'],
+  // 非长任务 → 单轮（默认；单轮路径同样带全部工具）
+  ['帮我修一下这个 bug',                       'chat'],
+  ['写一下单元测试',                           'chat'],
+  ['删掉旧代码',                              'chat'],
+  ['fix the bug in auth.py',                  'chat'],
   ['implement a REST API',                    'task'],
-  ['add a login button',                       'task'],
+  ['add a login button',                      'chat'],
   ['refactor the database layer',             'task'],
-  ['write tests for the parser',              'task'],
+  ['write tests for the parser',              'chat'],
   // Questions → chat
   ['what does this function do?',             'chat'],
   ['why is the test failing?',                 'chat'],
@@ -1322,16 +1328,16 @@ const CASES = [
   ['什么文件是主入口？',                       'chat'],
   ['为什么这个 API 返回 404？',                 'chat'],
   ['怎么配置数据库？',                         'chat'],
-  // Code blocks → task
-  ['看看这个:\\n```js\\nconst x = 1;\\n```',   'task'],
+  // 贴代码不再等于长任务 → chat（R40；单轮路径同样能改文件）
+  ['看看这个:\\n```js\\nconst x = 1;\\n```',   'chat'],
   // Casual / short → chat
   ['hi',                                       'chat'],
   ['ok',                                       'chat'],
   ['thanks',                                   'chat'],
   ['你好',                                     'chat'],
   // Long technical → task
-  ['import os; from typing import List; class Foo: async def bar(self): return os.path.join(\\'a\\', \\'b\\')',
-                                              'task'],
+  ['import os; from typing import List; class Foo: async def bar(self): return os.path.join("a", "b")',
+   'chat'],
   // Ambiguous defaults to chat
   ['I had lunch today',                        'chat'],
   ['会议改到明天下午三点',                     'chat'],
@@ -1365,43 +1371,66 @@ def test_intent_classifier_handles_real_cases(tmp_path):
         # a normal repo checkout, but make the test robust).
         return
 
-    # Use a temp dir so we can write a .mjs test that imports the
-    # TS file. Node 20+ supports import-from-ts via tsx or a build
-    # step; we use the simplest path: spawn a one-off process
-    # that uses the project's tsc to transpile, then runs Node.
-    # Since transpiling the whole web/ tree is slow, we instead
-    # ship a tiny re-implementation in JS that exercises the
-    # heuristic. This is a smoke test — the real logic is in
-    # intent.ts, which we test by source-level assertions in
-    # other tests.
+    # Run the real module. Node ≥ 22.6 strips TypeScript types itself, so
+    # importing intent.ts directly works and a JS re-implementation is
+    # unnecessary — a re-implementation would test the re-implementation,
+    # not the shipped heuristic.
+    #
+    # (R40: this test used to ``return`` before running anything, so the
+    # CASES above asserted nothing at all and the file's only real coverage
+    # of the classifier was the source-level "does the text contain 帮我"
+    # checks below. A stub that always passes is worse than no test.)
+    import shutil
+    import subprocess
+
+    import pytest
+
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed; cannot exercise the classifier")
+
     test_js = tmp_path / "intent_test.mjs"
-    test_js.write_text(_INTENT_TEST_JS.replace(
-        "await import('./intent.ts');",
-        # Inline a JS re-implementation that mirrors the TS
-        # logic. The real source-level tests in this file
-        # assert the source uses the right keywords / patterns.
-        "const classifyIntent = globalThis.__classifyIntent;"
-    ), encoding="utf-8")
-    # Skip running the test if we can't actually import TS.
-    # The behavioral coverage is in the source-level tests below.
-    return  # Smoke test: rely on the source-level checks below.
+    test_js.write_text(
+        _INTENT_TEST_JS.replace(
+            "await import('./intent.ts');",
+            f"await import({(utils_dir / 'intent.ts').as_uri()!r});",
+        ),
+        encoding="utf-8",
+    )
+    proc = subprocess.run(
+        [node, "--experimental-strip-types", str(test_js)],
+        capture_output=True, text=True, timeout=180,
+    )
+    out = (proc.stdout or "") + (proc.stderr or "")
+    assert proc.returncode == 0, out[-2000:]
+    assert "FAIL=0" in out, out[-2000:]
 
 
-def test_intent_classifier_source_has_chinese_keywords():
-    """The intent.ts source must include the Chinese imperative
-    keywords we test against (帮我, 实现, 写, 改, 删, etc.)."""
+def test_intent_classifier_source_has_long_task_signals():
+    """The classifier escalates on long-job scope — not on every imperative.
+
+    R40: the old keyword list (帮我 / 实现 / 写 / 改 / 删 / 创建 / 优化 / 调试 /
+    build / create / fix / add / remove / delete / refactor / update) matched
+    almost any message, so a one-line fix opened the full Coder ↔ Reviewer
+    loop. Only scope implying several files or steps may do that now.
+    """
     p = REPO_ROOT / "web" / "src" / "utils" / "intent.ts"
     if not p.exists():
         return  # skip if file missing
     src = p.read_text(encoding="utf-8")
-    # Use substring match (not the f-string check) so we can
-    # handle both single-quote and double-quote wrapped keywords.
-    for kw in ('帮我', '实现', '改', '删', '创建', '优化', '调试',
-              'build', 'create', 'fix', 'implement', 'add', 'remove',
-              'delete', 'refactor', 'update'):
-        assert kw in src, (
-            f"intent.ts should include the imperative keyword '{kw}'"
-        )
+    # Long-job scope signals stay.
+    for kw in ("重构", "重写", "迁移", "整个项目", "多个文件", "端到端",
+               "refactor", "migrat", "entire", "whole", "multiple files",
+               "batch", "pipeline"):
+        assert kw in src, f"intent.ts should keep the long-task signal '{kw}'"
+    # The any-imperative-wins list is gone.
+    assert "TASK_KEYWORDS" not in src, (
+        "the old imperative-keyword escalation should be gone (R40)"
+    )
+    # Asking for the loop by name still works.
+    assert "LOOP_PHRASES" in src, (
+        "intent.ts should still honour an explicit '走 loop'"
+    )
 
 
 def test_intent_classifier_source_has_chinese_question_patterns():
@@ -1417,18 +1446,21 @@ def test_intent_classifier_source_has_chinese_question_patterns():
         )
 
 
-def test_intent_classifier_source_has_code_patterns():
-    """The intent.ts source must have a code-block detector
-    (fenced ``` or file extensions like .py/.js)."""
+def test_intent_classifier_does_not_escalate_on_pasted_code():
+    """R40: pasting a snippet no longer forces the loop.
+
+    Sharing code is usually "explain / review / fix this", and the single-turn
+    path carries the same tools (file_edit, terminal …), so a follow-up edit
+    is not lost work. The old CODE_PATTERNS made a fenced block a task signal;
+    behaviour is pinned for real in
+    test_intent_classifier_handles_real_cases above.
+    """
     p = REPO_ROOT / "web" / "src" / "utils" / "intent.ts"
     if not p.exists():
         return
     src = p.read_text(encoding="utf-8")
-    # Fenced code block.
-    assert r"```" in src, "intent.ts should detect fenced code blocks"
-    # File extension hint.
-    assert ".py" in src or ".js" in src, (
-        "intent.ts should detect file-extension mentions"
+    assert "CODE_PATTERNS" not in src, (
+        "a fenced code block must not be a long-task signal any more (R40)"
     )
 
 

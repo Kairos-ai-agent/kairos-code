@@ -25,7 +25,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Tag, Tooltip, message as antMessage, App as AntdApp } from 'antd';
 import {
   PlayCircleOutlined, StopOutlined, ReloadOutlined, ThunderboltOutlined,
-  ExportOutlined, CodeOutlined, BranchesOutlined,
+  ExportOutlined, CodeOutlined, BranchesOutlined, LoadingOutlined,
 } from '@ant-design/icons';
 
 import { useChatStore } from '../stores/chatStore';
@@ -68,6 +68,13 @@ const Chat: React.FC = () => {
     running: boolean; round: number; last_score: number;
     last_approve: boolean; session_id?: string;
   } | null>(null);
+  // The loop's own session, remembered instead of opened. A dispatched task
+  // runs in the background: the thread the user is reading must not be
+  // replaced by it, so we keep the id here and offer an explicit jump.
+  const [backgroundSession, setBackgroundSession] = useState<string | null>(null);
+  const rememberBackgroundSession = useCallback((sid: string) => {
+    setBackgroundSession((prev) => prev || sid);
+  }, []);
   const [planState, setPlanState] = useState<{
     pending: boolean; text: string; decision: string | null;
     round: number;
@@ -463,32 +470,28 @@ const Chat: React.FC = () => {
         // for the topbar and refresh the session list so the sidebar
         // picks up the new entry.
         if (currentProject) {
-          // The message metadata usually carries session_id; use it
-          // directly so the URL switches without waiting for the
-          // /loop GET. Fall back to the GET when the message doesn't
-          // have it (loop.finished, loop.completed, etc.).
+          // A dispatched task runs in the background. It used to take the
+          // screen: the moment `loop.coder_started` arrived the chat switched
+          // to the fresh session and the user lost whatever they were reading
+          // or typing. Now we only *remember* the session (the slim strip
+          // above the composer offers an explicit jump) and leave the thread
+          // alone. The session list still refreshes so the sidebar picks the
+          // new entry up.
           const wsSid = msg.metadata?.session_id;
-          if (wsSid && wsSid !== sessionId) {
-            setCurrentSessionId(wsSid);
-            navigate(`/chat/${wsSid}`, { replace: true });
-            loadHistory(currentProject.id, wsSid);
-          }
+          if (wsSid) rememberBackgroundSession(wsSid);
           api.get<{ sessions: LoopSession[] }>(`/projects/${currentProject.id}/sessions`)
             .then((r) => setSessions(r.data.sessions || []))
             .catch(() => {});
           api.get(`/projects/${currentProject.id}/loop`).then((r) => {
             setLoopState(r.data);
             const fetchedSid = r.data?.session_id;
-            if (fetchedSid && !wsSid) {
-              // The WS message didn't carry session_id; use the
-              // fetched one. Switch the URL if it's new.
-              if (fetchedSid !== sessionId) {
-                setCurrentSessionId(fetchedSid);
-                navigate(`/chat/${fetchedSid}`, { replace: true });
-                loadHistory(currentProject.id, fetchedSid);
-              } else {
-                loadHistory(currentProject.id, fetchedSid);
-              }
+            if (fetchedSid) rememberBackgroundSession(fetchedSid);
+            // Pull the thread in only when the turn is over, so its replies
+            // land where the user is looking. Mid-run refreshes would race
+            // the WebSocket and buy nothing — the run is deliberately hidden.
+            if (topic === 'loop.completed' || topic === 'loop.finished'
+                || topic === 'loop.approved' || topic === 'loop.rejected') {
+              loadHistory(currentProject.id, sessionId ?? null);
             }
           }).catch(() => {});
         }
@@ -910,6 +913,42 @@ const Chat: React.FC = () => {
           round={askState.round}
           onAnswered={() => setAskState(null)}
         />
+      )}
+
+      {/* Background task strip. A dispatched task keeps running while the
+          user stays where they are — one slim line, no view switch, and the
+          two links are the only way the run can take the screen: on purpose. */}
+      {loopState?.running && (
+        <div
+          data-testid="background-task"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            margin: '0 16px 6px', padding: '5px 10px',
+            border: `1px solid ${tokens.border}`, borderRadius: 6,
+            background: tokens.bgLay1, fontSize: 12,
+            color: tokens.labelSecondary,
+          }}
+        >
+          <LoadingOutlined spin style={{ fontSize: 11 }} />
+          <span>{t('run.running')}</span>
+          <span style={{ color: tokens.labelTertiary }}>
+            {t('run.liveRound')} {loopState.round}
+            {' · '}{t('run.finalScore')}: {loopState.last_score}
+          </span>
+          <div style={{ flex: 1 }} />
+          {backgroundSession && (
+            <Button
+              size="small" type="link" data-testid="background-task-view"
+              style={{ padding: 0, height: 'auto', fontSize: 12 }}
+              onClick={() => {
+                setCurrentSessionId(backgroundSession);
+                navigate(`/chat/${backgroundSession}`);
+              }}
+            >
+              {t('run.view')}
+            </Button>
+          )}
+        </div>
       )}
 
       {/* Composer */}

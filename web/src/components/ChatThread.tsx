@@ -323,7 +323,7 @@ const ProcessBlock: React.FC<{ steps: Step[]; running: boolean }> = ({ steps, ru
     <div
       data-testid="process-block"
       style={{
-        margin: '2px 0 10px 34px',
+        margin: '2px 0 8px 0',
         border: `1px solid ${tokens.border}`,
         borderRadius: 8,
         background: tokens.bgLay1,
@@ -536,27 +536,19 @@ const AssistantBubble: React.FC<{
   const tokensUsed = typeof usage.total_tokens === 'number' ? usage.total_tokens : null;
 
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8,
-                  marginTop: 4, marginBottom: 6 }}>
-      <div style={{
-        width: 26, height: 26, borderRadius: 6,
-        background: '#facc15', color: '#000',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontWeight: 900, fontSize: 14, flexShrink: 0, marginTop: 2,
-      }}>K</div>
-      <div style={{ flex: 1, minWidth: 0, background: tokens.bgElevated,
-                    borderRadius: 8, padding: '8px 12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8,
-                      marginBottom: 2 }}>
-          {tokensUsed !== null && (
+    <div data-testid="assistant-bubble" style={{ marginTop: 2, marginBottom: 4 }}>
+      <div style={{ background: tokens.bgElevated,
+                    borderRadius: 8, padding: '7px 11px' }}>
+        {tokensUsed !== null && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end',
+                        marginBottom: 2 }}>
             <Tooltip title={t('chat.thread.tokenUsage')}>
-              <span style={{ fontSize: 10, color: tokens.labelTertiary,
-                             marginInlineStart: 'auto' }}>
+              <span style={{ fontSize: 10, color: tokens.labelTertiary }}>
                 {t('chat.thread.tokensUsed', { n: tokensUsed.toLocaleString() })}
               </span>
             </Tooltip>
-          )}
-        </div>
+          </div>
+        )}
         {thinking && (
           <details
             data-testid="think-block"
@@ -687,8 +679,8 @@ const RoleBubble: React.FC<{
     <div style={{
       background: tokens.agentBubble,
       border: `1px solid ${tokens.agentBubbleBorder}`,
-      borderRadius: 12, padding: '10px 14px',
-      fontSize: 14, lineHeight: 1.55,
+      borderRadius: 8, padding: '7px 10px',
+      fontSize: 13, lineHeight: 1.5,
       color: tokens.labelPrimary,
       fontFamily: mono ? MONO_STACK : undefined,
       whiteSpace: 'pre-wrap', wordBreak: 'break-word',
@@ -697,20 +689,20 @@ const RoleBubble: React.FC<{
     </div>
   );
   return (
-    <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
       <div style={{
-        width: 32, height: 32, borderRadius: 8,
+        width: 22, height: 22, borderRadius: 6,
         background: tokens.bgLay1, color: accent,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 16, flexShrink: 0, border: `1px solid ${tokens.border}`,
+        fontSize: 12, flexShrink: 0, border: `1px solid ${tokens.border}`,
       }}>
         {icon}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         {(roleLabel || meta) && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8,
-                        marginBottom: 4 }}>
-            {roleLabel && <span style={{ fontSize: 13, fontWeight: 600,
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6,
+                        marginBottom: 2 }}>
+            {roleLabel && <span style={{ fontSize: 12, fontWeight: 600,
                            color: tokens.labelPrimary }}>{roleLabel}</span>}
             {meta && <span style={{ fontSize: 11, color: tokens.labelTertiary }}>
                        {meta}

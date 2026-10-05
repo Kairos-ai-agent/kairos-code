@@ -165,7 +165,7 @@ describe('Chat WebSocket message routing', () => {
     expect(msgs.some((m) => m.topic === 'tool.result')).toBe(true);
   });
 
-  it('loop.coder_started triggers a session start (sets sessionId + fetches)', async () => {
+  it('loop.coder_started is tracked in the background, not opened', async () => {
     // The handler closes over `currentProject` from the render pass, so the
     // project must be selected before the component mounts.
     useChatStore.getState().setProjects([{
@@ -191,9 +191,11 @@ describe('Chat WebSocket message routing', () => {
         },
       });
     });
-    // The handler should set currentSessionId to the new session
-    // (via setCurrentSessionId('sess-abc123') from the r.data.session_id).
-    expect(useChatStore.getState().currentSessionId).toBe('sess-abc123');
+    // R39: a dispatched task runs in the background. Switching to its session
+    // here used to yank the user out of whatever they were reading or typing,
+    // so the handler now only *remembers* the session (the strip above the
+    // composer offers the jump) and the selected session must not change.
+    expect(useChatStore.getState().currentSessionId).toBeNull();
   });
 
   it('init / agent_update envelopes are ignored (no bubble added)', async () => {

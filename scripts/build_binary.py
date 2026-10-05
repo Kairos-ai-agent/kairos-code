@@ -26,6 +26,35 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 LAUNCHER = ROOT / "kairos_code_launcher.py"
 WEB_DIST = ROOT / "web" / "dist"
+
+#: Files under ``web/dist`` that nothing serves. ``web/public/branding/`` holds
+#: the *master* logo the icon set is regenerated from (see _build_icons.py in
+#: that folder), and Vite copies the whole public dir into dist -- so the raw
+#: jpeg rode along in every binary at 2.2 MB, more than any other single asset,
+#: for a file no page ever requests. Staged out at build time instead of deleted
+#: from the repo: the source asset stays where the icon build expects it.
+BUNDLE_SKIP = ("branding/kairos-icon.jpeg",)
+
+
+def _stage_web_dist():
+    """Copy web/dist minus BUNDLE_SKIP; returns the dir to hand to PyInstaller.
+
+    Returns web/dist untouched when it is absent (CI shards run this module
+    without a frontend build) or when there is nothing to skip.
+    """
+    import shutil
+    import tempfile
+
+    if not BUNDLE_SKIP or not WEB_DIST.is_dir():
+        return WEB_DIST
+    out = Path(tempfile.mkdtemp(prefix="kairos-webdist-")) / "dist"
+    shutil.copytree(WEB_DIST, out,
+                    ignore=shutil.ignore_patterns(*(Path(p).name for p in BUNDLE_SKIP)))
+    dropped = sum((WEB_DIST / p).stat().st_size for p in BUNDLE_SKIP
+                  if (WEB_DIST / p).is_file())
+    print(f"[build] staged  : web/dist without {len(BUNDLE_SKIP)} dead asset(s) "
+          f"({dropped / 1e6:.1f} MB not shipped)")
+    return out
 NAME = "kairos-code"
 
 # Packages whose submodules PyInstaller cannot see through static analysis.
@@ -145,7 +174,10 @@ def main() -> int:
     icon = icon_for_platform()
     if icon:
         cmd += ["--icon", str(icon)]
+    staged_web = _stage_web_dist()
     for src, dest in DATA_DIRS:
+        if src == WEB_DIST:
+            src = staged_web
         if src.is_dir():
             cmd += ["--add-data", f"{src}{os.pathsep}{dest}"]
     for module in HIDDEN_IMPORTS:
@@ -182,6 +214,17 @@ def main() -> int:
         # falls back to plain HTTP downloads ("Xet Storage is enabled for this
         # repo, but the 'hf_xet' package is not installed").
         "--exclude-module", "hf_xet",
+        # Development-only weight that PyInstaller walks in from the venv. None
+        # of it is imported by the app at runtime -- checked with `pip show`
+        # (Required-by) and by grepping the runtime packages for imports. pytest
+        # and mypy are for developing Kairos, chardet is required by nothing at
+        # all, and tkinter is not used by either the web UI or the CLI (kept as
+        # insurance against a transitive import quietly dragging it back in).
+        "--exclude-module", "pytest",
+        "--exclude-module", "_pytest",
+        "--exclude-module", "mypy",
+        "--exclude-module", "chardet",
+        "--exclude-module", "tkinter",
         LAUNCHER.name,
     ]
 

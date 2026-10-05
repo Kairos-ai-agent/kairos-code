@@ -193,6 +193,56 @@ def _load_yaml(path: Path) -> dict:
     return raw if isinstance(raw, dict) else {}
 
 
+# ---------------------------------------------------------------------------
+# Rules that cannot fire
+# ---------------------------------------------------------------------------
+
+def _certainly_covers(broad: "PermissionRule", narrow: "PermissionRule") -> bool:
+    """True only when *broad* provably matches everything *narrow* can match.
+
+    Deliberately conservative: the answer is used to tell the user a rule is
+    dead, and "probably" is not good enough for that. Only the three shapes
+    where the containment is exact are recognised.
+    """
+    if broad.tool not in ("*", narrow.tool):
+        return False
+    if broad.pattern == "*" or broad.pattern == narrow.pattern:
+        return True
+    # `git diff*` swallows `git diff--stat`; only a single trailing star.
+    if broad.pattern.count("*") == 1 and broad.pattern.endswith("*"):
+        return narrow.pattern.startswith(broad.pattern[:-1])
+    return False
+
+
+def detect_shadowed_rules(rules: List["PermissionRule"]) -> List[str]:
+    """Allow rules the gate can never reach, each with the rule that eats it.
+
+    ``PermissionPolicy.check`` consults every deny rule before any ask rule, and
+    every ask rule before any allow rule, so one ``deny terminal(*)`` makes
+    every narrower allow for that tool dead — including one added later to stop
+    the prompts. A rule that silently does nothing is worse than no rule: the
+    user believes the gate has been told.
+    """
+    findings: List[str] = []
+    for rule in rules:
+        if rule.decision is not Decision.ALLOW:
+            continue
+        label = f"{rule.tool}({rule.pattern})"
+        if not rule.pattern.strip():
+            findings.append(f"{label} can never match: the pattern is empty")
+            continue
+        for other in rules:
+            if other is rule or other.decision is Decision.ALLOW:
+                continue
+            if not _certainly_covers(other, rule):
+                continue
+            findings.append(
+                f"{label} never fires: {other.tool}({other.pattern}) "
+                f"({other.decision.value}) is evaluated first")
+            break
+    return findings
+
+
 def load_policy(
     project_dir: Optional[Path] = None,
     user_dir: Optional[Path] = None,

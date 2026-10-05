@@ -401,12 +401,39 @@ def check_git() -> CheckResult:
 # ---------------------------------------------------------------------------
 
 
+def check_permission_rules() -> CheckResult:
+    """Standing rules that can never fire.
+
+    The gate evaluates every deny before any ask and every ask before any
+    allow, so one broad rule silently swallows each narrower allow for the same
+    tool — including ones added later to stop the prompts. Nothing surfaced
+    that, and a rule that does nothing is worse than no rule at all.
+    """
+    try:
+        from kairos.permissions import detect_shadowed_rules, load_policy
+        from kairos.sentinel import load_allow_rules
+        rules = list(load_policy().rules) + list(load_allow_rules())
+        findings = detect_shadowed_rules(rules)
+    except Exception as exc:  # noqa: BLE001
+        return _warn("Permission rules", f"could not evaluate the rules: {exc}",
+                     group="Security")
+    if findings:
+        return _warn(
+            "Permission rules",
+            f"{len(findings)} allow rule(s) can never fire — {findings[0]}",
+            hint="remove the dead rule, or narrow the rule evaluated before it",
+            group="Security",
+        )
+    return _ok("Permission rules", "no unreachable rules", group="Security")
+
+
 DEFAULT_CHECKS: List[Callable[[], CheckResult]] = [
     check_python_version,
     check_platform,
     check_dependencies,
     check_git,
     check_settings_loadable,
+    check_permission_rules,
     check_data_dir,
     check_workspace_dir,
     check_alerts_history_dir,

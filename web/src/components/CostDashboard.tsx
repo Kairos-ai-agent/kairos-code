@@ -137,7 +137,10 @@ const CostDashboard: React.FC = () => {
         {byModelEntries.length === 0 ? (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description={t('costDashboard.empty')}
+            imageStyle={{ height: 28 }}
+            description={
+              <span style={{ fontSize: 12 }}>{t('costDashboard.empty')}</span>
+            }
           />
         ) : (
           <Table<[string, any]>

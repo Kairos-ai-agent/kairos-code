@@ -115,7 +115,8 @@ const OverviewTab: React.FC<{ trend: TrendReport | null }> = ({ trend }) => {
   const t = useT();
   if (!trend || trend.n_total === 0) {
     return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description={t('trendPanel.empty')} />;
+                  imageStyle={{ height: 28 }}
+                  description={<span style={{ fontSize: 12 }}>{t('trendPanel.empty')}</span>} />;
   }
   return (
     <div>

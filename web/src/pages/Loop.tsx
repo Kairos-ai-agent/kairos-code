@@ -452,7 +452,7 @@ const Loop: React.FC = () => {
       <div style={{ display: 'flex', gap: 12, marginBottom: 12,
                     alignItems: 'stretch' }}>
         <div style={{ flex: '1 0 320px', minWidth: 320 }}>
-          <Card title={t('common.projects')} size="small" style={{ height: '100%' }} bodyStyle={{ padding: 4, maxHeight: 200, overflow: 'auto' }}>
+          <Card title={t('common.projects')} size="small" style={{ height: '100%' }} bodyStyle={{ padding: 4, maxHeight: 64, overflow: 'auto' }}>
             <List
               size="small"
               dataSource={projects}
@@ -535,7 +535,7 @@ const Loop: React.FC = () => {
       <div style={{ flex: 1, display: 'flex', gap: 12, minHeight: 0 }}>
         {/* Center: activity stream */}
         <div style={{ flex: '1 0 320px', minWidth: 320, display: 'flex',
-                      flexDirection: 'column', gap: 12 }}>
+                      flexDirection: 'column', gap: 12, minHeight: 0 }}>
           {precheckHint && (
             <Alert
               type={precheckHint.fixes.length > 0 ? 'warning' : 'error'}
@@ -644,7 +644,9 @@ const Loop: React.FC = () => {
         </div>
 
         {/* Middle: stats, plan viz, diff, checkpoints */}
-        <div style={{ flex: '0 1 380px', minWidth: 280, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ flex: '0 1 380px', minWidth: 280, display: 'flex',
+                      flexDirection: 'column', gap: 8, minHeight: 0,
+                      overflowY: 'auto' }}>
 
           {/* Bug chart + cost */}
           {stats && (

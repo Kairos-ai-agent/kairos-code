@@ -175,7 +175,12 @@ const EvalPanel: React.FC = () => {
                 {datasets.length === 0 ? (
                   <Empty
                     image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description={t('evalPanel.datasets.empty')}
+                    imageStyle={{ height: 28 }}
+                    description={
+                      <span style={{ fontSize: 12 }}>
+                        {t('evalPanel.datasets.empty')}
+                      </span>
+                    }
                   />
                 ) : (
                   <List

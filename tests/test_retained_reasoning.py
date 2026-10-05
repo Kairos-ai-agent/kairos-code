@@ -14,6 +14,7 @@ if str(ROOT) not in sys.path:
 import pytest
 
 from kairos.agents.base import AgentTask, KairosAgent
+from kairos.agents.identity import KAIROS_IDENTITY
 from kairos.core.message_bus import MessageBus
 from kairos.llm.base import LLMConfig, LLMMessage, LLMResponse, ToolCall
 from kairos.llm.provider_registry import ProviderRegistry
@@ -127,7 +128,10 @@ def test_build_messages_includes_summary_as_second_system_msg():
     ]
     msgs = agent._build_messages()
     assert msgs[0].role == "system"
-    assert msgs[0].content.startswith("You are a test agent.")  # base prompt first
+    # The identity (kairos.agents.identity) stakes the claim first, then the
+    # base prompt, then the standing rule about untrusted content.
+    assert msgs[0].content.startswith(KAIROS_IDENTITY)
+    assert "You are a test agent." in msgs[0].content
     # ...followed by the standing rule about content from outside this machine.
     assert "untrusted_content" in msgs[0].content
     assert msgs[1].role == "system"

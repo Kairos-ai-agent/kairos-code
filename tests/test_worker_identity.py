@@ -9,6 +9,7 @@ new single point of failure.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from kairos import worker_identity as wi
@@ -36,12 +37,23 @@ def test_two_repos_get_two_workers(tmp_path):
 
 
 def test_case_differences_do_not_create_a_second_worker(tmp_path):
-    """Windows paths are case-insensitive; a worker must not fork on that."""
+    """Case only matters where the filesystem says it does.
+
+    On Windows ``D:/Work/Proj`` and ``d:/work/proj`` are the same working
+    copy, so the worker must not fork. On POSIX they are genuinely
+    different directories, and folding them there would be wrong —
+    ``repo_key`` goes through ``os.path.normcase``, which is a no-op off
+    Windows. So assert whichever behaviour this platform actually has.
+    """
     repo = tmp_path / "Proj"
     repo.mkdir()
     first = wi.bind(repo)
     second = wi.bind(str(repo).upper())
-    assert first.project_id == second.project_id
+
+    if os.path.normcase("A") == os.path.normcase("a"):
+        assert first.project_id == second.project_id
+    else:
+        assert first.project_id != second.project_id
 
 
 def test_identity_survives_losing_our_state_file(tmp_path):

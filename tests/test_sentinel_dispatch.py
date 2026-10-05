@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 
 from kairos.agents.base import UNTRUSTED_SYSTEM_RULE, KairosAgent
+from kairos.agents.identity import KAIROS_IDENTITY
 from kairos.core.message_bus import MessageBus
 from kairos.llm.base import LLMConfig, ToolCall
 from kairos.permissions import Decision, PermissionPolicy, PermissionRule
@@ -326,5 +327,6 @@ def test_the_system_prompt_warns_about_untrusted_content(tmp_path):
     assert messages[0].role == "system"
     assert UNTRUSTED_SYSTEM_RULE in messages[0].content
     assert "prompt injection" in messages[0].content
-    # The caller's own prompt is still there, ahead of the rule.
-    assert messages[0].content.startswith("You are the Coder.")
+    # Identity first, then the caller's own prompt, then the rule.
+    assert messages[0].content.startswith(KAIROS_IDENTITY)
+    assert "You are the Coder." in messages[0].content

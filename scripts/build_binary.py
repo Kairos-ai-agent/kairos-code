@@ -173,6 +173,15 @@ def main() -> int:
         "--collect-all", "semble",
         "--collect-all", "model2vec",
         "--collect-all", "vicinity",
+        # hf_xet is HuggingFace's Xet transfer backend, pulled in as a
+        # transitive binary dependency. Do NOT ship it: its shared object
+        # carries a string that matches the HuggingFace-token shape, so
+        # scan_binary_secrets.py refuses to publish the artefact — which is the
+        # correct call, and the fix is to ship less, not to teach the scanner an
+        # exception. Nothing is lost: huggingface_hub imports hf_xet lazily and
+        # falls back to plain HTTP downloads ("Xet Storage is enabled for this
+        # repo, but the 'hf_xet' package is not installed").
+        "--exclude-module", "hf_xet",
         LAUNCHER.name,
     ]
 

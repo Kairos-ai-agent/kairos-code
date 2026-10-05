@@ -99,3 +99,6 @@ gate-report-*.html
 # neither it nor the secret file it writes belongs in the public tree.
 # (tests/test_wechat_connector.py skips when it is absent.)
 connectors/
+
+# Test-run report written by run_tests.bat (the agent reads it; not committed)
+_pytest_report.txt

@@ -107,6 +107,37 @@ async def create_project(request: "CreateProjectRequest"):
     return project.to_dict()
 
 
+class AttachProjectRequest(BaseModel):
+    repo: str
+    name: str = ""
+
+
+@router.post("/attach")
+async def attach_project(request: AttachProjectRequest):
+    """Find-or-create the one worker bound to a repository.
+
+    This is the dispatch entry point for *another* agent (a main agent handing
+    work to Kairos). Unlike ``POST /projects`` it is **idempotent**: called
+    twice for the same repo it returns the same project, so a second task lands
+    in the session that already has the notes, checkpoints and history —
+    instead of a colleague who forgets everything between tasks. The binding
+    lives in ``<repo>/.kairos/worker.json`` and survives restarts.
+
+    ``kairos worker attach <repo>`` does the same thing on the CLI; this is the
+    HTTP side of that contract, which previously existed only in the CLI, so an
+    agent dispatching over HTTP had to create a new project (and a new session)
+    for every task.
+    """
+    repo = (request.repo or "").strip()
+    if not repo:
+        raise HTTPException(status_code=400, detail="repo is required")
+    path = Path(repo).expanduser()
+    if not path.exists():
+        raise HTTPException(status_code=400, detail=f"仓库目录不存在: {repo}")
+    project = _orch().attach_project(str(path), name=request.name)
+    return project.to_dict()
+
+
 # --- Literal routes for /settings and /cost MUST be registered BEFORE
 # /{project_id} — otherwise Starlette matches "settings" as a project_id
 # and returns 404. Keep these above the {project_id} catch-all.

@@ -36,7 +36,7 @@ from __future__ import annotations
 import fnmatch
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -181,6 +181,38 @@ class SkillsLoader:
         else:
             self.bundled_dir = Path(bundled_dir) if bundled_dir else None
         self.max_active = max_active
+        # Parsed skills, keyed by file and validated on (mtime_ns, size).
+        # ``discover()`` runs on *every turn* (the system prompt is rebuilt
+        # once the tool list changes), and with a few hundred bundled skills
+        # the read + YAML parse dominated that: measured at ~0.56s per call
+        # for the 606-skill bundle, paid before the model is even asked.
+        # Re-parsing only files whose mtime or size changed keeps discovery
+        # correct — an edited skill is picked up immediately, with no TTL
+        # window and no staleness — while skipping the expensive part.
+        self._file_cache: Dict[Path, tuple] = {}
+
+    def invalidate(self) -> None:
+        """Drop cached parses (after writing skill files, if in doubt)."""
+        self._file_cache.clear()
+
+    def _parse_cached(self, path: Path) -> Optional["Skill"]:
+        """Parse ``path`` unless an identical-looking parse is already cached.
+
+        A miss costs a stat + a parse; a hit costs a stat. Anything that
+        changes a file's content changes its size or its mtime (NTFS resolves
+        both well below a turn), so a hit is never a stale read.
+        """
+        try:
+            st = path.stat()
+            key = (st.st_mtime_ns, st.st_size)
+        except OSError:
+            return None
+        hit = self._file_cache.get(path)
+        if hit is not None and hit[0] == key:
+            return hit[1]
+        parsed = _parse_skill(path)
+        self._file_cache[path] = (key, parsed)
+        return parsed
 
     def discover(self) -> List[Skill]:
         """Return all skills found across all three scopes.
@@ -206,11 +238,18 @@ class SkillsLoader:
                 scopes.append((project_skills, 2))  # highest
 
         skills: Dict[str, Skill] = {}
+        seen: set = set()
         for scope_root, _scope_idx in scopes:
             for md in sorted(scope_root.rglob("*.md")):
-                s = _parse_skill(md)
+                seen.add(md)
+                s = self._parse_cached(md)
                 if not s:
                     continue
+                # Work on a copy: the cache hands out shared objects and the
+                # namespacing below rewrites ``name``. Without the copy the
+                # second discover() would namespace an already-namespaced name
+                # (``backend__backend__deploy``).
+                s = replace(s)
                 # Compute namespaced name from the relative path
                 # inside the skills root, e.g.
                 # "backend/api/commit.md" -> "backend__api__commit"
@@ -235,6 +274,10 @@ class SkillsLoader:
                 # — simply overwrite.
                 s.name = namespaced
                 skills[namespaced] = s
+        # Forget files that disappeared so a long-lived loader doesn't pin them.
+        if len(self._file_cache) > len(seen):
+            for stale in set(self._file_cache) - seen:
+                self._file_cache.pop(stale, None)
         return list(skills.values())
 
     def match(self, context: Dict[str, Any]) -> List[Skill]:

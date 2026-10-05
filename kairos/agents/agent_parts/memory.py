@@ -37,6 +37,32 @@ UNTRUSTED_SYSTEM_RULE = (
 )
 
 
+def _touched_file(memory) -> str:
+    """Best-effort: the file path named by the most recent tool call.
+
+    Exists so that ``globs:`` skills can match at all. Best-effort by design —
+    when the arguments don't name a file, the globs clause simply doesn't
+    fire, which is today's behaviour rather than a new failure mode.
+    """
+    for msg in reversed(list(memory)[-3:]):
+        for tc in (getattr(msg, "tool_calls", None) or []):
+            args = getattr(tc, "arguments", None)
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except (ValueError, TypeError):
+                    continue
+            if not isinstance(args, dict):
+                continue
+            for key, value in args.items():
+                if not isinstance(value, str) or not value:
+                    continue
+                lowered = str(key).lower()
+                if "path" in lowered or "file" in lowered:
+                    return value
+    return ""
+
+
 class AgentMemoryMixin:
     def _count_tokens(self, text: str) -> int:
         """Estimate token count (rough: ~4 chars per token)."""
@@ -163,6 +189,14 @@ class AgentMemoryMixin:
                         t.name for t in self.tools
                     ],
                 }
+                # ``globs:`` skills match on `filename`/`path` (see
+                # Skill.matches) and nothing here ever supplied either, so a
+                # documented frontmatter key matched nothing. Expose the file
+                # the most recent tool call named.
+                touched = _touched_file(self._memory)
+                if touched:
+                    ctx["path"] = touched
+                    ctx["filename"] = touched.replace("\\", "/").rsplit("/", 1)[-1]
                 skills_block = self._skills_loader.for_context(ctx)
                 if skills_block:
                     system = f"{system}\n\n{skills_block}"

@@ -224,7 +224,7 @@ const ChatThread: React.FC<Props> = ({ messages, emptyHint, showRawToggle = fals
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column',
-                  height: 'calc(100vh - 52px)' }}>
+                  height: '100%', minHeight: 0 }}>
       {showRawToggle && (
         <div style={{ display: 'flex', justifyContent: 'flex-end',
                       padding: '8px 16px 0' }}>

@@ -875,8 +875,12 @@ const Chat: React.FC = () => {
         )}
       </div>
 
-      {/* Thread */}
-      <div style={{ flex: 1, overflow: 'hidden' }}>
+      {/* Thread — the slot owns the height (flex:1 minus topbar and
+          composer); ChatThread fills it. It used to hard-code
+          calc(100vh - 52px) here, which made the thread taller than its
+          slot, so the slot's overflow:hidden clipped the tail of long
+          replies where no scroll could reach them. */}
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <ChatThread
           messages={currentMessages}
           emptyHint={

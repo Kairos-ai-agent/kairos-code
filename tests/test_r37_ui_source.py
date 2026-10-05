@@ -642,6 +642,11 @@ def test_workbench_checkpoint_uses_dedicated_dir_under_work_dir():
     """
     p = REPO_ROOT / "api" / "routes" / "workbench.py"
     src = p.read_text(encoding="utf-8")
+    # Helpers were later split into a sibling module; search both so the
+    # convention guard still holds wherever the code lives.
+    helpers = REPO_ROOT / "api" / "routes" / "workbench_helpers.py"
+    if helpers.exists():
+        src += "\n" + helpers.read_text(encoding="utf-8")
     assert '".kairos" / "workbench"' in src, (
         "Checkpoint dir should be <work_dir>/.kairos/workbench — "
         "a hidden dir so it doesn't pollute the file tree"

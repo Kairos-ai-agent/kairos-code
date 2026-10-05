@@ -14,6 +14,23 @@ from kairos.core.persistence_parts.artifacts import ArtifactStoreMixin
 class Persistence(ProjectStoreMixin, FileStoreMixin, MessageStoreMixin, RoundStoreMixin, KnowledgeStoreMixin, ReviewStoreMixin, ArtifactStoreMixin):
     """SQLite persistence for projects, messages, and requirements."""
 
+    CHAT_TOPICS = ('user.chat', 'agent.chat', 'agent.chat_reply',
+                   'agent.message', 'agent.response',
+                   # R38.8: the agent's *process* — a turn starting, a tool
+                   # being called, what it returned, an error — belongs in the
+                   # thread too. It already rendered live over the WebSocket,
+                   # but it was not in this whitelist, so the moment the user
+                   # refreshed or reopened the session the whole process
+                   # vanished and the agent looked like it had done nothing.
+                   #
+                   # Trade-off: a tool-heavy project now spends part of its
+                   # newest-N window on process rows instead of conversation.
+                   # That is the point (the user wants to see the process), but
+                   # callers that need more *turns* should page back with the
+                   # ``before_ts``/``before_id`` cursor or raise ``limit``.
+                   'agent.thinking', 'tool.call', 'tool.result', 'task.error')
+
+
     def __init__(self, db_path: Path):
         self.db_path = db_path
         db_path.parent.mkdir(parents=True, exist_ok=True)

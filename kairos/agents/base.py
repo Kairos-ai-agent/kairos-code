@@ -125,6 +125,12 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
     - Message bus connection for inter-agent communication
     """
 
+    MAX_TOOL_TURNS = 8
+    temperature: Optional[float] = None
+    MAX_CHAT_TURNS = 5
+    project_id: Optional[str] = None
+
+
     def __init__(
         self,
         agent_id: str,

@@ -188,7 +188,14 @@ class OrchIntrospectMixin:
                 logger.debug("Failed to refresh model for %s", agent_id, exc_info=True)
 
     def _load_yaml_prompts(self) -> Dict[str, str]:
-        yaml_path = Path(__file__).parent.parent / "config" / "agents_config.yaml"
+        # Resolve relative to the kairos package, not __file__: this method
+        # was split out of kairos/core/orchestrator.py into a mixin module, so
+        # `Path(__file__).parent.parent` no longer points at kairos/ and the
+        # lookup found nothing, returning None and crashing every caller that
+        # did `if role in yaml_prompts`.
+        import kairos
+        yaml_path = (Path(kairos.__file__).resolve().parent
+                     / "config" / "agents_config.yaml")
         prompts: Dict[str, str] = {}
         if yaml_path.exists():
             try:
@@ -200,4 +207,4 @@ class OrchIntrospectMixin:
                         prompts[role_name] = role_cfg["system_prompt"]
             except Exception:
                 logger.debug("Failed to load YAML prompts", exc_info=True)
-            return prompts
+        return prompts

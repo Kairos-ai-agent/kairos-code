@@ -287,6 +287,9 @@ from kairos.core.orchestrator_parts.introspect import OrchIntrospectMixin
 class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, OrchContextMixin, OrchLoopControlMixin, OrchIntrospectMixin):
     """Bootstraps projects and runs Coder <-> Reviewer loops."""
 
+    _SPECIALIST_CLASSES: Dict[str, Any] = {}
+
+
     def __init__(self, model_router: ModelRouter,
                  workspace_base: Path = Path("./workspace"),
                  db: Optional["Persistence"] = None):

@@ -119,9 +119,15 @@ def _persist_path(project_id: str, team_id: str) -> Path:
 def _make_worker_fn(project):
     """Return an async worker_fn bound to the project's Coder agent.
 
-    The Coder is reused (one Coder per project). Each invocation
-    creates a fresh AgentTask so the conversation memory doesn't
-    leak between workers.
+    Each invocation **forks** the Coder, so a team worker gets its own
+    ``_memory`` and its own lock. Reusing one Coder instance looked harmless
+    but was not: ``run()`` appends every turn to the agent's own memory and
+    holds the agent's ``_lock`` for the whole run, so workers (a) leaked their
+    entire conversation into each other *and into the project's Coder* — which
+    then carried every worker's history into its own later turns — and (b) were
+    serialised into one at a time by that shared lock. The previous docstring
+    claimed a fresh ``AgentTask`` kept memory from leaking; that was not true,
+    because the task is per-run while the memory hangs off the agent.
     """
     from kairos.agents.base import AgentTask
     coder = project.coder
@@ -135,7 +141,7 @@ def _make_worker_fn(project):
             title=task.title,
             description=task.description,
         )
-        return await coder.run(agent_task)
+        return await coder.fork().run(agent_task)
 
     return worker_fn
 

@@ -58,7 +58,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from kairos.approval import ApprovalMode
+from kairos.approval import ApprovalMode, effective_mode, mode_from_env
 from kairos.permissions import Decision, PermissionPolicy, PermissionRule
 from kairos.taint import TaintTracker, is_network_tool, mcp_server_of
 
@@ -495,10 +495,30 @@ class Sentinel:
                  enabled: Optional[bool] = None,
                  strict: Optional[bool] = None) -> None:
         self.policy = policy or PermissionPolicy()
-        self.mode = mode
+        # `KAIROS_APPROVAL_MODE` is a ceiling, not a default: a project may be
+        # stricter than it, never looser (see kairos.approval.effective_mode).
+        self._env_mode = mode_from_env()
+        self.mode = effective_mode(mode, self._env_mode)
         self.audit = audit if audit is not None else SentinelAudit()
         self._enabled = enabled
         self._strict = strict
+
+    def set_mode(self, mode: "ApprovalMode | str") -> ApprovalMode:
+        """Point the gate at a project's approval mode.
+
+        Called by the attach path (:mod:`kairos.core.orchestrator`) and by the
+        settings endpoint, so the switch in the UI reaches the gate that
+        actually makes the decision. Unknown values fall back to the safest
+        mode — ``ApprovalMode.parse`` never fails loudly.
+
+        One process hosts one gate and may host several projects, so the mode
+        follows the project that is currently attached.
+        """
+        if isinstance(mode, str):
+            mode = ApprovalMode.parse(mode)
+        self.mode = effective_mode(mode, self._env_mode)
+        logger.info("sentinel approval mode → %s", self.mode.value)
+        return self.mode
 
     # -- configuration ----------------------------------------------------
 

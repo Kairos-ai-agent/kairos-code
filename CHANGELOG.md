@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **「全自动模式」此前是空转的：选和不选没有任何区别。** `approval_mode` 只有写入
+  （设置接口）和一个回读给 UI 的 getter，而 `get_sentinel()` 永远构造 SUGGEST 模式
+  的哨兵——界面上选 full-auto 对 agent 的实际行为毫无影响，它照样每一项都问你。
+  现在把线接上：
+
+  - 项目上的选择落到 `project.metadata["approval_mode"]`（与 `coder_mode` 同一个
+    家，重启后仍在）；attach 时由 `Sentinel.set_mode()` 推给真正做判定的那个 gate；
+  - 设置接口的 PUT 立刻作用到正在运行的 gate，不必等下一次 attach；
+  - 新增进程级上限 `KAIROS_APPROVAL_MODE`（不设 = 不限制）。**上限与项目设置取更严
+    的那个**：项目可以比进程上限更保守，绝不能更松——否则几个月前写进库里的一行，
+    就能放开运维显式收紧过的进程；
+  - `full-auto` 的含义仍是「没有显式 deny 就不问」：策略里的 deny 规则照旧优先，
+    `terminal` 的 DENY_PATTERNS 硬拦也不受它影响（那是另一层）；
+  - GET 现在同时返回 `mode`（项目记录，UI 显示的那个）与 `effective`（gate 实际
+    在跑的那个）；进程上限收紧时两者会不同。
+
+  15 个用例：设置到达判定、默认仍是 SUGGEST、deny 在 full-auto 下依然是 deny、
+  上限只收紧不放松、未知值回落到最安全的模式。
+
 ## [0.1.8] - 2026-10-05
 
 ### Fixed

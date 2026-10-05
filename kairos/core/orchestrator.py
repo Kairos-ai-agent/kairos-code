@@ -517,6 +517,24 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
             logger.warning("coder mode policy failed for %s: %s", project.id, e)
             project.runtime.attach_errors.append(f"coder_mode: {e}")
 
+        # Apply the project's approval mode to the gate. Until this existed the
+        # setting was written by the API and read by nobody: `get_sentinel()`
+        # always built a SUGGEST gate, so "full-auto" in the UI changed nothing
+        # about what the agent asked for. The gate is one per process and may
+        # serve several projects, so the mode follows the attached project.
+        try:
+            from kairos.sentinel import get_sentinel
+            metadata = getattr(project, "metadata", None)
+            stored = ""
+            if isinstance(metadata, dict):
+                stored = metadata.get("approval_mode") or ""
+            if not stored:
+                stored = getattr(project.runtime, "approval_mode", "") or "suggest"
+            project.runtime.approval_mode = get_sentinel().set_mode(stored).value
+        except Exception as e:  # noqa: BLE001
+            logger.warning("approval mode wiring failed for %s: %s", project.id, e)
+            project.runtime.attach_errors.append(f"approval_mode: {e}")
+
         reviewer_tools = [
             FileReadTool(allowed_root=reviewer_root),
             GrepTool(allowed_root=reviewer_root),

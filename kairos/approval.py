@@ -22,6 +22,7 @@ a given tool call.
 from __future__ import annotations
 
 import enum
+import os
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -111,3 +112,29 @@ def decide_with_mode_name(
 
 # Default-mode helper for one-off CLI invocations.
 DEFAULT_MODE = ApprovalMode.SUGGEST
+
+# Strictest first. Used to combine two sources of intent — a project's stored
+# setting and a process-wide ceiling — without letting either loosen the other.
+MODE_ORDER = (ApprovalMode.SUGGEST, ApprovalMode.EDIT, ApprovalMode.FULL_AUTO)
+
+
+def effective_mode(project_mode: ApprovalMode,
+                   ceiling: Optional[ApprovalMode]) -> ApprovalMode:
+    """The stricter of the two modes.
+
+    ``ceiling`` is what ``KAIROS_APPROVAL_MODE`` asked for process-wide, or
+    ``None`` when it was not set. A project may be stricter than the ceiling,
+    never looser: an operator who exported a mode for the whole process did not
+    expect a value written through the UI months ago to loosen it.
+    """
+    if ceiling is None:
+        return project_mode
+    if MODE_ORDER.index(project_mode) < MODE_ORDER.index(ceiling):
+        return project_mode
+    return ceiling
+
+
+def mode_from_env() -> Optional[ApprovalMode]:
+    """``KAIROS_APPROVAL_MODE`` as a ceiling, or ``None`` when unset/blank."""
+    raw = (os.environ.get("KAIROS_APPROVAL_MODE") or "").strip()
+    return ApprovalMode.parse(raw) if raw else None

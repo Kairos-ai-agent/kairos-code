@@ -147,10 +147,23 @@ async def get_approval_mode(project_id: str):
     if not project:
         raise HTTPException(404, "Project not found: " + project_id)
     from kairos.approval import ApprovalMode
-    mode_name = getattr(project.runtime, "approval_mode", "suggest") \
-        if hasattr(project, "runtime") and project.runtime else "suggest"
-    mode = ApprovalMode.parse(mode_name)
-    return {"mode": mode.value, "label": mode.describe()}
+    # The project record is the source of truth; the runtime value is only a
+    # mirror of what the gate is currently running (they differ before attach,
+    # and after a ceiling in KAIROS_APPROVAL_MODE tightens the mode).
+    stored = ""
+    metadata = getattr(project, "metadata", None)
+    if isinstance(metadata, dict):
+        stored = metadata.get("approval_mode") or ""
+    if not stored:
+        stored = getattr(project.runtime, "approval_mode", "") \
+            if hasattr(project, "runtime") and project.runtime else ""
+    mode = ApprovalMode.parse(stored or "suggest")
+    from kairos.sentinel import get_sentinel
+    return {
+        "mode": mode.value,
+        "label": mode.describe(),
+        "effective": get_sentinel().mode.value,
+    }
 
 
 class SetApprovalBody(BaseModel):
@@ -169,7 +182,24 @@ async def set_approval_mode(project_id: str, body: SetApprovalBody):
         from kairos.core.project_runtime import ProjectRuntime
         project.runtime = ProjectRuntime()
     project.runtime.approval_mode = mode.value
-    return {"ok": True, "mode": mode.value, "label": mode.describe()}
+    # Persist the choice on the project record (the same home coder_mode uses)
+    # and push it into the running gate, so flipping the switch changes what the
+    # agent asks for right now instead of at the next attach.
+    applied = mode
+    try:
+        if not isinstance(getattr(project, "metadata", None), dict):
+            project.metadata = {}
+        project.metadata["approval_mode"] = mode.value
+        from kairos.sentinel import get_sentinel
+        applied = get_sentinel().set_mode(mode.value)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("could not apply approval mode to the gate: %s", exc)
+    return {
+        "ok": True,
+        "mode": mode.value,
+        "label": mode.describe(),
+        "effective": applied.value,
+    }
 
 
 # Thread/Turn/Item event stream (the cloud task-style)

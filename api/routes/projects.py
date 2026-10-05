@@ -20,6 +20,48 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+class CreateProjectRequest(BaseModel):
+    name: str
+    description: str = ""
+    work_dir: str = ""
+
+
+class StartLoopRequest(BaseModel):
+    requirement: str
+    # R38.7: chat attachments (paths returned by POST /{id}/attachments).
+    # They are appended to the requirement as an "[附件]" block so the Coder
+    # can read the uploaded files with its own file tools.
+    attachments: list[str] = []
+
+
+class ChatRequest(BaseModel):
+    """Round 37: payload for the single-turn /chat endpoint."""
+    message: str
+    # R38.6 §34: when true, the agent's task starts with
+    # the Plan Mode flow — the LLM lays out a TODO and the
+    # user must approve it before execution begins. Mirrors
+    # the the the plan-mode pattern's "Plan Mode" toggle.
+    require_plan: bool = False
+    # Pre-generated plan_id (from /api/borrowed/.../plan/generate)
+    # — when set, the agent reads the plan's step list and
+    # asks the user to approve each step before executing.
+    plan_id: str = ""
+    # R38.7: attachments uploaded through POST /{project_id}/attachments.
+    # Paths are relative to the project root; they are folded into the
+    # message (and therefore into the persisted history) as an "[附件]" block.
+    attachments: list[str] = []
+    # Voice mode: the reply will be read aloud, so the agent is asked to answer
+    # briefly and without Markdown. Sent per message rather than stored, so the
+    # switch in the interface is the only source of truth.
+    voice_mode: bool = False
+
+class RevertFileRequest(BaseModel):
+    sha: str
+    path: str
+
+
+
+
 def _orch():
     """Resolve the live orchestrator via the deps module.
 
@@ -1219,43 +1261,5 @@ async def revert_file(project_id: str, request: "RevertFileRequest"):
         raise HTTPException(status_code=400, detail=err or "revert failed")
     return {"status": "reverted", "project_id": project_id,
             "path": request.path, "sha": request.sha}
-class CreateProjectRequest(BaseModel):
-    name: str
-    description: str = ""
-    work_dir: str = ""
-
-
-class StartLoopRequest(BaseModel):
-    requirement: str
-    # R38.7: chat attachments (paths returned by POST /{id}/attachments).
-    # They are appended to the requirement as an "[附件]" block so the Coder
-    # can read the uploaded files with its own file tools.
-    attachments: list[str] = []
-
-
-class ChatRequest(BaseModel):
-    """Round 37: payload for the single-turn /chat endpoint."""
-    message: str
-    # R38.6 §34: when true, the agent's task starts with
-    # the Plan Mode flow — the LLM lays out a TODO and the
-    # user must approve it before execution begins. Mirrors
-    # the the the plan-mode pattern's "Plan Mode" toggle.
-    require_plan: bool = False
-    # Pre-generated plan_id (from /api/borrowed/.../plan/generate)
-    # — when set, the agent reads the plan's step list and
-    # asks the user to approve each step before executing.
-    plan_id: str = ""
-    # R38.7: attachments uploaded through POST /{project_id}/attachments.
-    # Paths are relative to the project root; they are folded into the
-    # message (and therefore into the persisted history) as an "[附件]" block.
-    attachments: list[str] = []
-    # Voice mode: the reply will be read aloud, so the agent is asked to answer
-    # briefly and without Markdown. Sent per message rather than stored, so the
-    # switch in the interface is the only source of truth.
-    voice_mode: bool = False
-
-class RevertFileRequest(BaseModel):
-    sha: str
-    path: str
 
 

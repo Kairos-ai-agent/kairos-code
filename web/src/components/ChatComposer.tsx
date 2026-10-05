@@ -39,6 +39,10 @@ import {
 import api from '../api/client';
 import { useThemeTokens } from '../hooks/useThemeTokens';
 import { useChatStore } from '../stores/chatStore';
+import {
+  matchSlashCommands, slashTokenAt,
+  type SlashCommand, type SlashToken,
+} from '../utils/slash';
 import { useSettingsStore } from '../stores/settingsStore';
 import { classifyIntent } from '../utils/intent';
 import { startDictation, isSpeechInputSupported, type Dictation } from '../lib/speechInput';
@@ -57,6 +61,12 @@ export interface ChatAttachment {
 interface Props {
   value?: string;
   onChange?: (v: string) => void;
+  /**
+   * Slash commands the backend will actually run (`GET /borrowed/{id}/slash`).
+   * Empty or absent means no completion at all — the composer never offers a
+   * command it cannot see a handler for.
+   */
+  slashCommands?: SlashCommand[];
   /**
    * Called when the user submits. The intent is auto-classified
    * by the composer (no manual Chat/Task toggle since R38.6).
@@ -85,12 +95,18 @@ function humanSize(n: number): string {
 
 const ChatComposer: React.FC<Props> = ({
   value, onChange, onSubmit, placeholder, busy, disabled, disabledHint,
+  slashCommands,
 }) => {
   const tokens = useThemeTokens();
   const t = useT();
   const { message: msgApi } = AntdApp.useApp();
   const [text, setText] = useState(value || '');
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+  // Slash-command completion. Nothing here invents a command: the list is
+  // whatever the backend reports, and only an exact name is ever routed to it.
+  const [sug, setSug] = useState<
+    { items: SlashCommand[]; index: number; token: SlashToken } | null
+  >(null);
   // R38.7: chat attachments. Files are uploaded the moment they are picked
   // (progress visible in the chip row), then their project-relative paths are
   // sent with the message so the Coder can open them with file_read.
@@ -260,7 +276,63 @@ const ChatComposer: React.FC<Props> = ({
   const submitRef = useRef(submit);
   submitRef.current = submit;
 
+  /** Recompute the completion list for the caret's current position. */
+  const refreshSug = (nextText: string, caret: number | null) => {
+    const at = caret ?? nextText.length;
+    const token = slashTokenAt(nextText, at);
+    if (!token || !slashCommands?.length) {
+      setSug(null);
+      return;
+    }
+    const items = matchSlashCommands(slashCommands, token.query);
+    setSug(items.length ? { items, index: 0, token } : null);
+  };
+
+  /** Put the highlighted command in the text, caret just after it. */
+  const acceptSug = (choice?: SlashCommand) => {
+    if (!sug) return;
+    const pick = choice || sug.items[sug.index];
+    if (!pick) return;
+    const next = `${text.slice(0, sug.token.start)}/${pick.name} `
+      + text.slice(sug.token.end);
+    setText(next);
+    onChange?.(next);
+    setSug(null);
+    const caret = sug.token.start + pick.name.length + 2;
+    window.requestAnimationFrame(() => {
+      const el = taRef.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(caret, caret);
+      }
+    });
+  };
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (sug) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const step = e.key === 'ArrowDown' ? 1 : -1;
+        setSug({
+          ...sug,
+          index: (sug.index + step + sug.items.length) % sug.items.length,
+        });
+        return;
+      }
+      if (e.key === 'Tab'
+          || (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing)) {
+        // Accepting the highlighted command. Enter only sends when no list is
+        // open, so picking a command never sends a half-typed one instead.
+        e.preventDefault();
+        acceptSug();
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setSug(null);
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       submit();
@@ -296,7 +368,7 @@ const ChatComposer: React.FC<Props> = ({
           }
         }}
         style={{
-        maxWidth: 768, margin: '0 auto',
+        maxWidth: 768, margin: '0 auto', position: 'relative',
         background: tokens.bgLay1,
         border: `1px solid ${dragOver ? tokens.labelPrimary : tokens.borderStrong}`,
         borderRadius: 18,
@@ -367,12 +439,57 @@ const ChatComposer: React.FC<Props> = ({
             e.target.value = '';
           }}
         />
+        {sug && (
+          <div
+            data-testid="composer-slash-list"
+            role="listbox"
+            style={{
+              position: 'absolute', left: 0, right: 0, bottom: '100%',
+              marginBottom: 6, zIndex: 30, overflow: 'hidden',
+              background: tokens.bgElevated,
+              border: `1px solid ${tokens.border}`,
+              borderRadius: 12,
+              boxShadow: '0 8px 28px rgba(0,0,0,0.20)',
+            }}
+          >
+            {sug.items.map((c, i) => (
+              <div
+                key={c.name}
+                role="option"
+                aria-selected={i === sug.index}
+                onMouseEnter={() => setSug({ ...sug, index: i })}
+                onMouseDown={(e) => {
+                  // mousedown, not click: the textarea must not blur first.
+                  e.preventDefault();
+                  acceptSug(c);
+                }}
+                style={{
+                  padding: '7px 12px', cursor: 'pointer', fontSize: 13,
+                  display: 'flex', gap: 10, alignItems: 'baseline',
+                  background: i === sug.index ? tokens.bgLay2 : 'transparent',
+                }}
+              >
+                <code style={{ color: tokens.brand, fontWeight: 600 }}>
+                  /{c.name}
+                </code>
+                <span style={{
+                  color: tokens.labelSecondary, fontSize: 12,
+                  overflow: 'hidden', textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {c.help}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
         <textarea
           ref={taRef}
           value={text}
           onChange={(e) => {
             setText(e.target.value);
             onChange?.(e.target.value);
+            refreshSug(e.target.value, e.target.selectionStart);
           }}
           onPaste={(e) => {
             // R38.7: pasting a file (e.g. a screenshot) attaches it instead

@@ -694,6 +694,31 @@ def _heuristic_validate(model: str, is_anthropic: bool, reason: str) -> dict:
 import re as _re
 _SLASH_RE = _re.compile(r"^/(\w+)(?:\s+(.*))?$")
 
+# The commands the POST below actually handles, with the hint the composer
+# shows while you type. Kept in the same module as the dispatch chain on
+# purpose, and guarded by a test that reads this file: advertising a command no
+# branch handles would put a name in the UI that silently does nothing, which
+# is worse than offering nothing at all.
+CHAT_SLASH_HELP = {
+    "goal": "show or set the project goal — /goal <text>",
+    "autonomous": "queue an autonomous run — /autonomous <requirement>",
+    "compact": "how memory compaction works",
+    "verify": "where the verification pass lives",
+    "forget": "drop a remembered key — /forget <key>",
+    "remember": "remember a key and value — /remember <key>=<value>",
+}
+
+
+@router.get("/{project_id}/slash")
+async def slash_command_list(project_id: str) -> dict:
+    """What the composer may offer under ``/``.
+
+    The list lives next to the handler that executes it so the two cannot drift
+    apart into "the UI offers it, nothing runs it".
+    """
+    return {"commands": [{"name": name, "help": help_text}
+                         for name, help_text in CHAT_SLASH_HELP.items()]}
+
 
 @router.post("/{project_id}/slash")
 async def slash_command(project_id: str, body: dict):
@@ -732,12 +757,13 @@ async def slash_command(project_id: str, body: dict):
                 "state_change": "show_autonomous",
                 "continue_chat": False}
     if cmd == "compact":
-        from kairos.compaction import maybe_compact
+        # Informational: there is nothing for the agent to do with the literal
+        # text "/compact", so the message must not follow the reply into chat.
         return {"reply": "Compaction is automatic; the agent compacts every 10 turns.",
-                "continue_chat": True}
+                "continue_chat": False}
     if cmd == "verify":
         return {"reply": "Verify is on the Tools → Verify tab; /verify alone does not run a check.",
-                "continue_chat": True}
+                "continue_chat": False}
     if cmd == "forget":
         if not arg:
             return {"reply": "Usage: /forget <key>", "continue_chat": True}

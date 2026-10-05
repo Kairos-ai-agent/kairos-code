@@ -37,6 +37,7 @@ import ChatThread from '../components/ChatThread';
 import ChatComposer, { ChatAttachment } from '../components/ChatComposer';
 import { classifyIntent } from '../utils/intent';
 import { keepIfSame } from '../utils/equal';
+import { knownSlashCommand, type SlashCommand } from '../utils/slash';
 import api, { onWebSocketMessage, onWebSocketState } from '../api/client';
 import type { Message, LoopSession, SessionRound } from '../types';
 
@@ -60,6 +61,21 @@ const Chat: React.FC = () => {
   const setCurrentMessages = useChatStore((s) => s.setCurrentMessages);
   const appendMessage = useChatStore((s) => s.appendMessage);
   const updateMessage = useChatStore((s) => s.updateMessage);
+  // Slash commands the backend will actually run: the composer offers them and
+  // submit routes them. An empty list means no completion and no interception,
+  // which is the old behaviour.
+  const [slashCommands, setSlashCommands] = useState<SlashCommand[]>([]);
+  useEffect(() => {
+    if (!currentProject) {
+      setSlashCommands([]);
+      return;
+    }
+    let alive = true;
+    api.get<{ commands: SlashCommand[] }>(`/borrowed/${currentProject.id}/slash`)
+      .then((r) => { if (alive) setSlashCommands(r.data?.commands || []); })
+      .catch(() => { if (alive) setSlashCommands([]); });
+    return () => { alive = false; };
+  }, [currentProject]);
   const appendStreamChunk = useChatStore((s) => s.appendStreamChunk);
   const finalizeStream = useChatStore((s) => s.finalizeStream);
   const setSessions = useChatStore((s) => s.setSessions);
@@ -659,6 +675,32 @@ const Chat: React.FC = () => {
         timestamp: Date.now() / 1000,
         metadata: relPaths.length ? { attachments: relPaths } : {},
       });
+      // A slash command the backend will run goes to its own endpoint first: it
+      // answers with a reply and says whether the message should still go on to
+      // the agent ("/compact" has nothing for the agent to do, "/goal set …"
+      // consumes the argument). Only exact command names are intercepted, so a
+      // path like /etc/hosts is still an ordinary message.
+      const slash = askState?.pending
+        ? null
+        : knownSlashCommand(text, slashCommands);
+      if (slash) {
+        const sr = await api.post<{ reply: string; continue_chat?: boolean }>(
+          `/borrowed/${currentProject.id}/slash`, { text });
+        const slashReply = (sr.data?.reply || '').trim();
+        if (slashReply) {
+          appendMessage({
+            id: `slash-${Date.now()}`,
+            sender: 'agent',
+            receiver: 'user',
+            topic: 'agent.chat',
+            content: slashReply,
+            msg_type: 'text',
+            timestamp: Date.now() / 1000,
+            metadata: { source: `slash_command:${slash.name}` },
+          });
+        }
+        if (sr.data?.continue_chat === false) return;
+      }
       if (askState?.pending) {
         await api.post(`/projects/${currentProject.id}/ask/answer`,
                        { answer: text });
@@ -970,6 +1012,7 @@ const Chat: React.FC = () => {
         busy={busy}
         disabled={!showComposer}
         disabledHint={t('chat.page.disabledHint')}
+        slashCommands={slashCommands}
       />
     </div>
   );

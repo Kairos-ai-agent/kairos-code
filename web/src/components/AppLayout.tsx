@@ -293,9 +293,34 @@ const AppLayout: React.FC = () => {
         >
           <ChatSidebar />
         </Sider>
-        <Content style={{ background: tokens.bgBase, overflow: 'hidden' }}>
+        <Content style={{
+          background: tokens.bgBase,
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 0,
+          // Give the Content box a *definite* height, derived from the same
+          // constant the Header uses so the two cannot drift apart. Without
+          // it, descendants resolving `height: '100%'` get `auto` (the outer
+          // Layout is `minHeight: 100vh`, i.e. auto height) — which is why
+          // every page used to hardcode `calc(100vh - 52px)`. That hardcoding
+          // ignored everything else living in this column: as soon as
+          // <UpdateBanner /> rendered, the page was taller than its real slot
+          // and `overflow: hidden` clipped the bottom away, unscrollably.
+          height: `calc(100vh - ${LAYOUT.topbarHeight}px)`,
+        }}>
           <UpdateBanner />
-          <Outlet />
+          {/* The page gets exactly the space the banner left over, and owns
+              its own scrolling when its content is taller than the viewport. */}
+          <div
+            data-testid="app-content-slot"
+            style={{
+              flex: 1, minHeight: 0, display: 'flex',
+              flexDirection: 'column', overflow: 'auto',
+            }}
+          >
+            <Outlet />
+          </div>
         </Content>
         {/* Right-side Workbench. When open it hosts WorkbenchPanel
             + TaskTracker; when closed it keeps a slim rail with a

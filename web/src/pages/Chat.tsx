@@ -812,7 +812,7 @@ const Chat: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column',
-                  height: 'calc(100vh - 52px)' }}>
+                  height: '100%', minHeight: 0 }}>
       {/* Topbar */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12,

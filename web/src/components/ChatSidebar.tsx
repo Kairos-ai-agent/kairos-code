@@ -170,7 +170,8 @@ const ChatSidebar: React.FC = () => {
 
   return (
     <div style={{
-      height: `calc(100vh - 52px)`,
+      height: '100%',
+      minHeight: 0,
       display: 'flex', flexDirection: 'column',
       padding: '10px 8px',
       boxSizing: 'border-box',

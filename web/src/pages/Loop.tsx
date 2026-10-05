@@ -391,7 +391,8 @@ const Loop: React.FC = () => {
   const lastSummary = lastRound?.review?.summary || '';
 
   return (
-    <div style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: '100%', minHeight: 0, overflow: 'auto',
+                  display: 'flex', flexDirection: 'column' }}>
       <SkillSearchPalette />
       <Space style={{ marginBottom: 12 }}>
         <Title level={3} style={{ margin: 0 }}>{t('loop.title')}</Title>

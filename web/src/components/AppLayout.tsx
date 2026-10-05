@@ -289,6 +289,15 @@ const AppLayout: React.FC = () => {
             borderInlineEnd: `1px solid ${tokens.border}`,
             transition: 'width 0.18s ease',
             overflow: 'hidden',
+            // The outer Layout only carries `minHeight: 100vh`, i.e. auto
+            // height, so the `height: 100%` this column inherits from App.css
+            // resolved against auto: the whole column collapsed to its content
+            // height and the nav grid floated mid-column with dead space under
+            // it instead of pinning to the bottom-left. The shell owns the
+            // viewport height (pages must not compute it — see
+            // tests/test_chat_thread_fills_its_slot.py), so derive the slot from
+            // the same constant the Header and the Content box use.
+            height: `calc(100vh - ${LAYOUT.topbarHeight}px)`,
           }}
         >
           <ChatSidebar />

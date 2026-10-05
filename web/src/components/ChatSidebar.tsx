@@ -53,7 +53,6 @@ import { useChatStore } from '../stores/chatStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useThemeTokens } from '../hooks/useThemeTokens';
-import { LAYOUT } from '../styles/theme';
 import { useT, type TFunc } from '../i18n';
 import { VoicePanel } from './SettingsDrawer';
 import { WeixinDrawer } from './WeixinPanel';
@@ -171,18 +170,15 @@ const ChatSidebar: React.FC = () => {
 
   return (
     <div style={{
-      // A percentage height needs a definite link in the chain, and antd's
-      // `.ant-layout-sider-children` is auto-height — so `height: '100%'`
-      // resolved to auto, the whole column collapsed to its content height and
-      // the footer (the nav grid) floated mid-column with dead space under it
-      // instead of sitting at the bottom-left. Same viewport-derived height as
-      // the Content box, from the same constant, so the two cannot drift.
-      height: `calc(100vh - ${LAYOUT.topbarHeight}px)`,
+      // The shell owns the definite height of this slot (see AppLayout): the
+      // sidebar must never compute viewport units itself — the shell column also
+      // holds the update banner, so `100vh - <constant>` is taller than the real
+      // slot and gets clipped. tests/test_chat_thread_fills_its_slot.py pins this.
+      height: '100%',
       minHeight: 0,
       display: 'flex', flexDirection: 'column',
       padding: '10px 8px',
       boxSizing: 'border-box',
-      overflow: 'hidden',
     }}>
       <NewChatButton />
 

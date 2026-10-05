@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any, Iterable, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,57 @@ MAX_ASK_TOKENS = 400
 MAX_HISTORY_TOKENS = 1200
 MAX_GLOBAL_TOKENS = 400
 MAX_TOTAL_TOKENS = 4500
+
+# Memory records what was true *then*, it is not a description of now: a note
+# written three months ago is not evidence about today's code. Every line
+# therefore carries its age and the block says so once, because a model that
+# cannot tell a fresh note from a stale one asserts the stale one with exactly
+# the same confidence.
+MEMORY_DRIFT_WARNING = (
+    "> Memory below records what was observed **at the time**, not live state. "
+    "Mind the dates and check the current code before relying on an entry."
+)
+
+
+def _age_phrase(ts: Any) -> str:
+    """Human age for a unix timestamp: "today" / "4 days ago" / "3 months ago".
+
+    Returns "" for a missing or unusable stamp — including the 0.0 that means
+    "never recorded" — so callers can append the result blindly instead of
+    inventing an age nobody knows.
+    """
+    if not ts:  # 0.0 / None / "" mean "no stamp", not "1970"
+        return ""
+    try:
+        age = time.time() - float(ts)
+    except (TypeError, ValueError):
+        return ""
+    if age < 60:
+        return "just now"
+    if age < 86400:
+        return "today"
+    days = int(age // 86400)
+    if days == 1:
+        return "yesterday"
+    if days < 60:
+        return f"{days} days ago"
+    months = days // 30
+    if months < 24:
+        return f"{months} months ago"
+    return f"{months // 12} years ago"
+
+
+def _age_suffix(*stamps: Any) -> str:
+    """``", 4 days ago"``, or "" when none of the stamps is usable.
+
+    Comma form, not parenthesised: callers already sit inside their own
+    ``(...)``/``[...]`` and nesting them read as ``(user (4 days ago))``.
+    """
+    for stamp in stamps:
+        phrase = _age_phrase(stamp)
+        if phrase:
+            return f", {phrase}"
+    return ""
 
 
 def _approx_tokens(text: str) -> int:
@@ -66,7 +118,8 @@ def _render_notes(notes: List[dict]) -> str:
         if not body:
             continue
         src = n.get("source") or "user"
-        lines.append(f"- [{kind}] {title} ({src}): {body}")
+        age = _age_suffix(n.get("updated_at"), n.get("created_at"))
+        lines.append(f"- [{kind}] {title} ({src}{age}): {body}")
     return _truncate_to_tokens("\n".join(lines), MAX_NOTES_TOKENS)
 
 
@@ -95,7 +148,8 @@ def _render_working_fixes(fixes: Iterable[dict]) -> str:
         success = fix.get("success_count") or 0
         if not body:
             continue
-        lines.append(f"- [{sig}] (used {success}x): {body}")
+        age = _age_suffix(fix.get("updated_at"), fix.get("created_at"))
+        lines.append(f"- [{sig}] (used {success}x{age}): {body}")
     return _truncate_to_tokens("\n".join(lines), MAX_FIXES_TOKENS)
 
 
@@ -163,7 +217,8 @@ def _render_global_insights(insights: List[dict]) -> str:
         uses = ins.get("use_count") or 0
         if not body:
             continue
-        lines.append(f"- [{cat} x{uses}] {body}")
+        age = _age_suffix(ins.get("created_at"), ins.get("updated_at"))
+        lines.append(f"- [{cat} x{uses}{age}] {body}")
     return _truncate_to_tokens("\n".join(lines), MAX_GLOBAL_TOKENS)
 
 
@@ -301,7 +356,11 @@ def assemble_coder_memory(
 
     # Concatenate and truncate to the overall budget.
     full = "\n\n".join(s for s in sections if s)
-    return _truncate_to_tokens(full, MAX_TOTAL_TOKENS)
+    if not full:
+        return ""
+    # Said once at the top rather than repeated in every section.
+    return _truncate_to_tokens(
+        f"{MEMORY_DRIFT_WARNING}\n\n{full}", MAX_TOTAL_TOKENS)
 
 
 def failure_signature(issue: dict) -> str:

@@ -202,6 +202,12 @@ Rules:
 - 1-3 skills total. Triggers are concrete keywords.
 - Skip generic advice ("always test", "use git").
 - Only lessons that clearly recur or are non-obvious from the code.
+- Never save: credentials, tokens, API keys, connection strings, personal data,
+  customer or user identifiers, absolute paths naming a person or a machine, or
+  anything already stated in the repository (README, docs, comments). Notes are
+  replayed into future prompts - treat every one as if it were published.
+- Phrase a note as the observation it is (what was true then), not as standing
+  policy: later runs see it with its age and no longer trust it blindly.
 - If nothing worth saving, return {{"notes": [], "skills": []}}.
 
 Loop digest:

@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from kairos.llm.base import LLMConfig, LLMMessage, LLMResponse, ToolCall
 from kairos.llm.errors import is_context_length_error
 from kairos.llm.provider_registry import create_provider
+from kairos.memory.retrieval import MEMORY_DRIFT_WARNING, _age_suffix
 from kairos.context_governor import (
     DEFAULT_KEEP_RECENT_TOOL_RESULTS,
     elide_old_tool_results,
@@ -156,14 +157,22 @@ class AgentMemoryMixin:
                                                 scope="project", limit=5)
                 if hits:
                     lines = ["", "## Memory (from past sessions)"]
+                    entries: List[str] = []
                     for h in hits:
                         val = h.value
                         if not val:
                             continue
                         if not isinstance(val, str):
                             val = str(val)
-                        lines.append(f"- {h.key}: {val[:200]}")
-                    if len(lines) > 1:
+                        # These come from earlier sessions: a model that cannot
+                        # tell a fresh entry from a stale one asserts the stale
+                        # one with exactly the same confidence.
+                        age = _age_suffix(getattr(h, "updated_at", None),
+                                          getattr(h, "created_at", None))
+                        entries.append(f"- {h.key}{age}: {val[:200]}")
+                    if entries:
+                        lines.append(MEMORY_DRIFT_WARNING)
+                        lines.extend(entries)
                         system = system + "\n" + "\n".join(lines)
             except Exception as exc:
                 logger.debug("memory recall in _build_messages: %s", exc)

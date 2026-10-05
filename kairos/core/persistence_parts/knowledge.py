@@ -18,6 +18,17 @@ class KnowledgeStoreMixin:
             raise ValueError('note body cannot be empty')
         now = time.time()
         with sqlite3.connect(self.db_path) as conn:
+            # The same lesson arrives more than once: a reflection re-reads a
+            # digest that overlaps the previous one, and a user re-adds a note
+            # they forgot writing. Bumping the existing row instead of inserting
+            # keeps the prompt from filling with near-identical entries and
+            # keeps "most-used first" meaningful. No UNIQUE constraint is added:
+            # rows already in the table would make that migration fail.
+            cur = conn.execute('SELECT id FROM project_notes WHERE project_id = ? AND kind = ? AND title = ? AND body = ? LIMIT 1', (project_id, kind, title, body))
+            row = cur.fetchone()
+            if row:
+                conn.execute('UPDATE project_notes SET use_count = use_count + 1, updated_at = ? WHERE id = ?', (now, row[0]))
+                return int(row[0])
             cur = conn.execute('INSERT INTO project_notes (project_id, kind, title, body, source, use_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)', (project_id, kind, title, body, source or 'user', now, now))
             return cur.lastrowid or 0
 

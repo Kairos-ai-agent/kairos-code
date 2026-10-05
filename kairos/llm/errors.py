@@ -155,3 +155,54 @@ def describe_provider_error(exc: BaseException, *, limit: int = 280) -> str:
         return f"{status}{collapsed} — {_AUTH_HINT}" if collapsed else f"{status}{_AUTH_HINT}"
 
     return f"{status}{collapsed}" if status else collapsed
+
+
+# --- Timeouts -----------------------------------------------------------------
+#
+# A timeout is not like other retryable failures: the call already spent its
+# whole deadline (LLMConfig.timeout, 120s by default) before it was reported.
+# Retrying it five times, with the openai SDK's own retry on top, turned one
+# stuck call into ~15 requests and ten minutes of spinner with no answer at the
+# end of it. So a timeout gets exactly one retry, and then it is reported.
+
+_TIMEOUT_MARKERS = (
+    "timeout",
+    "timed out",
+    "deadline exceeded",
+    "read timed out",
+)
+
+
+def is_timeout_error(exc: BaseException) -> bool:
+    """True when *exc* means "the provider did not answer in time".
+
+    Matched on the class name as well as the text: the openai SDK raises
+    ``APITimeoutError``, httpx raises ``ReadTimeout``/``ConnectTimeout``, and
+    the retry wrapper keeps only the original message.
+    """
+    name = type(exc).__name__.lower()
+    if "timeout" in name or "timedout" in name:
+        return True
+    return any(marker in _body_of(exc).lower() for marker in _TIMEOUT_MARKERS)
+
+
+class LLMTimeoutError(RuntimeError):
+    """The provider missed its deadline twice in a row, so we stopped.
+
+    Subclasses ``RuntimeError`` so callers already catching the retry
+    wrapper's error keep working; ``str()`` is what the user ends up reading,
+    so it says what happened, how many times, and how to get more patience.
+    """
+
+    def __init__(self, attempts: int, timeout_s: float | None,
+                 last: BaseException):
+        self.attempts = attempts
+        self.timeout_s = timeout_s
+        self.last = last
+        within = f"{timeout_s:g}s" if timeout_s else "its deadline"
+        super().__init__(
+            f"LLM call timed out {attempts} times in a row: the provider did "
+            f"not answer within {within}. A timeout is retried once and then "
+            f"reported instead of retried until the request is minutes old. "
+            f"Last error: {last}"
+        )

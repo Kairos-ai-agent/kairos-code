@@ -39,7 +39,12 @@ class OpenAIProvider(BaseLLMProvider):
         super().__init__(config)
         from openai import AsyncOpenAI
 
-        kwargs = {"api_key": config.api_key or "sk-placeholder", "max_retries": 2}
+        # The SDK's own retry is off on purpose: ResilientProvider owns the
+        # retry policy (including the one-retry-then-report rule for timeouts),
+        # and two layers multiply their budgets — the SDK's 2 retries on top of
+        # 5 attempts is up to 15 requests for one stuck call, which is how a
+        # single timeout became ten minutes of spinner.
+        kwargs = {"api_key": config.api_key or "sk-placeholder", "max_retries": 0}
         if config.base_url:
             kwargs["base_url"] = _normalize_openai_base_url(config.base_url)
         # Some OpenAI-compatible proxies (e.g. Cloudflare-fronted ones)

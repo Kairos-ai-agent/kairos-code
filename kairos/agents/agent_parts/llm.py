@@ -26,12 +26,88 @@ from kairos.voice_text import VOICE_REPLY_DIRECTIVE
 logger = logging.getLogger(__name__)
 
 
+#: How many characters of the model's hidden reasoning one ``agent.thinking``
+#: message carries. The full channel can run to ~24k characters on a single
+#: turn and only the tail is ever displayed, so only the tail leaves the process.
+AGENT_THINKING_TAIL_CHARS = 400
+
+#: Minimum seconds between two streamed ``agent.thinking`` messages. A reasoning
+#: model streams one delta per token; without a floor that is one WebSocket
+#: frame (and one DB write path) per token, which swamps the socket.
+AGENT_THINKING_MIN_INTERVAL_S = 0.15
+
+
+def _thinking_tail(text: str, n: int = AGENT_THINKING_TAIL_CHARS) -> str:
+    """The last ``n`` characters of ``text``."""
+    if not text:
+        return ""
+    return text if len(text) <= n else text[-n:]
+
+
 
 
 class AgentLLMMixin:
     @property
     def _llm_timeout_s(self) -> float:
         return float(self._llm_config.timeout or 60)
+
+    async def _publish_thinking(
+        self, text: str, *, task_id: str = "", turn: int = 0,
+        reasoning_chars: int = 0, transient: bool = False, done: bool = False,
+    ) -> None:
+        """Publish the TAIL of the model's hidden reasoning as ``agent.thinking``.
+
+        The WebSocket/persistence layer already knew this topic
+        (``api/routes/websocket.py`` AGENT_STATE_TRIGGERS,
+        ``Persistence.CHAT_TOPICS``) but nothing ever published it, so the UI's
+        "thinking" line had no real source. This is that source.
+
+        ``transient=True`` marks a mid-stream hint: the UI shows it as a single
+        rolling line and drops it when the answer starts, so it is not worth
+        persisting (``Orchestrator._persist_message`` skips it). ``done=True``
+        marks the closing hint of a stream — the answer is about to start, so
+        the UI must NOT re-show the tail it just cleared.
+
+        Invariant: the reasoning text travels on this channel ONLY. It is never
+        appended to ``LLMResponse.content`` — thinking is not an answer.
+        """
+        tail = _thinking_tail(text)
+        if not tail:
+            return
+        metadata = {"task_id": task_id, "turn": turn,
+                    "reasoning_chars": reasoning_chars}
+        if transient:
+            metadata["transient"] = True
+        elif done:
+            metadata["thinking_done"] = True
+        try:
+            await self.message_bus.publish(Message(
+                sender=self.agent_id,
+                topic="agent.thinking",
+                content=tail,
+                msg_type="text",
+                metadata=metadata,
+            ))
+        except Exception:
+            logger.debug("agent.thinking publish failed", exc_info=True)
+
+    async def _publish_complete_reasoning(self, resp, task_id: str = "",
+                                          turn: int = 0) -> None:
+        """Publish a NON-streaming reply's reasoning tail, when it has one.
+
+        ``chat()`` uses ``complete()``, not ``stream()``, so the whole reasoning
+        channel arrives in one piece after the call returns. There is nothing to
+        throttle here — a single message is what lets the UI show what the model
+        was thinking instead of a bare spinner. It is NOT marked ``done``: there
+        is no earlier tail to clear, so the rolling line should show this text.
+        """
+        tail = getattr(resp, "reasoning_tail", "") or ""
+        if not tail:
+            return
+        await self._publish_thinking(
+            tail, task_id=task_id, turn=turn,
+            reasoning_chars=int(getattr(resp, "reasoning_chars", 0) or 0),
+        )
 
     async def _stream_complete(self, messages, tools, task, turn_no: int):
         """Call LLM with streaming. Each content delta is published as a
@@ -48,6 +124,10 @@ class AgentLLMMixin:
         usage = {}
         reasoning_chars = 0
         chunk_seq = 0
+        # Hidden-reasoning text streamed so far, and the last moment we
+        # published a (throttled) hint from it.
+        reasoning_text = ""
+        last_think_at = 0.0
 
         try:
             with self._traced_llm_call(messages, tools) as _trace_span:
@@ -62,6 +142,7 @@ class AgentLLMMixin:
                 completion_tokens=resp.usage.get("completion_tokens", 0),
                 finish_reason=resp.finish_reason,
             )
+            await self._publish_complete_reasoning(resp, task.id, turn_no)
             return resp
 
         # Iterate chunks. The provider's stream() is an AsyncIterator[str]
@@ -114,6 +195,25 @@ class AgentLLMMixin:
                             if stream_usage:
                                 usage = stream_usage
                             continue
+                        if kind == "reasoning":
+                            # A hidden-reasoning increment (see the provider:
+                            # ``reasoning_content`` is never merged into the
+                            # content deltas). Accumulate it for the closing
+                            # message and, throttled, publish its tail so the
+                            # UI can show a live thinking line.
+                            reasoning_text += parsed.get("text") or ""
+                            now = time.monotonic()
+                            if (reasoning_text
+                                    and now - last_think_at
+                                        >= AGENT_THINKING_MIN_INTERVAL_S):
+                                last_think_at = now
+                                await self._publish_thinking(
+                                    reasoning_text,
+                                    task_id=task.id, turn=turn_no,
+                                    reasoning_chars=len(reasoning_text),
+                                    transient=True,
+                                )
+                            continue
                 # Plain text delta — emit as stream.chunk and accumulate.
                 accumulated_text += chunk
                 chunk_seq += 1
@@ -142,10 +242,21 @@ class AgentLLMMixin:
                     completion_tokens=resp.usage.get("completion_tokens", 0),
                     finish_reason=resp.finish_reason,
                 )
+                await self._publish_complete_reasoning(resp, task.id, turn_no)
                 return resp
             except Exception:
                 # Re-raise the original stream error if complete also fails.
                 raise
+
+        # The reasoning is over. Publish a closing hint that carries the tail
+        # and the total character count, so the UI can fold the rolling line
+        # back into the process block (and a refresh still shows the model did
+        # think). Mid-stream hints above are marked transient; this one is not.
+        if reasoning_text:
+            await self._publish_thinking(
+                reasoning_text, task_id=task.id, turn=turn_no,
+                reasoning_chars=len(reasoning_text), done=True,
+            )
 
         # Record the streaming call's output on the trace span
         # (started at the top of _stream_complete). usage is populated

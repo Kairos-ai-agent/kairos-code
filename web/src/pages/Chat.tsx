@@ -330,8 +330,23 @@ const Chat: React.FC = () => {
       // R38.8: keep the live status row in sync with what the agent is doing.
       // `agent.progress` is still not rendered as a message — it is per-turn
       // chatter — but it is exactly the signal the status row needs.
-      if (topic === 'agent.progress' || topic === 'agent.thinking') {
+      //
+      // `agent.thinking` now carries the model's hidden-reasoning TAIL (the
+      // backend publishes it throttled while a thinking model works), so it
+      // feeds the single rolling line instead of becoming a bubble per chunk.
+      const thinkingMeta = (msg.metadata || {}) as Record<string, unknown>;
+      const thinkingText = topic === 'agent.thinking'
+        ? String(msg.content ?? '') : '';
+      if (topic === 'agent.progress') {
         useChatStore.getState().setLiveStatus({ kind: 'thinking' });
+      } else if (topic === 'agent.thinking') {
+        // `thinking_done` is the closing hint: the answer is about to start, so
+        // drop the stale tail (and let the process step below carry it). Any
+        // other hint is the live text for the rolling line.
+        useChatStore.getState().setLiveStatus(
+          thinkingMeta.thinking_done === true
+            ? { kind: 'thinking' }
+            : { kind: 'thinking', text: thinkingText || undefined });
       } else if (topic === 'tool.call') {
         const md = (msg.metadata || {}) as Record<string, unknown>;
         const name = md.tool || md.name || '';
@@ -339,11 +354,24 @@ const Chat: React.FC = () => {
           { kind: 'tool', detail: name ? String(name) : undefined });
       } else if (topic === 'tool.result') {
         useChatStore.getState().setLiveStatus({ kind: 'thinking' });
+      } else if (topic === 'stream.chunk') {
+        // The answer is starting, so the reasoning is over: drop the tail the
+        // rolling line was showing (it would otherwise keep sliding while the
+        // reply streamed). The generic thinking row — and the `<think>`-block
+        // fallback — still stand through the stream.
+        if (useChatStore.getState().liveStatus?.text) {
+          useChatStore.getState().setLiveStatus({ kind: 'thinking' });
+        }
       } else if (topic === 'agent.response' || topic === 'task.result'
                  || topic === 'task.error' || topic === 'agent.chat') {
         useChatStore.getState().setLiveStatus(null);
       }
       if (topic === 'agent.progress') return;
+      // A mid-stream reasoning hint belongs to the live rolling line only.
+      // Publishing one bubble per throttled hint would bury the reply in
+      // thinking tails; the closing hint (thinking_done) still lands below as
+      // one process step.
+      if (topic === 'agent.thinking' && thinkingMeta.transient === true) return;
       const content = (msg.content ?? '').toString();
       const isTurnProgress = /^Turn \d+\/\d+:\s*reasoning/i.test(content);
 

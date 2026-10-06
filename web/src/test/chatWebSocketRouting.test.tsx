@@ -119,6 +119,47 @@ describe('Chat WebSocket message routing', () => {
     expect(msgs[0].topic).toBe('agent.thinking');
   });
 
+  it('a transient agent.thinking hint feeds the rolling line, not a bubble', async () => {
+    await setup();
+    expect(useChatStore.getState().currentMessages.length).toBe(0);
+    await act(async () => {
+      messageHandler!({
+        type: 'activity',
+        message: {
+          id: 'th1', sender: 'coder', receiver: 'user',
+          topic: 'agent.thinking',
+          content: 'the reasoning tail',
+          msg_type: 'text', timestamp: 1.0,
+          metadata: { transient: true, turn: 1, reasoning_chars: 40 },
+        },
+      });
+    });
+    // No bubble: dozens of throttled hints must never bury the reply.
+    expect(useChatStore.getState().currentMessages.length).toBe(0);
+    const live = useChatStore.getState().liveStatus;
+    expect(live?.kind).toBe('thinking');
+    expect(live?.text).toBe('the reasoning tail');
+  });
+
+  it('a stream.chunk drops the reasoning tail so the rolling line collapses', async () => {
+    await setup();
+    await act(async () => {
+      useChatStore.getState().setLiveStatus({ kind: 'thinking', text: 'tail' });
+    });
+    await act(async () => {
+      messageHandler!({
+        type: 'activity',
+        message: {
+          id: 'sc1', sender: 'coder', topic: 'stream.chunk',
+          content: 'here comes the answer', metadata: {},
+        },
+      });
+    });
+    const live = useChatStore.getState().liveStatus;
+    expect(live?.kind).toBe('thinking');
+    expect(live?.text).toBeUndefined();
+  });
+
   it('agent.response does not duplicate the streaming bubble', async () => {
     await setup();
     await act(async () => {

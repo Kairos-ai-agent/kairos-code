@@ -812,13 +812,20 @@ const LiveStatusRow: React.FC<{ messages: Message[] }> = ({ messages }) => {
   const tokens = useThemeTokens();
   const t = useT();
   const live = useChatStore((s) => s.liveStatus);
-  const tail = useMemo(() => liveThinkingTail(messages), [messages]);
+  const streamTail = useMemo(() => liveThinkingTail(messages), [messages]);
   if (!live) return null;
   // Thinking phase with reasoning to show: one rolling line instead of the
-  // generic status row. Every other state (tool running, no reasoning yet, the
-  // turn over) falls through to the row below.
-  if (live.kind === 'thinking' && tail) {
-    return <ThinkingLine text={tail} />;
+  // generic status row. The preferred source is the `agent.thinking` tail the
+  // backend now streams onto ``liveStatus.text``; the `<think>`-block heuristic
+  // stays as the fallback for providers that only expose reasoning inside the
+  // reply body. Every other state (tool running, no reasoning yet, the turn
+  // over) falls through to the row below.
+  if (live.kind === 'thinking') {
+    const fromThinking = (live.text || '').replace(/\s+/g, ' ').trim();
+    const tail = fromThinking
+      ? fromThinking.slice(-THINK_TAIL_CHARS)
+      : streamTail;
+    if (tail) return <ThinkingLine text={tail} />;
   }
   return (
     <div

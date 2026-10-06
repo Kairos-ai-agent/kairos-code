@@ -209,6 +209,13 @@ class ResilientProvider(BaseLLMProvider):
             temperature=temperature, max_tokens=max_tokens,
         )
         # Yield content as a single chunk (callers handle it fine).
+        # The hidden-reasoning tail rides along on its own typed envelope: the
+        # non-streaming ``complete()`` above already produced it, and without
+        # forwarding it here the agent loop would never see the model's
+        # reasoning and the UI's thinking line would stay empty on every
+        # resilient (i.e. default) provider.
+        if getattr(response, "reasoning_tail", ""):
+            yield json.dumps({"type": "reasoning", "text": response.reasoning_tail})
         if response.content:
             yield response.content
         if response.tool_calls:

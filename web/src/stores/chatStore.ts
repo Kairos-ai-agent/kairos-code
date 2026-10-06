@@ -56,6 +56,14 @@ export interface LiveStatus {
   kind: 'thinking' | 'tool';
   /** Tool name, when ``kind === 'tool'``. */
   detail?: string;
+  /**
+   * The model's live reasoning TAIL, when ``kind === 'thinking'``. Fed by the
+   * backend's ``agent.thinking`` events (throttled, tail-only) and rendered as
+   * a single rolling line. Optional so every existing caller that sets only a
+   * ``kind`` keeps working — and so a reasoning-less provider still shows the
+   * generic status row.
+   */
+  text?: string;
 }
 
 interface ChatStore {

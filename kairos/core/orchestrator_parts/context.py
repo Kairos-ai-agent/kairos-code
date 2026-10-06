@@ -100,6 +100,12 @@ class OrchContextMixin:
             return ""
 
     def _persist_message(self, msg):
+        # Mid-stream `agent.thinking` hints drive the live rolling line only:
+        # one turn can emit dozens (throttled, but still many), and persisting
+        # them would flood the DB and the thread a refresh reloads. The closing
+        # hint (no `transient` flag) is the one that survives.
+        if (msg.metadata or {}).get("transient"):
+            return
         try:
             self._db.save_message(msg)
         except Exception:

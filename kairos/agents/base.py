@@ -875,6 +875,17 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
                     raise
 
             last_response = response
+            # The chat path is NON-streaming: the whole hidden reasoning (if
+            # the model has any) lands in the response at once. Publish one
+            # `agent.thinking` so the UI's single rolling line shows what the
+            # model was thinking instead of a bare spinner. The text stays out
+            # of `content` — the reply below is the answer and only the answer.
+            if response is not None:
+                await self._publish_complete_reasoning(
+                    response,
+                    getattr(self.current_task, "id", "") or "",
+                    turn + 1,
+                )
             self._memory.append(LLMMessage(role="assistant", content=response.content or "", tool_calls=response.tool_calls))
 
             if not response.tool_calls:

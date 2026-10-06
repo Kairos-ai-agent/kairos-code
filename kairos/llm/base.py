@@ -76,6 +76,12 @@ class LLMResponse(BaseModel):
     # (DeepSeek's ``reasoning_content``). Deliberately a count, not the text:
     # it exists so an empty reply can be explained, not to be replayed.
     reasoning_chars: int = 0
+    # The *tail* of that hidden channel (never the whole thing — one turn can
+    # reason for ~24k characters). Carried only so a NON-streaming caller
+    # (``chat()`` uses ``complete()``) can publish an ``agent.thinking`` hint
+    # and the UI can show a live line. It must never be merged into
+    # ``content``, which is the answer and only the answer.
+    reasoning_tail: str = ""
 
 class BaseLLMProvider(ABC):
     """Abstract base class for LLM providers."""

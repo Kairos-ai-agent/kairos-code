@@ -14,6 +14,18 @@ from kairos.llm.providers.base import format_messages_for_openai
 
 logger = logging.getLogger(__name__)
 
+#: How much of the hidden-reasoning channel a UI hint carries. The full channel
+#: can run to tens of thousands of characters on one turn and only its tail is
+#: ever displayed, so shipping more would burn WebSocket bandwidth for nothing.
+REASONING_TAIL_CHARS = 400
+
+
+def _reasoning_tail(text: str, n: int = REASONING_TAIL_CHARS) -> str:
+    """The last ``n`` characters of ``text`` (what a rolling line shows)."""
+    if not text:
+        return ""
+    return text if len(text) <= n else text[-n:]
+
 
 def _normalize_openai_base_url(url: str) -> str:
     """Trim a base_url so the OpenAI SDK's own "/chat/completions" append
@@ -116,6 +128,11 @@ class OpenAIProvider(BaseLLMProvider):
             raise
         
         choice = response.choices[0]
+        # Hidden reasoning on the non-streaming path arrives whole on the same
+        # message. Count it (an empty reply that spent its budget thinking must
+        # be explainable) AND keep the tail so the caller can show a thinking
+        # line. It never touches ``content`` below.
+        reasoning_text = getattr(choice.message, "reasoning_content", "") or ""
 
         # Parse tool calls
         tool_calls = None
@@ -140,8 +157,10 @@ class OpenAIProvider(BaseLLMProvider):
             tool_calls=tool_calls,
             # Thinking models put their hidden reasoning on a separate field.
             # Counting it is what lets an empty answer be explained instead of
-            # looking like a silent failure.
-            reasoning_chars=len(getattr(choice.message, "reasoning_content", "") or ""),
+            # looking like a silent failure; the tail rides along so a
+            # non-streaming caller can show a live thinking line.
+            reasoning_chars=len(reasoning_text),
+            reasoning_tail=_reasoning_tail(reasoning_text),
         )
 
     async def stream(
@@ -206,13 +225,16 @@ class OpenAIProvider(BaseLLMProvider):
             # Thinking models stream hidden reasoning on its own channel
             # (DeepSeek's ``reasoning_content``). Count it: an empty answer
             # that spent its budget thinking is explainable, one with no
-            # evidence at all is not. Never merge it into the reply —
-            # thinking is not an answer — but do not drop it without trace
-            # either, or the caller cannot tell "said nothing" from
-            # "thought hard and said nothing".
+            # evidence at all is not. Never merge it into the reply — thinking
+            # is not an answer — but do not drop it without trace either, or
+            # the caller cannot tell "said nothing" from "thought hard and
+            # said nothing". Hand each increment to the consumer as its own
+            # typed envelope (never mixed with the content deltas below) so the
+            # UI can show a live thinking line.
             reasoning = getattr(delta, "reasoning_content", None)
             if reasoning:
                 reasoning_chars += len(reasoning)
+                yield json.dumps({"type": "reasoning", "text": reasoning})
             if delta.content:
                 yield delta.content
             if delta.tool_calls:

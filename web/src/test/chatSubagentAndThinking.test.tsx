@@ -234,6 +234,35 @@ describe('live thinking line', () => {
     expect(screen.getByTestId('live-status').textContent).toContain('read_file');
   });
 
+  it('prefers the agent.thinking tail the backend streams (liveStatus.text)', () => {
+    // The backend now publishes the model's hidden reasoning as `agent.thinking`
+    // and the chat page parks its tail on ``liveStatus.text``. That is the
+    // preferred source, and the line must still be ONE clipped line of tail.
+    act(() => {
+      useChatStore.setState({
+        liveStatus: { kind: 'thinking', text: `${HEAD}${TAIL}` },
+      });
+    });
+    render(<ChatThread messages={[question('go')]} />);
+
+    expect(screen.getAllByTestId('thinking-line').length).toBe(1);
+    const text = screen.getByTestId('thinking-line-text') as HTMLElement;
+    expect(text.style.whiteSpace).toBe('nowrap');
+    expect(text.style.overflow).toBe('hidden');
+    expect(text.textContent).toContain(TAIL);
+    expect(text.textContent).not.toContain('start-of-reasoning');
+    expect((text.textContent || '').length).toBeLessThanOrEqual(140);
+  });
+
+  it('does not render a line for a thinking status that carries no text', () => {
+    // A bare `{kind:'thinking'}` (no reasoning yet, provider without one) keeps
+    // the generic status row — the rolling line needs real text.
+    act(() => { useChatStore.setState({ liveStatus: { kind: 'thinking' } }); });
+    render(<ChatThread messages={[question('go'), reply('hi')]} />);
+    expect(screen.queryByTestId('thinking-line')).toBeNull();
+    expect(screen.getByTestId('live-status')).toBeTruthy();
+  });
+
   it('returns to the process fold — with its step count — once the turn is done', () => {
     act(() => { useChatStore.setState({ liveStatus: null }); });
     render(

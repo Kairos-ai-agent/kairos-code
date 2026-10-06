@@ -80,3 +80,26 @@ def test_a_promised_next_step_is_not_accepted_as_an_exit():
         "the follow-through nudge must be injected into the request, before the "
         "language anchor so the anchor stays last"
     )
+
+
+# --------------------------------------------------------------------------
+# 4) 真实语料：用户截图里那句话必须被认出（固定短语表抓不住它）
+# --------------------------------------------------------------------------
+
+def test_the_exact_sentence_from_the_bug_report_is_a_promise():
+    said = "我找到关键目标了：kairos.db（2.2MB）很可能就是会话历史库。我去读它。".lower()
+    assert B._promises_action(said), "this is the sentence that was accepted as an exit"
+    for ok in ["我来看一下配置。", "我接着改这两个文件。", "我现在去建目录。"]:
+        assert B._promises_action(ok.lower()), ok
+
+
+def test_pattern_does_not_fire_on_a_question_back_to_the_user():
+    for bad in ["接下来你可以运行 npm run dev。", "完成了，需要我继续吗？",
+                "要不要我把这份报告发给你？", "All done, you can review the diff."]:
+        assert not B._promises_action(bad.lower()), bad
+
+
+def test_history_scope_is_stated_honestly_and_forbids_reading_the_app_database():
+    src = (REPO_ROOT / "kairos/agents/agent_parts/discipline.py").read_text(encoding="utf-8")
+    assert "你只能看到当前这个会话的消息" in src
+    assert "kairos.db" in src, "the app's own database must be named explicitly"

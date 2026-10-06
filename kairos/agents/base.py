@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import json
 import logging
 import os
@@ -81,6 +82,27 @@ FOLLOW_THROUGH_MARKERS = (
 
 # Injected as the newest user turn when the model promised an action and then
 # ended its turn without doing it.
+# The tuple above misses how models actually talk: "\u6211\u53bb\u8bfb\u5b83\u3002" matched
+# no marker, so the promise was accepted as an exit. The pattern below covers
+# a first-person subject + motion/intent + action. Second person is excluded
+# on purpose -- "\u63a5\u4e0b\u6765\u4f60\u53ef\u4ee5..." is not a promise.
+_NL = chr(10)
+FOLLOW_THROUGH_PATTERN = re.compile(
+    "(?:^|[^\u4f60\u60a8\u628a\u5c06\u8ba9])(?:\u6211|\u54b1)[^\u3002\uff01\uff1f!?" + _NL + "]{0,4}"
+    "(?:\u53bb|\u6765|\u5148|\u5c06|\u4f1a|\u8981|\u73b0\u5728|\u9a6c\u4e0a|\u7acb\u523b|\u63a5\u7740|\u7136\u540e|\u8fd9\u5c31)"
+    "[^\u3002\uff01\uff1f!?" + _NL + "]{0,8}"
+    "(?:\u8bfb|\u770b|\u67e5|\u641c|\u627e|\u6539|\u5199|\u5efa|\u8dd1|\u6267\u884c|\u4fee|\u53d6|\u6253\u5f00|\u8bfb\u53d6|\u6e05\u7406|\u8fd0\u884c|\u9a8c\u8bc1|\u8bd5|\u6574)",
+    re.IGNORECASE,
+)
+
+
+
+
+def _promises_action(text: str) -> bool:
+    """True when the message commits the model itself to an imminent action."""
+    return bool(FOLLOW_THROUGH_PATTERN.search(text))
+
+
 FOLLOW_THROUGH_NUDGE = (
     "你上一条说要动手（“先…再…”），但这一轮没有发出任何工具调用。\n"
     "现在立刻把它做掉——不要再解释计划，不要复述上一轮，直接发出工具调用，"
@@ -1077,7 +1099,8 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
                     # that promise (bounded) instead of accepting the stop.
                     # Lowercased: the model writes "I'll", not "i'll".
                     _said = (response.content or "")[-400:].lower()
-                    _promised = any(m in _said for m in FOLLOW_THROUGH_MARKERS)
+                    _promised = (any(m in _said for m in FOLLOW_THROUGH_MARKERS)
+                                 or _promises_action(_said))
                     if (_promised and not progress_tools
                             and follow_throughs < MAX_FOLLOW_THROUGHS):
                         follow_throughs += 1

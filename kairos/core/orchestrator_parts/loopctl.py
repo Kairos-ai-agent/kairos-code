@@ -65,18 +65,39 @@ class OrchLoopControlMixin:
         if not project:
             return
         if task.cancelled():
-            project.status = "stopped"
+            status = "stopped"
         elif task.exception():
-            project.status = "failed"
+            status = "failed"
             logger.exception("Loop for %s raised", project_id, exc_info=task.exception())
         else:
             session = project.loop_session
-            project.status = "stopped" if (session and session.user_stopped) else "done"
+            status = "stopped" if (session and session.user_stopped) else "done"
+        project.status = status
         try:
             self._db.save_project(project)
         except Exception:
             logger.debug("Failed to persist final status for %s",
                          project_id, exc_info=True)
+
+        # R41: announce the terminal state.
+        #
+        # Every other terminal topic (`loop.completed`, `loop.finished`,
+        # `loop.rejected`, the caps …) is published from *inside* `run_loop`,
+        # i.e. while the task is still unwinding — so a client that re-read
+        # ``GET /loop`` on one of them got ``running: true``, and with nothing
+        # after it the "运行中" badge stayed up forever beside the final score.
+        # A cancelled task (the Stop button) published nothing at all.
+        #
+        # This callback is the one place that runs after the task has really
+        # finished, on every path (approved / stopped / crashed), and by now
+        # ``loop_task.done()`` is true — so both the event and any subsequent
+        # ``GET /loop`` agree. Best-effort: a publish failure must not affect
+        # the bookkeeping above.
+        self._announce_loop_ended(
+            project_id,
+            getattr(project.loop_session, "session_id", "") or "",
+            status,
+        )
 
         # Self-learning: fire-and-forget consolidation so the agent
         # gets smarter in the background while the user reads the result.
@@ -101,6 +122,38 @@ class OrchLoopControlMixin:
                 self._maybe_reflect(project_id, rounds)
         except Exception:
             logger.debug("self-learning post-loop pass failed", exc_info=True)
+
+    def _announce_loop_ended(self, project_id: str, session_id: str,
+                             status: str) -> None:
+        """Publish the explicit ``loop.ended`` terminal event.
+
+        Scheduled as a task because this runs from a ``Task.add_done_callback``
+        (a sync frame); the callback still runs on the loop, so a task can be
+        created here. Failure to schedule must never propagate into the
+        callback — the loop is already over.
+        """
+        try:
+            bus = getattr(self, "message_bus", None)
+            if bus is None:
+                return
+            evt = asyncio.create_task(
+                bus.publish(Message(
+                    sender="orchestrator", topic="loop.ended",
+                    content=f"Loop ended ({status})",
+                    msg_type="result",
+                    metadata={"project_id": project_id,
+                              "session_id": session_id,
+                              "status": status},
+                )),
+                name=f"loop-ended-{project_id}",
+            )
+            tasks = getattr(self, "_dispatch_tasks", None)
+            if tasks is not None:
+                tasks.add(evt)
+                evt.add_done_callback(tasks.discard)
+        except Exception:
+            logger.debug("loop.ended publish failed for %s", project_id,
+                         exc_info=True)
 
     def _maybe_reflect(self, project_id: str, rounds: List[dict]) -> None:
         """Schedule an LLM-driven self-reflection in the background.

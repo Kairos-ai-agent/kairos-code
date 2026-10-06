@@ -25,7 +25,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Tag, Tooltip, message as antMessage, App as AntdApp } from 'antd';
 import {
   PlayCircleOutlined, StopOutlined, ReloadOutlined, ThunderboltOutlined,
-  ExportOutlined, CodeOutlined, BranchesOutlined, LoadingOutlined,
+  ExportOutlined, CodeOutlined, BranchesOutlined,
 } from '@ant-design/icons';
 
 import { useChatStore } from '../stores/chatStore';
@@ -46,6 +46,71 @@ import type { Message, LoopSession, SessionRound } from '../types';
 // (server.py, teams.py) that have nothing to do with the
 // user's actual project. Cluttering the empty chat without
 // adding value. The composer placeholder is enough.
+
+/**
+ * R41 — the loop's terminal state, declared once.
+ *
+ * Every one of these topics ends the run: the loop task returns right after
+ * publishing it (or, for `loop.ended`, *because* it returned). `loop.approved`
+ * is deliberately NOT here — that is the *plan* approval decision, and an
+ * approved plan means the loop carries on (it is not a terminal event, even
+ * though an earlier version treated it as one). A rejected plan, by contrast,
+ * does end the run, so `loop.rejected` stays.
+ *
+ * Listing them in one place is the point: "clear every running flag" and
+ * "which events close a run" cannot drift apart, and a mid-run topic can never
+ * be mistaken for the end of one.
+ */
+const LOOP_TERMINAL_TOPICS = new Set([
+  // Published by the orchestrator's task-done callback — the one place that
+  // runs after the loop has actually finished, on every path (approved,
+  // crashed, or cancelled with Stop).
+  'loop.ended',
+  'loop.completed', 'loop.finished', 'loop.error',
+  'loop.rejected', 'loop.plan_timeout',
+  'loop.cost_cap', 'loop.time_cap', 'loop.infra_streak',
+  'loop.no_progress', 'loop.stagnation', 'loop.safety_cap',
+]);
+
+/** Topics published from inside a live run (start of a round / of the run). */
+const LOOP_START_TOPICS = new Set([
+  'loop.started', 'loop.coder_started', 'loop.plan_started',
+]);
+
+type LoopState = {
+  running: boolean; round: number; last_score: number;
+  last_approve: boolean; session_id?: string;
+};
+
+/**
+ * Fold one GET /loop response into the loop state.
+ *
+ * The running flag has exactly two authoritative writers: a start event
+ * (true) and a terminal event (false). The response only seeds it — and never
+ * for a session a terminal event has already closed.
+ */
+export function mergeLoopState(
+  prev: LoopState | null,
+  data: any,
+  ev: 'started' | 'ended' | null,
+  endedSessions: Set<string>,
+): LoopState | null {
+  if (!data) return null;
+  const sessionId = data.session_id || prev?.session_id;
+  const closed = !!sessionId && endedSessions.has(sessionId);
+  const running = (ev === 'ended' || closed)
+    ? false
+    : ev === 'started'
+      ? true
+      : !!data.running;
+  return {
+    running,
+    round: Number(data.round ?? prev?.round ?? 0),
+    last_score: Number(data.last_score ?? prev?.last_score ?? 0),
+    last_approve: !!(data.last_approve ?? prev?.last_approve),
+    session_id: sessionId,
+  };
+}
 
 const Chat: React.FC = () => {
   const tokens = useThemeTokens();
@@ -81,17 +146,20 @@ const Chat: React.FC = () => {
   const setSessions = useChatStore((s) => s.setSessions);
 
   const [busy, setBusy] = useState(false);
-  const [loopState, setLoopState] = useState<{
-    running: boolean; round: number; last_score: number;
-    last_approve: boolean; session_id?: string;
-  } | null>(null);
-  // The loop's own session, remembered instead of opened. A dispatched task
-  // runs in the background: the thread the user is reading must not be
-  // replaced by it, so we keep the id here and offer an explicit jump.
-  const [backgroundSession, setBackgroundSession] = useState<string | null>(null);
-  const rememberBackgroundSession = useCallback((sid: string) => {
-    setBackgroundSession((prev) => prev || sid);
-  }, []);
+  const [loopState, setLoopState] = useState<LoopState | null>(null);
+  // R41 — the loop runs in the background and takes no screen: no view switch,
+  // no banner over the thread. The header badge is the only trace of it, and
+  // LOOP_TERMINAL_TOPICS below is what guarantees the badge cannot outlive the
+  // run.
+  //
+  // `endedSessionsRef` holds the sessions whose run we have seen end. A
+  // GET /loop response may only *seed* the running flag; once a terminal event
+  // has closed a session, no later refetch may resurrect it. The old code
+  // applied every refetch verbatim — and since `loop.completed` is published
+  // from *inside* the still-unwinding loop task, the refetch it triggered read
+  // `running: true`, nothing followed it, and "运行中" sat on screen for good
+  // next to the final "评分 100".
+  const endedSessionsRef = useRef<Set<string>>(new Set());
   const [planState, setPlanState] = useState<{
     pending: boolean; text: string; decision: string | null;
     round: number;
@@ -522,38 +590,48 @@ const Chat: React.FC = () => {
         }
       }
 
-      // Loop lifecycle.
-      if (topic === 'loop.coder_started' || topic === 'loop.plan_started'
-          || topic === 'loop.completed' || topic === 'loop.finished'
-          || topic === 'loop.approved' || topic === 'loop.rejected') {
-        // The session is now running (or done). Refetch loop state
-        // for the topbar and refresh the session list so the sidebar
-        // picks up the new entry.
+      // Loop lifecycle. The topics that matter are declared at module level:
+      // a start topic says the run is live, a terminal topic says it is over.
+      if (LOOP_START_TOPICS.has(topic) || LOOP_TERMINAL_TOPICS.has(topic)
+          || topic === 'loop.approved') {
+        const ended = LOOP_TERMINAL_TOPICS.has(topic);
+        const started = LOOP_START_TOPICS.has(topic);
+        const wsSid = msg.metadata?.session_id;
+        if (ended && wsSid) endedSessionsRef.current.add(wsSid);
+        if (ended) {
+          // Explicit terminal state, applied synchronously — the one thing the
+          // previous version never did. The loop task is still unwinding when
+          // it publishes a terminal topic, so the refetch below (and anything
+          // else that reads GET /loop) reports `running: true`; with no event
+          // after it, that stale `true` was what kept "运行中" on screen next to
+          // the final score. Clearing here means the badge comes off the moment
+          // the run ends — approved, crashed, or stopped.
+          setLoopState((prev) => (prev && prev.running
+            ? { ...prev, running: false } : prev));
+        }
+        // The run stays in the background: nothing here navigates, so the
+        // thread the user is reading is never replaced by the fresh session
+        // (the sidebar lists it, and the loop page has its own tab).
         if (currentProject) {
-          // A dispatched task runs in the background. It used to take the
-          // screen: the moment `loop.coder_started` arrived the chat switched
-          // to the fresh session and the user lost whatever they were reading
-          // or typing. Now we only *remember* the session (the slim strip
-          // above the composer offers an explicit jump) and leave the thread
-          // alone. The session list still refreshes so the sidebar picks the
-          // new entry up.
-          const wsSid = msg.metadata?.session_id;
-          if (wsSid) rememberBackgroundSession(wsSid);
           api.get<{ sessions: LoopSession[] }>(`/projects/${currentProject.id}/sessions`)
             .then((r) => setSessions(r.data.sessions || []))
             .catch(() => {});
-          api.get(`/projects/${currentProject.id}/loop`).then((r) => {
-            setLoopState(r.data);
-            const fetchedSid = r.data?.session_id;
-            if (fetchedSid) rememberBackgroundSession(fetchedSid);
-            // Pull the thread in only when the turn is over, so its replies
-            // land where the user is looking. Mid-run refreshes would race
-            // the WebSocket and buy nothing — the run is deliberately hidden.
-            if (topic === 'loop.completed' || topic === 'loop.finished'
-                || topic === 'loop.approved' || topic === 'loop.rejected') {
-              loadHistory(currentProject.id, sessionId ?? null);
-            }
-          }).catch(() => {});
+          api.get(`/projects/${currentProject.id}/loop`)
+            .then((r) => setLoopState((prev) => mergeLoopState(
+              prev, r.data, ended ? 'ended' : started ? 'started' : null,
+              endedSessionsRef.current,
+            )))
+            .catch(() => {
+              // The fetch is best-effort: round/score stay as they were, and
+              // because a terminal event already cleared the flag above there
+              // is no state to guess at.
+            });
+          // Pull the thread in only when the turn is over, so its replies
+          // land where the user is looking. Mid-run refreshes would race
+          // the WebSocket and buy nothing — the run is deliberately hidden.
+          if (ended || topic === 'loop.approved') {
+            loadHistory(currentProject.id, sessionId ?? null);
+          }
         }
         // Plan / Ask state — the orchestrator doesn't publish these
         // over WS, so the polling effect below picks them up.
@@ -573,7 +651,10 @@ const Chat: React.FC = () => {
 
   useEffect(() => {
     if (!currentProject) return;
-    api.get(`/projects/${currentProject.id}/loop`).then((r) => setLoopState(r.data))
+    // Seed only: a session a terminal event already closed stays closed.
+    api.get(`/projects/${currentProject.id}/loop`)
+      .then((r) => setLoopState((prev) => mergeLoopState(
+        prev, r.data, null, endedSessionsRef.current)))
       .catch(() => setLoopState(null));
   }, [currentProject]);
 
@@ -872,6 +953,13 @@ const Chat: React.FC = () => {
 
   const isRunning = !!loopState?.running;
   const hasSession = !!sessionId || isRunning;
+  // The loop's own chrome belongs on screen only while the run is live, or
+  // when the user has actually opened that session. A finished background run
+  // must leave nothing behind in the header of the thread you are reading —
+  // "第 N 轮 · 评分 X" next to a "运行中" that never cleared is what the user
+  // saw. The title follows the same rule: it names the session you opened, not
+  // the one the loop created for itself.
+  const loopOnScreen = isRunning || (!!sessionId && sessionId === loopState?.session_id);
   const showComposer = !!currentProject;  // we always allow typing
 
   return (
@@ -889,12 +977,8 @@ const Chat: React.FC = () => {
           minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis',
           whiteSpace: 'nowrap', flex: 1,
         }}>
-          {hasSession
-            ? (loopState?.session_id
-                ? t('chat.page.sessionTitle', { id: loopState.session_id.slice(0, 8) })
-                : (sessionId
-                    ? t('chat.page.sessionTitle', { id: sessionId.slice(0, 8) })
-                    : t('chat.page.newSession')))
+          {sessionId
+            ? t('chat.page.sessionTitle', { id: sessionId.slice(0, 8) })
             : (currentProject
                 ? t('chat.page.chatWithProject', { name: currentProject.name })
                 : t('chat.page.noProject'))}
@@ -902,7 +986,7 @@ const Chat: React.FC = () => {
         {isRunning && (
           <Tag color="processing" icon={<ThunderboltOutlined />}>{t('common.running')}</Tag>
         )}
-        {loopState && loopState.round > 0 && (
+        {loopState && loopState.round > 0 && loopOnScreen && (
           <Tag color={loopState.last_approve ? 'green' : 'orange'}>
             {t('chat.page.roundScore', {
               round: loopState.round, score: loopState.last_score,
@@ -923,7 +1007,9 @@ const Chat: React.FC = () => {
                   onClick={stopLoop} size="small">{t('common.stop')}</Button>
         ) : hasSession ? (
           <Button icon={<ReloadOutlined />}
-                  onClick={() => currentProject && api.get(`/projects/${currentProject.id}/loop`).then((r) => setLoopState(r.data))}
+                  onClick={() => currentProject && api.get(`/projects/${currentProject.id}/loop`)
+                    .then((r) => setLoopState((prev) => mergeLoopState(
+                      prev, r.data, null, endedSessionsRef.current)))}
                   size="small">{t('common.refresh')}</Button>
         ) : null}
         {hasSession && currentProject && sessionId && (
@@ -991,41 +1077,12 @@ const Chat: React.FC = () => {
         />
       )}
 
-      {/* Background task strip. A dispatched task keeps running while the
-          user stays where they are — one slim line, no view switch, and the
-          two links are the only way the run can take the screen: on purpose. */}
-      {loopState?.running && (
-        <div
-          data-testid="background-task"
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            margin: '0 16px 6px', padding: '5px 10px',
-            border: `1px solid ${tokens.border}`, borderRadius: 6,
-            background: tokens.bgLay1, fontSize: 12,
-            color: tokens.labelSecondary,
-          }}
-        >
-          <LoadingOutlined spin style={{ fontSize: 11 }} />
-          <span>{t('run.running')}</span>
-          <span style={{ color: tokens.labelTertiary }}>
-            {t('run.liveRound')} {loopState.round}
-            {' · '}{t('run.finalScore')}: {loopState.last_score}
-          </span>
-          <div style={{ flex: 1 }} />
-          {backgroundSession && (
-            <Button
-              size="small" type="link" data-testid="background-task-view"
-              style={{ padding: 0, height: 'auto', fontSize: 12 }}
-              onClick={() => {
-                setCurrentSessionId(backgroundSession);
-                navigate(`/chat/${backgroundSession}`);
-              }}
-            >
-              {t('run.view')}
-            </Button>
-          )}
-        </div>
-      )}
+      {/* R41: no background strip here. It used to sit above the composer
+          ("运行中，页面会自动刷新… 当前轮次 1 · 最终评分: 100") and it competed
+          for the thread's own space — the loop is meant to run hidden. The
+          run is listed in the sidebar (one row per session, refreshed on every
+          loop event) and the 循环 page is its own tab, so nothing about it
+          needs to be pinned to the chat page. */}
 
       {/* Composer */}
       <ChatComposer

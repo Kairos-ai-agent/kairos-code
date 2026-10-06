@@ -60,6 +60,33 @@ CHAT_WRAPUP_DIRECTIVE = (
 # this is only how many times the internal loop may extend it.
 MAX_CHAT_CONTINUATIONS = 3
 
+# A run that keeps producing real side effects does not spend the budget
+# above: it is working, not spinning. It gets these extra segments instead,
+# so the limit stays on the internal loop and never on the work the user
+# asked for. Bounded all the same -- an endless writer still has to stop.
+MAX_PRODUCTIVE_CONTINUATIONS = 6
+
+# How many times the loop may call the model out on its own promise ("I'll
+# read the rest and then fix it") when that turn emitted no tool call at
+# all. Small on purpose: it finishes a sentence, it does not argue.
+MAX_FOLLOW_THROUGHS = 2
+
+# First-person announcements of an imminent action. Deliberately narrow:
+# second-person suggestions ("接下来你可以...") are NOT a promise.
+FOLLOW_THROUGH_MARKERS = (
+    "先把", "先读", "先看", "先取", "接下来我", "然后我", "我将", "我会",
+    "现在去", "这就去", "马上", "立刻就", "let me ", "i'll ", "i will ",
+    "i am going to ", "next, i",
+)
+
+# Injected as the newest user turn when the model promised an action and then
+# ended its turn without doing it.
+FOLLOW_THROUGH_NUDGE = (
+    "你上一条说要动手（“先…再…”），但这一轮没有发出任何工具调用。\n"
+    "现在立刻把它做掉——不要再解释计划，不要复述上一轮，直接发出工具调用，"
+    "把该改的文件改掉，然后再说结果。"
+)
+
 # Consecutive turns allowed to consist only of read-only tools before the loop
 # stops treating investigation as progress. Two catches the read/read/read spin
 # without firing on a single exploratory turn.
@@ -958,6 +985,9 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
         # (see tests/test_voice_mode_prompt.py), so nothing here may depend on
         # attributes set only by the constructor.
         continuations = 0
+        productive_continuations = 0
+        follow_throughs = 0
+        follow_nudge_active = False
         read_only_streak = 0
         nudge_active = False
         # The reply-language anchor is re-stated on EVERY request as the
@@ -974,6 +1004,7 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
             # every turn carried a tool call (the model never converged) -- the
             # exact case the old code ended on, mid-work, with a wrap-up.
             exhausted = True
+            segment_made_progress = False
             for _ in range(self.MAX_CHAT_TURNS):
                 turn += 1
                 self.current_turn = turn
@@ -985,6 +1016,9 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
                 # moment, not a standing rule.
                 if nudge_active:
                     messages = messages + [LLMMessage(role="user", content=NO_PROGRESS_NUDGE)]
+                if follow_nudge_active:
+                    messages = messages + [LLMMessage(role="user", content=FOLLOW_THROUGH_NUDGE)]
+                    follow_nudge_active = False
                 # Always last: request-scoped, never persisted.
                 if _lang_anchor:
                     messages = messages + [LLMMessage(role="user", content=_lang_anchor)]
@@ -1035,9 +1069,20 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
                 self._memory.append(LLMMessage(role="assistant", content=response.content or "", tool_calls=response.tool_calls))
 
                 if not response.tool_calls:
-                    # The model chose to stop and answer. That is a real end, not
-                    # an exhaustion -- never continue past it, or a wrap-up would
-                    # turn into an uninvited second round of work.
+                    # The model chose to stop and answer. Usually a real end --
+                    # but the failure users report is exactly this: it *promises*
+                    # an action ("先取全文，再纠正") and stops, so nothing gets
+                    # written. When this run has produced no side effect yet and
+                    # the message announces a first-person next step, hold it to
+                    # that promise (bounded) instead of accepting the stop.
+                    # Lowercased: the model writes "I'll", not "i'll".
+                    _said = (response.content or "")[-400:].lower()
+                    _promised = any(m in _said for m in FOLLOW_THROUGH_MARKERS)
+                    if (_promised and not progress_tools
+                            and follow_throughs < MAX_FOLLOW_THROUGHS):
+                        follow_throughs += 1
+                        follow_nudge_active = True
+                        continue
                     exhausted = False
                     break
 
@@ -1073,6 +1118,7 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
                 # that investigation is over and files must appear. It clears as
                 # soon as any turn does something with a side effect.
                 if turn_made_progress:
+                    segment_made_progress = True
                     read_only_streak = 0
                     nudge_active = False
                 else:
@@ -1082,6 +1128,18 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
 
             if not exhausted:
                 break
+            # A segment that produced real side effects is work, not a spin: it
+            # does not spend the continuation budget, it spends the larger
+            # productive one. Same memory, same visible turn numbering.
+            if (segment_made_progress
+                    and productive_continuations < MAX_PRODUCTIVE_CONTINUATIONS):
+                productive_continuations += 1
+                self._chat_continuations = continuations + productive_continuations
+                self.total_turns = self.MAX_CHAT_TURNS * (
+                    continuations + productive_continuations + 1)
+                await self._publish_chat_continuation(
+                    continuations + productive_continuations)
+                continue
             if continuations >= MAX_CHAT_CONTINUATIONS:
                 break
             # The budget ran out while the model was still working: grant a new

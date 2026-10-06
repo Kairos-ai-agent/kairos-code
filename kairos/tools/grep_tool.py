@@ -85,7 +85,18 @@ class GrepTool(BaseTool):
                 with f.open("r", encoding="utf-8", errors="ignore") as fh:
                     for lineno, line in enumerate(fh, start=1):
                         if compiled.search(line):
-                            rel = f.relative_to(self._allowed_root)
+                            try:
+                                rel = f.relative_to(self._allowed_root)
+                            except ValueError:
+                                # Under full access the searched root can sit
+                                # outside the worktree this tool is anchored to
+                                # (an absolute path into the real work_dir), and
+                                # the unguarded relative_to escaped execute() as
+                                # a raw "is not in the subpath of ..." error --
+                                # ValueError is not an OSError, so the handler
+                                # below never saw it. FindTool has always kept
+                                # the absolute path in exactly this case.
+                                rel = f
                             matches.append(f"{rel}:{lineno}:{line.rstrip()}")
                             if len(matches) >= max_results:
                                 break

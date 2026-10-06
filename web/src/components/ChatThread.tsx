@@ -285,7 +285,11 @@ export default React.memo(ChatThread);
 const TurnViewBase: React.FC<{ turn: Turn; mdStyle: MarkdownStyle }> = ({ turn, mdStyle }) => {
   // A turn with no reply yet is still running: its process stays open so the
   // user can watch the steps land, then folds away once the answer arrives.
-  const running = turn.replies.length === 0;
+  // A turn is "running" only while a step is still unsettled. A tool-only turn
+  // (the model calls tools and never writes a closing reply) used to count as
+  // running forever, so its process block never folded and the thread read as a
+  // raw log. Once every step has landed, fold to the one-line summary.
+  const running = turn.replies.length === 0 && turn.steps.some((s) => s.ok === null);
   return (
     <div data-testid="chat-turn">
       {turn.user && <UserBubble message={turn.user} />}
@@ -331,6 +335,19 @@ const ProcessBlock: React.FC<{ steps: Step[]; running: boolean }> = ({ steps, ru
 
   const total = steps.reduce((acc, s) => acc + (s.ms || 0), 0);
   const failed = steps.filter((s) => s.kind === 'tool' && s.ok === false).length;
+  // A digest of what the turn actually did, shown ONLY while folded: the
+  // summary line then reads "思考 → read_file → grep" instead of bare "N 步",
+  // and unfolding swaps it for the real step rows (which would otherwise show
+  // the same tool names twice). Consecutive
+  // thinking steps collapse to a single entry, and only the last four show.
+  // Tool names are the backend's own identifiers and the thinking label reuses
+  // chat.process.thinkingStep, so no new i18n keys are introduced.
+  const seen: string[] = [];
+  for (const s of steps) {
+    const label = s.kind === 'thinking' ? t('chat.process.thinkingStep') : (s.tool || 'tool');
+    if (seen[seen.length - 1] !== label) seen.push(label);
+  }
+  const digest = (seen.length > 4 ? '… → ' : '') + seen.slice(-4).join(' → ');
 
   return (
     <div
@@ -361,12 +378,19 @@ const ProcessBlock: React.FC<{ steps: Step[]; running: boolean }> = ({ steps, ru
         </span>
         {running ? <LoadingOutlined spin style={{ fontSize: 11 }} />
                  : <ThunderboltOutlined style={{ fontSize: 11 }} />}
-        <span>
+        <span style={{ flexShrink: 0 }}>
           {t('chat.process.summary', {
             n: steps.length,
             time: formatMs(total) || '—',
           })}
         </span>
+        {!open && digest && (
+          <span style={{
+            color: tokens.labelTertiary, fontFamily: MONO_STACK,
+            fontSize: 10.5, minWidth: 0, flexShrink: 1,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>{digest}</span>
+        )}
         {failed > 0 && (
           <Tag color="red" style={{ marginInlineStart: 'auto', marginInlineEnd: 0,
                                     fontSize: 10, lineHeight: '16px' }}>

@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Dict, List
 
-from kairos.agents.base import KairosAgent
+from kairos.agents.base import CHAT_WRAPUP_DIRECTIVE, KairosAgent
 from kairos.core.message_bus import MessageBus
 from kairos.llm.base import LLMConfig, LLMResponse, ToolCall
 from kairos.tools.base import ToolResult
@@ -94,13 +94,25 @@ def test_normal_reply_is_returned_unchanged():
 
 
 class _ToolLoopLLM:
-    """A model that only ever asks for a tool and never writes a closing line."""
+    """Only ever asks for a tool -- unless tools are off, when it may summarise.
 
-    def __init__(self):
+    That is the deepseek-flash shape on "行，你做吧": every tools-ON turn is a
+    tool call with no prose, and the tools-OFF wrap-up call is the one chance to
+    get the closing sentence out of it.
+    """
+
+    def __init__(self, summary: str = ""):
+        self.summary = summary
         self.calls = 0
+        self.memory = []
 
     async def complete(self, messages, tools=None, **kw):
         self.calls += 1
+        self.memory.append(messages)
+        if self.summary and (messages[-1].content or "").startswith(
+                CHAT_WRAPUP_DIRECTIVE[:12]):
+            return LLMResponse(content=self.summary, model="deepseek-flash",
+                               finish_reason="stop", usage={})
         return LLMResponse(
             content="",
             model="deepseek-flash",
@@ -154,3 +166,94 @@ def test_tool_calls_finish_reason_without_calls_does_not_blame_the_key():
     assert "检查模型名与 API Key" not in reply
     assert "无关" in reply
     assert reply in _chat_notices(bus)
+
+
+WRAPUP = "我在 D:/AI_work/AI Personal OS 建好了项目骨架，写了 README.md 和 Makefile，还没跑测试。"
+
+
+def test_missing_closing_line_is_answered_by_a_real_summary():
+    """The work is done but the model wrote no prose -> one tools-OFF wrap-up.
+
+    Before this, the user got a tool list ("已完成：· write_file - ...").
+    Now the agent asks once, with tools disabled, for the summary it owed.
+    """
+    agent, bus = _make_agent(LLMResponse(content="", model="m", finish_reason="stop"))
+    llm = _ToolLoopLLM(summary=WRAPUP)
+    agent._llm = llm
+
+    async def _fake_dispatch(tc):
+        return ToolResult(success=True, output="wrote a.txt (2 bytes)")
+
+    agent._dispatch_tool = _fake_dispatch
+
+    reply = asyncio.run(agent.chat("行，你做吧，按你倾向的"))
+
+    assert reply.strip() == WRAPUP
+    assert "已完成：" not in reply, "prose beats a tool list"
+    assert reply in _chat_notices(bus)
+    # The wrap-up must be requested with tools OFF -- that is what makes a
+    # second tool loop impossible.
+    assert llm.memory[-1][-1].content == CHAT_WRAPUP_DIRECTIVE
+    # The wrap-up is asked exactly once, at the very end, after the tool loop
+    # ran to its cap (the stub asks for a tool on every turn, like the real
+    # model did).
+    assert sum(1 for msgs in llm.memory if msgs[-1].content == CHAT_WRAPUP_DIRECTIVE) == 1
+    assert reply in [m.content for m in agent._memory if m.role == "assistant"]
+
+
+def test_failed_wrapup_falls_back_to_the_tool_list():
+    """If the wrap-up blows up, the old tool list still reports the work."""
+    agent, bus = _make_agent(LLMResponse(content="", model="m", finish_reason="stop"))
+
+    class _Exploding:
+        def __init__(self):
+            self.calls = 0
+
+        async def complete(self, messages, tools=None, **kw):
+            self.calls += 1
+            if (messages[-1].content or "").startswith(CHAT_WRAPUP_DIRECTIVE[:12]):
+                raise RuntimeError("boom")
+            return LLMResponse(
+                content="", model="deepseek-flash", finish_reason="tool_calls",
+                usage={},
+                tool_calls=[ToolCall(id="c1", name="write_file",
+                                     arguments={"path": "a.txt", "content": "hi"})],
+            )
+
+        async def close(self):
+            pass
+
+    agent._llm = _Exploding()
+
+    async def _fake_dispatch(tc):
+        return ToolResult(success=True, output="wrote a.txt (2 bytes)")
+
+    agent._dispatch_tool = _fake_dispatch
+
+    reply = asyncio.run(agent.chat("行，你做吧"))
+
+    assert reply.strip(), "a failed wrap-up must never go blank"
+    assert "write_file" in reply
+    assert reply in _chat_notices(bus)
+
+
+def test_a_normal_reply_never_pays_for_a_wrapup():
+    """No second LLM call when the model actually answered."""
+    counted = {"calls": 0}
+
+    class _Answering:
+        async def complete(self, messages, tools=None, **kw):
+            counted["calls"] += 1
+            return LLMResponse(content="你好！", model="m",
+                               finish_reason="stop", usage={})
+
+        async def close(self):
+            pass
+
+    agent, bus = _make_agent(LLMResponse(content="", model="m", finish_reason="stop"))
+    agent._llm = _Answering()
+
+    reply = asyncio.run(agent.chat("你好"))
+
+    assert reply == "你好！"
+    assert counted["calls"] == 1, "a real answer must not trigger a wrap-up call"

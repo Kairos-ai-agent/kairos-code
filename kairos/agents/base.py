@@ -31,6 +31,21 @@ from kairos.voice_text import VOICE_REPLY_DIRECTIVE
 
 logger = logging.getLogger(__name__)
 
+# The closing sentence a model owes but never writes when it spends every turn
+# on tool calls. Sent as the final user turn of a tools-OFF completion, so a
+# chat can end with a real summary instead of a tool list or a blank bubble.
+# See KairosAgent._chat_wrapup_summary.
+CHAT_WRAPUP_DIRECTIVE = (
+    "现在请收尾。你上面几轮只是在调用工具，还没有写给用户的话。\n"
+    "不要再调用任何工具，直接用一段话总结（2-4 句中文，纯文字，"
+    "不要 Markdown、不要代码块）：\n"
+    "1) 你做了什么、结果是什么；\n"
+    "2) 改了或新建了哪些文件（写出文件名）；\n"
+    "3) 有没有没做完的部分，或需要用户确认的地方。\n"
+    "只描述已经真实发生的事，不要编造。如果其实什么都没做成，"
+    "就用一句话说清楚卡在哪里。"
+)
+
 
 # Content that entered through the network or a third-party server is wrapped so
 # the model can tell it apart from its own instructions. Muse does the same thing
@@ -903,6 +918,23 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
             ))
             return last_response.content
 
+        # The model ran tools and never wrote a closing line (deepseek-flash
+        # does exactly this on "行，你做吧"): the work is real, only the prose is
+        # missing. Ask ONCE, with tools disabled, for a 2-4 sentence wrap-up over
+        # the live transcript. Reached only when the final content was empty, so
+        # a normal reply never pays for a second call; if this call fails or
+        # answers nothing, control falls through to the performed-tool list
+        # below -- never back to a blank bubble.
+        summary = await self._chat_wrapup_summary(chat_system)
+        if summary:
+            await self.message_bus.publish(Message(
+                sender=self.agent_id,
+                topic="agent.chat",
+                content=summary,
+                msg_type="text",
+            ))
+            return summary
+
         # An empty reply means the UI shows NOTHING at all — no bubble and
         # no error (the route still returns HTTP 200), so the user just sees
         # a chat that never answers. A thinking/reasoning model produces
@@ -977,6 +1009,52 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
             msg_type="text",
         ))
         return notice
+
+    async def _chat_wrapup_summary(self, chat_system: str) -> str:
+        """One tools-OFF completion asking for the closing line the model owes.
+
+        Called from ``_chat_impl`` only when the loop ended with empty content.
+        The live transcript is already in ``self._memory`` -- assistant
+        ``tool_calls`` next to their ``tool`` results -- so the summary can name
+        what was actually touched without reconstructing anything. Passing
+        ``tools=None`` makes a second tool loop impossible.
+
+        Returns "" on timeout, error or an empty answer: best-effort, handing
+        control back to the caller's fallback rather than ever going blank.
+        """
+        messages = (
+            [LLMMessage(role="system", content=chat_system)]
+            + self._sanitize_memory(self._elided_memory())
+            + [LLMMessage(role="user", content=CHAT_WRAPUP_DIRECTIVE)]
+        )
+        try:
+            with self._traced_llm_call(messages, None) as _span:
+                resp = await asyncio.wait_for(
+                    self._llm.complete(
+                        messages, tools=None, temperature=self.temperature,
+                    ),
+                    timeout=self._llm_timeout_s,
+                )
+                _span.set_output(
+                    content=(resp.content or "")[:500],
+                    prompt_tokens=resp.usage.get("prompt_tokens", 0),
+                    completion_tokens=resp.usage.get("completion_tokens", 0),
+                    finish_reason=resp.finish_reason,
+                )
+            text = (resp.content or "").strip()
+        except Exception as exc:
+            # Best-effort: a failed wrap-up must fall back to the tool list,
+            # never to a blank reply.
+            logger.warning(
+                "%s: chat wrap-up summary failed (non-fatal): %s",
+                self.agent_id, exc,
+            )
+            return ""
+        if text:
+            # It is the assistant's closing turn: keep it in memory so the next
+            # user message ("现在改成蓝色") has something to answer.
+            self._memory.append(LLMMessage(role="assistant", content=text))
+        return text
 
     def _build_task_prompt(self, task: AgentTask) -> str:
         parts = [

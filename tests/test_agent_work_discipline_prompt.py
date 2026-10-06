@@ -66,6 +66,18 @@ def test_every_promised_rule_is_present():
     assert "真实结果" in text and "不夸大" in text and "没做什么" in text
 
 
+def test_the_language_rule_is_pinned():
+    """Answer in the user's language -- the bug was a Chinese question met with
+    an all-English answer because no rule said which language to reply in."""
+    text = WORK_DISCIPLINE_DIRECTIVE
+    assert "用户使用的语言" in text
+    assert "中文" in text and "英文" in text
+    assert "系统提示词" in text
+    # It sits in the prominent slot: the first rule of the block.
+    first_rule = text.splitlines()[1]
+    assert first_rule.startswith("- 用用户使用的语言回答"), first_rule
+
+
 def test_directive_stays_short():
     """A manifesto ships to every turn of every session -- keep it tight."""
     assert 400 <= len(WORK_DISCIPLINE_DIRECTIVE) <= MAX_CHARS, (

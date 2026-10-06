@@ -155,6 +155,18 @@
     "zh": "进行中…",
     "en": "running…"
   },
+  "chat.subagent.background": {
+    "zh": "后台运行中",
+    "en": "Running in background"
+  },
+  "chat.subagent.handle": {
+    "zh": "handle：{handle}",
+    "en": "handle: {handle}"
+  },
+  "chat.subagent.pollHint": {
+    "zh": "子代理结束后，用 subagent_status / subagent_result 取回结果。",
+    "en": "When it finishes, use subagent_status / subagent_result to collect the result."
+  },
   "chat.thread.tokenUsage": {
     "zh": "这条回复消耗的 token 数",
     "en": "Tokens spent on this reply"

@@ -185,6 +185,44 @@ def _open_browser_when_ready(url: str, timeout: float = 30.0, shell: str = "app"
             pass
 
 
+def _reattach_std_streams() -> bool:
+    """Point sys.stdin/stdout/stderr at the descriptors we were actually given.
+
+    A windowed EXE has no console, and PyInstaller's bootloader leaves
+    ``sys.stdout``/``sys.stderr`` unusable even when fd 1/2 are perfectly good
+    pipes -- which they are here, because this process *is* an MCP server
+    spawned with ``stdout=PIPE``. The MCP SDK wraps ``sys.stdout`` and flushes it
+    for every JSON-RPC message, so the bootloader's dead object surfaced as
+
+        OSError: [Errno 22] Invalid argument
+
+    inside anyio's stdout_writer, took the TaskGroup down, and the server died
+    with an ExceptionGroup traceback. Reopen the inherited descriptors instead
+    of trusting those objects. Returns True when stdout can carry the protocol.
+    """
+    for name, fd, mode in (("stdin", 0, "r"), ("stdout", 1, "w"),
+                           ("stderr", 2, "w")):
+        stream = getattr(sys, name, None)
+        if stream is not None:
+            try:
+                # The bootloader's shim is exactly the thing that failed with
+                # EINVAL on flush; a working stream (or a test harness's
+                # capture object) passes and is left alone.
+                if mode == "w":
+                    stream.flush()
+                else:
+                    stream.readable()
+                continue
+            except Exception:
+                pass
+        try:
+            setattr(sys, name, os.fdopen(fd, mode, encoding="utf-8",
+                                         errors="replace", buffering=1))
+        except OSError:
+            setattr(sys, name, None)
+    return getattr(sys, "stdout", None) is not None
+
+
 def _serve_bundled_mcp(argv: list) -> int:
     """Become one of the bundled MCP servers, on stdio, in this executable.
 
@@ -196,6 +234,21 @@ def _serve_bundled_mcp(argv: list) -> int:
     a full request timeout before the UI even comes up.
     """
     import asyncio
+
+    # Must happen before any server object exists: the protocol *is* stdio, and
+    # under a windowed EXE the inherited descriptors are the only usable ones.
+    if not _reattach_std_streams():
+        # No stdout means no protocol. Say so in one line (the parent captures
+        # our stderr and shows it in the MCP status) instead of dying inside
+        # anyio with an ExceptionGroup the user cannot act on.
+        try:
+            sys.stderr.write(
+                "kairos-code --mcp-serve: no usable stdout; "
+                "this process must be started with stdout=PIPE\n")
+            sys.stderr.flush()
+        except Exception:
+            pass
+        return 2
 
     name = argv[argv.index("--mcp-serve") + 1]
     root = Path(argv[argv.index("--root") + 1]) if "--root" in argv else Path.cwd()

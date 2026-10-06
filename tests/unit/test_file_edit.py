@@ -22,6 +22,8 @@ async def test_file_write_and_read_round_trip(tmp_workspace):
 
 @pytest.mark.asyncio
 async def test_file_read_clamps_output_and_sets_metadata(tmp_workspace):
+    # A single 60k-char line exceeds the 50k cap and must be clipped with a
+    # marker that names the cap — not the old unactionable "(truncated)".
     big = "x" * 60_000
     (tmp_workspace / "big.txt").write_text(big)
 
@@ -29,11 +31,15 @@ async def test_file_read_clamps_output_and_sets_metadata(tmp_workspace):
     res = await read_tool.execute(path="big.txt")
 
     assert res.success
-    assert len(res.output) <= 50_000 + len("\n... (truncated)")
-    assert "(truncated)" in res.output
     assert res.metadata["truncated"] is True
+    assert res.metadata["is_full_file"] is False
     assert res.metadata["original_length"] == 60_000
     assert res.metadata["max_length"] == 50_000
+    assert res.metadata["total_lines"] == 1
+    # Content is clipped to the cap, then comes the explicit marker.
+    assert res.output[:50_000] == "x" * 50_000
+    assert "truncated" in res.output.lower()
+    assert "longer than the 50000-char cap" in res.output
 
 @pytest.mark.asyncio
 async def test_path_traversal_is_blocked(tmp_workspace):

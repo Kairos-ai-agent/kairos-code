@@ -14,6 +14,58 @@ from kairos.access_control import is_full_access
 from kairos.tools.base import BaseTool, ToolResult
 
 
+def _console_encodings() -> List[str]:
+    """Code pages a shell may have written its own messages in.
+
+    Asked of Windows itself (kernel32's OEM/ANSI code pages) rather than of
+    ``locale``: under PEP 540 UTF-8 mode -- which this app can be started in --
+    ``locale.getpreferredencoding()`` answers "utf-8" no matter what the console
+    actually emits, so the fallback silently never fired.
+    """
+    if os.name != "nt":
+        return ["utf-8"]
+    found: List[str] = []
+    try:
+        import ctypes
+
+        for cp in (ctypes.windll.kernel32.GetOEMCP(),
+                   ctypes.windll.kernel32.GetACP()):
+            try:
+                enc = "cp%d" % int(cp)
+                "x".encode(enc)  # Validate the codec exists in this build.
+            except Exception:
+                continue
+            if enc not in found:
+                found.append(enc)
+    except Exception:  # pragma: no cover - no ctypes / no kernel32
+        pass
+    return found or ["utf-8"]
+
+
+def _decode_console_output(raw: bytes,
+                           console_encodings: Optional[List[str]] = None) -> str:
+    """Decode command output without turning real text into tofu.
+
+    Output arrives in whatever encoding the program chose, and on Windows that
+    is usually the console code page rather than UTF-8: ``cmd`` and friends
+    print 找不到文件 as cp936 bytes. Decoding everything as UTF-8 with
+    ``errors="replace"`` turned that into a row of replacement characters --
+    what the user saw as "terminal - 失败: ??????" in a tool summary, and what
+    the model was handed instead of the actual error message.
+
+    Strict UTF-8 first (ASCII and UTF-8 output are byte-identical under both
+    attempts), then the console code page, and only then give up on the bytes.
+    """
+    if not raw:
+        return ""
+    for enc in ["utf-8"] + list(console_encodings or _console_encodings()):
+        try:
+            return raw.decode(enc)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return raw.decode("utf-8", errors="replace")
+
+
 def _split_command(command: str) -> List[str]:
     """Split a command line into argv without a shell.
 
@@ -519,8 +571,8 @@ class TerminalTool(BaseTool):
                     await self._kill_tree(process, kill_process_group)
                     stdout_bytes, stderr_bytes = b"", b""
 
-            output = stdout_bytes.decode("utf-8", errors="replace")
-            error_output = stderr_bytes.decode("utf-8", errors="replace")
+            output = _decode_console_output(stdout_bytes)
+            error_output = _decode_console_output(stderr_bytes)
 
             if len(output) > self.max_output:
                 output = output[:self.max_output] + "\n... (truncated)"
@@ -585,7 +637,7 @@ class TerminalTool(BaseTool):
                 sink.append(chunk)
                 if cb:
                     try:
-                        cb(chunk.decode("utf-8", errors="replace"))
+                        cb(_decode_console_output(chunk))
                     except Exception:
                         pass
 

@@ -289,14 +289,18 @@ async def chat(project_id: str, request: "ChatRequest"):
             logger.exception("failed to persist user chat message")
 
         # R38.6.3: /chat calls the Coder's ``chat()`` method
-        # (not ``run()``). ``chat()`` uses MAX_CHAT_TURNS=5 with
-        # a single conversational prompt — no tool calls, no
-        # Reviewer, no multi-round plan. The previous code used
-        # ``run()`` which has MAX_TOOL_TURNS=25 and ran the full
-        # tool loop, which is wrong for a single-turn chat message.
-        # The user reported "Turn 1/25 + Reviewer triggered" for
-        # a simple "你好" — this fix routes the chat through
-        # ``chat()`` so it's a single LLM call.
+        # (not ``run()``), so a plain "你好" does not trip the full
+        # loop with a Reviewer. It is still a real tool-calling
+        # loop, not a single LLM call: ``chat()`` runs up to
+        # MAX_CHAT_TURNS (the Coder overrides it to 10) and the
+        # Coder's own role prompt applies — it reads before it
+        # writes, verifies by running the tests, and can send tool
+        # calls (file_read, terminal, ...) before it answers.
+        # The previous code used ``run()``, which has the loop's
+        # MAX_TOOL_TURNS (=200 for the Coder) and spins up the full
+        # Reviewer round; the user reported "Turn 1/25 + Reviewer
+        # triggered" for a simple "你好", which is what this fix
+        # routes away from.
         try:
             reply = await project.coder.chat(text, voice_mode=request.voice_mode)
         except Exception as exc:

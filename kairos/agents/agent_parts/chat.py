@@ -109,6 +109,43 @@ class AgentChatMixin:
             logger.debug("agenerate failed", exc_info=True)
             return ""
 
+    def _chat_base_prompt(self) -> str:
+        """The full role prompt this agent was built with.
+
+        The UI chat path used to assemble its own prompt — identity plus a
+        "respond conversationally to the user's message. Use tools when
+        helpful." line — and never read ``self.system_prompt``, so the Coder
+        role prompt (read before you write / smallest change / verify by
+        running the tests / cite your work / don't ask) never reached a chat
+        turn and the agent answered like a support bot instead of working.
+        ``self.system_prompt`` already carries the identity and the work
+        discipline (see kairos/agents/base.py), so it *is* the base here.
+
+        A caller that builds the mixin without a ``system_prompt`` (test stubs)
+        still gets a usable prompt: the same identity + discipline composition
+        the base class uses, never an empty string.
+        """
+        base = getattr(self, "system_prompt", "") or ""
+        if base:
+            return base
+        return f"{KAIROS_IDENTITY}\n\n{WORK_DISCIPLINE_DIRECTIVE}"
+
+    def _chat_supplementary_blocks(self, base: str) -> list[str]:
+        """The standing operating rules, minus whatever the base already has.
+
+        The discipline block is injected into ``self.system_prompt`` by the
+        base class (kairos/agents/base.py), so appending it here unconditionally
+        would print it twice in the same prompt. Each block is added only when
+        the base does not already carry it.
+        """
+        return [
+            block
+            for block in (WORK_DISCIPLINE_DIRECTIVE,
+                          ACT_DONT_ASK_DIRECTIVE,
+                          HOST_EXECUTION_ENVIRONMENT)
+            if block not in base
+        ]
+
     def _build_chat_system_prompt(self) -> str:
         """Build a project-aware system prompt for single-turn chat.
 
@@ -119,18 +156,24 @@ class AgentChatMixin:
         and known fixes — so a casual "what does this function
         do?" or "fix this bug" gets a real, project-grounded answer.
 
+        The base is the agent's own role prompt (``self.system_prompt``),
+        so a chat turn is answered with the same operating rules the loop
+        turns use; this method only *adds* project context and the standing
+        directives on top of it.
+
         Every field is best-effort: if the work_dir doesn't exist,
         the orchestrator is gone, or persistence returns an empty
         list, we degrade silently rather than raise. The chat call
         must never break because context is missing.
         """
+        base = self._chat_base_prompt()
+        rules = self._chat_supplementary_blocks(base)
+
         if not self.project_id:
-            # No project context: fall back to the generic prompt.
-            return (KAIROS_IDENTITY + " Respond "
-                    "conversationally to the user's message. Use "
-                    "tools when helpful.\n" + WORK_DISCIPLINE_DIRECTIVE
-                    + "\n\n" + ACT_DONT_ASK_DIRECTIVE
-                    + "\n\n" + HOST_EXECUTION_ENVIRONMENT)
+            # No project context: the role prompt plus the standing rules.
+            if rules:
+                return base + "\n\n" + "\n\n".join(rules)
+            return base
         try:
             orch = self._orchestrator  # injected by orchestrator
         except AttributeError:
@@ -209,19 +252,13 @@ class AgentChatMixin:
                     lines.append(f"- [{sev}] {sig} — fix: {fix}")
                 blocks.append("\n".join(lines))
 
-        # How to work and how to report it, stated once for every chat turn
-        # (see kairos/agents/agent_parts/discipline.py).
-        blocks.append(WORK_DISCIPLINE_DIRECTIVE)
-        blocks.append(ACT_DONT_ASK_DIRECTIVE)
-        # Which shell this machine actually has (git-bash vs no bash at all).
-        # Stated next to the other operating rules so the model stops assuming
-        # cmd on Windows and stops writing Unix syntax where it cannot work.
-        blocks.append(HOST_EXECUTION_ENVIRONMENT)
+        # How to work and how to report it, plus which shell this machine
+        # actually has (git-bash vs no bash at all) — stated once per chat
+        # turn, and only for the blocks the role prompt does not already
+        # carry (see _chat_supplementary_blocks).
+        blocks.extend(rules)
 
         # 4) assemble
-        base = (KAIROS_IDENTITY + " Respond "
-                "conversationally to the user's message. Use "
-                "tools when helpful.")
         if blocks:
             ctx = " ".join(blocks)
             return (f"{base}\n\n"

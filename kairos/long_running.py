@@ -109,6 +109,15 @@ class LongRunningRegistry:
             self._replay()
         else:
             self._persist_path = None
+        # The bus the completed/failed events are published on, and the lock
+        # guarding the in-memory maps. These two assignments used to live at
+        # the tail of `_append_log` (a paste error), so a registry built the
+        # usual way had neither: the first event a background sub-agent tried
+        # to publish raised AttributeError, which turned every completed child
+        # into a FAILED one and left `wait()` re-raising. A handle that works
+        # starts here.
+        self._message_bus = message_bus
+        self._lock = asyncio.Lock()
 
     def _replay(self):
         """Read the JSONL log to rebuild in-memory state on startup.
@@ -159,8 +168,6 @@ class LongRunningRegistry:
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
         except Exception as exc:
             logger.debug("persist log write failed: %s", exc)
-        self._message_bus = message_bus
-        self._lock = asyncio.Lock()
 
     # ---------- Subagent ----------
 
@@ -213,12 +220,19 @@ class LongRunningRegistry:
                                               record.error)
 
     async def _publish_subagent_event(self, handle: str, topic: str, content: str):
-        if self._message_bus is None:
-            return
-        record = self._subagents[handle]
+        """Best-effort: a bus hiccup must never change a child's outcome.
+
+        Everything lives inside the try -- including the bus lookup and the
+        record lookup. When this method could raise, a missing bus turned a
+        *completed* child into a failed one on the way out.
+        """
         try:
+            bus = getattr(self, "_message_bus", None)
+            if bus is None:
+                return
+            record = self._subagents[handle]
             from kairos.core.message_bus import Message
-            await self._message_bus.publish(Message(
+            await bus.publish(Message(
                 sender=record.child_id, topic=topic, content=content[:500],
                 msg_type="text",
                 metadata={"project_id": record.project_id,
@@ -236,6 +250,7 @@ class LongRunningRegistry:
         return {
             "handle": r.handle, "child_id": r.child_id,
             "parent_id": r.parent_id, "project_id": r.project_id,
+            "task_text": r.task_text,
             "status": r.status.value,
             "started_at": r.started_at, "finished_at": r.finished_at,
             "result": r.result, "error": r.error,

@@ -23,8 +23,12 @@ Frontmatter format (no external lib — we just split on `---`):
     # Skill body (Markdown)
 
 Matching is a simple union of conditions. A skill matches when ANY
-of its `when` clauses (if any) is satisfied. Higher `priority` wins.
-At most `max_active` skills are injected into a single run.
+of its `when` clauses (if any) is satisfied. Skills whose `when` clause
+actually matched the context rank above skills with no `when` clause at
+all; within a class higher `priority` wins, then shorter bodies.
+At most `max_active` skills are injected into a single run, and each
+injected body is capped (with an explicit marker) so one long skill
+cannot dominate the block.
 
 This is intentionally simpler than the cloud task's full Skills spec (no
 sub-agent discovery, no MCP-injected skills). We focus on the single
@@ -44,11 +48,17 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MAX_ACTIVE = 3
+DEFAULT_MAX_ACTIVE = 5
 DEFAULT_MAX_BODY_BYTES = 16384  # 16KB — long enough for battle-tested skills
                                   # (e.g. the community skill library). Priority is still
                                   # the top-N gate so total injected bytes
                                   # stay bounded.
+# Per-skill cap for a single injected body. A handful of 16KB narrative
+# skills used to fill every slot and crowd out short, relevant ones; the
+# full parsed body stays cached intact — only the *injected* copy is
+# truncated, and never silently (the marker names the skill and its
+# original length, mirroring file_read's truncation contract).
+DEFAULT_MAX_INJECT_BODY_CHARS = 4096
 
 _FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n(.*)\Z", re.DOTALL)
 
@@ -281,14 +291,41 @@ class SkillsLoader:
         return list(skills.values())
 
     def match(self, context: Dict[str, Any]) -> List[Skill]:
-        """Return the top-N matching skills, sorted by priority desc."""
+        """Return the top-N matching skills.
+
+        Ranking key, in order:
+        1. **Real `when` hit first.** A skill whose `when` clause actually
+           matched the context beats one that has no `when` clause and is
+           only along for the ride (``matches()`` returns True for every
+           no-`when` skill, and ~92% of the bundled library has none). Without
+           this, a neutral prompt matched all 556 no-`when` skills, their
+           identical default ``priority=0.5`` degenerated the sort to
+           discovery (alphabetical) order, and the same 3 arbitrary long
+           skills were injected every single turn.
+        2. ``priority`` descending — explicit user intent still wins.
+        3. Shorter body first — a 16KB narrative skill must not crowd out
+           several short, relevant ones.
+        """
         all_skills = self.discover()
         matched = [s for s in all_skills if s.matches(context)]
-        matched.sort(key=lambda s: s.priority, reverse=True)
+        matched.sort(
+            key=lambda s: (1 if s.when else 0, s.priority, -len(s.body)),
+            reverse=True,
+        )
         return matched[: self.max_active]
 
-    def render(self, skills: List[Skill]) -> str:
-        """Render matched skills as a Markdown block for the system_prompt."""
+    def render(
+        self,
+        skills: List[Skill],
+        max_body_chars: int = DEFAULT_MAX_INJECT_BODY_CHARS,
+    ) -> str:
+        """Render matched skills as a Markdown block for the system_prompt.
+
+        ``max_body_chars`` caps each skill's *injected* body. Oversized bodies
+        are truncated with an explicit marker naming the skill and its
+        original length — never silently, mirroring ``file_read``. The cached
+        ``Skill.body`` is left untouched: this only affects what is rendered.
+        """
         if not skills:
             return ""
         out: List[str] = ["# Active Skills"]
@@ -299,7 +336,15 @@ class SkillsLoader:
             out.append(f"\n## {s.name}{tag}")
             if s.description:
                 out.append(f"\n_{s.description}_\n")
-            out.append(s.body)
+            body = s.body
+            if max_body_chars and len(body) > max_body_chars:
+                original = len(body)
+                body = body[:max_body_chars] + (
+                    f"\n\n[truncated: skill '{s.name}' body is {original} chars; "
+                    f"showing first {max_body_chars} "
+                    f"(omitted {original - max_body_chars}).]"
+                )
+            out.append(body)
         return "\n".join(out).strip()
 
     def for_context(

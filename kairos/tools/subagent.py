@@ -20,7 +20,7 @@ import logging
 import time
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from kairos.llm.base import LLMMessage
 from kairos.tools.base import BaseTool, ToolResult
@@ -97,10 +97,11 @@ class SubagentTool(BaseTool):
                     "max_turns": {"type": "integer", "default": 8,
                                    "description": "Cap the subagent's tool turns. Default 8."},
                     "background": {"type": "boolean", "default": False,
-                                    "description": "R38.6.4 (long-running-harness-inspired): if true, return a handle "
-                                                    "immediately and run the child in background. Use "
-                                                    "subagent_status(handle) / subagent_result(handle) "
-                                                    "to poll the result. The parent Coder keeps going."},
+                                   "description": "R38.6.4 (long-running-harness-inspired): if true, return a handle "
+                                                   "immediately and run the child in background. Use the "
+                                                   "subagent_status and subagent_result tools "
+                                                   "(with the handle) to poll and collect the result. "
+                                                   "The parent Coder keeps going."},
                 },
                 "required": ["task"],
             },
@@ -276,8 +277,8 @@ class SubagentTool(BaseTool):
                 success=True,
                 output=(f"Sub-agent spawned in background. "
                         f"handle={handle} child={child_id}. "
-                        f"Use subagent_status({handle}) to poll "
-                        f"the result."),
+                        f"Poll it with the subagent_status tool, then read "
+                        f"the report with subagent_result."),
                 metadata={"child_agent_id": child_id,
                           "handle": handle, "background": True},
             )
@@ -315,5 +316,225 @@ class SubagentTool(BaseTool):
                       "result_chars": len(result),
                       "raw_output_path": raw_path},
         )
+
+
+#: Largest result body handed back inline by ``subagent_result``. A child's
+#: full report can be tens of thousands of characters and the parent asked for
+#: a result, not a transcript; larger bodies are still written to disk
+#: (redacted) so the parent can go and read the rest.
+_RESULT_INLINE_CHARS = 8000
+
+
+class _SubagentHandleTool(BaseTool):
+    """Shared plumbing for the read-only ``subagent_status`` / ``subagent_result``.
+
+    Both read the process-local :class:`~kairos.long_running.LongRunningRegistry`
+    that ``SubagentTool(background=True)`` spawns into. They are handed the
+    *spawn* tool instance and read its ``parent_agent`` / ``project_id`` at call
+    time — the orchestrator wires those onto the spawn tool
+    (``kairos/core/orchestrator_parts/wiring.py``), so "which session owns these
+    handles" is decided in exactly one place.
+
+    Scoping: a handle resolves only when the record's ``parent_id`` *and*
+    ``project_id`` both match this session's. Anything else returns the same
+    "no such handle" answer an unknown handle gets, so these tools can never be
+    used to enumerate or read another session's sub-agents. Bodies are passed
+    through ``sentinel.redact`` and bounded before they reach the parent's
+    context.
+    """
+
+    #: The SubagentTool whose parent_agent / project_id scope these lookups.
+    spawn_tool: Optional[SubagentTool] = None
+
+    def __init__(self, spawn_tool: Optional[SubagentTool] = None,
+                 allowed_root: str | Path = "."):
+        super().__init__(allowed_root=allowed_root)
+        self.spawn_tool = spawn_tool
+
+    def _scoped_record(self, handle: str) -> Optional[Dict[str, Any]]:
+        """The registry record for *handle*, or ``None`` if it is not ours.
+
+        Fails closed: no wired session, unknown handle, or a handle owned by
+        another parent/project all return ``None`` (the caller reports the same
+        "no such sub-agent" for each, so ownership is never disclosed).
+        """
+        handle = str(handle or "").strip()
+        if not handle:
+            return None
+        spawn = self.spawn_tool
+        parent_id = getattr(getattr(spawn, "parent_agent", None), "agent_id", None)
+        project_id = getattr(spawn, "project_id", "") or ""
+        if not parent_id:
+            return None
+        try:
+            from kairos.long_running import get_registry
+            rec = get_registry().status_of(handle)
+        except Exception as exc:  # noqa: BLE001 — a registry hiccup is not a crash
+            logger.debug("subagent registry lookup failed: %s", exc)
+            return None
+        if not rec:
+            return None
+        if rec.get("parent_id") != parent_id or rec.get("project_id") != project_id:
+            return None
+        return rec
+
+    @staticmethod
+    def _redact(text: Any) -> str:
+        """Strip credential-shaped substrings. A child that read config files
+        can quote a key back at us; this is the point where that stops."""
+        text = "" if text is None else str(text)
+        if not text:
+            return ""
+        try:
+            from kairos.sentinel import redact
+            return redact(text)
+        except Exception:  # noqa: BLE001 — redaction must never block a read
+            return text
+
+
+class SubagentStatusTool(_SubagentHandleTool):
+    """Read-only status of a background sub-agent spawned by ``spawn_subagent``."""
+
+    name = "subagent_status"
+    description = (
+        "Check a background sub-agent you started with "
+        "spawn_subagent(background=true). Returns its status (pending / "
+        "running / completed / failed / cancelled), whether it has finished, "
+        "and any error. Read-only — it changes nothing. Once the status is "
+        "completed, call subagent_result(handle) to read its report."
+    )
+
+    def to_schema(self) -> dict:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "handle": {
+                        "type": "string",
+                        "description": "The handle returned by spawn_subagent.",
+                    },
+                },
+                "required": ["handle"],
+                "additionalProperties": False,
+            },
+        }
+
+    async def execute(self, handle: str = "", **kwargs: Any) -> ToolResult:
+        if not str(handle or "").strip():
+            return ToolResult(success=False, output="", error="handle is required")
+        rec = self._scoped_record(handle)
+        if rec is None:
+            return ToolResult(success=False, output="",
+                              error=f"No such background sub-agent: {handle}")
+        finished = rec.get("finished_at") is not None
+        lines = [
+            f"handle: {rec['handle']}",
+            f"status: {rec['status']}",
+            f"finished: {'yes' if finished else 'no'}",
+        ]
+        if rec.get("error"):
+            lines.append(f"error: {self._redact(rec['error'])}")
+        result_ready = rec.get("result") is not None and not rec.get("error")
+        if result_ready:
+            lines.append("result ready: call subagent_result(handle) to read it")
+        return ToolResult(
+            success=True,
+            output="\n".join(lines),
+            metadata={"handle": rec["handle"], "status": rec["status"],
+                      "finished": finished, "result_ready": result_ready},
+        )
+
+
+class SubagentResultTool(_SubagentHandleTool):
+    """Read-only report of a finished background sub-agent."""
+
+    name = "subagent_result"
+    description = (
+        "Read the report of a background sub-agent you started with "
+        "spawn_subagent(background=true). Fails while the sub-agent is still "
+        "pending or running — call subagent_status(handle) first. The body is "
+        "redacted and capped; when it was capped the full report is also saved "
+        "to a file and that path is included in the answer."
+    )
+
+    def to_schema(self) -> dict:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "handle": {
+                        "type": "string",
+                        "description": "The handle returned by spawn_subagent.",
+                    },
+                },
+                "required": ["handle"],
+                "additionalProperties": False,
+            },
+        }
+
+    async def execute(self, handle: str = "", **kwargs: Any) -> ToolResult:
+        if not str(handle or "").strip():
+            return ToolResult(success=False, output="", error="handle is required")
+        rec = self._scoped_record(handle)
+        if rec is None:
+            return ToolResult(success=False, output="",
+                              error=f"No such background sub-agent: {handle}")
+        status = rec.get("status")
+        if status in ("pending", "running"):
+            return ToolResult(
+                success=False, output="",
+                error=(f"sub-agent {rec['handle']} is still {status}; poll "
+                       f"subagent_status({rec['handle']}) and try again when "
+                       f"it is completed"),
+            )
+        if rec.get("error") and rec.get("result") is None:
+            return ToolResult(success=False, output="",
+                              error=self._redact(f"sub-agent failed: {rec['error']}"))
+        body = self._redact(rec.get("result"))
+        if not body:
+            return ToolResult(success=True,
+                              output="(the sub-agent returned no text)",
+                              metadata={"handle": rec["handle"],
+                                        "status": status,
+                                        "result_chars": 0,
+                                        "truncated": False})
+        truncated = len(body) > _RESULT_INLINE_CHARS
+        if truncated:
+            omitted = len(body) - _RESULT_INLINE_CHARS
+            output = (f"{body[:_RESULT_INLINE_CHARS]}\n\n"
+                      f"… [{omitted} of {len(body)} chars omitted] …")
+            path = self._persist(rec, body)
+            if path:
+                output += f"\n[full report saved: {path}]"
+        else:
+            output = body
+        return ToolResult(
+            success=True,
+            output=output,
+            metadata={"handle": rec["handle"], "status": status,
+                      "result_chars": len(body), "truncated": truncated},
+        )
+
+    def _persist(self, rec: Dict[str, Any], body: str) -> Optional[str]:
+        """Best-effort: keep the full (already redacted) report on disk.
+
+        Reuses the spawn tool's writer, so background reports land beside the
+        foreground ones with the same redaction and the same pruning schedule.
+        """
+        try:
+            return self.spawn_tool._persist_raw_output(
+                str(rec.get("child_id") or rec.get("handle") or "subagent"),
+                str(rec.get("task_text") or ""),
+                body,
+            )
+        except Exception:  # noqa: BLE001
+            logger.debug("could not persist background sub-agent report",
+                         exc_info=True)
+            return None
+
 
 from kairos.core.message_bus import Message  # noqa: E402  (after class for forward ref)

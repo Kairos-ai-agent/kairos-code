@@ -61,6 +61,69 @@ def _plan_snapshot(session) -> Optional[dict]:
         logger.debug("plan snapshot failed (non-fatal)", exc_info=True)
         return None
 
+def _previous_round_review(session) -> Optional[dict]:
+    """Return the last round's stored review dict, or ``None``.
+
+    The review the loop hands to ``build_next_prompt`` is the one appended
+    to ``session.history`` at the end of the preceding round (the same
+    object that carries ``issues`` and the ``_precheck_hint`` attached just
+    before the append). Reading it back from history is the only real
+    in-memory source — there is no separate "last review" field on the
+    session.
+    """
+    try:
+        history = getattr(session, "history", None) or []
+        if not history:
+            return None
+        last = history[-1]
+        if not isinstance(last, dict):
+            return None
+        review = last.get("review")
+        if isinstance(review, dict) and review:
+            return review
+    except Exception:
+        logger.debug("prior-review lookup failed", exc_info=True)
+    return None
+
+
+def _effective_coder_description(session, requirement, round_no):
+    """Pick the description handed to this round's Coder.
+
+    Returns ``(description, source)`` where ``source`` is one of:
+
+    * ``"requirement"``             — round 1 (or ``round_no <= 1``): raw requirement.
+    * ``"review_feedback"``         — round > 1 with a usable prior review:
+                                      the ``build_next_prompt`` product (issues +
+                                      precheck hint + self-debug block).
+    * ``"requirement_no_review"``   — round > 1 but no prior review on the session.
+    * ``"requirement_empty_prompt"``/``"requirement_prompt_failed"`` — build failed.
+
+    The loop used to build the next prompt but never call it, so every round
+    re-sent the identical requirement and the Reviewer's findings could never
+    change the Coder's input — the loop repeated itself instead of converging.
+    This helper closes that gap. It never raises; on any problem it falls back
+    to the raw requirement so a bad review dict can't break the loop.
+    """
+    req = str(requirement or "")
+    if round_no <= 1:
+        return req, "requirement"
+    review = _previous_round_review(session)
+    if not review:
+        logger.info(
+            "round %s: no prior review available; sending raw requirement",
+            round_no,
+        )
+        return req, "requirement_no_review"
+    try:
+        prompt = build_next_prompt(session, review)
+    except Exception:
+        logger.debug("build_next_prompt failed; using raw requirement", exc_info=True)
+        return req, "requirement_prompt_failed"
+    if not (prompt or "").strip():
+        return req, "requirement_empty_prompt"
+    return prompt, "review_feedback"
+
+
 async def _run_coder_round(session, requirement, round_no, plan_mode=False, coder=None):
     # R38.6.4 packaging: AgentTask is lazy-loaded at module level via
     # __getattr__, which does NOT fire for this bare-name lookup inside
@@ -1034,14 +1097,32 @@ async def run_loop(session, requirement, *, unbounded: bool = False):
                 return
             if not session.original_requirement:
                 session.original_requirement = requirement
+            # Loop convergence: round 1 keeps the raw requirement; every
+            # later round folds the PREVIOUS round's Reviewer verdict
+            # (issues + precheck hint + self-debug block) into the Coder's
+            # description via build_next_prompt. Before this the prompt was
+            # built but never used, so the Coder saw the identical
+            # requirement every round and the loop could not converge.
+            coder_description, feedback_source = _effective_coder_description(
+                session, requirement, round_no,
+            )
+            try:
+                session.last_coder_prompt_source = feedback_source
+            except Exception:
+                pass
+            if feedback_source != "review_feedback":
+                logger.info(
+                    "round %s: Coder prompt source=%s (review feedback not applied)",
+                    round_no, feedback_source,
+                )
             # Best-of-N: spawn multiple Coders in parallel, pick highest-confidence winner.
             best_of_n = max(1, min(int(getattr(session, "best_of_n", 1) or 1), 5))
             if best_of_n > 1:
                 coder_result, _self_score = await _best_of_n_attempts(
-                    session, requirement, round_no, best_of_n, bus,
+                    session, coder_description, round_no, best_of_n, bus,
                 )
             else:
-                coder_result = await _run_coder_round(session, requirement, round_no)
+                coder_result = await _run_coder_round(session, coder_description, round_no)
             if session.user_stopped:
                 break
             try:

@@ -61,8 +61,10 @@ from kairos.tools.file_read import FileReadTool
 from kairos.tools.find import FindTool
 from kairos.tools.git_tool import GitTool
 from kairos.tools.grep_tool import GrepTool
-from kairos.tools.subagent import SubagentTool
+from kairos.tools.subagent import (SubagentResultTool, SubagentStatusTool,
+                                   SubagentTool)
 from kairos.tools.terminal import TerminalTool
+from kairos.tools.todos import WriteTodosTool
 from kairos.tools.webfetch import WebFetchTool, WebSearchTool
 
 
@@ -457,6 +459,11 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
             TerminalTool(allowed_cwd=coder_root),
             WebFetchTool(),
             WebSearchTool(),
+            # The schema the model needs in order to emit the ``write_todos``
+            # call the agent loop intercepts (and applies to its plan tracker).
+            # Without it in the tool list the whole plan-panel mechanism is
+            # unreachable: the LLM never calls a tool it has not been told about.
+            WriteTodosTool(allowed_root=coder_root),
         ]
 
         # R38.6 §30: auto-checkpoint the project's files before any
@@ -477,6 +484,17 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
 
         subagent_tool = SubagentTool(allowed_root=coder_root)
         coder_tools.append(subagent_tool)
+        # R38.6.4 background sub-agents: ``spawn_subagent`` returns a handle
+        # immediately, and these two read-only tools are how the model polls it
+        # and collects the report. Without them the handle was a dead end — the
+        # spawn schema and the spawn result both pointed at tools that were
+        # never registered. They read the registry through the spawn tool's
+        # parent_agent / project_id, so a handle from another session is not
+        # reachable.
+        coder_tools.append(SubagentStatusTool(spawn_tool=subagent_tool,
+                                              allowed_root=coder_root))
+        coder_tools.append(SubagentResultTool(spawn_tool=subagent_tool,
+                                              allowed_root=coder_root))
 
         # The two capabilities the agent was promised and never had. Both
         # modules shipped with tests and no caller, and the bundled

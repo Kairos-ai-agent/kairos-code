@@ -33,6 +33,8 @@ import wave
 from pathlib import Path
 from typing import List, Optional
 
+from kairos.platform_flags import hidden_kwargs
+
 logger = logging.getLogger(__name__)
 
 
@@ -145,6 +147,7 @@ class EspeakTTSProvider:
             ]
             proc = subprocess.run(
                 cmd, capture_output=True, text=True, timeout=30,
+                **hidden_kwargs(),
             )
             if proc.returncode != 0:
                 raise TTSProviderError(

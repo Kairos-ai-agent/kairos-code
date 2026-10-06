@@ -37,6 +37,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
+from kairos.platform_flags import hidden_kwargs
+
 logger = logging.getLogger(__name__)
 
 
@@ -96,7 +98,7 @@ def launch_uvicorn(
     """
     cmd = build_uvicorn_command(host=host, port=port, workers=workers, **kwargs)
     logger.info("launching uvicorn: %s", " ".join(cmd))
-    return subprocess.Popen(cmd)
+    return subprocess.Popen(cmd, **hidden_kwargs())
 
 
 # ---------------------------------------------------------------------------

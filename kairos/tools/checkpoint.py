@@ -14,6 +14,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
+from kairos.platform_flags import hidden_kwargs
 from kairos.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ def _git(args: list[str], cwd: Path, timeout: int = 30) -> tuple[int, str, str]:
             text=True,
             timeout=timeout,
             check=False,
+            **hidden_kwargs(),
         )
         return proc.returncode, proc.stdout, proc.stderr
     except subprocess.TimeoutExpired:
@@ -147,8 +149,7 @@ def checkpoint_round(workspace: Path, round_no: int, score: int,
     if plan and isinstance(plan, dict) and plan.get("todos"):
         # Render the plan as a Markdown block so it's grep-friendly
         # from the command line.
-        from kairos.loop.plan import render_plan_block
-        from kairos.loop.plan import Plan
+        from kairos.loop.plan import Plan, render_plan_block
         try:
             block = render_plan_block(Plan.from_dict(plan))
             if block:

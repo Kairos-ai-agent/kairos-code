@@ -344,6 +344,19 @@ const AppLayout: React.FC = () => {
             background: tokens.bgElevated,
             transition: 'width 0.18s ease',
             overflow: 'hidden',
+            // The shell owns the viewport height (pages and panels must not
+            // compute it — see tests/test_chat_thread_fills_its_slot.py), so
+            // this rail derives its slot from the same constant as the Header,
+            // the Content box and the left Sider — exactly like the left one.
+            //
+            // Without a *definite* height this Sider was auto-sized: every
+            // `height: 100%` inside it resolved against `auto`, so the Files
+            // panel grew with its tree instead of scrolling in place, the whole
+            // column grew past the viewport and — because the outer Layout is
+            // `minHeight: 100vh` — the reader got the page-level scrollbar at
+            // the far right of the window, scrolling the entire app to reach
+            // the bottom of a file list.
+            height: `calc(100vh - ${LAYOUT.topbarHeight}px)`,
           }}
           data-testid="workbench-sider"
         >
@@ -352,7 +365,11 @@ const AppLayout: React.FC = () => {
               height: '100%', display: 'flex',
               flexDirection: 'column', minHeight: 0,
             }}>
-              <div style={{ flex: '0 0 auto', minHeight: 0,
+              {/* A definite-height flex item, so the panel below can fill it
+                  and its own inner list is the only thing that scrolls. It used
+                  to be `flex: 0 0 auto` — content height — which made every
+                  `height: 100%` underneath resolve to `auto`. */}
+              <div style={{ flex: 1, minHeight: 0,
                           display: 'flex', flexDirection: 'column' }}>
                 <WorkbenchPanel />
               </div>

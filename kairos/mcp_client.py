@@ -54,8 +54,8 @@ import logging
 import os
 import re
 import shutil
-import time
 import sys
+import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -63,6 +63,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 import yaml
 
+from kairos.platform_flags import hidden_kwargs
 from kairos.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -482,6 +483,7 @@ class StdioMcpClient:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env=env,
+                **hidden_kwargs(),
             )
         except FileNotFoundError as exc:
             raise McpError(
@@ -742,8 +744,10 @@ class HttpMcpClient:
                 read, write = await stack.enter_async_context(
                     sse_client(self.config.url, headers=headers))
             else:
-                from mcp.client.streamable_http import (create_mcp_http_client,
-                                                        streamable_http_client)
+                from mcp.client.streamable_http import (
+                    create_mcp_http_client,
+                    streamable_http_client,
+                )
                 # Headers ride on the http client in this SDK, not on the
                 # transport call — the two were merged in later versions.
                 http_client = create_mcp_http_client(headers=headers) if headers else None

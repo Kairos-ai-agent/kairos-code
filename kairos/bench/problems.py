@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, List, Optional, Tuple
 
+from kairos.platform_flags import hidden_kwargs
+
 
 @dataclass
 class BenchmarkProblem:
@@ -140,6 +142,7 @@ class CustomUnitTestProblem(BenchmarkProblem):
                 capture_output=True,
                 text=True,
                 timeout=self.timeout_s,
+                **hidden_kwargs(),
             )
             ok = proc.returncode == 0
             msg = (proc.stdout or "") + (("\n[stderr]\n" + proc.stderr) if proc.stderr else "")

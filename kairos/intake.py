@@ -57,6 +57,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from kairos.platform_flags import hidden_kwargs
+
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
@@ -245,7 +247,7 @@ def _git(root: Path, args: list[str]) -> list[str]:
     try:
         proc = subprocess.run(
             ["git", *args], cwd=str(root), capture_output=True, text=True,
-            timeout=10, check=False,
+            timeout=10, check=False, **hidden_kwargs(),
         )
     except (OSError, subprocess.SubprocessError):
         return []

@@ -36,6 +36,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator, List, Optional
 
+from kairos.platform_flags import hidden_kwargs
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_WORKTREE_PARENT = ".kairos-worktrees"
@@ -109,6 +111,7 @@ class WorktreeManager:
                 errors="replace",
                 check=False,
                 timeout=timeout_s,
+                **hidden_kwargs(),
             )
         except subprocess.TimeoutExpired as exc:
             raise WorktreeError(

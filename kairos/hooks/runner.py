@@ -13,6 +13,8 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from kairos.platform_flags import hidden_kwargs
+
 logger = logging.getLogger(__name__)
 
 class HookRunner:
@@ -75,7 +77,7 @@ class HookRunner:
         # registry's post-tool event with command field is
         # executed as a shell command.
         try:
-            from kairos.hooks import get_default_registry, HookEvent
+            from kairos.hooks import HookEvent, get_default_registry
             registry = get_default_registry()
             for spec in registry.hooks_for(HookEvent.PreToolUse):
                 if spec.matcher and not spec.matcher in (tool_name,):
@@ -86,7 +88,8 @@ class HookRunner:
                         subprocess.run(spec.command, shell=True,
                                        timeout=spec.timeout_s,
                                        cwd=None,
-                                       capture_output=True)
+                                       capture_output=True,
+                                       **hidden_kwargs())
                     except Exception:
                         logger.debug("pre_tool hook cmd failed",
                                      exc_info=True)
@@ -105,7 +108,7 @@ class HookRunner:
                 logger.warning("post_tool_use hook raised", exc_info=True)
         # R38.6 §34: registry-based hooks (PostToolUse event)
         try:
-            from kairos.hooks import get_default_registry, HookEvent
+            from kairos.hooks import HookEvent, get_default_registry
             registry = get_default_registry()
             for spec in registry.hooks_for(HookEvent.PostToolUse):
                 if spec.matcher and not (spec.matcher in (tool_name, "*")
@@ -117,7 +120,8 @@ class HookRunner:
                         subprocess.run(spec.command, shell=True,
                                        timeout=spec.timeout_s,
                                        cwd=None,
-                                       capture_output=True)
+                                       capture_output=True,
+                                       **hidden_kwargs())
                     except Exception:
                         logger.debug("post_tool hook cmd failed",
                                      exc_info=True)

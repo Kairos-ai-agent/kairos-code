@@ -53,6 +53,7 @@ from kairos.llm.scripted import (
     tool_response,
     write_file_call,
 )
+from kairos.platform_flags import hidden_kwargs
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEMO_PROJECT_NAME = "demo-relay"
@@ -434,7 +435,10 @@ def _attach_scripted(agent: Any, provider: ScriptedProvider) -> None:
 def _preflight(demo_root: Path) -> Tuple[bool, List[Dict[str, str]], str]:
     """Fast, offline sanity checks — deliberately not the key/network checks."""
     from kairos.doctor import (
-        check_data_dir, check_git, check_python_version, check_workspace_dir,
+        check_data_dir,
+        check_git,
+        check_python_version,
+        check_workspace_dir,
     )
 
     wanted = [
@@ -464,7 +468,8 @@ def _git_init(repo: Path) -> None:
         ["git", "commit", "-q", "-m", "initial: relay planner + tests"],
     ):
         try:
-            subprocess.run(args, cwd=str(repo), env=env, capture_output=True, timeout=20)
+            subprocess.run(args, cwd=str(repo), env=env, capture_output=True,
+                           timeout=20, **hidden_kwargs())
         except (OSError, subprocess.SubprocessError):
             return
 
@@ -487,7 +492,7 @@ def _run_tests(repo: Path, timeout: int = 120) -> Tuple[bool, str]:
     for cmd in attempts:
         try:
             proc = subprocess.run(cmd, cwd=str(repo), capture_output=True, text=True,
-                                  timeout=timeout)
+                                  timeout=timeout, **hidden_kwargs())
         except (OSError, subprocess.SubprocessError) as exc:
             last = str(exc)
             continue

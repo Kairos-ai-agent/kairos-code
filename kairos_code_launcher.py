@@ -101,6 +101,8 @@ def _open_app_window(url: str) -> bool:
     """
     import subprocess
 
+    from kairos.platform_flags import hidden_kwargs
+
     exe = _find_app_shell()
     if not exe:
         return False
@@ -114,11 +116,12 @@ def _open_app_window(url: str) -> bool:
     ]
     try:
         _WINDOW_PROFILE.mkdir(parents=True, exist_ok=True)
+        _flags = (subprocess.DETACHED_PROCESS
+                  | subprocess.CREATE_NEW_PROCESS_GROUP) if os.name == "nt" else 0
         subprocess.Popen(
             cmd,
             close_fds=True,
-            creationflags=(subprocess.DETACHED_PROCESS
-                           | subprocess.CREATE_NEW_PROCESS_GROUP) if os.name == "nt" else 0,
+            **hidden_kwargs({"creationflags": _flags}),
         )
         return True
     except Exception:
@@ -367,6 +370,7 @@ def main() -> int:
                 _f.write(_tb.format_exc())
 
     import uvicorn  # noqa: E402
+
     from api.app import app  # noqa: E402
 
     # R38.6.4 packaging: disable uvicorn's auto-open-browser

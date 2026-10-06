@@ -37,6 +37,8 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from kairos.platform_flags import hidden_kwargs
+
 logger = logging.getLogger(__name__)
 
 
@@ -170,6 +172,7 @@ def check_tests() -> tuple[bool, str]:
              "tests/test_eval.py", "tests/test_meta_eval.py",
              "tests/test_llm_judge_grader.py"],
             capture_output=True, text=True, timeout=180,
+            **hidden_kwargs(),
         )
     except subprocess.TimeoutExpired:
         return False, "tests timed out after 180s"

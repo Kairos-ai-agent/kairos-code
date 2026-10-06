@@ -45,6 +45,8 @@ THREAD = SRC / "components/ChatThread.tsx"
 CHAT = SRC / "pages/Chat.tsx"
 SHELL = SRC / "components/AppLayout.tsx"
 
+WORKBENCH = SRC / "components/WorkbenchPanel.tsx"
+
 # Page roots that used to compute their own viewport height. They are children
 # of the shell column, which also holds the update banner.
 PAGE_ROOTS = [
@@ -153,4 +155,63 @@ def test_only_the_shell_uses_viewport_units():
     assert not offenders, (
         "these files compute viewport height outside the shell: "
         f"{offenders}. Fill with `height: '100%', minHeight: 0` instead."
+    )
+
+
+def test_workbench_rail_is_given_a_definite_height():
+    """Round 3 of the same bug, in the right-hand column.
+
+    The workbench rail (the Sider hosting WorkbenchPanel) had ``overflow:
+    hidden`` but no height of its own, unlike the left rail and the Content box
+    beside it. So every ``height: 100%`` inside it — the panel, its tab strip,
+    the file list — resolved against ``auto``: the panel grew with its file tree
+    instead of scrolling in place, the whole column grew past the viewport, and
+    the document scrollbar at the far right of the window scrolled the entire
+    app to reach the bottom of a file list.
+
+    The slot is derived from ``LAYOUT.topbarHeight``, the same constant the
+    Header, the Content box and the left rail use, so the four cannot drift.
+    """
+    code = _code(SHELL)
+    at = code.index('data-testid="workbench-sider"')
+    opening = code[max(0, at - 500):at]
+    assert "height: `calc(100vh - ${LAYOUT.topbarHeight}px)`" in opening, (
+        "the workbench rail is auto-sized again: the file panel will grow "
+        "instead of filling its slot, and the page — not the panel — scrolls"
+    )
+    assert "flex: '0 0 auto'" not in code, (
+        "the workbench slot is content-sized again (`flex: 0 0 auto`): every "
+        "`height: 100%` below it resolves to `auto` and the file list expands "
+        "past the viewport"
+    )
+
+
+def test_only_the_file_list_scrolls_in_the_workbench():
+    """The rule for the right column, end to end: the rail clips, the panel
+    fills, and exactly one element scrolls — the file list."""
+    panel = _code(WORKBENCH)
+    shell = _code(SHELL)
+    # The rail does not scroll, it clips.
+    assert "overflow: 'hidden'" in shell[shell.index('data-testid="workbench-sider"') - 500:
+                                           shell.index('data-testid="workbench-sider"')]
+    # The panel fills its slot and does not scroll.
+    assert "height: '100%', minHeight: 0" in panel, (
+        "WorkbenchPanel must fill with height: '100%' + minHeight: 0"
+    )
+    # The file list scrolls...
+    files_tab = panel[panel.index('data-testid="files-tab"'):][:200]
+    assert "overflow: 'auto'" in files_tab, (
+        "the Files tab must own the scroll: `flex: 1, minHeight: 0, "
+        "overflow: 'auto'`"
+    )
+    # ...and it can, because the antd tab pane above it has a definite height.
+    # (antd gives .ant-tabs-tabpane no height and .ant-tabs-content-holder no
+    # overflow, so a `flex: 1` child would otherwise never be constrained.)
+    assert ".ant-tabs-tabpane{height:100%" in panel, (
+        "the antd tab pane chain is not closed: a `flex: 1; overflow: auto` "
+        "child inside .ant-tabs-tabpane has no definite height and grows "
+        "instead of scrolling"
+    )
+    assert ".ant-tabs-content-holder{overflow:hidden" in panel, (
+        "the antd content holder must clip, or the pane overflows the panel"
     )

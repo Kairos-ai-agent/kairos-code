@@ -36,6 +36,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from kairos.platform_flags import hidden_kwargs
+
 logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -387,7 +389,7 @@ def check_git() -> CheckResult:
     try:
         import subprocess
         out = subprocess.run(["git", "--version"], capture_output=True,
-                             text=True, timeout=5)
+                             text=True, timeout=5, **hidden_kwargs())
         if out.returncode == 0:
             return _ok(name, out.stdout.strip(), group="runtime")
         return _fail(name, f"git --version failed: {out.stderr}",

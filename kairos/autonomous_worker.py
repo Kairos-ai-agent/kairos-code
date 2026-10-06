@@ -22,6 +22,8 @@ import logging
 import time
 from typing import Any, Dict, Optional
 
+from kairos.platform_flags import hidden_kwargs
+
 logger = logging.getLogger(__name__)
 
 
@@ -171,6 +173,7 @@ class AutonomousWorker:
                 gate, cwd=work_dir,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                **hidden_kwargs(),
             )
             try:
                 await asyncio.wait_for(proc.wait(), timeout=300)

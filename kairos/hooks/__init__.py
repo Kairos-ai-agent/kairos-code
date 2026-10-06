@@ -31,12 +31,13 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
 
 import yaml
 
+from kairos.platform_flags import hidden_kwargs
+
 logger = logging.getLogger(__name__)
 
 
 # Re-export the old data-dir hook system for backwards compatibility.
 from kairos.hooks.runner import HookRunner, get_runner  # noqa: F401
-
 
 __all__ = [
     # Old data-dir system
@@ -283,7 +284,8 @@ class HookRegistry:
                 # whole CI job) from the inside: exit 137, no traceback, nothing to
                 # diagnose with. Windows uses taskkill and has no groups, so this
                 # stays POSIX-only.
-                **({"start_new_session": True} if os.name == "posix" else {}),
+                **hidden_kwargs(
+                    {"start_new_session": True} if os.name == "posix" else {}),
             )
             stdout, stderr = await asyncio.wait_for(
                 proc.communicate(), timeout=spec.timeout_s,
@@ -362,6 +364,7 @@ class HookRegistry:
                     "taskkill", "/T", "/F", "/PID", str(proc.pid),
                     stdout=asyncio.subprocess.DEVNULL,
                     stderr=asyncio.subprocess.DEVNULL,
+                    **hidden_kwargs(),
                 )
                 try:
                     await asyncio.wait_for(tk.wait(), timeout=2.0)

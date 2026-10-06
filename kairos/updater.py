@@ -41,6 +41,8 @@ import zipfile
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 
+from kairos.platform_flags import hidden_kwargs
+
 logger = logging.getLogger(__name__)
 
 REPO = "Kairos-ai-agent/kairos-code"
@@ -390,13 +392,19 @@ def _write_helper(exe: Path, staged: Path) -> Path:
 
 def _spawn_detached(helper: Path) -> None:
     if sys.platform.startswith("win"):
-        subprocess.Popen(["cmd", "/c", str(helper)], close_fds=True,
-                         creationflags=0x00000008 | 0x00000200,  # DETACHED | NEW_GROUP
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # DETACHED_PROCESS already means "no console is created"; merging
+        # CREATE_NO_WINDOW keeps the intent explicit (the two are OR-ed, the
+        # Win32 docs say CREATE_NO_WINDOW is ignored alongside DETACHED_PROCESS,
+        # so nothing regresses).
+        subprocess.Popen(
+            ["cmd", "/c", str(helper)], close_fds=True,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            **hidden_kwargs({"creationflags": 0x00000008 | 0x00000200}),  # DETACHED | NEW_GROUP
+        )
     else:
         subprocess.Popen(["/bin/sh", str(helper)], close_fds=True,
-                         start_new_session=True,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         **hidden_kwargs({"start_new_session": True}))
 
 
 def apply_update(

@@ -30,9 +30,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from api.deps import orchestrator
+from kairos.platform_flags import hidden_kwargs
 from kairos.tools.checkpoint import (
-    checkpoint_round,
     checkout_checkpoint,
+    checkpoint_round,
     list_checkpoints,
 )
 
@@ -112,6 +113,7 @@ def diff_checkpoint(project_id: str, sha: str) -> Dict[str, Any]:
             encoding="utf-8",
             errors="replace",
             timeout=30,
+            **hidden_kwargs(),
         )
     except FileNotFoundError:
         raise HTTPException(status_code=500, detail="git not installed")

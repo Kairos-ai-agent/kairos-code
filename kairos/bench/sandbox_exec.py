@@ -21,8 +21,9 @@ import textwrap
 from pathlib import Path
 from typing import Tuple
 
-from .problems import BenchmarkProblem
+from kairos.platform_flags import hidden_kwargs
 
+from .problems import BenchmarkProblem
 
 # Template that the runner writes to a temp file. It defines the
 # candidate code, then runs each assert. We use a try/except so a
@@ -105,6 +106,7 @@ def run_candidate(
                 text=True,
                 timeout=timeout,
                 env=env,
+                **hidden_kwargs(),
             )
         except subprocess.TimeoutExpired:
             return False, f"timeout after {timeout}s"

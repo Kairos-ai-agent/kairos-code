@@ -16,6 +16,7 @@ import shlex
 from pathlib import Path
 from typing import Optional
 
+from kairos.platform_flags import hidden_kwargs
 from kairos.tools.base import BaseTool, ToolResult
 
 # Subcommands we permit.
@@ -86,6 +87,7 @@ class GitTool(BaseTool):
             proc = await asyncio.create_subprocess_exec(
                 *cmd, stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE, cwd=cwd,
+                **hidden_kwargs(),
             )
             try:
                 stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30.0)

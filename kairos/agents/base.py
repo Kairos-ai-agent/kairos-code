@@ -41,10 +41,57 @@ CHAT_WRAPUP_DIRECTIVE = (
     "不要 Markdown、不要代码块）：\n"
     "1) 你做了什么、结果是什么；\n"
     "2) 改了或新建了哪些文件（写出文件名）；\n"
-    "3) 有没有没做完的部分，或需要用户确认的地方。\n"
+    "3) 有没有没做完的部分，以及卡在哪、证据是什么。\n"
     "只描述已经真实发生的事，不要编造。如果其实什么都没做成，"
-    "就用一句话说清楚卡在哪里。"
+    "就用一句话说清楚卡在哪里。\n"
+    "不要用「需要你确认」「需要你在下一轮让我动手」这类话收尾——"
+    "用户的指令就是授权，你要么报产出，要么报带证据的真实阻塞。"
 )
+
+# The chat loop used to end the moment its turn cap ran out: an agent still in
+# the middle of a read-everything investigation would stop with a wrap-up and a
+# request for approval instead of finishing the job (the 10-step screenshot is
+# exactly the Coder's MAX_CHAT_TURNS=10 budget running dry). When the budget
+# runs out while the model is still calling tools, the loop now restarts the
+# budget -- a "continuation" -- up to this many times. The memory is NOT reset,
+# so the work continues on the same context. Bounded so a runaway loop still
+# terminates, and telemetered on ``agent.progress`` so it is never a silent
+# limit. Deliberately separate from MAX_CHAT_TURNS: that is what the user sees,
+# this is only how many times the internal loop may extend it.
+MAX_CHAT_CONTINUATIONS = 3
+
+# Consecutive turns allowed to consist only of read-only tools before the loop
+# stops treating investigation as progress. Two catches the read/read/read spin
+# without firing on a single exploratory turn.
+NO_PROGRESS_NUDGE_TURNS = 2
+
+# Injected as the newest user turn once the read-only streak hits the threshold.
+# Deliberately blunt: the model's failure mode was to keep investigating and
+# then ask to be told to start, so this takes the question away.
+NO_PROGRESS_NUDGE = (
+    "你已经连续几轮只做只读调查（读文件 / 搜索 / 看 git），没有产出任何文件。"
+    "调查到此为止。\n"
+    "这一轮必须开始产生真实的副作用：用 file_write / file_edit_replace / "
+    "multi_edit 写文件，或用 terminal 执行会落地结果的命令。\n"
+    "不要再读一遍，不要再问用户是否继续，也不要请求批准——用户已经授权，"
+    "直接动手，做完再汇报。"
+)
+
+
+def _tool_makes_progress(name: str) -> bool:
+    """True when a tool call can change state (write / edit / run), not just read.
+
+    The read-only set is the same one ``coder_modes`` uses to strip tools in
+    read-only mode, so "investigation" means the same thing in both places. An
+    unclassifiable tool counts as progress: firing the nudge on a tool we do not
+    understand would be worse than staying quiet. Imported lazily so this module
+    keeps no import-order coupling with the tool-layer modules.
+    """
+    try:
+        from kairos.coder_modes import _is_read_only
+        return not _is_read_only(name)
+    except Exception:  # noqa: BLE001 - the chat loop must never break on this
+        return True
 
 
 # Content that entered through the network or a third-party server is wrapped so
@@ -831,6 +878,9 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
 
         self.current_turn = 0
         self.total_turns = self.MAX_CHAT_TURNS
+        # How many extra budgets this chat has been granted. Reset per call so a
+        # fresh chat reports 0; telemetered on ``agent.progress``.
+        self._chat_continuations = 0
         last_response = None
         # What the tools actually did this turn. A model that only ever asks for
         # tools -- deepseek-flash does exactly this when the ask is "go do it" --
@@ -838,81 +888,142 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
         # used to surface as the generic "no content / check your model name and
         # API Key" notice: wrong, and it hid the fact that the work was done.
         performed: list = []
-        for turn in range(self.MAX_CHAT_TURNS):
-            self.current_turn = turn + 1
-            self._truncate_memory()
-            messages = [LLMMessage(role="system", content=chat_system)] + self._sanitize_memory(self._elided_memory())
-            # Same overflow contract as the run loop: the provider saying
-            # "too long" buys one compaction + retry, not an error bubble.
-            response = None
-            for _attempt in range(2):
-                try:
-                    with self._traced_llm_call(messages, tool_schemas) as _trace_span:
-                        response = await asyncio.wait_for(
-                            self._llm.complete(messages, tools=tool_schemas, temperature=self.temperature),
-                            timeout=self._llm_timeout_s,
+        # The subset of the above whose tool can actually change state. When
+        # this is empty the run was investigation-only, and the closing notice
+        # must not claim "changes are in the working directory".
+        progress_tools: list = []
+        # Continuations granted, the read-only streak driving the no-progress
+        # nudge, and whether the nudge is currently active. Local, not instance
+        # state: a chat call may run on a harness that skipped ``__init__``
+        # (see tests/test_voice_mode_prompt.py), so nothing here may depend on
+        # attributes set only by the constructor.
+        continuations = 0
+        read_only_streak = 0
+        nudge_active = False
+        # The turn number the user sees: it keeps climbing across continuations
+        # so "Turn 11" is honest, and ``total_turns`` grows with it. The cap is
+        # internal; the visible progress never goes backwards.
+        turn = 0
+        while True:
+            # One budget of MAX_CHAT_TURNS. ``exhausted`` stays True only if
+            # every turn carried a tool call (the model never converged) -- the
+            # exact case the old code ended on, mid-work, with a wrap-up.
+            exhausted = True
+            for _ in range(self.MAX_CHAT_TURNS):
+                turn += 1
+                self.current_turn = turn
+                self._truncate_memory()
+                messages = [LLMMessage(role="system", content=chat_system)] + self._sanitize_memory(self._elided_memory())
+                # The no-progress nudge rides the request as the newest user
+                # turn, so it is the last instruction the model reads before it
+                # answers. It is not part of ``chat_system``: a nudge is a
+                # moment, not a standing rule.
+                if nudge_active:
+                    messages = messages + [LLMMessage(role="user", content=NO_PROGRESS_NUDGE)]
+                # Same overflow contract as the run loop: the provider saying
+                # "too long" buys one compaction + retry, not an error bubble.
+                response = None
+                for _attempt in range(2):
+                    try:
+                        with self._traced_llm_call(messages, tool_schemas) as _trace_span:
+                            response = await asyncio.wait_for(
+                                self._llm.complete(messages, tools=tool_schemas, temperature=self.temperature),
+                                timeout=self._llm_timeout_s,
+                            )
+                        _trace_span.set_output(
+                            content=(response.content or "")[:500],
+                            prompt_tokens=response.usage.get("prompt_tokens", 0),
+                            completion_tokens=response.usage.get("completion_tokens", 0),
+                            finish_reason=response.finish_reason,
                         )
-                    _trace_span.set_output(
-                        content=(response.content or "")[:500],
-                        prompt_tokens=response.usage.get("prompt_tokens", 0),
-                        completion_tokens=response.usage.get("completion_tokens", 0),
-                        finish_reason=response.finish_reason,
+                        break
+                    except asyncio.TimeoutError:
+                        return (
+                            f"[chat timed out after {self._llm_timeout_s:.0f}s "
+                            f"on turn {turn}/{self.total_turns}]"
+                        )
+                    except Exception as exc:
+                        if _attempt == 0 and is_context_length_error(exc):
+                            await self._recover_context_overflow(exc=exc)
+                            messages = shrink_for_overflow(
+                                [LLMMessage(role="system", content=chat_system)]
+                                + self._sanitize_memory(self._elided_memory())
+                            )[0]
+                            continue
+                        raise
+
+                last_response = response
+                # The chat path is NON-streaming: the whole hidden reasoning (if
+                # the model has any) lands in the response at once. Publish one
+                # `agent.thinking` so the UI's single rolling line shows what the
+                # model was thinking instead of a bare spinner. The text stays out
+                # of `content` — the reply below is the answer and only the answer.
+                if response is not None:
+                    await self._publish_complete_reasoning(
+                        response,
+                        getattr(getattr(self, "current_task", None), "id", ""),
+                        turn,
                     )
+                self._memory.append(LLMMessage(role="assistant", content=response.content or "", tool_calls=response.tool_calls))
+
+                if not response.tool_calls:
+                    # The model chose to stop and answer. That is a real end, not
+                    # an exhaustion -- never continue past it, or a wrap-up would
+                    # turn into an uninvited second round of work.
+                    exhausted = False
                     break
-                except asyncio.TimeoutError:
-                    return (
-                        f"[chat timed out after {self._llm_timeout_s:.0f}s "
-                        f"on turn {turn + 1}/{self.MAX_CHAT_TURNS}]"
-                    )
-                except Exception as exc:
-                    if _attempt == 0 and is_context_length_error(exc):
-                        await self._recover_context_overflow(exc=exc)
-                        messages = shrink_for_overflow(
-                            [LLMMessage(role="system", content=chat_system)]
-                            + self._sanitize_memory(self._elided_memory())
-                        )[0]
-                        continue
-                    raise
 
-            last_response = response
-            # The chat path is NON-streaming: the whole hidden reasoning (if
-            # the model has any) lands in the response at once. Publish one
-            # `agent.thinking` so the UI's single rolling line shows what the
-            # model was thinking instead of a bare spinner. The text stays out
-            # of `content` — the reply below is the answer and only the answer.
-            if response is not None:
-                await self._publish_complete_reasoning(
-                    response,
-                    getattr(getattr(self, "current_task", None), "id", ""),
-                    turn + 1,
-                )
-            self._memory.append(LLMMessage(role="assistant", content=response.content or "", tool_calls=response.tool_calls))
+                # Execute tools silently in chat mode
+                self.status = AgentStatus.ACTING
+                turn_made_progress = False
+                for tc in response.tool_calls:
+                    self.current_tool = tc.name
+                    tool_result = await self._dispatch_tool(tc)
+                    self.current_tool = None
+                    if _tool_makes_progress(tc.name):
+                        turn_made_progress = True
+                        progress_tools.append(tc.name)
+                    if tool_result.success:
+                        lines = (tool_result.output or "").strip().splitlines()
+                        performed.append(
+                            "%s - %s" % (tc.name, lines[0][:120] if lines else "完成")
+                        )
+                    else:
+                        performed.append(
+                            "%s - 失败: %s" % (tc.name, str(tool_result.error)[:120])
+                        )
+                    self._memory.append(LLMMessage(
+                        role="tool",
+                        content=tool_result.output if tool_result.success else f"Error: {tool_result.error}",
+                        tool_call_id=tc.id,
+                        name=tc.name,
+                    ))
+                self.status = AgentStatus.THINKING
 
-            if not response.tool_calls:
-                break
-
-            # Execute tools silently in chat mode
-            self.status = AgentStatus.ACTING
-            for tc in response.tool_calls:
-                self.current_tool = tc.name
-                tool_result = await self._dispatch_tool(tc)
-                self.current_tool = None
-                if tool_result.success:
-                    lines = (tool_result.output or "").strip().splitlines()
-                    performed.append(
-                        "%s - %s" % (tc.name, lines[0][:120] if lines else "完成")
-                    )
+                # No-progress tracking: a run of turns that only read cannot
+                # finish the job, so the NEXT turn is told, in its own request,
+                # that investigation is over and files must appear. It clears as
+                # soon as any turn does something with a side effect.
+                if turn_made_progress:
+                    read_only_streak = 0
+                    nudge_active = False
                 else:
-                    performed.append(
-                        "%s - 失败: %s" % (tc.name, str(tool_result.error)[:120])
-                    )
-                self._memory.append(LLMMessage(
-                    role="tool",
-                    content=tool_result.output if tool_result.success else f"Error: {tool_result.error}",
-                    tool_call_id=tc.id,
-                    name=tc.name,
-                ))
-            self.status = AgentStatus.THINKING
+                    read_only_streak += 1
+                    if read_only_streak >= NO_PROGRESS_NUDGE_TURNS:
+                        nudge_active = True
+
+            if not exhausted:
+                break
+            if continuations >= MAX_CHAT_CONTINUATIONS:
+                break
+            # The budget ran out while the model was still working: grant a new
+            # one on the SAME memory (nothing is reset, so the context it built
+            # up stays), record it, and tell the Workbench. The cap is internal;
+            # every turn above still reached the user.
+            continuations += 1
+            self._chat_continuations = continuations
+            self.total_turns = self.MAX_CHAT_TURNS * (continuations + 1)
+            await self._publish_chat_continuation(continuations)
 
         self.status = AgentStatus.IDLE
         self.current_turn = 0
@@ -933,6 +1044,7 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
                 topic="agent.chat",
                 content=last_response.content,
                 msg_type="text",
+                metadata={"continuations": continuations},
             ))
             return last_response.content
 
@@ -950,6 +1062,7 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
                 topic="agent.chat",
                 content=summary,
                 msg_type="text",
+                metadata={"continuations": continuations},
             ))
             return summary
 
@@ -980,7 +1093,7 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
             bool(getattr(last_response, "tool_calls", None)),
             usage,
         )
-        if performed:
+        if performed and progress_tools:
             # The work happened; only the closing sentence is missing. Report
             # the work rather than a notice that sends the user chasing a
             # key/model problem that does not exist.
@@ -995,6 +1108,20 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
                 + '已完成：' + chr(10) + done + more + chr(10) + chr(10)
                 + '改动都在工作目录里，可以直接查看。'
                 + '想让它补一句总结，回一句「继续，总结一下」就行。'
+            ) % model
+        elif performed:
+            # Investigation only: every tool call was a read. It would be a lie
+            # to say "changes are in the working directory" -- nothing changed.
+            # This is the "agent stuck in the investigation stage" case; name it
+            # instead of dressing it up as a finished round, and never end on a
+            # request for approval.
+            done = chr(10).join('· ' + x for x in performed[-8:])
+            notice = (
+                '🔍 这一轮只做了只读调查 —— 模型（%s）读了文件、搜了代码，'
+                '但始终没有写出任何文件，所以没有正文，也没有改动可以查看。'
+                + chr(10) + chr(10)
+                + '看过的东西：' + chr(10) + done + chr(10) + chr(10)
+                + '这不是「做完了」：它停在了调查阶段。'
             ) % model
         elif finish_reason == "length" and (reasoning_tokens or reasoning_chars):
             spent = (f"reasoning_tokens={reasoning_tokens}" if reasoning_tokens
@@ -1025,8 +1152,38 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
             topic="agent.chat",
             content=notice,
             msg_type="text",
+            metadata={"continuations": continuations},
         ))
         return notice
+
+    async def _publish_chat_continuation(self, count: int) -> None:
+        """Record an auto-continuation of the internal chat loop.
+
+        A continuation is invisible as a *limit* -- every turn it granted still
+        reached the user -- but the count has to be observable. It rides
+        ``agent.progress``, the topic the chat thread filters out and the
+        Workbench subscribes to (see the ``agent.progress`` publishes in the run
+        loop), so it never crowds the conversation while staying auditable. The
+        count is also stamped on the final ``agent.chat`` payload's metadata.
+        """
+        try:
+            await self.message_bus.publish(Message(
+                sender=self.agent_id,
+                topic="agent.progress",
+                content=(
+                    "Chat turn budget exhausted mid-work -- continuing "
+                    f"({count}/{MAX_CHAT_CONTINUATIONS})."
+                ),
+                msg_type="text",
+                metadata={
+                    "reason": "chat_continuation",
+                    "continuations": count,
+                    "max_continuations": MAX_CHAT_CONTINUATIONS,
+                },
+            ))
+        except Exception:  # noqa: BLE001 - telemetry must never break a chat
+            logger.debug("chat continuation telemetry publish failed",
+                         exc_info=True)
 
     async def _chat_wrapup_summary(self, chat_system: str) -> str:
         """One tools-OFF completion asking for the closing line the model owes.

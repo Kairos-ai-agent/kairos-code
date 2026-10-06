@@ -51,6 +51,8 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import yaml
 
+from kairos.platform_flags import hidden_kwargs
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -382,6 +384,7 @@ def run_target_agent(prompt: str, **kwargs) -> Dict[str, Any]:
             [sys.executable, "-m", "kairos.agents.coder", "--prompt", prompt,
              "--json"],
             capture_output=True, text=True, timeout=600,
+            **hidden_kwargs(),
         )
     except subprocess.TimeoutExpired:
         return {"output": "", "tools_called": [], "tokens_in": 0,
@@ -761,6 +764,7 @@ def derive_from_git_log(
         proc = subprocess.run(
             ["git", "log", f"-n{limit}", "--format=%H%x1f%s%x1f%B%x1e"],
             cwd=str(repo_path), capture_output=True, text=True, timeout=30,
+            **hidden_kwargs(),
         )
     except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
         logger.warning("git log failed for %s: %s", repo_path, exc)

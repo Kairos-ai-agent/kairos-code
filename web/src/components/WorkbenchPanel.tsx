@@ -50,10 +50,25 @@ import { ToolOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
 
+/**
+ * Give the tab panes the height their parent already has.
+ *
+ * antd lays panes out as plain blocks: `.ant-tabs-tabpane` has no height and
+ * `.ant-tabs-content-holder` has no `overflow: hidden`, so a child that asks to
+ * be `flex: 1; overflow: auto` (the file list) never receives a definite height
+ * — it grows instead of scrolling, the growth escapes the holder, and the rail
+ * clips it. Those three rules close the chain so the list itself is the only
+ * scroller in the column. Scoped to this panel's own tab strip.
+ */
+const WORKBENCH_TABS_CSS = `
+.kairos-workbench-tabs .ant-tabs-content-holder{overflow:hidden;min-height:0}
+.kairos-workbench-tabs .ant-tabs-content{height:100%}
+.kairos-workbench-tabs .ant-tabs-tabpane{height:100%;display:flex;flex-direction:column;min-height:0}
+`;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
 interface FileEntry {
   name: string;
   path: string;
@@ -147,10 +162,13 @@ const WorkbenchPanel: React.FC<WorkbenchPanelProps> = () => {
       data-testid="workbench-panel"
       style={{
         display: 'flex', flexDirection: 'column',
-        height: '100%', background: tokens.bgElevated,
+        height: '100%', minHeight: 0, background: tokens.bgElevated,
         borderInlineStart: `1px solid ${tokens.border}`,
       }}
     >
+      {/* The pane chain that lets the file list (and only the file list)
+          scroll is closed here — see WORKBENCH_TABS_CSS. */}
+      <style>{WORKBENCH_TABS_CSS}</style>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 6,
         padding: '6px 12px', borderBottom: `1px solid ${tokens.border}`,
@@ -177,7 +195,9 @@ const WorkbenchPanel: React.FC<WorkbenchPanelProps> = () => {
             activeKey={activeTab}
             onChange={setActiveTab}
             size="small"
-            style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
+            className="kairos-workbench-tabs"
+            style={{ flex: 1, minHeight: 0, display: 'flex',
+                     flexDirection: 'column' }}
             tabBarStyle={{ marginBottom: 0, paddingInlineStart: 8 }}
             items={[
               // R38.6.3: collapsed 5 tabs → 1. Changes / Tasks /
@@ -389,7 +409,7 @@ const FilesTab: React.FC<{ projectId: string }> = ({ projectId }) => {
   return (
     <div
       data-testid="files-tab"
-      style={{ flex: 1, overflow: 'auto', padding: '4px 0' }}
+      style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '4px 0' }}
     >
       <div style={{ padding: '4px 12px', fontSize: 11,
                     color: tokens.labelTertiary }}>

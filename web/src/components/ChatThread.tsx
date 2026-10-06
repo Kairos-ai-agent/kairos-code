@@ -22,6 +22,12 @@
  * both with those fields — so each step shows its own duration and outcome.
  * Nothing here invents a step: a message with no result yet renders as running.
  *
+ * Every duration is read off the events' own timestamps (``Message.timestamp``,
+ * stamped at publish time): a step's own span, and the turn's total as the span
+ * from the question to the last event. The total is NOT a sum of the steps'
+ * durations — a step only carries one when a result closed it, so summing them
+ * made every reasoning-heavy turn report "0.0s" however long it ran.
+ *
  * Two exceptions get their own treatment:
  *   - the sub-agent tools (spawn_subagent / subagent_status / subagent_result)
  *     render as cards, not rows — a spawned child is its own long-running run,
@@ -254,7 +260,54 @@ function groupIntoTurns(messages: Message[]): Turn[] {
       current = t;
     }
   });
+
+  // A duration needs two timestamps, and only a tool call has both (its own,
+  // then its result's). A thinking step has no result event of its own, so its
+  // ``ms`` stayed undefined — and every number derived from the steps counted
+  // that missing time as zero. Close such a step at the next thing the turn
+  // did (the next step's start, else the turn's first reply): that is what the
+  // clock actually ran, so the expanded row can show it instead of a blank.
+  // A step that is still running (``ok === null``) claims nothing.
+  for (const turn of turns) {
+    const replyAt = turn.replies.find((r) => (r.timestamp || 0) > 0)?.timestamp;
+    turn.steps.forEach((s, i) => {
+      if (typeof s.ms === 'number' || s.ok === null) return;
+      const nextStart = turn.steps[i + 1]?.startedAt;
+      const end = (nextStart && nextStart > s.startedAt) ? nextStart : replyAt;
+      if (end && end > s.startedAt) {
+        s.ms = Math.max(0, (end - s.startedAt) * 1000);
+      }
+    });
+  }
   return turns;
+}
+
+/**
+ * How long this turn took, in ms — the wall clock from the question to the last
+ * thing the turn did.
+ *
+ * The folded line used to SUM the steps' own durations. Only a tool call has
+ * one (it is set when the result closes it); a thinking step has none, so a
+ * turn that spent its time reasoning summed to exactly 0 and the line read
+ * "0.0s" however long it ran — a statistic that was really a placeholder. A
+ * span is defined as soon as the events carry timestamps, which the bus
+ * guarantees (``Message.timestamp`` is stamped at publish time, and the chat
+ * page stamps every event again on arrival), so the line reports real time for
+ * every turn, tool-heavy or not.
+ */
+function turnDurationMs(turn: Turn): number {
+  const times: number[] = [];
+  const push = (t: number | undefined) => {
+    if (typeof t === 'number' && t > 0) times.push(t);
+  };
+  push(turn.user?.timestamp);
+  for (const s of turn.steps) {
+    push(s.startedAt);
+    if (typeof s.ms === 'number') push(s.startedAt + s.ms / 1000);
+  }
+  for (const m of [...turn.replies, ...turn.others]) push(m.timestamp);
+  if (times.length < 2) return 0;
+  return Math.max(0, (Math.max(...times) - Math.min(...times)) * 1000);
 }
 
 // ------------------------------------------------------------------ thread
@@ -372,7 +425,10 @@ const TurnViewBase: React.FC<{ turn: Turn; mdStyle: MarkdownStyle }> = ({ turn, 
   return (
     <div data-testid="chat-turn">
       {turn.user && <UserBubble message={turn.user} />}
-      {turn.steps.length > 0 && <ProcessBlock steps={turn.steps} running={running} />}
+      {turn.steps.length > 0 && (
+        <ProcessBlock steps={turn.steps} running={running}
+                      durationMs={turnDurationMs(turn)} />
+      )}
       {turn.others.map((m, i) => (
         <MessageBubble key={m.id || i} message={m} mdStyle={mdStyle} />
       ))}
@@ -401,7 +457,16 @@ function formatMs(ms: number | undefined): string {
   return `${m}m ${String(Math.round(s - m * 60)).padStart(2, '0')}s`;
 }
 
-const ProcessBlock: React.FC<{ steps: Step[]; running: boolean }> = ({ steps, running }) => {
+const ProcessBlock: React.FC<{
+  steps: Step[];
+  running: boolean;
+  /**
+   * The turn's own elapsed time (see ``turnDurationMs``). Not re-derived from
+   * the steps here: a step only carries a duration when a result closed it, so
+   * a sum over the steps was 0 for every thinking-heavy turn.
+   */
+  durationMs: number;
+}> = ({ steps, running, durationMs }) => {
   const tokens = useThemeTokens();
   const t = useT();
   const [open, setOpen] = useState(running);
@@ -412,7 +477,7 @@ const ProcessBlock: React.FC<{ steps: Step[]; running: boolean }> = ({ steps, ru
     if (!touched.current) setOpen(running);
   }, [running]);
 
-  const total = steps.reduce((acc, s) => acc + (s.ms || 0), 0);
+  const total = durationMs;
   const failed = steps.filter((s) => s.kind === 'tool' && s.ok === false).length;
   // Sub-agent calls get their own cards, shown whether the block is folded or
   // not: "is the child still running?" must not depend on the user having

@@ -34,6 +34,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from kairos.platform_flags import hidden_kwargs
+
 logger = logging.getLogger(__name__)
 
 #: Everything this module can serve, plus the module that already served one.
@@ -114,6 +116,7 @@ def _run_git(root: Path, args: List[str]) -> str:
     proc = subprocess.run(
         ["git", *args], cwd=str(root), capture_output=True, text=True,
         encoding="utf-8", errors="replace", timeout=30,
+        **hidden_kwargs(),
     )
     out = (proc.stdout or "") + (proc.stderr or "")
     if proc.returncode != 0 and not out.strip():
@@ -347,7 +350,7 @@ def tools_for(server: str, root: Optional[Path] = None) -> Dict[str, ToolSpec]:
 def build_mcp_server(server: str, root: Optional[Path] = None):
     """Construct an ``mcp.server.Server`` for ``server``."""
     from mcp.server import Server
-    from mcp.types import (CallToolResult, ListToolsResult, TextContent, Tool)
+    from mcp.types import CallToolResult, ListToolsResult, TextContent, Tool
 
     table = tools_for(server, root)
 

@@ -86,8 +86,22 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from api import deps
+from api.routes.workbench_helpers import (
+    _checkpoint_dir,
+    _first_line,
+    _hash_file,
+    _is_binary,
+    _meta_of,
+    _orch,
+    _safe_join,
+    _todo_detail,
+    _todo_title,
+    _todos_of,
+    _verdict_from_content,
+    _with_note,
+)
 from kairos.core.message_bus import Message
-from api.routes.workbench_helpers import (_orch, _safe_join, _is_binary, _checkpoint_dir, _hash_file, _meta_of, _first_line, _todos_of, _todo_title, _todo_detail, _verdict_from_content, _with_note)
+from kairos.platform_flags import hidden_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -422,12 +436,14 @@ async def open_folder(
     try:
         if sys.platform.startswith("win"):
             subprocess.Popen(["explorer", str(root)],
-                             creationflags=getattr(
-                                 subprocess, "DETACHED_PROCESS", 0))
+                             **hidden_kwargs({"creationflags": getattr(
+                                 subprocess, "DETACHED_PROCESS", 0)}))
         elif sys.platform == "darwin":
-            subprocess.Popen(["open", str(root)], start_new_session=True)
+            subprocess.Popen(["open", str(root)],
+                             **hidden_kwargs({"start_new_session": True}))
         else:
-            subprocess.Popen(["xdg-open", str(root)], start_new_session=True)
+            subprocess.Popen(["xdg-open", str(root)],
+                             **hidden_kwargs({"start_new_session": True}))
     except FileNotFoundError as exc:
         raise HTTPException(
             status_code=500,

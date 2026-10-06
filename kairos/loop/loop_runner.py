@@ -389,9 +389,11 @@ async def _run_precheck(session, workspace, round_no, bus):
     changed = []
     try:
         import subprocess
+        from kairos.platform_flags import hidden_kwargs
         proc = subprocess.run(
             ["git", "diff", "--name-only", "HEAD"],
             cwd=str(workspace), capture_output=True, text=True, timeout=10, check=False,
+            **hidden_kwargs(),
         )
         if proc.returncode == 0:
             changed = [line.strip() for line in proc.stdout.splitlines() if line.strip()]

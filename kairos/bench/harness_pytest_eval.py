@@ -32,7 +32,7 @@ from kairos.bench.harness_eval import (  # noqa: E402
     HarnessResult,
     print_report,
 )
-
+from kairos.platform_flags import hidden_kwargs  # noqa: E402
 
 _HUNK_RE = re.compile(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 
@@ -206,6 +206,7 @@ def _run_test_file(test_file: Path, work_dir: Path, timeout: int = 30) -> Tuple[
         [sys.executable, "-m", "pytest", "-q", "--tb=line", "-x", str(test_file.name)],
         cwd=str(test_file.parent), capture_output=True, text=True,
         timeout=timeout, env=env,
+        **hidden_kwargs(),
     )
     if result.returncode == 0 and "passed" in result.stdout:
         return True, ""
@@ -214,6 +215,7 @@ def _run_test_file(test_file: Path, work_dir: Path, timeout: int = 30) -> Tuple[
         [sys.executable, str(test_file.name)],
         cwd=str(test_file.parent), capture_output=True, text=True,
         timeout=timeout, env=env,
+        **hidden_kwargs(),
     )
     if result.returncode == 0:
         return True, ""

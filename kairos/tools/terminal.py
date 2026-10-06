@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Callable, List, Optional, Tuple
 
 from kairos.access_control import is_full_access
+from kairos.platform_flags import hidden_kwargs
 from kairos.tools.base import BaseTool, ToolResult
 
 
@@ -602,7 +603,7 @@ class TerminalTool(BaseTool):
         # allow-list here is extended by a subclass.
         policy = None
         try:
-            from kairos.sandbox import SandboxPolicy, check_policy, assign_child_to_sandbox
+            from kairos.sandbox import SandboxPolicy, assign_child_to_sandbox, check_policy
             policy = SandboxPolicy(allowed_root=safe_cwd)
             rule = check_policy(policy, command)
             if rule:
@@ -710,10 +711,10 @@ class TerminalTool(BaseTool):
             try:
                 if run_via_shell:
                     process = await asyncio.create_subprocess_shell(
-                        command, **popen_kwargs)
+                        command, **hidden_kwargs(popen_kwargs))
                 else:
                     process = await asyncio.create_subprocess_exec(
-                        *exec_argv, **popen_kwargs)
+                        *exec_argv, **hidden_kwargs(popen_kwargs))
             except (TypeError, ValueError):
                 # Some asyncio loops / Popen builds reject preexec_fn/pass_fds;
                 # retry without them so the command still runs (at reduced
@@ -722,10 +723,10 @@ class TerminalTool(BaseTool):
                     popen_kwargs.pop(k, None)
                 if run_via_shell:
                     process = await asyncio.create_subprocess_shell(
-                        command, **popen_kwargs)
+                        command, **hidden_kwargs(popen_kwargs))
                 else:
                     process = await asyncio.create_subprocess_exec(
-                        *exec_argv, **popen_kwargs)
+                        *exec_argv, **hidden_kwargs(popen_kwargs))
 
             # Wire the OS-level sandbox for this child (Windows Job Object
             # KILL_ON_JOB_CLOSE; called in the child for Linux via the

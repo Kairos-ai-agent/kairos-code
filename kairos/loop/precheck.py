@@ -45,8 +45,9 @@ async def _terminate_tree(proc) -> None:
     if proc is None or proc.returncode is not None:
         return
     if os.name == "nt":
+        from kairos.platform_flags import hidden_kwargs
         subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                       capture_output=True, check=False)
+                       capture_output=True, check=False, **hidden_kwargs())
     else:
         try:
             os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
@@ -68,11 +69,12 @@ async def _run(cmd: List[str], cwd: Path, timeout: int = 60) -> Dict:
     try:
         extra: Dict = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
                        if os.name == "nt" else {"start_new_session": True})
+        from kairos.platform_flags import hidden_kwargs
         proc = await asyncio.create_subprocess_exec(
             *cmd, cwd=str(cwd),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            **extra,
+            **hidden_kwargs(extra),
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         return {

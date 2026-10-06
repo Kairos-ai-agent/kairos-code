@@ -47,7 +47,7 @@ from kairos.bench.harness_eval import (  # noqa: E402
     print_report,
 )
 from kairos.bench.harness_pytest_eval import apply_diff_to_workdir  # noqa: E402
-
+from kairos.platform_flags import hidden_kwargs  # noqa: E402
 
 # Each validator takes a work_dir Path and returns (passed, reason).
 Validator = Callable[[Path], Tuple[bool, str]]
@@ -198,6 +198,7 @@ def _v_test_file(work_dir: Path) -> Tuple[bool, str]:
                     cwd=str(work_dir), capture_output=True, text=True,
                     env={**os.environ, "PYTHONPATH": str(work_dir)},
                     timeout=15,
+                    **hidden_kwargs(),
                 )
                 if result.returncode == 0:
                     return True, "test in tests/__init__.py runs OK"
@@ -212,6 +213,7 @@ def _v_test_file(work_dir: Path) -> Tuple[bool, str]:
         cwd=str(work_dir), capture_output=True, text=True,
         env={**os.environ, "PYTHONPATH": str(work_dir)},
         timeout=15,
+        **hidden_kwargs(),
     )
     if result.returncode == 0:
         return True, "tests/test_calc.py runs OK"

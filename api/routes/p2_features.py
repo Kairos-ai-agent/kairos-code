@@ -1,5 +1,6 @@
 """R38.6 §34 - P2 borrowed features."""
 from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -7,8 +8,12 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
+
+from kairos.platform_flags import hidden_kwargs
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/borrowed", tags=["borrowed-p2"])
 
@@ -337,6 +342,7 @@ async def lsp_check(project_id: str, body: LspCheckBody):
             r = subprocess.run(
                 ["python", "-m", "py_compile", str(target)],
                 capture_output=True, text=True, timeout=10,
+                **hidden_kwargs(),
             )
             diagnostics = []
             if r.returncode != 0:
@@ -592,7 +598,8 @@ async def sandbox_run(project_id: str, body: RunCommandBody):
     try:
         proc = _subprocess.run(body.command, shell=True, cwd=cwd,
                                 capture_output=True, text=True,
-                                timeout=body.timeout_s)
+                                timeout=body.timeout_s,
+                                **hidden_kwargs())
         return {"stdout": proc.stdout[:8000],
                 "stderr": proc.stderr[:4000],
                 "returncode": proc.returncode, "timed_out": False}
@@ -722,6 +729,7 @@ def _heuristic_validate(model: str, is_anthropic: bool, reason: str) -> dict:
 # R38.6.4: Slash commands inside chat (e.g. /goal, /autonomous, /verify)
 # ---------------------------------------------------------------------------
 import re as _re
+
 _SLASH_RE = _re.compile(r"^/(\w+)(?:\s+(.*))?$")
 
 # The commands the POST below actually handles, with the hint the composer
@@ -797,8 +805,8 @@ async def slash_command(project_id: str, body: dict):
     if cmd == "forget":
         if not arg:
             return {"reply": "Usage: /forget <key>", "continue_chat": True}
-        from kairos.memory_kb import MemoryKB
         from kairos.config.settings import settings as ksettings
+        from kairos.memory_kb import MemoryKB
         kb = MemoryKB(storage_path=ksettings.data_dir / "memory_kb.json")
         return {"reply": "Forgot: " + arg if kb.forget(arg, "project") else "Not found",
                 "continue_chat": True}
@@ -807,8 +815,8 @@ async def slash_command(project_id: str, body: dict):
             return {"reply": "Usage: /remember <key>=<value>", "continue_chat": True}
         k, v = arg.split("=", 1)
         k, v = k.strip(), v.strip()
-        from kairos.memory_kb import MemoryKB
         from kairos.config.settings import settings as ksettings
+        from kairos.memory_kb import MemoryKB
         kb = MemoryKB(storage_path=ksettings.data_dir / "memory_kb.json")
         kb.remember(k, v, "project")
         return {"reply": f"Remembered {k!r}", "continue_chat": True}
@@ -836,8 +844,8 @@ async def a2a_send(body: SendAgentMessageBody):
     a process-local pub-sub is enough for a single-process dev
     setup. The message bus history acts as the inbox.
     """
-    from kairos.core.message_bus import Message
     from api.routes.projects import _orch
+    from kairos.core.message_bus import Message
     bus = _orch().message_bus if _orch() else None
     if bus is None:
         raise HTTPException(503, "message bus not available")
@@ -946,10 +954,12 @@ async def harness_run(project_id: str, body: RunHarnessBody):
     against ARC-AGI-3 directly (no API access) but the 10-task
     mini suite gives a fast, comparable signal.
     """
-    from kairos.bench.harness_eval import (
-        TASKS, run_full_eval, HarnessTask,
-    )
     from api.routes.projects import _orch
+    from kairos.bench.harness_eval import (
+        TASKS,
+        HarnessTask,
+        run_full_eval,
+    )
     orch = _orch() if _orch() else None
     if orch is None:
         raise HTTPException(503, "orchestrator not available")
@@ -1036,6 +1046,7 @@ def _diff_repo(work_dir, task):
 # R38.6.4: Real LLM harness (3 scoring methods + per-model leaderboard)
 # ---------------------------------------------------------------------------
 import os as _os
+
 _HARNESS_LEADERBOARD_PATH = Path(
     _os.environ.get("KAIROS_HARNESS_LEADERBOARD",
                     str(Path.home() / ".kairos" / "harness_leaderboard.json"))
@@ -1139,12 +1150,17 @@ async def harness_run_llm(body: LLMHarnessBody):
 
     Returns the per-task scores plus aggregate pass_rate / mean_score.
     """
-    from kairos.bench.harness_eval import (
-        TASKS as _TASKS, HarnessReport, HarnessResult,
-    )
     import asyncio as _asyncio
     import shutil as _shutil
     import tempfile as _tempfile
+
+    from kairos.bench.harness_eval import (
+        TASKS as _TASKS,
+    )
+    from kairos.bench.harness_eval import (
+        HarnessReport,
+        HarnessResult,
+    )
 
     method = body.method.lower().strip()
     if method not in {"difflib", "pytest", "semantic"}:
@@ -1153,14 +1169,18 @@ async def harness_run_llm(body: LLMHarnessBody):
 
     # Pick the right scorer
     if method == "difflib":
-        from kairos.bench.harness_eval import (
-            run_task as _run_task, TASKS as _T)
+        from kairos.bench.harness_eval import TASKS as _T
+        from kairos.bench.harness_eval import run_task as _run_task
         run_task_fn = _run_task
         score_kwargs = {}
     elif method == "pytest":
         from kairos.bench.harness_pytest_eval import (
-            run_one_task as _run_one_task, apply_diff_to_workdir,
-            find_test_files, run_pytest,
+            apply_diff_to_workdir,
+            find_test_files,
+            run_pytest,
+        )
+        from kairos.bench.harness_pytest_eval import (
+            run_one_task as _run_one_task,
         )
         run_task_fn = None
     else:  # semantic
@@ -1308,12 +1328,17 @@ async def harness_compare(body: CompareBody):
     of candidate models, get back a ranked table of pass_rate /
     mean_score / cost / total time.
     """
-    from kairos.bench.harness_eval import (
-        TASKS as _TASKS, HarnessReport, HarnessResult,
-    )
     import asyncio as _asyncio
     import shutil as _shutil
     import tempfile as _tempfile
+
+    from kairos.bench.harness_eval import (
+        TASKS as _TASKS,
+    )
+    from kairos.bench.harness_eval import (
+        HarnessReport,
+        HarnessResult,
+    )
 
     method = body.method.lower().strip()
     if method not in {"difflib", "pytest", "semantic"}:

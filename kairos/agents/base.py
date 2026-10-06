@@ -810,6 +810,12 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
         self.current_turn = 0
         self.total_turns = self.MAX_CHAT_TURNS
         last_response = None
+        # What the tools actually did this turn. A model that only ever asks for
+        # tools -- deepseek-flash does exactly this when the ask is "go do it" --
+        # burns every turn of the cap and never writes a closing sentence. That
+        # used to surface as the generic "no content / check your model name and
+        # API Key" notice: wrong, and it hid the fact that the work was done.
+        performed: list = []
         for turn in range(self.MAX_CHAT_TURNS):
             self.current_turn = turn + 1
             self._truncate_memory()
@@ -858,6 +864,15 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
                 self.current_tool = tc.name
                 tool_result = await self._dispatch_tool(tc)
                 self.current_tool = None
+                if tool_result.success:
+                    lines = (tool_result.output or "").strip().splitlines()
+                    performed.append(
+                        "%s - %s" % (tc.name, lines[0][:120] if lines else "完成")
+                    )
+                else:
+                    performed.append(
+                        "%s - 失败: %s" % (tc.name, str(tool_result.error)[:120])
+                    )
                 self._memory.append(LLMMessage(
                     role="tool",
                     content=tool_result.output if tool_result.success else f"Error: {tool_result.error}",
@@ -915,7 +930,23 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
             bool(getattr(last_response, "tool_calls", None)),
             usage,
         )
-        if finish_reason == "length" and (reasoning_tokens or reasoning_chars):
+        if performed:
+            # The work happened; only the closing sentence is missing. Report
+            # the work rather than a notice that sends the user chasing a
+            # key/model problem that does not exist.
+            done = chr(10).join('· ' + x for x in performed[-8:])
+            more = (
+                chr(10) + '（另有 %d 步未列出）' % (len(performed) - 8)
+                if len(performed) > 8 else ''
+            )
+            notice = (
+                '✅ 这一轮的动作已经真实执行完了 —— 模型（%s）连续调用工具、'
+                '没有写出收尾说明，所以这里没有正文。' + chr(10) + chr(10)
+                + '已完成：' + chr(10) + done + more + chr(10) + chr(10)
+                + '改动都在工作目录里，可以直接查看。'
+                + '想让它补一句总结，回一句「继续，总结一下」就行。'
+            ) % model
+        elif finish_reason == "length" and (reasoning_tokens or reasoning_chars):
             spent = (f"reasoning_tokens={reasoning_tokens}" if reasoning_tokens
                      else f"{reasoning_chars} 字符的思考内容")
             notice = (
@@ -926,6 +957,12 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
                 "这通常意味着当前配置的是「思考型 / 推理型」模型，不适合直接聊天。\n"
                 "解决办法：打开设置把模型换成非思考模型（例如 deepseek-chat）"
                 "后重试；或者把需求拆小一点再发一次。"
+            )
+        elif finish_reason == "tool_calls":
+            notice = (
+                f"⚠️ 模型 {model} 表示要调用工具（finish_reason=tool_calls），"
+                "但没有给出可执行的调用，也没有正文。\n"
+                "这是模型这一次的输出异常，重试一次即可 —— 与 API Key 无关。"
             )
         else:
             notice = (

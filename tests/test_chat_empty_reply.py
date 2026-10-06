@@ -17,7 +17,8 @@ from typing import Any, Dict, List
 
 from kairos.agents.base import KairosAgent
 from kairos.core.message_bus import MessageBus
-from kairos.llm.base import LLMConfig, LLMResponse
+from kairos.llm.base import LLMConfig, LLMResponse, ToolCall
+from kairos.tools.base import ToolResult
 
 
 class _StubLLM:
@@ -89,4 +90,67 @@ def test_normal_reply_is_returned_unchanged():
 
     assert reply == "你好！有什么我可以帮你的吗？"
     assert "⚠️" not in reply
+    assert reply in _chat_notices(bus)
+
+
+class _ToolLoopLLM:
+    """A model that only ever asks for a tool and never writes a closing line."""
+
+    def __init__(self):
+        self.calls = 0
+
+    async def complete(self, messages, tools=None, **kw):
+        self.calls += 1
+        return LLMResponse(
+            content="",
+            model="deepseek-flash",
+            finish_reason="tool_calls",
+            usage={"completion_tokens": 10},
+            tool_calls=[ToolCall(id="c1", name="write_file",
+                                 arguments={"path": "a.txt", "content": "hi"})],
+        )
+
+    async def close(self):
+        pass
+
+
+def test_tool_only_turns_report_the_work_not_an_api_key_notice():
+    """deepseek-flash\'s real shape: the tools ran, no closing sentence.
+
+    Before: every turn asked for a tool, the cap ran out, and the user got the
+    generic "no content -- check your model name and API Key" notice while the
+    files had in fact already been written.
+    """
+    agent, bus = _make_agent(LLMResponse(content="", model="m", finish_reason="stop"))
+    agent._llm = _ToolLoopLLM()
+    dispatched = []
+
+    async def _fake_dispatch(tc):
+        dispatched.append(tc.name)
+        return ToolResult(success=True, output="wrote a.txt (2 bytes)")
+
+    agent._dispatch_tool = _fake_dispatch
+
+    reply = asyncio.run(agent.chat("行，你做吧，按你倾向的"))
+
+    assert dispatched, "the tool loop must actually run"
+    assert "write_file" in reply
+    assert "wrote a.txt" in reply
+    assert "API Key" not in reply
+    assert "没有返回任何内容" not in reply
+    assert reply in _chat_notices(bus)
+
+
+def test_tool_calls_finish_reason_without_calls_does_not_blame_the_key():
+    """finish_reason=tool_calls with nothing callable -> say so, no key hint."""
+    resp = LLMResponse(content="", model="deepseek-flash",
+                       finish_reason="tool_calls", usage={})
+    agent, bus = _make_agent(resp)
+
+    reply = asyncio.run(agent.chat("hi"))
+
+    assert "tool_calls" in reply
+    # It may *mention* the key only to say the key is not the problem.
+    assert "检查模型名与 API Key" not in reply
+    assert "无关" in reply
     assert reply in _chat_notices(bus)

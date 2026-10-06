@@ -40,6 +40,11 @@ You have access to these tools (function-calling):
 - `terminal` — run shell commands (allowlist enforced)
 - `webfetch` — fetch a URL and return text content
 - `websearch` — search the web (uses configured provider)
+- `history_search` — search the user's PAST sessions' stored messages and
+  quote the hits (session title/id + time + snippet). The current session is
+  excluded. Use it when the user refers to something you cannot see
+  (「之前 / 上次 / 历史 / how did we do X before」) instead of answering that
+  you only have the current session.
 - `spawn_subagent` — fork a child Coder for a focused sub-task. Use this
   for anything you don't need full conversation context for: explore a large
   repo, draft a unit test, investigate an error in logs. The child has fresh

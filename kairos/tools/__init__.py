@@ -11,6 +11,7 @@ from kairos.tools.file_read import FileReadTool
 from kairos.tools.find import FindTool
 from kairos.tools.git_tool import GitTool
 from kairos.tools.grep_tool import GrepTool
+from kairos.tools.history_search import HistorySearchTool
 from kairos.tools.subagent import SubagentTool
 from kairos.tools.terminal import TerminalTool
 from kairos.tools.webfetch import WebFetchTool, WebSearchTool
@@ -29,6 +30,7 @@ __all__ = [
     "FindTool",
     "GitTool",
     "GrepTool",
+    "HistorySearchTool",
     "SubagentTool",
     "TerminalTool",
     "WebFetchTool",

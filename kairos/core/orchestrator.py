@@ -61,6 +61,7 @@ from kairos.tools.file_read import FileReadTool
 from kairos.tools.find import FindTool
 from kairos.tools.git_tool import GitTool
 from kairos.tools.grep_tool import GrepTool
+from kairos.tools.history_search import HistorySearchTool
 from kairos.tools.subagent import (SubagentResultTool, SubagentStatusTool,
                                    SubagentTool)
 from kairos.tools.terminal import TerminalTool
@@ -459,6 +460,12 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
             TerminalTool(allowed_cwd=coder_root),
             WebFetchTool(),
             WebSearchTool(),
+            # Past-session recall: the Coder (and the single-turn chat path,
+            # which runs on this same agent) could only ever see the current
+            # session, so 「上次我们是怎么做的」 had no answer. This reads the
+            # stored messages of *other* sessions, read-only, and quotes them
+            # with their session title/id and time.
+            HistorySearchTool(allowed_root=coder_root, project_id=project.id),
             # The schema the model needs in order to emit the ``write_todos``
             # call the agent loop intercepts (and applies to its plan tracker).
             # Without it in the tool list the whole plan-panel mechanism is

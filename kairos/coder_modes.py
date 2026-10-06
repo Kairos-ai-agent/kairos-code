@@ -71,6 +71,9 @@ _READ_ONLY_ALLOW: Set[str] = {
     "file_read", "read_file", "list_files", "list_directory",
     "grep", "find", "git_status", "git_log", "git_diff",
     "glob", "search", "stat", "code_search",
+    # Past-session recall opens kairos.db with mode=ro and never writes;
+    # it is safe (and useful) in read_only mode.
+    "history_search",
 }
 
 

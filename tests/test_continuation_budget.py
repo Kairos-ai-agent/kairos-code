@@ -101,5 +101,8 @@ def test_pattern_does_not_fire_on_a_question_back_to_the_user():
 
 def test_history_scope_is_stated_honestly_and_forbids_reading_the_app_database():
     src = (REPO_ROOT / "kairos/agents/agent_parts/discipline.py").read_text(encoding="utf-8")
-    assert "你只能看到当前这个会话的消息" in src
+    # 措辞可变，原意不可丢：只见当前会话 + 不许直接翻库 + 出口指向工具
+    assert "只能看到当前会话" in src
+    assert "history_search" in src, "must point at the tool"
+    assert "不要去直接读" in src or "不要去读" in src, "must still forbid reading the db"
     assert "kairos.db" in src, "the app's own database must be named explicitly"

@@ -355,13 +355,30 @@ const Chat: React.FC = () => {
       } else if (topic === 'tool.result') {
         useChatStore.getState().setLiveStatus({ kind: 'thinking' });
       } else if (topic === 'stream.chunk') {
+        // R38.6: collapse per-token chunks into ONE bubble per sender. This
+        // has to happen here, in the live status chain: the topic filter
+        // further down returns early for anything it does not list, so the
+        // older copy of this branch after the filter never runs (dead code).
+        const chunkContent = typeof msg.content === 'string'
+          ? msg.content
+          : JSON.stringify(msg.content || '');
+        appendStreamChunk(
+          msg.sender || 'agent',
+          chunkContent,
+          {
+            topic,
+            receiver: msg.receiver || '',
+            metadata: msg.metadata || {},
+            timestamp: msg.timestamp || Date.now() / 1000,
+          },
+        );
         // The answer is starting, so the reasoning is over: drop the tail the
         // rolling line was showing (it would otherwise keep sliding while the
-        // reply streamed). The generic thinking row — and the `<think>`-block
-        // fallback — still stand through the stream.
+        // reply streamed).
         if (useChatStore.getState().liveStatus?.text) {
           useChatStore.getState().setLiveStatus({ kind: 'thinking' });
         }
+        return;
       } else if (topic === 'agent.response' || topic === 'task.result'
                  || topic === 'task.error' || topic === 'agent.chat') {
         useChatStore.getState().setLiveStatus(null);
@@ -461,30 +478,6 @@ const Chat: React.FC = () => {
           timestamp: msg.timestamp || Date.now() / 1000,
           metadata: msg.metadata || {},
         });
-        return;
-      }
-
-      if (topic === 'stream.chunk') {
-        // R38.6: stream chunks collapse into a single bubble per
-        // sender. The Coder publishes one stream.chunk per token
-        // (each Chinese char / English word), so naively appending
-        // each chunk as its own message produces 8+ bubbles for a
-        // 5-word reply. We delegate to ``appendStreamChunk`` which
-        // finds the most recent stream bubble for this sender and
-        // appends; if none exists, it creates one.
-        const chunkContent = typeof msg.content === 'string'
-          ? msg.content
-          : JSON.stringify(msg.content || '');
-        appendStreamChunk(
-          msg.sender || 'agent',
-          chunkContent,
-          {
-            topic,
-            receiver: msg.receiver || '',
-            metadata: msg.metadata || {},
-            timestamp: msg.timestamp || Date.now() / 1000,
-          },
-        );
         return;
       }
 

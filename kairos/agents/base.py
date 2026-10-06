@@ -883,7 +883,7 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
             if response is not None:
                 await self._publish_complete_reasoning(
                     response,
-                    getattr(self.current_task, "id", "") or "",
+                    getattr(getattr(self, "current_task", None), "id", ""),
                     turn + 1,
                 )
             self._memory.append(LLMMessage(role="assistant", content=response.content or "", tool_calls=response.tool_calls))

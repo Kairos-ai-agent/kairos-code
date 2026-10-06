@@ -152,7 +152,11 @@ def test_read_only_spin_gets_the_nudge_and_no_approval_exit():
     assert not _has_nudge(loop_calls[0])
     assert not _has_nudge(loop_calls[NO_PROGRESS_NUDGE_TURNS - 1])
     assert _has_nudge(loop_calls[NO_PROGRESS_NUDGE_TURNS])
-    assert loop_calls[NO_PROGRESS_NUDGE_TURNS][0][-1].content == NO_PROGRESS_NUDGE
+    # The nudge rides the request as the newest *substantive* instruction; the
+    # reply-language anchor is appended after it (see tests/test_reply_language.py),
+    # so the nudge must be within the last three messages, not literally last.
+    _tail = [getattr(m, "content", "") for m in loop_calls[NO_PROGRESS_NUDGE_TURNS][0][-3:]]
+    assert NO_PROGRESS_NUDGE in _tail
     # ...and it keeps riding every later turn while the spin continues.
     assert _has_nudge(loop_calls[-1])
 

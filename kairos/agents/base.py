@@ -186,7 +186,12 @@ from kairos.agents.agent_parts.tools import AgentToolMixin
 from kairos.agents.agent_parts.memory import AgentMemoryMixin
 from kairos.agents.agent_parts.chat import AgentChatMixin
 from kairos.agents.agent_parts.misc import AgentMiscMixin
-from kairos.agents.agent_parts.discipline import WORK_DISCIPLINE_DIRECTIVE
+from kairos.agents.agent_parts.discipline import (
+    LANGUAGE_DIRECTIVE,
+    LANGUAGE_USER_ANCHOR,
+    WORK_DISCIPLINE_DIRECTIVE,
+    needs_language_anchor,
+)
 
 
 class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixin, AgentMiscMixin):
@@ -235,8 +240,10 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
         # See kairos/agents/agent_parts/discipline.py.
         self.system_prompt = (
             f"{KAIROS_IDENTITY}\n\n{WORK_DISCIPLINE_DIRECTIVE}\n\n{system_prompt}"
+            f"\n\n{LANGUAGE_DIRECTIVE}"
             if system_prompt
             else f"{KAIROS_IDENTITY}\n\n{WORK_DISCIPLINE_DIRECTIVE}"
+            f"\n\n{LANGUAGE_DIRECTIVE}"
         )
         self.message_bus = message_bus
         self.tools = tools or []
@@ -900,6 +907,11 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
         continuations = 0
         read_only_streak = 0
         nudge_active = False
+        # The reply-language anchor is re-stated on EVERY request as the
+        # newest message the model reads. A one-shot anchor on the user's
+        # turn gets buried under English tool output within a few turns,
+        # and the model starts narrating in English again.
+        _lang_anchor = LANGUAGE_USER_ANCHOR if needs_language_anchor(message) else ""
         # The turn number the user sees: it keeps climbing across continuations
         # so "Turn 11" is honest, and ``total_turns`` grows with it. The cap is
         # internal; the visible progress never goes backwards.
@@ -920,6 +932,9 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
                 # moment, not a standing rule.
                 if nudge_active:
                     messages = messages + [LLMMessage(role="user", content=NO_PROGRESS_NUDGE)]
+                # Always last: request-scoped, never persisted.
+                if _lang_anchor:
+                    messages = messages + [LLMMessage(role="user", content=_lang_anchor)]
                 # Same overflow contract as the run loop: the provider saying
                 # "too long" buys one compaction + retry, not an error bubble.
                 response = None

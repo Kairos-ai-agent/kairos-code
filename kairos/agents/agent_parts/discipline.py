@@ -49,3 +49,48 @@ WORK_DISCIPLINE_DIRECTIVE = (
     "2) 真实结果——贴关键输出原文（命令、退出码、测试结论）；3) 没做什么及原因"
     "（失败、跳过、仍不确定的地方）。不复述过程，不用形容词代替证据。"
 )
+
+
+# ---------------------------------------------------------------------------
+# 回答语言（LANGUAGE_DIRECTIVE / LANGUAGE_USER_ANCHOR）
+#
+# 为什么单独成块、而且要放在最靠后的位置：实测多轮里模型仍然回英文，因为
+#   a) 角色提示（英文）拼在 system prompt 的最末尾，比中段的纪律块更"近"；
+#   b) 代码/文档/日志全是英文，模型把"环境是英文"误当成"用户是英文"。
+# 所以除纪律块里那条之外，这里再补两道硬机制：
+#   1) LANGUAGE_DIRECTIVE 追加到 system prompt 的末尾（近因效应）；
+#   2) 用户消息若含中文，就在消息末尾挂 LANGUAGE_USER_ANCHOR（整个请求里最靠后的位置）。
+# ---------------------------------------------------------------------------
+
+LANGUAGE_DIRECTIVE = (
+    "### Reply language (highest priority; overrides every other language habit)\n"
+    "- ALWAYS answer in the SAME language as the user's latest message. "
+    "If they wrote Chinese, your ENTIRE reply must be Chinese: body text, headings, "
+    "list labels, table headers, status words, the final summary, and your reasoning.\n"
+    "- 用户用中文就用中文回答，用英文就用英文回答。"
+    "不要因为代码、注释、文档、任务书、日志、工具输出或本提示词是英文，就把回答改成英文。\n"
+    "- 覆盖范围：正文、标题、列表、表格、总结，以及思考过程——全部用同一种语言。\n"
+    "- 他明确点名语言（例如「用中文回答」）时，以他为准。\n"
+)
+
+LANGUAGE_USER_ANCHOR = (
+    "\n\n[系统要求] 用户使用中文，本次回答必须全部使用中文"
+    "（含正文、标题、列表、表格、总结与思考过程），不要用英文。"
+)
+
+_CJK_RANGES = (
+    ("\u4e00", "\u9fff"),   # CJK 统一表意
+    ("\u3400", "\u4dbf"),   # 扩展 A
+    ("\uf900", "\ufaff"),   # 兼容表意
+)
+
+
+def needs_language_anchor(text: str) -> bool:
+    """用户消息里出现汉字就认为他在用中文（其余判断留给模型）。"""
+    if not text:
+        return False
+    for ch in text:
+        for lo, hi in _CJK_RANGES:
+            if lo <= ch <= hi:
+                return True
+    return False

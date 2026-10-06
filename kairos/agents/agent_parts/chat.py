@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 from enum import Enum
 from pathlib import Path
@@ -42,6 +43,39 @@ ACT_DONT_ASK_DIRECTIVE = (
     "且动作不可逆时才开口问。\n"
     "- 汇报时说清楚改了哪些文件、结果是什么，而不是你考虑过什么。"
 )
+
+
+def _host_execution_environment() -> str:
+    """One short, factual block about how terminal commands actually run here.
+
+    The agent kept guessing the shell wrong on Windows — it wrote POSIX syntax
+    where only cmd worked, and (worse) the tool used to fall through to cmd and
+    leave directories named ``-p`` behind. Stating the real environment once, in
+    the same place as the other operating rules, stops the guessing.
+    """
+    if os.name != "nt":
+        body = ("- 本机是类 Unix 系统；terminal 通过 sh 执行"
+                "（`mkdir -p`、`&&`、`|`、`>`、`$VAR` 可用）。\n")
+    else:
+        bash = None
+        try:
+            from kairos.tools.terminal import _find_git_bash
+            bash = _find_git_bash()
+        except Exception:  # noqa: BLE001 - the prompt must never break
+            bash = None
+        if bash:
+            body = ("- 本机是 Windows；terminal 通过 git-bash 执行，"
+                    "`mkdir -p a/b/c`、`&&`、`|`、`>`、`$VAR` 都可用。"
+                    "不要假设 cmd，也不要用 `mkdir a\\b\\c` 这类 cmd 语法。\n")
+        else:
+            body = ("- 本机是 Windows，且未找到 git-bash：terminal 没有 POSIX shell，"
+                    "不要用 `mkdir -p` / `&&` / `$VAR`；只有 cmd 语义，"
+                    "建多级目录用 `mkdir a\\b\\c`。\n")
+    body += "- 写文件用 file_write 工具，不要用 shell 重定向（`>` / `>>`）。"
+    return "### 本机执行环境\n" + body
+
+
+HOST_EXECUTION_ENVIRONMENT = _host_execution_environment()
 
 
 
@@ -93,7 +127,8 @@ class AgentChatMixin:
             # No project context: fall back to the generic prompt.
             return (KAIROS_IDENTITY + " Respond "
                     "conversationally to the user's message. Use "
-                    "tools when helpful.\n" + ACT_DONT_ASK_DIRECTIVE)
+                    "tools when helpful.\n" + ACT_DONT_ASK_DIRECTIVE
+                    + "\n\n" + HOST_EXECUTION_ENVIRONMENT)
         try:
             orch = self._orchestrator  # injected by orchestrator
         except AttributeError:
@@ -173,6 +208,10 @@ class AgentChatMixin:
                 blocks.append("\n".join(lines))
 
         blocks.append(ACT_DONT_ASK_DIRECTIVE)
+        # Which shell this machine actually has (git-bash vs no bash at all).
+        # Stated next to the other operating rules so the model stops assuming
+        # cmd on Windows and stops writing Unix syntax where it cannot work.
+        blocks.append(HOST_EXECUTION_ENVIRONMENT)
 
         # 4) assemble
         base = (KAIROS_IDENTITY + " Respond "

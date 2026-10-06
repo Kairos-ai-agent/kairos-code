@@ -6,6 +6,7 @@ import asyncio
 import os
 import re
 import shlex
+import shutil
 import time
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
@@ -96,15 +97,98 @@ def _split_command(command: str) -> List[str]:
         return shlex.split(command, posix=True)
 
 
+# ``C:\Windows\System32\bash.exe`` is the WSL launcher, not git-bash: it boots
+# a Linux distribution, so git-bash syntax (and even plain Windows paths)
+# behaves completely differently. Any candidate under System32 is skipped.
+_WSL_BASH_MARKERS = ("\\windows\\system32", "/windows/system32")
+
+# ``C:\dir\file`` is meaningless to a POSIX shell: ``\`` is an escape there, so
+# the shell hands the program ``C:dirfile``. A cmd-flavoured absolute path has
+# to be spelled the MSYS way (``C:/dir/file``) before git-bash can resolve it.
+_WINDOWS_DRIVE_PATH = re.compile(
+    r"(?<![0-9A-Za-z_])([A-Za-z]):\\([^\s\"'|&;<>]*)")
+
+# Shell syntax that *requires* a real shell: chaining, pipelines, redirection,
+# variable expansion and command substitution. Used only to decide whether the
+# no-shell fallback can honestly run a command (see ``TerminalTool.execute``).
+_SHELL_SYNTAX = re.compile(r"&&|\|\||;|\||>>|>|<|&|\$\(|\$\{|\$[A-Za-z_]|`")
+
+
+def _find_git_bash() -> Optional[str]:
+    """Return the absolute path of a real git-bash, or ``None``.
+
+    Windows only. The order mirrors how Git for Windows installs itself, so a
+    normal installation is found by path without spawning anything;
+    ``shutil.which("bash")`` is consulted last because on a machine with WSL
+    enabled it can answer with ``C:\\Windows\\System32\\bash.exe`` — the WSL
+    launcher, which is *not* git-bash. Every candidate living under
+    ``Windows\\System32`` is rejected for that reason, and only real files are
+    accepted.
+    """
+    if os.name != "nt":
+        return None
+    candidates: List[str] = [
+        r"C:\Program Files\Git\bin\bash.exe",
+        r"C:\Program Files (x86)\Git\bin\bash.exe",
+    ]
+    local_app_data = os.environ.get("LOCALAPPDATA", "")
+    if local_app_data:
+        candidates.append(os.path.join(
+            local_app_data, "Programs", "Git", "bin", "bash.exe"))
+    try:
+        found = shutil.which("bash")
+    except Exception:  # noqa: BLE001 - PATH lookups must never blow up here
+        found = None
+    if found:
+        candidates.append(found)
+    for cand in candidates:
+        if not cand:
+            continue
+        normalized = os.path.normcase(os.path.normpath(cand))
+        if any(marker in normalized for marker in _WSL_BASH_MARKERS):
+            continue
+        try:
+            if os.path.isfile(cand):
+                return os.path.abspath(cand)
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def _bashify_windows_paths(command: str) -> str:
+    """Rewrite ``C:\\a\\b`` → ``C:/a/b`` so git-bash can resolve the path.
+
+    Only drive-letter-prefixed paths are touched; everything else (including
+    ``$VAR``, ``&&`` and already-POSIX ``C:/a/b`` spellings) is left alone.
+    Every backslash inside the matched path is turned into ``/``: bash treats
+    ``\\`` as an escape, so ``C:\\Users\\leohu`` reaches the program as
+    ``C:Usersleohu`` and the command fails with "No such file or directory".
+    """
+    return _WINDOWS_DRIVE_PATH.sub(
+        lambda m: f"{m.group(1)}:/" + m.group(2).replace("\\", "/"),
+        command)
+
+
 class TerminalTool(BaseTool):
-    """Execute a command in a sandboxed project directory (argv, no shell).
+    """Execute a command in a sandboxed project directory.
+
+    On POSIX (and in the default, sandboxed mode everywhere) the command is
+    parsed to argv and run with ``create_subprocess_exec`` — no shell. When the
+    user turns on full access the command *is* handed to a real shell, and on
+    Windows that shell is **git-bash** (``<bash> -lc``) when one can be found:
+    ``cmd.exe`` is not a POSIX shell at all — ``mkdir -p a/b/c`` fails there and
+    cmd still creates directories literally named ``-p`` / ``%WT%``, which is
+    how junk directories kept appearing inside user projects. If no git-bash is
+    present we do **not** silently degrade to cmd; the command runs with argv
+    semantics (no shell) and anything that needs a shell is refused with an
+    actionable error instead.
 
     Safety model (R38.6 hardening):
-      - the command is parsed with ``shlex`` and executed via
-        ``create_subprocess_exec`` — there is **no shell**, so shell
-        chaining (``&&`` / ``;`` / ``|``), redirection, ``$()`` and
-        backticks are impossible, and the allow-listed head *is* the real
-        executable.
+      - in the sandboxed default the command is parsed with ``shlex`` /
+        ``CommandLineToArgvW`` and executed via ``create_subprocess_exec`` —
+        there is **no shell**, so shell chaining (``&&`` / ``;`` / ``|``),
+        redirection, ``$()`` and backticks are impossible, and the allow-listed
+        head *is* the real executable.
       - the head must be on an allow-list; interpreter / leak-prone heads
         (``python``, ``node``, ``env``, ``cat``, …) are excluded, and the
         package-manager / build-tool RCE heads (``npm`` / ``pnpm`` / ``yarn``
@@ -112,7 +196,9 @@ class TerminalTool(BaseTool):
         default — enable them explicitly (``enable_build_commands=True`` or
         ``KAIROS_ENABLE_BUILD_COMMANDS``) once the build/test workflow needs
         them.
-      - shell-control tokens and destructive deny-patterns are rejected.
+      - shell-control tokens are rejected in that no-shell mode (they would be
+        meaningless there) and the destructive deny-patterns are rejected in
+        **every** mode, shell or not.
       - the portable ``kairos.sandbox`` deny-list is also applied, and the
         child is handed to the OS-level sandbox: on Linux a Landlock ruleset
         is applied in the forked child (via ``preexec_fn``); on Windows the
@@ -168,10 +254,19 @@ class TerminalTool(BaseTool):
         "ruff": (),
     }
 
-    # Tokens that only ever appear as shell control operators. Under argv
-    # execution a lone ``&&`` / ``;`` / ``|`` / ``>`` token means the caller
-    # tried to chain or redirect — reject it outright (no shell is used, so
-    # these operators should never be a legitimate part of the command).
+    # Tokens that only ever appear as shell control operators.
+    #
+    # These are rejected **in the sandboxed, no-shell mode**: there is no
+    # shell there, so a lone ``&&`` / ``;`` / ``|`` / ``>`` token cannot do
+    # anything except be handed to a program as a literal argument — which is
+    # how ``mkdir -p x && mkdir -p y`` used to end up creating a directory
+    # named ``&&``. Chaining in that mode is meaningless, so it stays refused.
+    #
+    # When the command genuinely runs through git-bash (full access), these
+    # tokens are ALLOWED: ``mkdir -p a && cd a`` is ordinary, correct shell
+    # usage that the user explicitly asked for by turning the sandbox off.
+    # The deny-patterns below still run on the raw command string in that mode,
+    # so ``rm -rf /`` or ``curl … | bash`` remain blocked no matter what.
     SHELL_OPERATORS = {"&&", "||", ";", "|", ">", ">>", "<", "&", "<&", ">&"}
 
     # Patterns that are NEVER allowed, even if the head looks innocent.
@@ -242,6 +337,13 @@ class TerminalTool(BaseTool):
                  enable_build_commands: bool | None = None):
         self._allowed_cwd = Path(allowed_cwd).resolve()
         self._allowed_cwd.mkdir(parents=True, exist_ok=True)
+        # Which shell the command will really be handed to. On Windows this is
+        # either a real git-bash or nothing — never cmd (see ``execute``).
+        self._bash_path = _find_git_bash()
+        # The schema the model sees must describe *this* machine, not a
+        # hypothetical one: whether ``mkdir -p`` / ``&&`` / ``$VAR`` work here
+        # is exactly what the agent kept getting wrong.
+        self.description = self._describe_environment()
         # Build/test RCE heads are OFF by default. They can be turned on
         # explicitly (``enable_build_commands=True``) or via the
         # KAIROS_ENABLE_BUILD_COMMANDS env var. Default = no RCE surface.
@@ -253,6 +355,48 @@ class TerminalTool(BaseTool):
             )
         if enable_build_commands:
             self.ALLOWED_COMMANDS = {**self.ALLOWED_COMMANDS, **self.BUILD_COMMANDS}
+
+    def _shell_kind(self) -> str:
+        """How the *shell-using* path will run: 'git-bash', 'cmd' or 'sh'.
+
+        ``cmd`` never means "we ran it through cmd.exe" — it means this is a
+        Windows host with no git-bash, so only Windows-native semantics exist.
+        """
+        if os.name == "nt":
+            return "git-bash" if self._bash_path else "cmd"
+        return "sh"
+
+    def _describe_environment(self) -> str:
+        """Description for the LLM schema, stating the *real* shell here."""
+        base = ("Execute a shell command inside the project directory. The "
+                "result metadata field ``shell`` says how it actually ran.")
+        if os.name != "nt":
+            return base + (" This host runs commands through sh: ``mkdir -p``, "
+                           "``&&`` and ``$VAR`` all work.")
+        if self._bash_path:
+            return base + (
+                f" This Windows host runs commands through git-bash "
+                f"(``{self._bash_path}``): ``mkdir -p a/b/c``, ``&&``, "
+                f"``$VAR``, pipes and redirection are supported — write "
+                f"POSIX/bash syntax, never cmd syntax. Write files with the "
+                f"file_write tool rather than shell redirection.")
+        return base + (" This Windows host has NO bash (git-bash) and only "
+                       "offers cmd semantics — do NOT use Unix-only syntax "
+                       "such as ``mkdir -p``, ``&&`` or ``$VAR``; use "
+                       "cmd-style paths (``mkdir a\\b\\c``). Git for Windows "
+                       "gives the tool full bash support.")
+
+    def _next_step_hint(self, shell_kind: str) -> Optional[str]:
+        """Actionable follow-up text appended when a command fails.
+
+        The model gets one concrete next step instead of a bare stderr blob.
+        """
+        if shell_kind == "cmd":
+            return ("[terminal] 未找到 bash (git-bash)，本机按无 shell 语义执行。"
+                    "不要使用 Unix 专有语法：请用 cmd 语法，例如 mkdir a\\b\\c "
+                    "而不是 mkdir -p a/b/c。安装 Git for Windows（确保 "
+                    "C:\\Program Files\\Git\\bin\\bash.exe 存在）即可启用 bash 语法。")
+        return None
 
     def _is_safe_command(self, command: str) -> Optional[str]:
         """Return the rule that blocked the command, or None if allowed."""
@@ -436,7 +580,16 @@ class TerminalTool(BaseTool):
         # Safety check
         blocked = self._is_safe_command(command)
         if blocked:
-            return ToolResult(success=False, output="", error=f"Blocked by safety: {blocked}")
+            error = f"Blocked by safety: {blocked}"
+            if "shell operator" in blocked and os.name == "nt" and self._bash_path:
+                # There is a real bash here; the operator is only refused
+                # because this call is running sandboxed (argv, no shell).
+                error += (f"\n[terminal] 本机有 git-bash（{self._bash_path}），"
+                          f"&& / | / 重定向等 shell 语法需要「完全访问」模式下才能使用。")
+            return ToolResult(success=False, output="", error=error,
+                              metadata={"shell": "none",
+                                        "bash_path": self._bash_path,
+                                        "command": command[:500]})
 
         # Lock cwd
         try:
@@ -479,16 +632,57 @@ class TerminalTool(BaseTool):
             else:
                 new_session_kw = {"start_new_session": True}
 
-            # SECURITY: execute via argv (no shell) so the head allow-list
-            # is the *actual* executable and shell chaining/redirection is
-            # impossible. The parsed argv is regenerated here (the parse in
+            # Decide what actually runs the command.
+            #
+            # SECURITY: in the sandboxed default the command is executed via
+            # argv (no shell) so the head allow-list is the *actual*
+            # executable and shell chaining/redirection is impossible. The
+            # parsed argv is regenerated here (the parse in
             # ``_is_safe_command`` is only used for validation).
             #
-            # Full access instead goes through the OS shell (``cmd /c`` on
-            # Windows, ``/bin/sh -c`` on POSIX) so pipelines, redirection
-            # and ``&&`` / ``;`` work as the user expects.
+            # Full access hands the command to a real shell so pipelines,
+            # redirection and ``&&`` / ``;`` behave as the user expects. On
+            # Windows that shell must be a real git-bash:
+            # ``create_subprocess_shell`` uses ``cmd.exe``, which has no
+            # ``-p`` flag and still creates directories literally named
+            # ``-p`` / ``%WT%`` when the command fails — the junk directories
+            # users kept finding inside their projects. When no git-bash
+            # exists we do NOT fall back to cmd: the command runs argv-style
+            # (no shell, so no argument can be mis-parsed into a path) and
+            # anything only a shell could do is refused with a next step.
             full_access = is_full_access()
-            argv = None if full_access else _split_command(command)
+            shell_kind = "none"
+            exec_argv: Optional[List[str]] = None
+            run_via_shell = False
+
+            if full_access:
+                shell_kind = self._shell_kind()
+                if self._bash_path:
+                    # ``-lc``: login shell + command string, so ``$VAR``,
+                    # ``&&``, pipes and redirection all work. Windows drive
+                    # paths are rewritten to the MSYS spelling first — bash
+                    # eats ``\`` and would otherwise never find ``C:\...``.
+                    exec_argv = [self._bash_path, "-lc",
+                                 _bashify_windows_paths(command)]
+                elif os.name == "nt":
+                    # No git-bash on Windows: refuse shell-only syntax
+                    # instead of letting cmd.exe invent ``-p`` directories.
+                    if _SHELL_SYNTAX.search(command):
+                        return ToolResult(
+                            success=False, output="",
+                            error=("bash (git-bash) 未找到，本机没有可用的 POSIX "
+                                   "shell，无法执行需要 shell 的命令"
+                                   "（&& / | / > / $VAR 等）。请改用 cmd 语法，例如 "
+                                   "mkdir a\\b\\c，或安装 Git for Windows 后重试。"),
+                            metadata={"shell": shell_kind,
+                                      "bash_path": None,
+                                      "command": command[:500]},
+                        )
+                    exec_argv = _split_command(command)
+                else:
+                    run_via_shell = True
+            else:
+                exec_argv = _split_command(command)
 
             popen_kwargs = {
                 "stdout": asyncio.subprocess.PIPE,
@@ -514,24 +708,24 @@ class TerminalTool(BaseTool):
                 popen_kwargs.pop("__kairos_seatbelt_profile", None)
 
             try:
-                if full_access:
+                if run_via_shell:
                     process = await asyncio.create_subprocess_shell(
                         command, **popen_kwargs)
                 else:
                     process = await asyncio.create_subprocess_exec(
-                        *argv, **popen_kwargs)
+                        *exec_argv, **popen_kwargs)
             except (TypeError, ValueError):
                 # Some asyncio loops / Popen builds reject preexec_fn/pass_fds;
                 # retry without them so the command still runs (at reduced
                 # isolation) rather than failing outright.
                 for k in ("preexec_fn", "pass_fds"):
                     popen_kwargs.pop(k, None)
-                if full_access:
+                if run_via_shell:
                     process = await asyncio.create_subprocess_shell(
                         command, **popen_kwargs)
                 else:
                     process = await asyncio.create_subprocess_exec(
-                        *argv, **popen_kwargs)
+                        *exec_argv, **popen_kwargs)
 
             # Wire the OS-level sandbox for this child (Windows Job Object
             # KILL_ON_JOB_CLOSE; called in the child for Linux via the
@@ -590,6 +784,11 @@ class TerminalTool(BaseTool):
                 err_msg = f"Command timed out after {effective_timeout}s"
             elif process.returncode != 0:
                 err_msg = error_output or f"exit code {process.returncode}"
+            # Never leave the model with a bare stderr blob when the next step
+            # is knowable (e.g. "there is no bash here, use cmd syntax").
+            hint = self._next_step_hint(shell_kind)
+            if hint and not success:
+                err_msg = f"{err_msg}\n{hint}" if err_msg else hint
 
             return ToolResult(
                 success=success,
@@ -601,6 +800,11 @@ class TerminalTool(BaseTool):
                     "duration_s": round(duration, 3),
                     "timed_out": timed_out,
                     "command": command[:500],
+                    # How the command actually ran — 'git-bash' means POSIX
+                    # syntax is valid here; 'cmd' means no POSIX shell exists;
+                    # 'none' means argv execution with no shell at all.
+                    "shell": shell_kind,
+                    "bash_path": self._bash_path,
                     "env_overrides": list((env or {}).keys()),
                     "had_stdin": stdin is not None,
                     "streamed": bool(stream),

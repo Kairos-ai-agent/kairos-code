@@ -208,6 +208,30 @@ def test_worktree_skipped_on_non_git_repo(orch, tmp_path):
     assert p.runtime.attach_errors == []  # not an error, just a no-op
 
 
+def test_worktree_skipped_when_the_repo_has_no_commits(orch, tmp_path):
+    """A repo whose HEAD is unborn can only produce an EMPTY worktree.
+
+    That is exactly how the agent ended up "working" in an empty box while the
+    user's real files sat in the parent directory, and then asked the user
+    three turns in a row which version was true.
+    """
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    (tmp_path / "README.md").write_text("hi", encoding="utf-8")
+    p = orch.create_project("demo", "d", work_dir=str(tmp_path))
+    assert p.runtime.coder_worktree is None
+    assert p.runtime.reviewer_worktree is None
+    assert p.runtime.attach_errors == []
+
+
+def test_worktree_skipped_when_the_tree_has_uncommitted_work(orch, tmp_path):
+    """Untracked/modified files stay behind in a worktree checkout."""
+    _git_init(tmp_path)
+    (tmp_path / "unfinished.py").write_text("print('wip')\n", encoding="utf-8")
+    p = orch.create_project("demo", "d", work_dir=str(tmp_path))
+    assert p.runtime.coder_worktree is None
+    assert p.runtime.reviewer_worktree is None
+
+
 def test_worktree_attached_but_effective_root_used(orch, tmp_path):
     """When worktrees are present, the agent's tools were created
     with the worktree path as their `allowed_root` kwarg (the

@@ -58,6 +58,16 @@ class OrchWiringMixin:
         except Exception:
             # Not a git repo (or no git installed) — silently skip.
             return (None, None)
+        if not mgr.is_ready_for_isolation():
+            # No committed baseline, or uncommitted work in the tree. A worktree
+            # would check out HEAD and leave the user's actual files behind, so
+            # the agent would work in an empty box that contradicts reality --
+            # and then keep asking the user which one is true. Work in place.
+            logger.info(
+                "worktrees skipped for %s: no committed baseline or dirty tree; "
+                "agents will work directly in the work_dir", work_dir,
+            )
+            return (None, None)
         coder_wt = mgr.create(branch_name=WorktreeManager.unique_branch_name("coder"))
         reviewer_wt = mgr.create(branch_name=WorktreeManager.unique_branch_name("reviewer"))
         return (coder_wt, reviewer_wt)

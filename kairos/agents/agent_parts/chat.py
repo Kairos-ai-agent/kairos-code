@@ -26,6 +26,20 @@ from kairos.voice_text import VOICE_REPLY_DIRECTIVE
 
 logger = logging.getLogger(__name__)
 
+# The agent used to stop three turns in a row asking the same question
+# ("commit these files first, or continue?") while the user was typing 继续做 --
+# the answer was already on the screen. Stated in both prompt branches.
+ACT_DONT_ASK_DIRECTIVE = (
+    "### 怎么干活\n"
+    "- 用户的指令就是授权。他说了「继续」「直接做」「按你的判断做」，那就是许可："
+    "执行，然后汇报结果。\n"
+    "- 同一个问题不要问第二遍。问过一次、用户答过了，这个问题就关闭了——即使你心里"
+    "还不确定，也按他给的方向做，并在汇报里说明你的假设。\n"
+    "- 先自己查：读文件、跑只读命令、看 git 状态。只有答案确实不在磁盘上、"
+    "且动作不可逆时才开口问。\n"
+    "- 汇报时说清楚改了哪些文件、结果是什么，而不是你考虑过什么。"
+)
+
 
 
 
@@ -76,7 +90,7 @@ class AgentChatMixin:
             # No project context: fall back to the generic prompt.
             return (KAIROS_IDENTITY + " Respond "
                     "conversationally to the user's message. Use "
-                    "tools when helpful.")
+                    "tools when helpful.\n" + ACT_DONT_ASK_DIRECTIVE)
         try:
             orch = self._orchestrator  # injected by orchestrator
         except AttributeError:
@@ -154,6 +168,8 @@ class AgentChatMixin:
                     fix = (row.get("fix_body") or "")[:120]
                     lines.append(f"- [{sev}] {sig} — fix: {fix}")
                 blocks.append("\n".join(lines))
+
+        blocks.append(ACT_DONT_ASK_DIRECTIVE)
 
         # 4) assemble
         base = (KAIROS_IDENTITY + " Respond "

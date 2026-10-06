@@ -166,6 +166,30 @@ class WorktreeManager:
             created_at=time.time(),
         )
 
+    def is_ready_for_isolation(self) -> bool:
+        """Whether a worktree would contain exactly what the user sees.
+
+        A worktree is a checkout of HEAD, so it can only ever hold *committed*
+        content. On a repo with no commits at all (unborn HEAD) ``git worktree
+        add -b`` still succeeds and hands back an EMPTY directory; on a repo
+        with uncommitted or untracked work the agent is boxed into a tree that
+        is missing the files the user is looking at. In both cases the agent
+        reasons about a project that contradicts the one on disk and stalls out
+        asking the user which version is true. Require a committed baseline and
+        a clean tree; otherwise the caller works in the real work_dir.
+        """
+        try:
+            head = self._run_git("rev-parse", "--verify", "HEAD")
+        except Exception:
+            return False
+        if not (head or "").strip():
+            return False
+        try:
+            status = self._run_git("status", "--porcelain")
+        except Exception:
+            return False
+        return not (status or "").strip()
+
     def list_existing(self) -> List[Worktree]:
         """Enumerate all worktrees this manager knows about.
 

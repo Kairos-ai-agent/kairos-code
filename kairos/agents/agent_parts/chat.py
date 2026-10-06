@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from kairos.llm.base import LLMConfig, LLMMessage, LLMResponse, ToolCall
 from kairos.llm.errors import is_context_length_error
 from kairos.agents.identity import KAIROS_IDENTITY
+from kairos.agents.agent_parts.discipline import WORK_DISCIPLINE_DIRECTIVE
 from kairos.llm.provider_registry import create_provider
 from kairos.context_governor import (
     DEFAULT_KEEP_RECENT_TOOL_RESULTS,
@@ -127,7 +128,8 @@ class AgentChatMixin:
             # No project context: fall back to the generic prompt.
             return (KAIROS_IDENTITY + " Respond "
                     "conversationally to the user's message. Use "
-                    "tools when helpful.\n" + ACT_DONT_ASK_DIRECTIVE
+                    "tools when helpful.\n" + WORK_DISCIPLINE_DIRECTIVE
+                    + "\n\n" + ACT_DONT_ASK_DIRECTIVE
                     + "\n\n" + HOST_EXECUTION_ENVIRONMENT)
         try:
             orch = self._orchestrator  # injected by orchestrator
@@ -207,6 +209,9 @@ class AgentChatMixin:
                     lines.append(f"- [{sev}] {sig} — fix: {fix}")
                 blocks.append("\n".join(lines))
 
+        # How to work and how to report it, stated once for every chat turn
+        # (see kairos/agents/agent_parts/discipline.py).
+        blocks.append(WORK_DISCIPLINE_DIRECTIVE)
         blocks.append(ACT_DONT_ASK_DIRECTIVE)
         # Which shell this machine actually has (git-bash vs no bash at all).
         # Stated next to the other operating rules so the model stops assuming

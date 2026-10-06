@@ -139,6 +139,7 @@ from kairos.agents.agent_parts.tools import AgentToolMixin
 from kairos.agents.agent_parts.memory import AgentMemoryMixin
 from kairos.agents.agent_parts.chat import AgentChatMixin
 from kairos.agents.agent_parts.misc import AgentMiscMixin
+from kairos.agents.agent_parts.discipline import WORK_DISCIPLINE_DIRECTIVE
 
 
 class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixin, AgentMiscMixin):
@@ -180,9 +181,15 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
         # Reviewer, subagents) so no role has to remember to state it: the
         # model behind a relay may otherwise introduce itself as whatever it
         # was trained to say. See kairos/agents/identity.py.
+        #
+        # The work/report discipline rides in the same place, right after the
+        # identity, so every role -- not just chat -- is told to act first,
+        # back conclusions with tool output, and report without exaggerating.
+        # See kairos/agents/agent_parts/discipline.py.
         self.system_prompt = (
-            f"{KAIROS_IDENTITY}\n\n{system_prompt}" if system_prompt
-            else KAIROS_IDENTITY
+            f"{KAIROS_IDENTITY}\n\n{WORK_DISCIPLINE_DIRECTIVE}\n\n{system_prompt}"
+            if system_prompt
+            else f"{KAIROS_IDENTITY}\n\n{WORK_DISCIPLINE_DIRECTIVE}"
         )
         self.message_bus = message_bus
         self.tools = tools or []

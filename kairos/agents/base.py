@@ -94,6 +94,59 @@ def _tool_makes_progress(name: str) -> bool:
         return True
 
 
+# Shell tools whose state effect depends on the COMMAND, not the tool name.
+_SHELL_TOOLS = frozenset({"terminal", "shell", "bash", "exec", "run_command"})
+
+# Verbs that only look around. A turn made of these is investigation.
+_READ_ONLY_VERBS = frozenset({
+    "ls", "dir", "cat", "type", "head", "tail", "grep", "rg", "find", "fd",
+    "pwd", "wc", "which", "where", "echo", "env", "stat", "file", "du", "df",
+    "tree", "sort", "uniq", "date", "whoami", "hostname", "locate", "column",
+})
+
+# Anything that writes, deletes or moves wins over the verb list.
+_WRITE_MARKERS = (" > ", " >> ", " 2> ", "| tee", " tee ", "set-content",
+                  "out-file", "add-content", "new-item", "remove-item",
+                  " rm ", " rm -", " del ", " mv ", " copy ", " cp ", " mkdir ",
+                  " touch ", " chmod ", " chown ", " truncate ", " >>", ">")
+
+
+def _terminal_command_is_read_only(command: str) -> bool:
+    """True when a shell command only reads (no write verb, no redirection)."""
+    cmd = (command or "").strip()
+    if not cmd:
+        return False
+    low = cmd.lower()
+    for marker in _WRITE_MARKERS:
+        if marker in " " + low + " ":
+            return False
+    # git: only the inspecting subcommands count as reading.
+    first = low.split()[0]
+    if first == "git":
+        parts = low.split()
+        sub = parts[1] if len(parts) > 1 else ""
+        return sub in {"status", "log", "diff", "show", "branch", "remote",
+                       "rev-parse", "describe", "ls-files", "blame", "tag",
+                       "--version"}
+    return first in _READ_ONLY_VERBS
+
+
+def _call_makes_progress(name: str, arguments: dict | None) -> bool:
+    """Progress = the call can change state, judged per call, not per tool name.
+
+    A ``terminal`` call running ``ls`` / ``cat`` / ``git status`` is
+    investigation: treating it as progress reset the read-only streak every
+    turn, so the no-progress nudge never fired and a pure-audit run burned the
+    whole turn budget and stopped mid-work. Unknown tools and unknown commands
+    still count as progress -- a false nudge is worse than silence.
+    """
+    if name in _SHELL_TOOLS and isinstance(arguments, dict):
+        cmd = arguments.get("command") or arguments.get("cmd") or ""
+        if isinstance(cmd, str) and cmd.strip():
+            return not _terminal_command_is_read_only(cmd)
+    return _tool_makes_progress(name)
+
+
 # Content that entered through the network or a third-party server is wrapped so
 # the model can tell it apart from its own instructions. Muse does the same thing
 # in its harness ("when data enters the context from an external source, it's
@@ -995,7 +1048,7 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
                     self.current_tool = tc.name
                     tool_result = await self._dispatch_tool(tc)
                     self.current_tool = None
-                    if _tool_makes_progress(tc.name):
+                    if _call_makes_progress(tc.name, getattr(tc, "arguments", None)):
                         turn_made_progress = True
                         progress_tools.append(tc.name)
                     if tool_result.success:

@@ -37,38 +37,115 @@ APPROVE_SCORE_THRESHOLD = 85
 _WORKSPACE_CWD_ACTIVE = False
 
 
-def bind_agent_to_workspace(agent: Any, root: Optional[str]) -> None:
+class WorkspaceBinding:
+    """The result of :func:`bind_agent_to_workspace` -- and a handle to undo it.
+
+    ``bound`` answers the only question a caller needs before choosing between
+    the parallel-safe explicit binding and the serial cwd fallback: did the
+    root actually reach the agent (an agent attribute was pointed at it) or one
+    of its tools (a tool root was re-pointed)? If ``bound`` is ``True`` the
+    common path is **parallel-safe** -- the worker must *not* touch the process
+    cwd. If ``bound`` is ``False`` (a bare agent with nothing to re-point) the
+    caller falls back to :func:`serial_workspace_cwd`.
+
+    ``restore()`` is the symmetric half the chdir path always had: it puts
+    every attribute this binding changed back to the value it held before the
+    bind, so an instance reused after the run no longer points at the run's
+    workspace. It never removes an attribute it did not set, and it is
+    idempotent. The object also works as a context manager (``with
+    bind_agent_to_workspace(...) as binding:``).
+    """
+
+    __slots__ = ("root", "_agent_restore", "_tool_restore", "_restored")
+
+    def __init__(self, root: Optional[str] = None) -> None:
+        self.root = root
+        # (obj, attr_name, previous_value) for every attribute we changed.
+        self._agent_restore: list[tuple[Any, str, Any]] = []
+        self._tool_restore: list[tuple[Any, str, Any]] = []
+        self._restored = False
+
+    @property
+    def bound(self) -> bool:
+        """True when the root actually reached the agent and/or a tool."""
+        return bool(self._agent_restore or self._tool_restore)
+
+    @property
+    def agent_attrs(self) -> list[str]:
+        """Names of the agent attributes this binding re-pointed."""
+        return [attr for _obj, attr, _old in self._agent_restore]
+
+    @property
+    def tools_rebound(self) -> int:
+        """How many tool attributes this binding re-pointed."""
+        return len(self._tool_restore)
+
+    def restore(self) -> None:
+        """Undo the bind: put every changed attribute back. Idempotent."""
+        if self._restored:
+            return
+        self._restored = True
+        for obj, attr, old in self._agent_restore + self._tool_restore:
+            try:
+                setattr(obj, attr, old)
+            except Exception:
+                pass
+
+    def __enter__(self) -> "WorkspaceBinding":
+        return self
+
+    def __exit__(self, *exc: Any) -> bool:
+        self.restore()
+        return False
+
+
+def bind_agent_to_workspace(agent: Any, root: Optional[str]) -> WorkspaceBinding:
     """Point ``agent`` -- and the tools it already holds -- at ``root``.
 
-    This is the **explicit** binding, mirroring ``kairos.core.orchestrator``:
-    the real Coder edits through tools that carry their own root
-    (``FileEditTool(allowed_root=X)``, ``TerminalTool(allowed_cwd=X)``) and are
-    constructed with it. So the correct way to make a worker act on a workspace
-    is to hand that root to the agent and to its tools -- **never** to mutate
-    the process cwd.
+    This is the **explicit**, parallel-safe binding, mirroring
+    ``kairos.core.orchestrator``: the real Coder edits through tools that carry
+    their own root (``FileEditTool(allowed_root=X)``, ``TerminalTool(allowed_cwd=X)``)
+    and are constructed with it. So the correct way to make a worker act on a
+    workspace is to hand that root to the agent and to its tools -- **never** to
+    mutate the process cwd.
 
-    Best-effort attribute injection; never raises. Agents that resolve relative
-    paths only from the process cwd are *not* covered here -- for those,
-    :func:`serial_workspace_cwd` is the serial-only fallback, and it is a
-    footgun by construction.
+    Best-effort attribute injection; never raises. Returns a
+    :class:`WorkspaceBinding` whose ``.bound`` says whether anything actually
+    took the root and whose ``.restore()`` undoes the change. Callers that get
+    ``bound is False`` are the ones that still need :func:`serial_workspace_cwd`
+    -- the serial-only fallback -- because their agent resolves relative paths
+    only from the process cwd.
     """
+    binding = WorkspaceBinding(root)
     if not root:
-        return
-    resolved = Path(root).resolve()
+        return binding
+    try:
+        resolved = Path(root).resolve()
+    except Exception:
+        resolved = Path(root)
     for attr in ("work_dir", "cwd", "project_dir", "_project_dir"):
         try:
             if hasattr(agent, attr):
+                previous = getattr(agent, attr)
                 setattr(agent, attr, root)
+                binding._agent_restore.append((agent, attr, previous))
         except Exception:
             pass
     # The mechanism a real Coder actually edits through: its tools' root.
-    for tool in (getattr(agent, "tools", None) or []):
+    try:
+        tools = getattr(agent, "tools", None) or []
+    except Exception:
+        tools = []
+    for tool in tools:
         for attr in ("_allowed_root", "_allowed_cwd"):
             try:
                 if hasattr(tool, attr):
+                    previous = getattr(tool, attr)
                     setattr(tool, attr, resolved)
+                    binding._tool_restore.append((tool, attr, previous))
             except Exception:
                 pass
+    return binding
 
 
 @contextmanager
@@ -177,9 +254,14 @@ class CoderWorker(Worker):
     points ``work_dir``/``cwd``/``project_dir`` (when present) and the
     ``_allowed_root``/``_allowed_cwd`` of the agent's own tools at
     ``workspace.root`` -- the same root the orchestrator builds a Coder's tools
-    with. As a serial-only fallback for agents that resolve relative paths via
-    the process cwd, the run is wrapped in :func:`serial_workspace_cwd`, which
-    is process-global and refuses nested or concurrent entry.
+    with. When that explicit binding takes (``binding.bound`` -- a real Coder
+    always does, because it has tools), the run does **not** touch the process
+    cwd, so two ``CoderWorker`` runs may proceed concurrently. Only for a *bare*
+    agent -- no ``work_dir`` and no re-pointable tool root -- does the run fall
+    back to :func:`serial_workspace_cwd`, the serial-only, process-global
+    primitive that refuses nested/concurrent entry. Either way the binding is
+    undone before ``run`` returns (:meth:`WorkspaceBinding.restore`), so a
+    reused instance no longer points at this workspace.
     """
 
     name = "coder"
@@ -203,16 +285,24 @@ class CoderWorker(Worker):
                 "workspace_root": root,
             },
         )
+        binding = bind_agent_to_workspace(self.agent, root)
         try:
-            bind_agent_to_workspace(self.agent, root)
-            with serial_workspace_cwd(root):
+            if binding.bound:
+                # Explicit binding reached the agent/tools -> parallel-safe; the
+                # process cwd is left alone.
                 output = await self.agent.run(agent_task, plan_mode=self.plan_mode) or ""
+            else:
+                # Bare agent: opt-in serial fallback. Fail-loud on nesting stays.
+                with serial_workspace_cwd(root):
+                    output = await self.agent.run(agent_task, plan_mode=self.plan_mode) or ""
         except Exception as exc:  # a worker failure is data, not a crash
             return WorkerResult(
                 ok=False, error=str(exc),
                 summary=f"{getattr(self.agent, 'name', 'Coder')} crashed: {exc}",
                 meta={"workspace_kind": workspace.kind, "workspace_root": root},
             )
+        finally:
+            binding.restore()
         return WorkerResult(
             ok=True,
             output=output,

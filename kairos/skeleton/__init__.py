@@ -12,6 +12,9 @@ from kairos.skeleton.adapters import (
     CoderWorker,
     PromptWorker,
     ReviewerVerifier,
+    WorkspaceBinding,
+    bind_agent_to_workspace,
+    serial_workspace_cwd,
     verdict_from_review,
 )
 from kairos.skeleton.contracts import (
@@ -48,6 +51,7 @@ __all__ = [
     # adapters
     "CoderWorker", "ReviewerVerifier", "PromptWorker",
     "verdict_from_review", "APPROVE_SCORE_THRESHOLD",
+    "WorkspaceBinding", "bind_agent_to_workspace", "serial_workspace_cwd",
     # driver
     "SkeletonRun", "run_once", "run_task", "resume_task",
     # offline

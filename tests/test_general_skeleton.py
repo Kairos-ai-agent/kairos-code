@@ -694,12 +694,17 @@ def test_repo_workspace_outputs_are_run_scoped(tmp_path):
 
 # ---- (7) the Coder adapter hands the workspace root to the agent -----------
 #
-# Two layers are proven here, and they are NOT the same:
-#   * the *serial cwd fallback* -- a cwd-reading agent sees the workspace as the
-#     process cwd during run, and a nested/concurrent entry is refused;
+# Three layers are proven here, and they are NOT the same:
 #   * the *explicit tool binding* -- the real Coder edits through tools whose
 #     root is set at construction (`FileEditTool(allowed_root=X)`), and
-#     CoderWorker re-points those tools at the workspace it is handed.
+#     CoderWorker re-points those tools at the workspace it is handed. This is
+#     the default, parallel-safe path: it does not touch the process cwd, so two
+#     workers may run concurrently.
+#   * the *serial cwd fallback* -- only for a bare agent with nothing to
+#     re-point: it sees the workspace as the process cwd during run, and a
+#     nested/concurrent entry into that fallback is refused (fail-loud kept).
+#   * the *reversibility* of the binding -- the re-point is undone after the
+#     run, so a reused instance no longer points at the run's workspace.
 # What is still NOT proven (no model / no network): that the full real
 # `kairos.agents.roles.Coder` LLM loop edits inside X. See the honest boundary
 # note on the tool-level test below.
@@ -814,6 +819,11 @@ async def test_coder_worker_rebinds_real_coder_tools_to_the_workspace(tmp_path):
     tools at the workspace it is handed, so the actual editing primitive writes
     into X -- never into the tree the tools were built for.
 
+    The re-point is scoped to the run: after ``run`` returns the binding is
+    undone (``WorkspaceBinding.restore``), so the tool points back at Y. The
+    proof that the *edit* landed in X is therefore taken from the filesystem
+    (the file exists in X, not Y), not from the tool's post-run state.
+
     Honest boundary: the agent body here just calls its own tool once. This
     proves the *binding + real tool + real filesystem* layer end to end; it
     does NOT exercise the full real ``kairos.agents.roles.Coder`` LLM loop
@@ -831,8 +841,11 @@ async def test_coder_worker_rebinds_real_coder_tools_to_the_workspace(tmp_path):
 
         def __init__(self, tools):
             self.tools = tools
+            self.root_during_run = None
 
         async def run(self, task, plan_mode=False):
+            # what the tool was pointed at *while running*
+            self.root_during_run = Path(self.tools[0]._allowed_root).resolve()
             res = await self.tools[0].execute(path="edited.txt", content="edit in X")
             assert res.success, res.error
             return "edited"
@@ -841,11 +854,209 @@ async def test_coder_worker_rebinds_real_coder_tools_to_the_workspace(tmp_path):
     result = await CoderWorker(coder).run(RepoWorkspace(x), Task(instruction="edit"))
 
     assert result.ok is True
-    # the wrapper re-pointed the real tool at X...
-    assert Path(coder.tools[0]._allowed_root).resolve() == x.resolve()
+    # during the run the wrapper had re-pointed the real tool at X...
+    assert coder.root_during_run == x.resolve()
     # ...so the file landed in X, not in the tree the tool was built for
     assert (x / "edited.txt").is_file()
     assert not (y / "edited.txt").exists()
+    # ...and the re-point did not outlive the run: the tool is back to Y
+    assert Path(coder.tools[0]._allowed_root).resolve() == y.resolve()
+
+
+class _RootTool:
+    """A minimal edit tool carrying its own root, like the real ``FileEditTool``.
+
+    It has no dependency on the process cwd -- it writes through its own
+    ``_allowed_root`` -- which is exactly the property that makes a worker using
+    it safe to run in parallel.
+    """
+
+    def __init__(self, root):
+        self._allowed_root = root
+
+    def write(self, name: str, content: str) -> str:
+        target = Path(self._allowed_root) / name
+        target.write_text(content, encoding="utf-8")
+        return str(target)
+
+
+class _ParallelCoder:
+    """A tool-driven coder whose edits go through a re-pointable tool root."""
+
+    name = "parallel-coder"
+
+    def __init__(self, tool: _RootTool):
+        self.tools = [tool]
+        self.cwd_during_run = None
+
+    async def run(self, task, plan_mode=False):
+        # nothing here reads the process cwd -- only the tool's own root
+        self.cwd_during_run = os.getcwd()
+        await asyncio.sleep(0)  # yield so a second worker can interleave
+        self.tools[0].write("proof.txt", f"written for {task.id}")
+        return str(self.tools[0]._allowed_root)
+
+
+async def test_two_parallel_coder_workers_each_bind_their_own_workspace(tmp_path):
+    """Two CoderWorkers run concurrently, each in its own workspace, no re-entrant error.
+
+    With the explicit tool binding in force the run does **not** touch the
+    process cwd, so ``asyncio.gather`` of two workers is allowed. Before this
+    change both runs did ``with serial_workspace_cwd(root)`` and the second one
+    raised the re-entrancy ``RuntimeError`` (reporting ``ok=False``).
+    """
+    x = tmp_path / "X"
+    y = tmp_path / "Y"
+    x.mkdir()
+    y.mkdir()
+    cwd_before = os.getcwd()
+
+    cx = _ParallelCoder(_RootTool(tmp_path / "unboundX"))
+    cy = _ParallelCoder(_RootTool(tmp_path / "unboundY"))
+
+    results = await asyncio.gather(
+        CoderWorker(cx).run(RepoWorkspace(x), Task(id="a", instruction="a")),
+        CoderWorker(cy).run(RepoWorkspace(y), Task(id="b", instruction="b")),
+    )
+
+    # both succeeded -- neither worker surfaced a re-entrancy RuntimeError
+    assert [r.ok for r in results] == [True, True]
+    assert not any("re-entrant" in (r.error or "") for r in results)
+
+    # each worker saw its own tool root and wrote into its own tree
+    assert Path(results[0].output).resolve() == x.resolve()
+    assert Path(results[1].output).resolve() == y.resolve()
+    assert (x / "proof.txt").read_text(encoding="utf-8") == "written for a"
+    assert (y / "proof.txt").read_text(encoding="utf-8") == "written for b"
+
+    # neither worker mutated the process cwd -- that is *why* they can overlap
+    assert Path(cx.cwd_during_run).resolve() == Path(cwd_before).resolve()
+    assert Path(cy.cwd_during_run).resolve() == Path(cwd_before).resolve()
+    assert Path(os.getcwd()).resolve() == Path(cwd_before).resolve()
+
+
+async def test_bare_agent_without_workdir_or_tools_falls_back_to_serial_cwd(tmp_path):
+    """A bare agent (no work_dir, no re-pointable tool) still works via the chdir fallback.
+
+    Nothing can be bound, so the run opts into ``serial_workspace_cwd``: the
+    agent sees the workspace as the process cwd during the run. Nesting that
+    fallback still raises -- the fail-loud guard is preserved, not removed.
+    """
+    from kairos.skeleton.adapters import serial_workspace_cwd
+
+    x = tmp_path / "X"
+    x.mkdir()
+
+    class _BareAgent:
+        # deliberately: no work_dir / cwd / project_dir, and no `tools` attribute
+        name = "bare"
+
+        def __init__(self):
+            self.seen_cwd = None
+            self.nested_error = None
+
+        async def run(self, task, plan_mode=False):
+            self.seen_cwd = os.getcwd()
+            try:
+                with serial_workspace_cwd(os.getcwd()):
+                    pass
+            except RuntimeError as exc:
+                self.nested_error = str(exc)
+            return "done"
+
+    cwd_before = os.getcwd()
+    agent = _BareAgent()
+    result = await CoderWorker(agent).run(RepoWorkspace(x), Task(instruction="x"))
+
+    assert result.ok is True
+    # the fallback really changed the cwd while running...
+    assert Path(agent.seen_cwd).resolve() == x.resolve()
+    # ...and a nested entry into it is still refused, loudly
+    assert agent.nested_error and "re-entrant" in agent.nested_error
+    # ...and the cwd is restored afterwards
+    assert Path(os.getcwd()).resolve() == Path(cwd_before).resolve()
+
+
+def test_bind_agent_to_workspace_is_reversible(tmp_path):
+    """``bind`` reports whether it took, and ``restore`` undoes it exactly."""
+    from kairos.skeleton.adapters import bind_agent_to_workspace
+
+    a = tmp_path / "A"
+    a.mkdir()
+    original = str(tmp_path)
+
+    class _Agent:
+        name = "agent"
+
+        def __init__(self):
+            self.work_dir = original
+            self.tools = [_RootTool(original)]
+
+    agent = _Agent()
+    binding = bind_agent_to_workspace(agent, str(a))
+
+    assert binding.bound is True
+    assert binding.agent_attrs == ["work_dir"]
+    assert binding.tools_rebound == 1
+    assert Path(agent.work_dir).resolve() == a.resolve()
+    assert Path(agent.tools[0]._allowed_root).resolve() == a.resolve()
+
+    binding.restore()
+    # exact restore: back to the pre-bind values, no longer pointing at A
+    assert agent.work_dir == original
+    assert Path(agent.tools[0]._allowed_root).resolve() == Path(original).resolve()
+    assert Path(agent.work_dir).resolve() != a.resolve()
+    # idempotent: a second restore is a no-op
+    binding.restore()
+    assert agent.work_dir == original
+
+
+def test_bind_reports_false_for_a_bare_agent(tmp_path):
+    """A bare agent (nothing to re-point) reports ``bound=False`` -- the chdir signal."""
+    from kairos.skeleton.adapters import bind_agent_to_workspace
+
+    class _Bare:
+        name = "bare"
+
+    a = tmp_path / "A"
+    a.mkdir()
+    binding = bind_agent_to_workspace(_Bare(), str(a))
+
+    assert binding.bound is False
+    assert binding.agent_attrs == [] and binding.tools_rebound == 0
+    binding.restore()  # no-op, must not raise
+
+
+async def test_coder_worker_restores_binding_after_the_run(tmp_path):
+    """Run against A, then the same instance no longer points at A."""
+    a = tmp_path / "A"
+    a.mkdir()
+    original = str(tmp_path)
+
+    class _Agent:
+        name = "agent"
+
+        def __init__(self):
+            self.work_dir = original
+            self.tools = [_RootTool(original)]
+            self.root_during_run = None
+
+        async def run(self, task, plan_mode=False):
+            self.root_during_run = Path(self.tools[0]._allowed_root).resolve()
+            self.tools[0].write("out.txt", "in A")
+            return "ok"
+
+    agent = _Agent()
+    result = await CoderWorker(agent).run(RepoWorkspace(a), Task(instruction="x"))
+
+    assert result.ok is True
+    # bound to A while running -- the write landed there
+    assert agent.root_during_run == a.resolve()
+    assert (a / "out.txt").is_file()
+    # after the run work_dir / tool root are back to their originals
+    assert Path(agent.work_dir).resolve() == Path(original).resolve()
+    assert Path(agent.tools[0]._allowed_root).resolve() == Path(original).resolve()
+    assert Path(agent.work_dir).resolve() != a.resolve()
 
 
 # ---- (8) the CLI wires the skeleton up (end to end, no network) ------------

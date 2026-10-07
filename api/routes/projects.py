@@ -32,6 +32,14 @@ class StartLoopRequest(BaseModel):
     # They are appended to the requirement as an "[附件]" block so the Coder
     # can read the uploaded files with its own file tools.
     attachments: list[str] = []
+    # General-skeleton routing (see kairos/task_router.py). A caller that
+    # declares a non-code task ("docs", "report", ...) has the request run on
+    # the domain-neutral Workspace/Worker/Verifier skeleton instead of the
+    # Coder <-> Reviewer loop, and gets the structured Verdict back. The
+    # default (empty / absent) is unchanged: the request goes to the loop.
+    kind: str = ""
+    # Accepted alias for callers that speak "workspace_kind".
+    workspace_kind: str = ""
 
 
 class ChatRequest(BaseModel):
@@ -190,7 +198,15 @@ async def get_project(project_id: str):
 @router.post("/{project_id}/start")
 async def start_loop(project_id: str, request: "StartLoopRequest"):
     """Start the Coder <-> Reviewer loop. Returns immediately; the loop
-    runs in the background and emits progress over the WebSocket."""
+    runs in the background and emits progress over the WebSocket.
+
+    General-skeleton routing: a caller may declare the task non-code via
+    ``kind`` / ``workspace_kind`` (or the workspace may positively look like a
+    document set). Such a request runs on the domain-neutral skeleton
+    (``kairos.skeleton``) and its structured ``Verdict`` is returned *and*
+    persisted to the run record. Absent that signal the request goes to the
+    loop exactly as before -- the router's default is the loop.
+    """
     project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
@@ -202,12 +218,69 @@ async def start_loop(project_id: str, request: "StartLoopRequest"):
     block = attachment_prompt_block(_project_root(project), request.attachments)
     if block:
         requirement = f"{requirement}\n\n{block}" if requirement.strip() else block
+    # Decide the path. Pure read (a workspace scan); it never mutates the
+    # request, and a code task (or an undecidable workspace) resolves to the
+    # loop, so the block below is byte-for-byte the previous behaviour.
+    from kairos.task_router import route_task
+    decision = route_task(
+        explicit_kind=(request.kind or request.workspace_kind or ""),
+        workspace=_project_root(project),
+    )
+    if decision.uses_skeleton:
+        return await _skeleton_route_response(project_id, project, requirement, decision)
     try:
         session_id = await _orch().start_loop(project_id, requirement)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return {"status": "started", "project_id": project_id,
             "session_id": session_id, "message": requirement}
+
+
+async def _skeleton_route_response(project_id: str, project, requirement: str,
+                                   decision) -> dict:
+    """Run a routed non-code task on the skeleton and package the response.
+
+    The structured ``Verdict`` (per-criterion ``evidence`` + ``passed``) is in
+    the response *and* in the run record: ``run_general_task`` persists the run
+    as JSON under ``<project>/.kairos/skeleton-runs/`` and publishes it to the
+    orchestrator's message bus, which the existing persistence listener writes
+    to the DB (the same record path the loop's events use).
+    """
+    from kairos.skeleton.service import run_general_task
+
+    try:
+        outcome = await run_general_task(
+            kind=decision.workspace_kind,
+            root=_project_root(project),
+            instruction=requirement,
+            bus=getattr(_orch(), "message_bus", None),
+        )
+    except Exception as e:  # noqa: BLE001 - surface why the route failed
+        logger.exception("skeleton route failed for project %s", project_id)
+        raise HTTPException(
+            status_code=503,
+            detail=f"skeleton route failed: {type(e).__name__}: {e}"[:400],
+        )
+    run = outcome.run
+    logger.info(
+        "skeleton route: project=%s kind=%s source=%s outcome=%s run=%s",
+        project_id, decision.workspace_kind, decision.source, run.outcome, run.run_id,
+    )
+    return {
+        "status": "started",
+        "route": "skeleton",
+        "project_id": project_id,
+        "workspace_kind": decision.workspace_kind,
+        "route_source": decision.source,
+        "route_reason": decision.reason,
+        "run_id": run.run_id,
+        "outcome": run.outcome,
+        "passed": run.passed,
+        "verdict": run.verdict.to_dict(),
+        "run_file": outcome.run_file,
+        "artifacts": list(outcome.artifacts or []),
+        "message": requirement,
+    }
 
 
 # ---------------------------------------------------------------------------

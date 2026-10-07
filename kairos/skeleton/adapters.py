@@ -359,31 +359,44 @@ class PromptWorker(Worker):
     """A domain-neutral, LLM-driven worker.
 
     It does not touch git, tests, or files beyond the workspace: it renders the
-    workspace's inputs (and the task) into a prompt, asks an injected
-    ``generate`` callable for the deliverable, and emits it back as an
-    artifact. The ``generate`` callable *is* the model -- a real provider in
-    production, a deterministic fake in tests (no network needed).
+    workspace's inputs **with their contents** (and the task) into a prompt,
+    asks an injected ``generate`` callable for the deliverable, and emits it
+    back as an artifact. The ``generate`` callable *is* the model -- a real
+    provider in production, a deterministic fake in tests (no network needed).
+
+    The rendering goes through :meth:`Workspace.as_prompt_context`, so the
+    bodies of the workspace's resources are actually in the prompt (bounded by
+    ``max_context_chars``, with any truncation and any unreadable input stated
+    in-band) -- a repo workspace keeps its bounded *listing* instead, because
+    inlining a whole repository is useless. Passing a blank context to the
+    model is the failure mode this guards against: the model then honestly
+    answers "no input was provided", which is not a deliverable.
     """
 
     name = "prompt"
 
     _PROMPT = (
         "TASK:\n{instruction}\n\n"
+        "The workspace inputs are provided below and are the authoritative "
+        "source; use them.\n\n"
         "{context}\n\n"
         "Write the deliverable now. Cite every input you used as [[<name>]] "
         "on the line that relies on it, and end with a self-check line "
         "`SELF_CHECK: citations=<n>/<m> ok`."
     )
 
-    def __init__(self, generate: Callable, name: str = "prompt"):
+    def __init__(self, generate: Callable, name: str = "prompt",
+                 *, max_context_chars: Optional[int] = None):
         self.generate = generate
         self.name = name
+        self.max_context_chars = max_context_chars
 
     async def run(self, workspace: Workspace, task: Task) -> WorkerResult:
         refs = task.inputs if task.inputs is not None else workspace.resources()
+        context = workspace.as_prompt_context(refs, max_chars=self.max_context_chars)
         prompt = self._PROMPT.format(
             instruction=task.instruction,
-            context=workspace.as_context(refs),
+            context=context,
         )
         try:
             text = self.generate(prompt)
@@ -399,5 +412,6 @@ class PromptWorker(Worker):
             output=text,
             artifacts=[ref],
             summary=f"emitted {ref} ({len(text)} chars)",
-            meta={"workspace_kind": workspace.kind, "inputs": list(refs)},
+            meta={"workspace_kind": workspace.kind, "inputs": list(refs),
+                  "context_chars": len(context)},
         )

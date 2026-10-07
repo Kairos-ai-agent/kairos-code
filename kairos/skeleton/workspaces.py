@@ -53,8 +53,20 @@ class FileWorkspace(Workspace):
             return []
         files = []
         for p in sorted(self.source_dir.rglob("*")):
-            if p.is_file():
-                files.append(str(p.relative_to(self.source_dir)).replace("\\", "/"))
+            if not p.is_file():
+                continue
+            # A resource listing is about *inputs*. Two kinds of thing are the
+            # workspace's own byproduct, not an input, and handing them to the
+            # worker as context is noise:
+            #   * the deliverable directory (under the source dir whenever the
+            #     two share a root, i.e. ``--workspace <docs-dir>``);
+            #   * the run-record directory ``.kairos`` the skeleton writes.
+            if self.output_dir == p or self.output_dir in p.parents:
+                continue
+            rel = p.relative_to(self.source_dir)
+            if any(part == ".kairos" for part in rel.parts):
+                continue
+            files.append(str(rel).replace("\\", "/"))
         return files
 
     def resources(self) -> List[str]:
@@ -135,6 +147,17 @@ class RepoWorkspace(FileWorkspace):
         more = f"\n(... {len(chosen) - len(head)} more files)" if len(chosen) > len(head) else ""
         return f"REPO FILES ({len(chosen)}):\n{listing}{more}"
 
+    def as_prompt_context(
+        self, refs: Optional[List[str]] = None, *, max_chars: Optional[int] = None
+    ) -> str:
+        # Deliberately NOT the base body-inlining behaviour: a repository's
+        # files are read through the Coder's tools, not crammed into a prompt.
+        # Keep the same bounded listing ``as_context`` has always produced, so
+        # adding the capped renderer to the interface does not change what a
+        # repo worker sees. (``max_chars`` is accepted and ignored -- a listing
+        # is already bounded.)
+        return self.as_context(refs)
+
 
 class DocSetWorkspace(FileWorkspace):
     """The non-code case: a set of documents. No git, no tests.
@@ -150,3 +173,16 @@ class DocSetWorkspace(FileWorkspace):
 
     def __init__(self, root, source_dir: str = "docs", output_dir: str = "outputs"):
         super().__init__(root, source_dir=source_dir, output_dir=output_dir)
+        # ``kairos skeleton run --kind docs --workspace <dir>`` may be pointed
+        # at a project root (inputs live in ``<dir>/docs``) *or* straight at the
+        # document folder itself. When the conventional subdir is absent but the
+        # root holds files, treat the root as the document set -- otherwise
+        # ``resources()`` comes back empty and the worker is handed a blank
+        # context (the real-model failure this guards against: the model then
+        # honestly answers "no documents were provided").
+        if not self.source_dir.exists() and source_dir not in ("", "."):
+            try:
+                if self.root.is_dir() and any(p.is_file() for p in self.root.rglob("*")):
+                    self.source_dir = self.root
+            except OSError:
+                pass

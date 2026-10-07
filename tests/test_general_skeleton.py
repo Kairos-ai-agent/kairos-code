@@ -22,6 +22,7 @@ import pytest
 
 from kairos.skeleton import (
     AssertionVerifier,
+    CitationConsistencyVerifier,
     CoderWorker,
     DocSetWorkspace,
     HumanVerifier,
@@ -590,9 +591,12 @@ def test_default_registry_is_honest_about_readiness():
     reg = build_default_registry()
     describe = reg.describe()
 
-    # only `tests` can decide on its own; `human` is a gate, not a decider
-    assert reg.deciding_names() == ["tests"]
+    # `tests` and `citations` can decide on their own; `human` is a gate, not a
+    # decider
+    assert reg.deciding_names() == ["citations", "tests"]
     assert describe["tests"]["ready"] is True
+    assert describe["citations"]["ready"] is True
+    assert describe["citations"]["decides"] is True
     assert describe["human"]["ready"] is True
     assert describe["human"]["decides"] is False
 
@@ -601,7 +605,9 @@ def test_default_registry_is_honest_about_readiness():
         assert describe[name]["ready"] is False, name
 
     # a caller that only wants ready kinds can drop the unconfigured stubs
-    assert build_default_registry(include_unconfigured=False).names() == ["human", "tests"]
+    assert build_default_registry(include_unconfigured=False).names() == [
+        "citations", "human", "tests",
+    ]
 
 
 async def test_default_tool_oracle_abstains_instead_of_faking_a_verdict(tmp_path):
@@ -1160,3 +1166,314 @@ def test_skeleton_cli_persists_and_resumes_a_human_gate(tmp_path):
     assert code2 == EXIT_OK
     loaded = json.loads(files[0].read_text(encoding="utf-8"))
     assert loaded["outcome"] == "passed"
+
+
+# ---- (9) the workspace's document *contents* really reach the worker -------
+#
+# The real-model failure this guards against: ``--workspace <dir>`` pointed
+# straight at the document folder, ``DocSetWorkspace`` looked in ``<dir>/docs``,
+# found nothing, handed the model an empty context, and the model honestly
+# answered "no documents were provided -- cannot complete". A passing verdict
+# from a weak ``--check`` then blessed it. These tests pin both halves.
+
+def test_docset_workspace_accepts_the_docs_dir_given_directly(tmp_path):
+    """``--workspace <docs-dir>`` (no nested ``docs/``) still finds the inputs."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "alpha.md").write_text("延迟 40ms", encoding="utf-8")
+
+    # pointed straight at the folder of documents -- ``<docs>/docs`` is absent
+    ws = DocSetWorkspace(docs)
+    assert not (docs / "docs").exists()
+    assert ws.resources() == ["alpha.md"]
+    assert "40ms" in ws.as_prompt_context()
+
+
+def test_docset_workspace_keeps_the_docs_subdir_layout(tmp_path):
+    """The conventional layout (``<root>/docs``) is unchanged by the fallback."""
+    ws = _doc_workspace(tmp_path)
+    assert ws.resources() == ["alpha.md", "beta.md", "gamma.md"]
+
+
+def test_docset_resources_exclude_its_own_outputs(tmp_path):
+    """A deliverable is not an input: ``outputs/`` never shows up in resources."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "alpha.md").write_text("延迟 40ms", encoding="utf-8")
+    ws = DocSetWorkspace(docs)  # root == docs, so outputs/ sits inside the root
+    ws.emit("report.md", "hello")
+    assert ws.resources() == ["alpha.md"]
+
+
+def test_docset_resources_exclude_the_run_record_dir(tmp_path):
+    """``.kairos`` run records are the harness's own, not workspace inputs."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "alpha.md").write_text("延迟 40ms", encoding="utf-8")
+    runs = docs / ".kairos" / "skeleton-runs"
+    runs.mkdir(parents=True)
+    (runs / "skeleton-run-abc123.json").write_text("{}", encoding="utf-8")
+
+    ws = DocSetWorkspace(docs)  # root == docs, so .kairos sits inside the root
+    assert ws.resources() == ["alpha.md"]
+
+
+async def test_prompt_worker_feeds_workspace_document_bodies(tmp_path):
+    """The fake generator captures the prompt: the *bodies* must be in it."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "alpha.md").write_text("# alpha\n- 延迟：约 40ms\n", encoding="utf-8")
+    (docs / "beta.md").write_text("# beta\n- 成本：每百万 token 0.3 元\n", encoding="utf-8")
+    (docs / "gamma.md").write_text("# gamma\n- 部署：无需服务器\n", encoding="utf-8")
+    ws = DocSetWorkspace(tmp_path)
+
+    prompts: list[str] = []
+
+    def gen(prompt: str) -> str:
+        prompts.append(prompt)
+        return "x"
+
+    await PromptWorker(generate=gen).run(
+        ws, Task(instruction="读三份文档产出一页对比报告", output_name="report.md")
+    )
+
+    assert prompts, "the generator was never driven"
+    prompt = prompts[0]
+    # the exact figures from the documents -- not just their names
+    assert "40ms" in prompt
+    assert "0.3 元" in prompt
+    assert "无需服务器" in prompt
+    for name in ("alpha.md", "beta.md", "gamma.md"):
+        assert f"INPUT: {name}" in prompt
+
+
+async def test_prompt_worker_reports_an_unreadable_resource(tmp_path):
+    """A resource that cannot be read is stated in the prompt, not dropped."""
+    ws = _doc_workspace(tmp_path)
+    prompts: list[str] = []
+    worker = PromptWorker(generate=lambda p: prompts.append(p) or "x")
+    await worker.run(
+        ws,
+        Task(instruction="读文档", output_name="report.md",
+             inputs=["alpha.md", "does-not-exist.md"]),
+    )
+    prompt = prompts[0]
+    assert "INPUT: alpha.md" in prompt
+    assert "does-not-exist.md" in prompt
+    assert "unreadable" in prompt
+
+
+async def test_prompt_worker_truncates_a_giant_workspace_and_says_so(tmp_path):
+    """The context is capped; a cut is named, never silent."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    # 'Z'/'Q' appear nowhere in the prompt template, so counting them counts
+    # only inlined body characters.
+    (docs / "a.md").write_text("Z" * 200, encoding="utf-8")
+    (docs / "b.md").write_text("Q" * 200, encoding="utf-8")
+    ws = DocSetWorkspace(tmp_path)
+
+    prompts: list[str] = []
+    worker = PromptWorker(generate=lambda p: prompts.append(p) or "x",
+                          max_context_chars=50)
+    await worker.run(ws, Task(instruction="x", output_name="report.md"))
+
+    prompt = prompts[0]
+    assert "[TRUNCATED]" in prompt
+    assert "50-char cap" in prompt
+    assert prompt.count("Z") == 50          # first doc cut exactly at the cap
+    assert "INPUT: b.md" not in prompt      # second doc omitted entirely
+    assert "b.md" in prompt                 # ... but named in the truncation note
+    assert "Q" not in prompt                # no byte of the omitted doc leaks
+
+
+def test_as_prompt_context_ceiling_bounds_the_inlined_bodies(tmp_path):
+    """``max_chars`` bounds the total body characters that get inlined."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "big1.md").write_text("x" * 5000, encoding="utf-8")
+    (docs / "big2.md").write_text("y" * 5000, encoding="utf-8")
+    ws = DocSetWorkspace(tmp_path)
+
+    ctx = ws.as_prompt_context(max_chars=120)
+    assert "[TRUNCATED]" in ctx
+    assert "x" * 120 in ctx        # the first body is inlined up to the cap
+    assert "x" * 121 not in ctx    # ... and not one character past it
+    assert "INPUT: big2.md" not in ctx   # the second body is omitted entirely
+    assert "big2.md" in ctx              # ... but named in the truncation note
+
+
+def test_as_prompt_context_of_an_empty_workspace_is_not_silently_blank(tmp_path):
+    """No resources -> an explicit note, so a model is never handed ''."""
+    ws = DocSetWorkspace(tmp_path)  # no docs/ and no files at all
+    ctx = ws.as_prompt_context()
+    assert ctx.strip()
+    assert "no readable inputs" in ctx
+
+
+# ---- (10) the citations verifier: self-report vs the real resource count ---
+
+def _cite_task(name: str = "report.md") -> Task:
+    return Task(instruction="读文档并写报告", output_name=name)
+
+
+async def test_citations_verifier_fails_a_zero_citation_report(tmp_path):
+    """The exact real-model deliverable: 'cannot complete' + citations=0/3."""
+    ws = _doc_workspace(tmp_path)  # three real resources
+    ws.emit("report.md",
+            "状态：无法完成。数据缺失。\n\nSELF_CHECK: citations=0/3 ok\n")
+
+    verdict = await CitationConsistencyVerifier().verify(
+        ws, _cite_task(), WorkerResult(ok=True, output=""))
+
+    assert verdict.passed is False
+    assert verdict.verifier == "citations"
+    # the declared total matches reality (3), so the *cited* count is the lie
+    total_row = next(e for e in verdict.evidence
+                     if e["criterion"] == "declared total equals workspace resource count")
+    assert total_row["reported"] == 3 and total_row["actual"] == 3
+    # every resource is reported "not cited"
+    resource_rows = [e for e in verdict.evidence
+                     if str(e["criterion"]).startswith("resource cited:")]
+    assert len(resource_rows) == 3
+    assert all(e["satisfied"] is False for e in resource_rows)
+
+
+async def test_citations_verifier_passes_when_every_resource_is_cited(tmp_path):
+    ws = _doc_workspace(tmp_path)
+    ws.emit("report.md",
+            "| 方案 | 延迟 |\n|---|---|\n"
+            "| 甲 [[alpha.md]] | 30ms |\n"
+            "| 乙 [[beta.md]] | 80ms |\n"
+            "| 丙 [[gamma.md]] | 15ms |\n\n"
+            "SELF_CHECK: citations=3/3 ok\n")
+
+    verdict = await CitationConsistencyVerifier().verify(
+        ws, _cite_task(), WorkerResult(ok=True, output=""))
+
+    assert verdict.passed is True
+    assert all(e["satisfied"] for e in verdict.evidence)
+
+
+async def test_citations_verifier_abstains_without_a_self_report(tmp_path):
+    """No self-report -> an honest None, never a silent pass."""
+    ws = _doc_workspace(tmp_path)
+    ws.emit("report.md", "读了三份文档并写了报告，但没有写自检行。\n")
+
+    verdict = await CitationConsistencyVerifier().verify(
+        ws, _cite_task(), WorkerResult(ok=True, output=""))
+
+    assert verdict.passed is None
+    assert verdict.verifier == "citations"
+    assert "cross-check" in verdict.reason
+    assert verdict.evidence[0]["satisfied"] is None
+
+
+async def test_citations_verifier_flags_a_declared_total_that_disagrees(tmp_path):
+    """A denominator that does not match the workspace is caught by itself."""
+    ws = _doc_workspace(tmp_path)  # three resources
+    ws.emit("report.md", "见 [[alpha.md]] [[beta.md]]\nSELF_CHECK: citations=2/5 ok\n")
+
+    verdict = await CitationConsistencyVerifier().verify(
+        ws, _cite_task(), WorkerResult(ok=True, output=""))
+
+    assert verdict.passed is False
+    total_row = next(e for e in verdict.evidence
+                     if e["criterion"] == "declared total equals workspace resource count")
+    assert total_row["satisfied"] is False and total_row["reported"] == 5 \
+        and total_row["actual"] == 3
+
+
+async def test_citations_verifier_is_not_tied_to_any_file_names(tmp_path):
+    """Different resources, no alpha/beta/gamma anywhere -- still decides."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    for name in ("north.txt", "south.txt"):
+        (docs / name).write_text("内容", encoding="utf-8")
+    ws = DocSetWorkspace(tmp_path)
+    ws.emit("report.md", "结论见 [[north.txt]] 与 [[south.txt]]\n"
+                         "SELF_CHECK: citations=2/2 ok\n")
+
+    verdict = await CitationConsistencyVerifier().verify(
+        ws, _cite_task(), WorkerResult(ok=True, output=""))
+
+    assert verdict.passed is True
+
+
+async def test_citations_verifier_abstains_when_the_workspace_has_no_resources(tmp_path):
+    ws = DocSetWorkspace(tmp_path)  # nothing to cross-check against
+    ws.emit("report.md", "SELF_CHECK: citations=0/0 ok\n")
+
+    verdict = await CitationConsistencyVerifier().verify(
+        ws, _cite_task(), WorkerResult(ok=True, output=""))
+
+    assert verdict.passed is None
+    assert "no resources" in verdict.reason
+
+
+def test_default_registry_includes_the_citations_verifier():
+    reg = build_default_registry()
+    assert "citations" in reg
+    assert reg.get("citations").ready is True
+    assert "citations" in reg.deciding_names()
+
+
+async def test_citations_verifier_is_reachable_through_the_registry(tmp_path):
+    ws = _doc_workspace(tmp_path)
+    ws.emit("report.md", "数据缺失\nSELF_CHECK: citations=0/3 ok\n")
+    verdict = await build_default_registry().verify(
+        "citations", ws, _cite_task(), WorkerResult(ok=True))
+    assert verdict.passed is False
+
+
+async def test_run_task_rejects_a_cannot_complete_deliverable_end_to_end(tmp_path):
+    """The whole point: worker -> citations verifier, no weak checkbox."""
+    ws = _doc_workspace(tmp_path)
+
+    def hopeless_generator(prompt: str) -> str:
+        # ignores the (now non-empty) prompt and answers like the real model did
+        return "状态：无法完成。本次会话未提供文档内容。\nSELF_CHECK: citations=0/3 ok\n"
+
+    run = await run_task(
+        PromptWorker(generate=hopeless_generator), ws, _cite_task(),
+        CitationConsistencyVerifier(),
+    )
+    assert run.passed is False
+    assert run.outcome == "failed"
+    assert run.verdict.verifier == "citations"
+
+
+def test_skeleton_cli_citations_verifier_reads_a_docs_folder_given_directly(tmp_path, capsys):
+    """``--workspace <docs-dir> --verifier citations`` runs end to end."""
+    from kairos.cli import EXIT_OK, main
+
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    for name in ("one.md", "two.md"):
+        (docs / name).write_text(f"# {name}\n- 内容\n", encoding="utf-8")
+
+    code = main([
+        "skeleton", "run",
+        "--task", "读文档产出一页对比报告",
+        "--workspace", str(docs),   # straight at the document folder
+        "--kind", "docs",
+        "--verifier", "citations",
+        "--out-name", "report.md",
+        "--generator", "offline",
+        "--run-dir", str(tmp_path / "runs"),
+    ])
+
+    assert code == EXIT_OK
+    assert "passed" in capsys.readouterr().out
+    report = (docs / "outputs" / "report.md").read_text(encoding="utf-8")
+    assert "citations=2/2" in report
+
+
+def test_skeleton_cli_help_mentions_the_citations_verifier(capsys):
+    from kairos.cli import main
+
+    with pytest.raises(SystemExit) as exc:
+        main(["skeleton", "run", "--help"])
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "citations" in out

@@ -5,6 +5,9 @@ Registered kinds (the gap report's §P0-2 list):
 * ``tests``       -- run the workspace's test command (existing behaviour).
 * ``assertion``   -- run a user-supplied callable or *safe* expression.
 * ``rubric``      -- score a list of criteria; pass when the score clears a bar.
+* ``citations``   -- cross-check a self-reported ``citations=N/M`` count against
+  the workspace's real resource count (a deliverable that admits it read
+  nothing does not pass).
 * ``human``       -- block on an explicit human approval (a gate, not a decider).
 * ``tool_oracle`` -- check the result with a separate tool/probe.
 
@@ -29,6 +32,7 @@ from __future__ import annotations
 import ast
 import asyncio
 import inspect
+import re
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from kairos.skeleton.contracts import Verdict, Verifier, WorkerResult, Workspace
@@ -501,21 +505,158 @@ class ToolOracleVerifier(Verifier):
                        score=score, evidence=evidence)
 
 
-def build_default_registry(*, include_unconfigured: bool = True) -> VerifierRegistry:
-    """Register the five built-in verifier kinds, honestly.
+#: Self-reported citation line, e.g. ``SELF_CHECK: citations=3/3 ok`` -- what
+#: the worker prompt asks for. Matched loosely (any separator / either spacing)
+#: so it is not tied to one task's wording, but it *does* require the word
+#: ``citation(s)`` next to an ``N/M`` pair; anything vaguer would be guessing,
+#: and guessing is what this verifier exists to refuse.
+_CITATION_LINE_RE = re.compile(r"citations?\b[^\d\n]{0,12}(\d+)\s*/\s*(\d+)", re.IGNORECASE)
 
-    ``tests`` can decide on its own. ``assertion`` / ``rubric`` /
+
+def _deliverable_text(workspace: Workspace, task, result: WorkerResult) -> str:
+    """The produced artifact if it reads back, else the worker's own output."""
+    text = ""
+    try:
+        text = workspace.read_output(getattr(task, "output_name", "") or "") or ""
+    except Exception:
+        text = ""
+    if not text:
+        text = getattr(result, "output", "") or ""
+    return text
+
+
+def _cited_names(text: str, resources: List[str]) -> List[str]:
+    """Resources whose name (or file stem) actually appears in the deliverable."""
+    lowered = (text or "").lower()
+    hits: List[str] = []
+    for ref in resources:
+        name = (ref or "").strip()
+        if not name:
+            continue
+        stem = name.rsplit("/", 1)[-1]
+        if "." in stem:
+            stem = stem.rsplit(".", 1)[0]
+        if name.lower() in lowered or (stem and stem.lower() in lowered):
+            hits.append(ref)
+    return hits
+
+
+class CitationConsistencyVerifier(Verifier):
+    """Cross-check a deliverable's *self-reported* citation count against the
+    workspace's real resource count.
+
+    Task-agnostic by design: it parses whatever ``citations=N/M`` the
+    deliverable declares (the self-check line the worker prompt asks for) and
+    compares it with ``workspace.resources()``. No file name and no wording is
+    baked in, so it works for any document set.
+
+    The point is that a report which *admits* it read nothing -- ``citations=0/3``
+    alongside "data missing / cannot complete" -- is a hard **fail**, not a pass
+    behind a weak substring check. When there is no self-report to cross-check
+    (or the workspace exposes no resources), it abstains (``passed=None``) with
+    an explicit reason rather than silently passing.
+    """
+
+    name = "citations"
+
+    def __init__(self, name: str = "citations"):
+        self.name = name
+
+    @property
+    def ready(self) -> bool:
+        # Can decide on its own; it abstains honestly when it has nothing to
+        # cross-check against, which is not the same as being unconfigured.
+        return True
+
+    async def verify(self, workspace: Workspace, task, result: WorkerResult) -> Verdict:
+        resources = list(workspace.resources())
+        text = _deliverable_text(workspace, task, result)
+
+        match = _CITATION_LINE_RE.search(text or "")
+        if match is None:
+            return Verdict(
+                passed=None, verifier=self.name,
+                reason=("no self-reported citation count found in the "
+                        "deliverable (expected a `citations=<n>/<m>` line); "
+                        "nothing to cross-check against"),
+                evidence=[{
+                    "criterion": "self-reported citation count present",
+                    "satisfied": None,
+                    "detail": "no `citations=N/M` line in the deliverable",
+                    "actual_resources": len(resources),
+                }],
+            )
+
+        reported_cited = int(match.group(1))
+        reported_total = int(match.group(2))
+        actual_total = len(resources)
+        hits = _cited_names(text, resources)
+
+        if actual_total == 0:
+            return Verdict(
+                passed=None, verifier=self.name,
+                reason=("workspace exposes no resources to cross-check against "
+                        f"(the deliverable self-reported {reported_cited}/{reported_total})"),
+                evidence=[{
+                    "criterion": "workspace has resources to cross-check",
+                    "satisfied": None,
+                    "reported": f"{reported_cited}/{reported_total}",
+                    "actual_resources": 0,
+                }],
+            )
+
+        evidence: List[Dict[str, Any]] = [{
+            "criterion": "declared total equals workspace resource count",
+            "satisfied": reported_total == actual_total,
+            "reported": reported_total,
+            "actual": actual_total,
+        }]
+        for ref in resources:
+            evidence.append({
+                "criterion": f"resource cited: {ref}",
+                "satisfied": ref in hits,
+            })
+        evidence.append({
+            "criterion": "declared cited count equals resources actually cited",
+            "satisfied": reported_cited == len(hits),
+            "reported": reported_cited,
+            "actual": len(hits),
+            "cited": hits,
+        })
+        passed = (
+            reported_total == actual_total
+            and reported_cited == len(hits)
+            and len(hits) == actual_total
+        )
+        reason = (
+            f"self-reported citations={reported_cited}/{reported_total}; workspace "
+            f"has {actual_total} resource(s), {len(hits)} actually cited"
+        )
+        return Verdict(
+            passed=passed, verifier=self.name, reason=reason,
+            score=round(100.0 * len(hits) / actual_total, 1),
+            evidence=evidence,
+        )
+
+
+def build_default_registry(*, include_unconfigured: bool = True) -> VerifierRegistry:
+    """Register the built-in verifier kinds, honestly.
+
+    ``tests`` and ``citations`` can decide on their own (each abstains
+    honestly -- ``passed=None`` -- when it has nothing to check against, which
+    is not the same as being unconfigured). ``assertion`` / ``rubric`` /
     ``tool_oracle`` need configuration (a check / criteria / oracle) and are
     registered *either* as unconfigured stubs that abstain with a clear reason
     (``include_unconfigured=True``, the default) *or* not at all
     (``include_unconfigured=False``). ``human`` is a gate, not a decider.
 
     Callers should read :meth:`VerifierRegistry.ready_names` /
-    :meth:`VerifierRegistry.deciding_names` instead of assuming "five names
-    registered" means "five kinds work".
+    :meth:`VerifierRegistry.deciding_names` instead of assuming "N names
+    registered" means "N kinds work".
     """
     reg = VerifierRegistry()
     reg.register(ProjectTestsVerifier())
+    reg.register(CitationConsistencyVerifier())
     if include_unconfigured:
         reg.register(AssertionVerifier())
         reg.register(RubricVerifier())

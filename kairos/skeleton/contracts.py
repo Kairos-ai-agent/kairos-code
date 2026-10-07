@@ -30,6 +30,12 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+#: Hard ceiling on how many characters of workspace *resource bodies* a worker
+#: may inline into a single prompt. Mirrors ``agents.base.MAX_PUBLISHED_TEXT``
+#: (the same "never silently drop the tail" idea): once the ceiling is hit the
+#: remainder is cut and the cut is stated in-band, never made invisible.
+MAX_WORKSPACE_CONTEXT_CHARS = 200_000
+
 
 @dataclass
 class Task:
@@ -207,6 +213,58 @@ class Workspace(ABC):
                 body = f"(unreadable: {exc})"
             chunks.append(f"INPUT: {ref}\n{body}")
         return "\n\n".join(chunks)
+
+    def as_prompt_context(
+        self, refs: Optional[List[str]] = None, *, max_chars: Optional[int] = None
+    ) -> str:
+        """Render inputs **with their bodies**, bounded and honest.
+
+        This is the rendering a *worker* feeds to a model -- unlike
+        :meth:`as_context`, which a workspace may override to emit a cheap
+        listing (``RepoWorkspace`` does exactly that, because inlining a whole
+        repository is useless). Every named resource's *content* is inlined
+        under a total ``max_chars`` ceiling (``None`` -> the module default),
+        and the failure modes are stated instead of hidden:
+
+        * a resource that cannot be read renders as ``(unreadable: ...)`` --
+          never silently dropped;
+        * a workspace with no resources renders an explicit note rather than
+          the empty string, so a model cannot be handed a blank context and
+          then blamed for saying "no input was provided";
+        * when the ceiling is reached, the tail is cut and a ``[TRUNCATED]``
+          note names every input that was cut short or omitted entirely.
+        """
+        cap = MAX_WORKSPACE_CONTEXT_CHARS if max_chars is None else int(max_chars)
+        chosen = list(refs) if refs is not None else self.resources()
+        if not chosen:
+            return ("(workspace exposes no readable inputs: resources() returned "
+                    "an empty list)")
+        blocks: List[str] = []
+        used = 0
+        truncated: List[str] = []
+        for ref in chosen:
+            try:
+                body = self.read(ref)
+            except Exception as exc:  # honest, never silent
+                blocks.append(f"INPUT: {ref}\n(unreadable: {exc})")
+                continue
+            body = "" if body is None else str(body)
+            remaining = cap - used
+            if remaining <= 0:
+                truncated.append(ref)
+                continue
+            if len(body) > remaining:
+                body = body[:remaining]
+                truncated.append(ref)
+            used += len(body)
+            blocks.append(f"INPUT: {ref}\n{body}")
+        text = "\n\n".join(blocks)
+        if truncated:
+            text += (
+                f"\n\n[TRUNCATED] workspace context hit the {cap}-char cap; these "
+                "inputs were cut short or omitted entirely: " + ", ".join(truncated)
+            )
+        return text
 
     def supports(self, capability: str) -> bool:
         return capability in self.capabilities

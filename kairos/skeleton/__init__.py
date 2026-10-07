@@ -29,6 +29,7 @@ from kairos.skeleton.driver import SkeletonRun, resume_task, run_once, run_task
 from kairos.skeleton.offline import OfflineGenerator
 from kairos.skeleton.verifiers import (
     AssertionVerifier,
+    CitationConsistencyVerifier,
     HumanVerifier,
     ProjectTestsVerifier,
     RubricVerifier,
@@ -47,7 +48,7 @@ __all__ = [
     # verifiers
     "VerifierRegistry", "build_default_registry",
     "ProjectTestsVerifier", "AssertionVerifier", "RubricVerifier",
-    "HumanVerifier", "ToolOracleVerifier",
+    "HumanVerifier", "ToolOracleVerifier", "CitationConsistencyVerifier",
     # adapters
     "CoderWorker", "ReviewerVerifier", "PromptWorker",
     "verdict_from_review", "APPROVE_SCORE_THRESHOLD",

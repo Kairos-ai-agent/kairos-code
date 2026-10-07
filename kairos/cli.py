@@ -283,10 +283,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="docs = a document set (default); repo = a git working tree.",
     )
     p_sk_run.add_argument(
-        "--verifier", choices=["assertion", "tests", "rubric", "human"],
+        "--verifier", choices=["assertion", "citations", "tests", "rubric", "human"],
         default="assertion",
-        help="How to judge the deliverable (default: assertion). `human` "
-             "persists the run as a human-gated run for `skeleton resume`.",
+        help="How to judge the deliverable (default: assertion). "
+             "`citations` cross-checks a self-reported `citations=N/M` line "
+             "against the workspace's real resource count (a report admitting "
+             "it read nothing fails); `tests` runs the workspace's test "
+             "command; `human` persists the run as a human-gated run for "
+             "`skeleton resume`.",
     )
     p_sk_run.add_argument(
         "--check", default="",
@@ -851,6 +855,7 @@ def _prepare_skeleton_run(args: argparse.Namespace):
     """Build (workspace, worker, verifier, task, run_dir) from parsed args."""
     from kairos.skeleton import (
         AssertionVerifier,
+        CitationConsistencyVerifier,
         DocSetWorkspace,
         OfflineGenerator,
         PromptWorker,
@@ -881,6 +886,8 @@ def _prepare_skeleton_run(args: argparse.Namespace):
 
     if args.verifier == "tests":
         verifier = ProjectTestsVerifier()
+    elif args.verifier == "citations":
+        verifier = CitationConsistencyVerifier()
     elif args.verifier == "human":
         from kairos.skeleton import HumanVerifier
         verifier = HumanVerifier()

@@ -10,7 +10,9 @@ thin -- no loop semantics change.
 from __future__ import annotations
 
 import inspect
+import os
 import uuid
+from contextlib import contextmanager
 from typing import Any, Callable, Optional
 
 from kairos.skeleton.contracts import (
@@ -25,6 +27,44 @@ from kairos.skeleton.contracts import (
 # The loop's approval bar; the Reviewer adapter uses it to decide whether a
 # "no bugs" verdict with a score clears the gate as a pass.
 APPROVE_SCORE_THRESHOLD = 85
+
+
+@contextmanager
+def _in_workspace(root: Optional[str]):
+    """Run the enclosed block with ``root`` as the process working directory.
+
+    The real Coder resolves relative paths against *its* cwd, so an adapter that
+    only stashed ``workspace.root`` in the task context would let the agent edit
+    the process's tree instead of the workspace it was handed. Entering the
+    workspace makes ``CoderWorker(real_coder).run(RepoWorkspace(X))`` actually
+    act on **X**. The previous cwd is restored on exit. Note this is
+    process-global: the skeleton driver runs one worker at a time.
+    """
+    if not root or not os.path.isdir(root):
+        yield
+        return
+    previous = os.getcwd()
+    os.chdir(root)
+    try:
+        yield
+    finally:
+        os.chdir(previous)
+
+
+def _bind_agent_to(agent: Any, root: str) -> None:
+    """Best-effort: point common cwd-carrying attributes at the workspace root.
+
+    Agents that expose ``work_dir`` / ``cwd`` get updated; agents that derive
+    their working directory from the process cwd are covered by
+    :func:`_in_workspace` instead. Never raises.
+    """
+    for attr in ("work_dir", "cwd"):
+        try:
+            if hasattr(agent, attr):
+                setattr(agent, attr, root)
+        except Exception:
+            pass
+
 
 
 def verdict_from_review(
@@ -88,6 +128,11 @@ class CoderWorker(Worker):
     -- the real ``kairos.agents.roles.Coder`` satisfies this, and so does a
     test stub, which is how the skeleton proves the Coder is *an*
     implementation rather than the only possibility.
+
+    The workspace is bound at the **behaviour** level, not just in the task
+    context: the agent runs with ``workspace.root`` as the working directory
+    (and any ``work_dir``/``cwd`` attribute it exposes is pointed there too),
+    so ``run(RepoWorkspace(X))`` really acts on ``X``.
     """
 
     name = "coder"
@@ -100,6 +145,7 @@ class CoderWorker(Worker):
     async def run(self, workspace: Workspace, task: Task) -> WorkerResult:
         from kairos.agents.base import AgentTask
 
+        root = str(getattr(workspace, "root", "") or "")
         agent_task = AgentTask(
             id=task.id,
             title=task.title,
@@ -107,23 +153,26 @@ class CoderWorker(Worker):
             context={
                 "project_id": self.project_id,
                 "workspace_kind": workspace.kind,
-                "workspace_root": str(getattr(workspace, "root", "")),
+                "workspace_root": root,
             },
         )
         try:
-            output = await self.agent.run(agent_task, plan_mode=self.plan_mode) or ""
+            _bind_agent_to(self.agent, root)
+            with _in_workspace(root):
+                output = await self.agent.run(agent_task, plan_mode=self.plan_mode) or ""
         except Exception as exc:  # a worker failure is data, not a crash
             return WorkerResult(
                 ok=False, error=str(exc),
                 summary=f"{getattr(self.agent, 'name', 'Coder')} crashed: {exc}",
-                meta={"workspace_kind": workspace.kind},
+                meta={"workspace_kind": workspace.kind, "workspace_root": root},
             )
         return WorkerResult(
             ok=True,
             output=output,
             artifacts=list(workspace.outputs()),
             summary=f"{getattr(self.agent, 'name', 'Coder')} produced {len(output)} chars",
-            meta={"workspace_kind": workspace.kind, "plan_mode": self.plan_mode},
+            meta={"workspace_kind": workspace.kind, "plan_mode": self.plan_mode,
+                  "workspace_root": root},
         )
 
 

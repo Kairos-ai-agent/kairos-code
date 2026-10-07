@@ -29,6 +29,8 @@ import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from kairos.test_command import detect_project_test_command
+
 logger = logging.getLogger(__name__)
 
 # Cap output so a long pytest trace doesn'"'"'t blow up the prompt.
@@ -224,11 +226,16 @@ def _auto_detect_test_command(workspace: Path) -> Optional[List[str]]:
     # from 1 GB to 13.5 GB while eight tests timed out at 150 s apiece.
     if os.environ.get("KAIROS_INSIDE_TESTS"):
         return None
-    if (workspace / "pyproject.toml").exists() or (workspace / "pytest.ini").exists():
-        return ["pytest", "-q", "--tb=short", "-x"]
-    if (workspace / "package.json").exists():
-        return ["npm", "test", "--silent"]
-    return None
+    # Detection lives in ONE place (kairos/test_command.py) so this precheck and
+    # the skeleton's verifier cannot drift apart. The venv-python preference is
+    # left off here to keep the precheck's command byte-identical to before
+    # (it has always relied on the global pytest console script).
+    return detect_project_test_command(
+        workspace,
+        pytest_args=("-q", "--tb=short", "-x"),
+        marker_files=("pyproject.toml", "pytest.ini"),
+        check_npm_on_path=False,
+    )
 
 def format_precheck_for_prompt(precheck: Dict) -> str:
     """Render the precheck result as a string the LLM can read.

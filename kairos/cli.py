@@ -260,6 +260,80 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_demo.add_argument("--quiet", "-q", action="store_true")
 
+    # ---- skeleton (domain-neutral worker -> verifier, no code loop) ------
+    p_skeleton = sub.add_parser(
+        "skeleton",
+        help="Run a domain-neutral task (workspace -> worker -> verifier) "
+             "without the code loop: e.g. read documents and produce a report.",
+    )
+    skeleton_sub = p_skeleton.add_subparsers(dest="skeleton_command")
+    p_sk_run = skeleton_sub.add_parser(
+        "run", help="Run one task through the skeleton and verify it.",
+    )
+    p_sk_run.add_argument(
+        "--task", required=True,
+        help="The task: literal text, or a path to a file containing it.",
+    )
+    p_sk_run.add_argument(
+        "--workspace", default=".",
+        help="Workspace directory the worker reads/writes (default: cwd).",
+    )
+    p_sk_run.add_argument(
+        "--kind", choices=["docs", "repo"], default="docs",
+        help="docs = a document set (default); repo = a git working tree.",
+    )
+    p_sk_run.add_argument(
+        "--verifier", choices=["assertion", "tests", "rubric", "human"],
+        default="assertion",
+        help="How to judge the deliverable (default: assertion). `human` "
+             "persists the run as a human-gated run for `skeleton resume`.",
+    )
+    p_sk_run.add_argument(
+        "--check", default="",
+        help="assertion verifier: a trusted string expression, e.g. "
+             "\"'SELF_CHECK' in output\" (callables preferred in code).",
+    )
+    p_sk_run.add_argument(
+        "--criterion", action="append", default=[], metavar="SUBSTRING",
+        help="rubric verifier: a substring the deliverable must contain "
+             "(repeatable).",
+    )
+    p_sk_run.add_argument(
+        "--threshold", type=float, default=1.0,
+        help="rubric threshold (default: 1.0 = every criterion).",
+    )
+    p_sk_run.add_argument(
+        "--out-name", default="report.md",
+        help="Name of the deliverable artifact (default: report.md).",
+    )
+    p_sk_run.add_argument(
+        "--generator", choices=["auto", "offline", "model"], default="auto",
+        help="auto = model if configured else offline (default); offline = a "
+             "deterministic no-network generator; model = require a provider.",
+    )
+    p_sk_run.add_argument(
+        "--run-dir", default=None,
+        help="Where to persist the run JSON "
+             "(default: <workspace>/.kairos/skeleton-runs).",
+    )
+    p_sk_run.add_argument("--json", action="store_true", dest="json_output")
+    p_sk_run.add_argument("--quiet", "-q", action="store_true")
+
+    p_sk_resume = skeleton_sub.add_parser(
+        "resume", help="Answer a human-gated skeleton run and continue it.",
+    )
+    p_sk_resume.add_argument(
+        "--run", required=True, help="Path to a persisted skeleton-run JSON.",
+    )
+    grp = p_sk_resume.add_mutually_exclusive_group(required=True)
+    grp.add_argument("--approve", action="store_true",
+                     help="Accept the deliverable; the run is marked passed.")
+    grp.add_argument("--reject", action="store_true",
+                     help="Reject the deliverable; the run is marked failed.")
+    p_sk_resume.add_argument("--reason", default="",
+                             help="Why (recorded on the run).")
+    p_sk_resume.add_argument("--json", action="store_true", dest="json_output")
+
     return parser
 
 
@@ -484,7 +558,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"kairos-code {__version__}")
         return 0
     if not argv or argv[0] not in ("serve", "exec", "gate", "demo", "worker",
-                                   "accept", "-h", "--help"):
+                                   "accept", "skeleton", "-h", "--help"):
         # Bare command (or unknown) → legacy server mode
         return _serve_legacy()
 
@@ -518,6 +592,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         except KeyboardInterrupt:
             print("\n[kairos] interrupted", file=sys.stderr)
             return 130
+    if args.command == "skeleton":
+        return _run_skeleton(args)
     return EXIT_BAD_INPUT
 
 
@@ -735,6 +811,209 @@ def _run_gate(args: argparse.Namespace) -> int:
     if args.quiet:
         argv += ["--quiet"]
     return gate_mod.main(argv)
+
+
+# ---------------------------------------------------------------------------
+# skeleton (domain-neutral worker -> verifier, without the code loop)
+# ---------------------------------------------------------------------------
+
+
+class _SkeletonInputError(ValueError):
+    """Bad ``kairos skeleton`` input; maps to EXIT_BAD_INPUT."""
+
+
+def _skeleton_provider_generator(provider):
+    """Adapt a model provider into an async ``generate(prompt) -> str``."""
+    from kairos.llm.base import LLMMessage
+
+    async def _generate(prompt: str) -> str:
+        response = await provider.complete([LLMMessage(role="user", content=prompt)])
+        return getattr(response, "content", "") or ""
+
+    return _generate
+
+
+def _skeleton_substring_predicate(needle: str):
+    """A rubric row: the deliverable (artifact, else worker output) contains it."""
+    def _pred(workspace, task, result):
+        text = ""
+        try:
+            text = workspace.read_output(task.output_name) or ""
+        except Exception:
+            text = ""
+        if not text:
+            text = result.output or ""
+        return needle in text
+    return _pred
+
+
+def _prepare_skeleton_run(args: argparse.Namespace):
+    """Build (workspace, worker, verifier, task, run_dir) from parsed args."""
+    from kairos.skeleton import (
+        AssertionVerifier,
+        DocSetWorkspace,
+        OfflineGenerator,
+        PromptWorker,
+        ProjectTestsVerifier,
+        RepoWorkspace,
+        RubricVerifier,
+        Task,
+    )
+
+    ws_root = Path(args.workspace).expanduser().resolve()
+    if not ws_root.is_dir():
+        raise _SkeletonInputError(f"no such workspace directory: {ws_root}")
+
+    workspace = RepoWorkspace(ws_root) if args.kind == "repo" else DocSetWorkspace(ws_root)
+
+    if args.generator == "offline":
+        worker = PromptWorker(generate=OfflineGenerator())
+    else:
+        provider = _intake_llm()
+        if provider is None:
+            if args.generator == "model":
+                raise _SkeletonInputError(
+                    "--generator model: no model provider is configured"
+                )
+            worker = PromptWorker(generate=OfflineGenerator())
+        else:
+            worker = PromptWorker(generate=_skeleton_provider_generator(provider))
+
+    if args.verifier == "tests":
+        verifier = ProjectTestsVerifier()
+    elif args.verifier == "human":
+        from kairos.skeleton import HumanVerifier
+        verifier = HumanVerifier()
+    elif args.verifier == "rubric":
+        if not args.criterion:
+            raise _SkeletonInputError(
+                "--verifier rubric needs at least one --criterion SUBSTRING"
+            )
+        verifier = RubricVerifier(
+            criteria=[(c, _skeleton_substring_predicate(c)) for c in args.criterion],
+            threshold=args.threshold,
+        )
+    else:  # assertion
+        if not args.check.strip():
+            raise _SkeletonInputError(
+                "--verifier assertion needs --check '<expression>'"
+            )
+        verifier = AssertionVerifier(check=args.check)
+
+    task_text = args.task
+    candidate = Path(args.task).expanduser()
+    if candidate.is_file():
+        try:
+            task_text = candidate.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            raise _SkeletonInputError(f"cannot read task file {candidate}: {exc}")
+    if not task_text.strip():
+        raise _SkeletonInputError("empty task")
+
+    task = Task(instruction=task_text, output_name=args.out_name)
+    run_dir = Path(args.run_dir).expanduser() if args.run_dir \
+        else ws_root / ".kairos" / "skeleton-runs"
+    return workspace, worker, verifier, task, run_dir
+
+
+async def _execute_skeleton_run(worker, workspace, task, verifier, run_dir):
+    from kairos.core.message_bus import MessageBus
+    from kairos.skeleton import run_task
+
+    return await run_task(
+        worker, workspace, task, verifier, bus=MessageBus(), run_dir=run_dir,
+    )
+
+
+def _emit_skeleton_run(args: argparse.Namespace, run, workspace, run_dir) -> None:
+    run_file = str(Path(run_dir) / f"skeleton-run-{run.run_id}.json")
+    payload = {**run.to_dict(), "artifacts": list(workspace.outputs()),
+               "run_file": run_file}
+    if getattr(args, "json_output", False):
+        sys.stdout.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+        sys.stdout.flush()
+        return
+    sys.stdout.write(f"=== kairos skeleton run [{run.outcome}] ===\n")
+    sys.stdout.write(f"attempts : {run.attempts}\n")
+    sys.stdout.write(f"verifier : {run.verdict.verifier}\n")
+    sys.stdout.write(f"reason   : {run.verdict.reason}\n")
+    for ref in workspace.outputs():
+        sys.stdout.write(f"artifact : {ref}\n")
+    sys.stdout.write(f"run file : {run_file}\n")
+    if run.blocked_on_human:
+        sys.stdout.write(
+            "→ 需要人工审批：kairos skeleton resume --run <file> --approve|--reject\n"
+        )
+    elif run.undecided:
+        sys.stdout.write("→ 没有验证器能判定（verifier abstained）。\n")
+    sys.stdout.flush()
+
+
+def _run_skeleton(args: argparse.Namespace) -> int:
+    """Dispatch ``kairos skeleton <run|resume>``."""
+    command = getattr(args, "skeleton_command", None)
+    if command == "resume":
+        return _run_skeleton_resume(args)
+    if command != "run":
+        print("error: `kairos skeleton` needs a subcommand (run|resume)",
+              file=sys.stderr)
+        return EXIT_BAD_INPUT
+
+    try:
+        workspace, worker, verifier, task, run_dir = _prepare_skeleton_run(args)
+    except _SkeletonInputError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_BAD_INPUT
+
+    try:
+        run = asyncio.run(_execute_skeleton_run(worker, workspace, task, verifier, run_dir))
+    except KeyboardInterrupt:
+        print("\n[kairos] interrupted", file=sys.stderr)
+        return 130
+
+    _emit_skeleton_run(args, run, workspace, run_dir)
+    if run.passed:
+        return EXIT_OK
+    if run.blocked_on_human or run.undecided:
+        return EXIT_NEEDS_CONFIRMATION
+    return EXIT_FAILED
+
+
+def _run_skeleton_resume(args: argparse.Namespace) -> int:
+    """Answer a human-gated skeleton run, then persist/print the result."""
+    from kairos.skeleton import SkeletonRun, resume_task
+
+    path = Path(args.run).expanduser()
+    if not path.is_file():
+        print(f"error: no such run file: {path}", file=sys.stderr)
+        return EXIT_BAD_INPUT
+    try:
+        prior = SkeletonRun.load(path)
+    except Exception as exc:
+        print(f"error: cannot read run file {path}: {exc}", file=sys.stderr)
+        return EXIT_BAD_INPUT
+
+    approved = bool(getattr(args, "approve", False))
+
+    async def _do():
+        return await resume_task(prior, approved=approved, reason=args.reason,
+                                 run_dir=path.parent)
+
+    try:
+        run = asyncio.run(_do())
+    except KeyboardInterrupt:
+        print("\n[kairos] interrupted", file=sys.stderr)
+        return 130
+
+    payload = {**run.to_dict(), "run_file": str(path)}
+    if getattr(args, "json_output", False):
+        sys.stdout.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+    else:
+        sys.stdout.write(f"=== kairos skeleton resume [{run.outcome}] ===\n")
+        sys.stdout.write(f"reason   : {run.verdict.reason}\n")
+        sys.stdout.write(f"run file : {path}\n")
+    sys.stdout.flush()
+    return EXIT_OK if run.passed else EXIT_FAILED
 
 
 def _serve_legacy(host: Optional[str] = None, port: Optional[int] = None) -> int:

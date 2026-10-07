@@ -22,7 +22,8 @@ from kairos.skeleton.contracts import (
     WorkerResult,
     Workspace,
 )
-from kairos.skeleton.driver import SkeletonRun, run_once, run_task
+from kairos.skeleton.driver import SkeletonRun, resume_task, run_once, run_task
+from kairos.skeleton.offline import OfflineGenerator
 from kairos.skeleton.verifiers import (
     AssertionVerifier,
     HumanVerifier,
@@ -48,5 +49,7 @@ __all__ = [
     "CoderWorker", "ReviewerVerifier", "PromptWorker",
     "verdict_from_review", "APPROVE_SCORE_THRESHOLD",
     # driver
-    "SkeletonRun", "run_once", "run_task",
+    "SkeletonRun", "run_once", "run_task", "resume_task",
+    # offline
+    "OfflineGenerator",
 ]

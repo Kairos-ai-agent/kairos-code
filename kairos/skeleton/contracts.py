@@ -55,6 +55,29 @@ class Task:
             first = (self.instruction or "").strip().splitlines()
             self.title = (first[0][:80] if first else "task") or "task"
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "instruction": self.instruction,
+            "output_name": self.output_name,
+            "inputs": list(self.inputs) if self.inputs is not None else None,
+            "title": self.title,
+            "meta": dict(self.meta),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Task":
+        data = data or {}
+        inputs = data.get("inputs")
+        return cls(
+            instruction=data.get("instruction", ""),
+            output_name=data.get("output_name", "output.txt"),
+            inputs=list(inputs) if inputs is not None else None,
+            title=data.get("title", ""),
+            id=data.get("id", ""),
+            meta=dict(data.get("meta") or {}),
+        )
+
 
 @dataclass
 class WorkerResult:
@@ -81,6 +104,18 @@ class WorkerResult:
             "error": self.error,
             "meta": dict(self.meta),
         }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "WorkerResult":
+        data = data or {}
+        return cls(
+            ok=bool(data.get("ok", False)),
+            output=data.get("output", ""),
+            artifacts=list(data.get("artifacts") or []),
+            summary=data.get("summary", ""),
+            error=data.get("error"),
+            meta=dict(data.get("meta") or {}),
+        )
 
 
 @dataclass
@@ -115,6 +150,19 @@ class Verdict:
             "requires_human": self.requires_human,
             "meta": dict(self.meta),
         }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Verdict":
+        data = data or {}
+        return cls(
+            passed=data.get("passed"),
+            reason=data.get("reason", ""),
+            score=data.get("score"),
+            evidence=[dict(e) for e in (data.get("evidence") or [])],
+            verifier=data.get("verifier", ""),
+            requires_human=bool(data.get("requires_human", False)),
+            meta=dict(data.get("meta") or {}),
+        )
 
 
 class Workspace(ABC):
@@ -178,6 +226,25 @@ class Verifier(ABC):
     """A domain-neutral check. The existing Reviewer is one implementation."""
 
     name: str = "verifier"
+
+    @property
+    def ready(self) -> bool:
+        """Configured enough to be consulted. Defaults to True.
+
+        A verifier that has nothing to check against (an ``assertion`` with no
+        check, a ``tool_oracle`` with no oracle) overrides this to ``False`` so
+        callers can tell "registered" from "usable".
+        """
+        return True
+
+    @property
+    def decides(self) -> bool:
+        """Whether this verifier can ever return ``passed`` True/False.
+
+        False for gates like :class:`~kairos.skeleton.verifiers.HumanVerifier`
+        that only ever block for a human.
+        """
+        return True
 
     @abstractmethod
     async def verify(

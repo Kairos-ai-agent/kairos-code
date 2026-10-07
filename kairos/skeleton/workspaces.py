@@ -7,6 +7,7 @@ tests. Reading three docs and writing a report is a first-class task here.
 from __future__ import annotations
 
 import subprocess
+import uuid
 from pathlib import Path
 from typing import List, Optional
 
@@ -90,7 +91,14 @@ class RepoWorkspace(FileWorkspace):
     kind = "repo"
     capabilities = frozenset({"read", "write", "git", "tests"})
 
-    def __init__(self, root, output_dir: str = "."):
+    def __init__(self, root, output_dir: Optional[str] = None, *, run_id: str = ""):
+        # A repo workspace used to write artifacts into the repository root
+        # (``output_dir="."``), which polluted the working tree. Default to a
+        # run-scoped directory instead, so many runs never collide and the
+        # repo root stays clean; pass ``output_dir`` explicitly to override.
+        if output_dir is None:
+            run_id = run_id or uuid.uuid4().hex[:8]
+            output_dir = f".kairos/skeleton-runs/{run_id}"
         super().__init__(root, source_dir=".", output_dir=output_dir)
 
     @property

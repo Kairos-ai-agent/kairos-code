@@ -3,9 +3,9 @@
 Registered kinds (the gap report's §P0-2 list):
 
 * ``tests``       -- run the workspace's test command (existing behaviour).
-* ``assertion``   -- run a user-supplied callable or expression over the result.
+* ``assertion``   -- run a user-supplied callable or *safe* expression.
 * ``rubric``      -- score a list of criteria; pass when the score clears a bar.
-* ``human``       -- block on an explicit human approval.
+* ``human``       -- block on an explicit human approval (a gate, not a decider).
 * ``tool_oracle`` -- check the result with a separate tool/probe.
 
 The existing Reviewer is a *different* implementation of this interface (see
@@ -14,15 +14,25 @@ The existing Reviewer is a *different* implementation of this interface (see
 Every verifier returns a :class:`~kairos.skeleton.contracts.Verdict` whose
 ``evidence`` is a list of ``{"criterion", "satisfied"}`` records -- the
 decision is data, not a trusted model score.
+
+Honesty about readiness
+-----------------------
+A verifier that has nothing to check against is *not* a verifier that passed.
+``assertion`` / ``rubric`` / ``tool_oracle`` are registered by name but start
+unconfigured: they abstain (``passed=None``) with an explicit reason until a
+check / criteria / oracle is supplied. ``Verifier.ready`` and
+:meth:`VerifierRegistry.ready_names` expose which kinds can actually decide
+right now, so "five kinds registered" is never mistaken for "five kinds work".
 """
 from __future__ import annotations
 
+import ast
 import asyncio
 import inspect
-import subprocess
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from kairos.skeleton.contracts import Verdict, Verifier, WorkerResult, Workspace
+from kairos.test_command import detect_project_test_command
 
 _NULL = object()
 
@@ -73,6 +83,86 @@ async def _maybe_await(value: Any) -> Any:
     return value
 
 
+# --------------------------------------------------------------------------
+# Safe evaluation of string assertions
+# --------------------------------------------------------------------------
+
+#: AST node types a string assertion is allowed to contain. Attribute access is
+#: deliberately absent: an attribute chain is the classic sandbox escape
+#: (``().__class__.__base__.__subclasses__()``), and a restricted
+#: ``__builtins__`` does not stop it. Comprehensions/lambdas are excluded too
+#: (they can smuggle in new scopes); the evaluator stays a small comparison /
+#: boolean language.
+_ALLOWED_AST_NODES: Tuple[type, ...] = (
+    ast.Expression,
+    ast.BoolOp, ast.And, ast.Or,
+    ast.BinOp, ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod,
+    ast.UnaryOp, ast.Not, ast.USub, ast.UAdd,
+    ast.Compare, ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE,
+    ast.In, ast.NotIn, ast.Is, ast.IsNot,
+    ast.IfExp,
+    ast.Name, ast.Load,
+    ast.Constant,
+    ast.List, ast.Tuple, ast.Set, ast.Dict,
+    ast.Subscript, ast.Slice,
+    ast.Call, ast.keyword,
+)
+
+#: The only callables a string assertion may call. Everything else -- and any
+#: attribute method call -- is rejected at validation time.
+_SAFE_FUNCTIONS: Dict[str, Callable] = {
+    "len": len, "all": all, "any": any, "sorted": sorted,
+    "min": min, "max": max, "sum": sum, "abs": abs,
+    "str": str, "int": int, "float": float, "bool": bool,
+    "list": list, "tuple": tuple, "dict": dict, "set": set,
+    "repr": repr, "isinstance": isinstance,
+}
+
+
+def _validate_expression(tree: ast.AST, allowed_names: set) -> None:
+    """Reject anything outside the small, escape-proof AST subset."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute):
+            raise ValueError(
+                "attribute access is not allowed in a string check "
+                "(use a callable check instead)"
+            )
+        if isinstance(node, ast.Name):
+            name = node.id
+            if name.startswith("__") or name.startswith("_"):
+                raise ValueError(f"private/dunder name {name!r} is not allowed")
+            if name not in allowed_names and name not in _SAFE_FUNCTIONS:
+                raise ValueError(f"unknown name {name!r}")
+        if isinstance(node, ast.Call):
+            func = node.func
+            if not (isinstance(func, ast.Name) and func.id in _SAFE_FUNCTIONS):
+                raise ValueError("only whitelisted functions may be called")
+        if not isinstance(node, _ALLOWED_AST_NODES):
+            raise ValueError(
+                f"{type(node).__name__} is not allowed in a string check"
+            )
+
+
+def _safe_eval_expression(expr: str, scope: Dict[str, Any]) -> Any:
+    """Evaluate a string assertion inside a locked-down evaluator.
+
+    The expression is parsed and validated against :data:`_ALLOWED_AST_NODES`
+    *before* it runs: no attribute access, no dunder/private names, no calls
+    except :data:`_SAFE_FUNCTIONS`, and no ``__builtins__``. A hostile
+    expression (``().__class__.__base__``, ``__import__('os')``) is **rejected**
+    -- raising ``ValueError`` -- rather than executed.
+    """
+    try:
+        tree = ast.parse(expr, mode="eval")
+    except SyntaxError as exc:
+        raise ValueError(f"invalid expression: {exc}") from exc
+    _validate_expression(tree, set(scope))
+    namespace: Dict[str, Any] = {"__builtins__": {}}
+    namespace.update(_SAFE_FUNCTIONS)
+    namespace.update(scope)
+    return eval(compile(tree, "<assertion>", "eval"), namespace)  # noqa: S307 - validated above
+
+
 class VerifierRegistry:
     """A pluggable name -> :class:`Verifier` map."""
 
@@ -108,6 +198,24 @@ class VerifierRegistry:
     def names(self) -> List[str]:
         return sorted(self._verifiers)
 
+    def ready_names(self) -> List[str]:
+        """Names whose verifier is configured enough to be consulted."""
+        return sorted(n for n, v in self._verifiers.items() if getattr(v, "ready", True))
+
+    def deciding_names(self) -> List[str]:
+        """Ready names that can return a real ``passed`` (i.e. not a human gate)."""
+        return sorted(
+            n for n, v in self._verifiers.items()
+            if getattr(v, "ready", True) and getattr(v, "decides", True)
+        )
+
+    def describe(self) -> Dict[str, Dict[str, bool]]:
+        return {
+            n: {"ready": bool(getattr(v, "ready", True)),
+                "decides": bool(getattr(v, "decides", True))}
+            for n, v in sorted(self._verifiers.items())
+        }
+
     def __contains__(self, name: str) -> bool:
         return name in self._verifiers
 
@@ -125,24 +233,24 @@ class VerifierRegistry:
 # --------------------------------------------------------------------------
 
 def _detect_test_command(root) -> Optional[List[str]]:
-    """Auto-detect a test command the way ``loop.precheck`` does."""
-    import json
-    import shutil
-    from pathlib import Path
+    """Auto-detect a cross-platform test command.
 
-    root = Path(root)
-    if (root / "pytest.ini").exists() or (root / "tests").is_dir() or (root / "pyproject.toml").exists():
-        if shutil.which("pytest"):
-            return ["pytest", "-q"]
-        return [".venv/Scripts/python.exe", "-m", "pytest", "-q"] if (root / ".venv").is_dir() else None
-    if (root / "package.json").is_file():
-        try:
-            pkg = json.loads((root / "package.json").read_text(encoding="utf-8"))
-            if "test" in (pkg.get("scripts") or {}) and shutil.which("npm"):
-                return ["npm", "test", "--silent"]
-        except Exception:
-            pass
-    return None
+    Delegates to :func:`kairos.test_command.detect_project_test_command` -- the
+    one place the venv layout is resolved -- so this and
+    ``loop.precheck._auto_detect_test_command`` cannot drift. Prefers the
+    project's own ``.venv`` interpreter (``bin/python`` on POSIX,
+    ``Scripts/python.exe`` on Windows) and falls back to the global ``pytest``
+    console script.
+    """
+    return detect_project_test_command(
+        root,
+        pytest_args=("-q",),
+        prefer_venv_python=True,
+        require_pytest_on_path=True,
+        marker_files=("pyproject.toml", "pytest.ini"),
+        marker_dirs=("tests",),
+        check_npm_on_path=True,
+    )
 
 
 class ProjectTestsVerifier(Verifier):
@@ -157,6 +265,12 @@ class ProjectTestsVerifier(Verifier):
     def __init__(self, test_command: Optional[List[str]] = None, timeout: int = 300):
         self.test_command = list(test_command) if test_command else None
         self.timeout = timeout
+
+    @property
+    def ready(self) -> bool:
+        # Can decide on its own (it abstains honestly when a workspace has no
+        # tests, which is not the same as being unconfigured).
+        return True
 
     async def verify(self, workspace: Workspace, task, result: WorkerResult) -> Verdict:
         if not workspace.supports("tests"):
@@ -212,10 +326,16 @@ class ProjectTestsVerifier(Verifier):
 class AssertionVerifier(Verifier):
     """Run a user-supplied check.
 
-    ``check`` may be a callable ``(workspace, task, result) -> outcome`` (sync
-    or async) or a string expression evaluated with ``workspace``/``task``/
-    ``result`` in scope (and a minimal builtins set). The outcome is coerced by
-    :func:`_normalize_outcome`.
+    ``check`` is **preferably a callable** ``(workspace, task, result) ->
+    outcome`` (sync or async). A string is also accepted, but only for
+    **trusted input** (a human-authored rule, a config file): it is evaluated
+    by :func:`_safe_eval_expression`, a locked-down evaluator that rejects
+    attribute access, dunder/private names, and any call beyond a small
+    whitelist -- so a check that arrived from a model or an untrusted user
+    cannot reach ``().__class__.__base__.__subclasses__()`` or ``__import__``.
+    The expression sees ``workspace`` / ``task`` / ``result`` plus the
+    convenience names ``output`` (``result.output``), ``artifacts`` and ``ok``.
+    The outcome is coerced by :func:`_normalize_outcome`.
     """
 
     name = "assertion"
@@ -224,27 +344,40 @@ class AssertionVerifier(Verifier):
         self.check = check
         self.name = name
 
+    @property
+    def ready(self) -> bool:
+        return self.check is not None
+
     async def verify(self, workspace: Workspace, task, result: WorkerResult) -> Verdict:
         if self.check is None:
             return Verdict(
                 passed=None, verifier=self.name, reason="no assertion supplied",
                 evidence=[{"criterion": "assertion provided", "satisfied": False}],
             )
-        try:
-            if isinstance(self.check, str):
-                raw = eval(  # noqa: S307 - explicit user-supplied check by design
-                    self.check,
-                    {"__builtins__": {"len": len, "all": all, "any": any, "str": str,
-                                      "int": int, "bool": bool, "set": set}},
-                    {"workspace": workspace, "task": task, "result": result},
+        if isinstance(self.check, str):
+            scope = {
+                "workspace": workspace, "task": task, "result": result,
+                "output": result.output or "",
+                "artifacts": list(result.artifacts or []),
+                "ok": bool(result.ok),
+            }
+            try:
+                raw = _safe_eval_expression(self.check, scope)
+            except Exception as exc:
+                return Verdict(
+                    passed=False, verifier=self.name,
+                    reason=f"assertion rejected: {exc}",
+                    evidence=[{"criterion": "assertion expression is safe",
+                               "satisfied": False, "detail": str(exc)}],
                 )
-            else:
+        else:
+            try:
                 raw = await _maybe_await(self.check(workspace, task, result))
-        except Exception as exc:
-            return Verdict(
-                passed=False, verifier=self.name, reason=f"assertion raised: {exc}",
-                evidence=[{"criterion": "assertion ran", "satisfied": False, "detail": str(exc)}],
-            )
+            except Exception as exc:
+                return Verdict(
+                    passed=False, verifier=self.name, reason=f"assertion raised: {exc}",
+                    evidence=[{"criterion": "assertion ran", "satisfied": False, "detail": str(exc)}],
+                )
         passed, evidence, reason, score = _normalize_outcome(raw)
         return Verdict(passed=passed, verifier=self.name, reason=reason,
                        score=score, evidence=evidence)
@@ -265,6 +398,10 @@ class RubricVerifier(Verifier):
         self.criteria = list(criteria or [])
         self.threshold = threshold
         self.name = name
+
+    @property
+    def ready(self) -> bool:
+        return bool(self.criteria)
 
     async def verify(self, workspace: Workspace, task, result: WorkerResult) -> Verdict:
         if not self.criteria:
@@ -298,9 +435,18 @@ class RubricVerifier(Verifier):
 
 
 class HumanVerifier(Verifier):
-    """An explicit human gate: return an undecided, human-blocked verdict."""
+    """An explicit human gate: return an undecided, human-blocked verdict.
+
+    This is a *gate*, not a decider -- it never returns ``passed`` True/False.
+    The driver persists the run and can :func:`resume <kairos.skeleton.driver.resume_task>`
+    it once the human answers.
+    """
 
     name = "human"
+
+    @property
+    def decides(self) -> bool:
+        return False
 
     async def verify(self, workspace: Workspace, task, result: WorkerResult) -> Verdict:
         return Verdict(
@@ -315,16 +461,29 @@ class ToolOracleVerifier(Verifier):
 
     ``oracle`` is a callable ``(workspace, task, result) -> outcome`` (sync or
     async) that usually re-reads the emitted artifact through the workspace
-    (e.g. an independent citation counter).
+    (e.g. an independent citation counter). ``oracle`` may be omitted at
+    construction and set later; until an oracle is supplied the verifier is
+    *unconfigured* (``ready`` is False) and abstains (``passed=None``) with an
+    explicit reason rather than emitting a fake verdict.
     """
 
     name = "tool_oracle"
 
-    def __init__(self, oracle: Callable, name: str = "tool_oracle"):
+    def __init__(self, oracle: Optional[Callable] = None, name: str = "tool_oracle"):
         self.oracle = oracle
         self.name = name
 
+    @property
+    def ready(self) -> bool:
+        return self.oracle is not None
+
     async def verify(self, workspace: Workspace, task, result: WorkerResult) -> Verdict:
+        if self.oracle is None:
+            return Verdict(
+                passed=None, verifier=self.name,
+                reason="tool_oracle has no oracle configured",
+                evidence=[{"criterion": "oracle configured", "satisfied": False}],
+            )
         try:
             raw = await _maybe_await(self.oracle(workspace, task, result))
         except Exception as exc:
@@ -337,17 +496,25 @@ class ToolOracleVerifier(Verifier):
                        score=score, evidence=evidence)
 
 
-def build_default_registry(*, include_assertion_placeholder: bool = True) -> VerifierRegistry:
-    """Register the five built-in verifier kinds.
+def build_default_registry(*, include_unconfigured: bool = True) -> VerifierRegistry:
+    """Register the five built-in verifier kinds, honestly.
 
-    ``assertion`` is registered with no check so the name exists; a caller that
-    wants a real assertion re-registers ``AssertionVerifier(check=...)``.
+    ``tests`` can decide on its own. ``assertion`` / ``rubric`` /
+    ``tool_oracle`` need configuration (a check / criteria / oracle) and are
+    registered *either* as unconfigured stubs that abstain with a clear reason
+    (``include_unconfigured=True``, the default) *or* not at all
+    (``include_unconfigured=False``). ``human`` is a gate, not a decider.
+
+    Callers should read :meth:`VerifierRegistry.ready_names` /
+    :meth:`VerifierRegistry.deciding_names` instead of assuming "five names
+    registered" means "five kinds work".
     """
     reg = VerifierRegistry()
     reg.register(ProjectTestsVerifier())
-    if include_assertion_placeholder:
+    if include_unconfigured:
         reg.register(AssertionVerifier())
-    reg.register(RubricVerifier())
+        reg.register(RubricVerifier())
     reg.register(HumanVerifier())
-    reg.register(ToolOracleVerifier(oracle=lambda w, t, r: (None, "no oracle supplied")))
+    if include_unconfigured:
+        reg.register(ToolOracleVerifier())
     return reg

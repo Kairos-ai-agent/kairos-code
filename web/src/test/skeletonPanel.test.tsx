@@ -195,5 +195,18 @@ describe('SkeletonPanel', () => {
       expect(next?.running).toBe(true);
       expect(next?.run_id).toBe('newrun');
     });
+
+    it('keeps a finished run when the server later answers "none"', () => {
+      // A "none" (no live state) response must not blank a run we already have
+      // — that was the 未运行-after-a-finished-run bug.
+      const done = { run_id: 'r1', status: 'done', running: false, passed: true };
+      const next = mergeSkeletonState(done, { status: 'none', running: false }, new Set());
+      expect(next).toBe(done);
+    });
+
+    it('still seeds the empty state from "none" when nothing is shown', () => {
+      const next = mergeSkeletonState(null, { status: 'none', running: false }, new Set());
+      expect(next).toBeNull();
+    });
   });
 });

@@ -317,6 +317,14 @@ const Loop: React.FC = () => {
           if (precheckTimerRef.current) window.clearTimeout(precheckTimerRef.current);
           precheckTimerRef.current = window.setTimeout(() => setPrecheckHint(null), 60000);
         }
+        // A run reached its terminal event: refresh the project list so the row
+        // stops showing 运行中 the moment the panel leaves it. The row renders
+        // the persisted project status and this page loads /projects once, so
+        // without this the stale marker would linger until a manual reload.
+        if (m?.topic === 'skeleton.ended' || m?.topic === 'loop.ended') {
+          api.get('/projects').then((r) => setProjects(r.data.projects || []))
+            .catch(() => {});
+        }
       }
       }
     });

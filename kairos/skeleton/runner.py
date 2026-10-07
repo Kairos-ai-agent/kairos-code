@@ -30,6 +30,7 @@ no loop code.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 import uuid
@@ -42,6 +43,9 @@ logger = logging.getLogger(__name__)
 #: Directory (relative to the workspace root) the run record is persisted under,
 #: mirroring ``run_general_task``'s default.
 RUN_DIR_REL = Path(".kairos") / "skeleton-runs"
+
+#: The persisted run record's filename pattern inside :data:`RUN_DIR_REL`.
+RUN_FILE_GLOB = "skeleton-run-*.json"
 
 #: The terminal topic the runner publishes, mirroring ``loop.ended``.
 ENDED_TOPIC = "skeleton.ended"
@@ -80,6 +84,9 @@ class SkeletonState:
     ended_at: float = 0.0
     task: Optional[asyncio.Task] = field(default=None, repr=False, compare=False)
     bus: Any = field(default=None, repr=False, compare=False)
+    #: The owning project, so the terminal done-callback can clear the project
+    #: row's "运行中" marker. Best-effort; never serialised.
+    project: Any = field(default=None, repr=False, compare=False)
 
     @property
     def session_id(self) -> str:
@@ -192,6 +199,26 @@ def _announce_ended(state: SkeletonState) -> None:
                      state.project_id, exc_info=True)
 
 
+def _set_project_status(project, status: str) -> None:
+    """Reflect a run's lifecycle on ``project.status`` (best-effort).
+
+    The project list renders "运行中" straight off ``project.status`` (the loop
+    sets it at start / done). The skeleton must do the same or the two halves of
+    one screen disagree: a finished run left the row on 运行中 while the panel
+    said 未运行. Persisted so the marker survives a reload; never fatal.
+    """
+    if project is None:
+        return
+    try:
+        project.status = status
+        db = getattr(project, "_db", None)
+        if db is not None:
+            db.save_project(project)
+    except Exception:  # a bookkeeping failure must not fail the run
+        logger.debug("skeleton: could not set project status=%s", status,
+                     exc_info=True)
+
+
 def finalize_skeleton_run(state: SkeletonState, task: asyncio.Task) -> None:
     """Done-callback: set the terminal status and announce it.
 
@@ -199,6 +226,9 @@ def finalize_skeleton_run(state: SkeletonState, task: asyncio.Task) -> None:
     ``task.done()`` is true by now and a state read taken on the back of the
     event agrees with it. Cancelled -> ``stopped`` (the Stop button), an
     exception -> ``failed``, otherwise ``done``.
+
+    The same terminal word also clears the project row's "运行中" marker, so
+    the row and the panel leave 运行中 together -- see :func:`_set_project_status`.
     """
     if task.cancelled():
         state.status = "stopped"
@@ -216,6 +246,7 @@ def finalize_skeleton_run(state: SkeletonState, task: asyncio.Task) -> None:
         elif state.status != "stopped":
             state.status = "done"
     state.ended_at = time.time()
+    _set_project_status(getattr(state, "project", None), state.status)
     _announce_ended(state)
 
 
@@ -250,6 +281,11 @@ def start_skeleton_run(
     )
     state.run_file = str(run_dir / f"skeleton-run-{state.run_id}.json")
     project.skeleton_state = state
+    state.project = project
+    # The row reads project.status for its "运行中" badge; mirror the loop so
+    # the row and the panel agree while the run is live (and the terminal word
+    # replaces it in finalize_skeleton_run).
+    _set_project_status(project, "running")
     state.task = asyncio.create_task(
         _execute(state, root=str(root), instruction=instruction, kind=kind,
                  generate=generate, bus=bus, run_dir=run_dir),
@@ -274,12 +310,105 @@ def stop_skeleton_run(project) -> bool:
     return True
 
 
-def read_skeleton_state(project) -> Optional[Dict[str, Any]]:
-    """The project's skeleton state as a plain dict, or ``None`` if it never ran."""
-    state = getattr(project, "skeleton_state", None)
-    if state is None:
+def _persisted_record_to_state(record: Dict[str, Any], *, run_file,
+                               project_id: str = "") -> Dict[str, Any]:
+    """Shape one persisted run record like :meth:`SkeletonState.to_dict`.
+
+    A record on disk is a *finished* run (``run_task`` only writes it after the
+    worker and verifier have run), so the lifecycle word is ``done``; whether it
+    passed is the verdict's own word, carried through unchanged.
+    """
+    result = record.get("result") if isinstance(record.get("result"), dict) else {}
+    meta = result.get("meta") if isinstance(result.get("meta"), dict) else {}
+    verdict = record.get("verdict") if isinstance(record.get("verdict"), dict) else {}
+    task = record.get("task") if isinstance(record.get("task"), dict) else {}
+    run_id = str(record.get("run_id") or "")
+    try:
+        ended_at = Path(run_file).stat().st_mtime
+    except OSError:
+        ended_at = 0.0
+    return {
+        "run_id": run_id,
+        "session_id": run_id,
+        "project_id": project_id,
+        "workspace_kind": meta.get("workspace_kind", "") or "",
+        "route": "skeleton",
+        "route_source": "",            # not recoverable from the record
+        "route_reason": "",
+        "status": "done",
+        "running": False,
+        "outcome": record.get("outcome", "") or "",
+        "passed": verdict.get("passed"),
+        "verdict": verdict,
+        "run_file": str(run_file),
+        "artifacts": list(result.get("artifacts") or []),
+        "error": "",
+        "stop_requested": False,
+        "started_at": ended_at,
+        "ended_at": ended_at,
+        "message": task.get("instruction", "") or "",
+        #: Marks a state that came off disk rather than out of this process.
+        "source": "record",
+    }
+
+
+def load_persisted_skeleton_state(root, project_id: str = "") -> Optional[Dict[str, Any]]:
+    """Read the newest persisted skeleton run under ``root``; **read-only**.
+
+    The live state (``project.skeleton_state``) exists only while the process
+    that started the run is alive: a backend restart, or the project being
+    re-hydrated from the DB, drops it -- and then a run that really finished
+    (its record is on disk, ``GET /skeleton`` returned ``done`` a moment ago)
+    read back as ``status="none"``. This reads that record instead, so a
+    finished run survives the process.
+
+    Strictly read-only: it lists the run directory and reads one JSON file; it
+    never creates, deletes, or rewrites anything. Returns ``None`` when there is
+    no readable record.
+    """
+    try:
+        run_dir = Path(str(root)).expanduser() / RUN_DIR_REL
+        if not run_dir.is_dir():
+            return None
+        candidates = [p for p in run_dir.glob(RUN_FILE_GLOB) if p.is_file()]
+        if not candidates:
+            return None
+        # Newest first; skip an unreadable/corrupt one rather than giving up
+        # (a half-written record from a crash mid-save must not hide the run).
+        candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    except OSError:
+        logger.debug("no readable persisted skeleton run under %s", root,
+                     exc_info=True)
         return None
-    return state.to_dict()
+    for newest in candidates:
+        try:
+            record = json.loads(newest.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            logger.debug("skipping unreadable skeleton record %s", newest,
+                         exc_info=True)
+            continue
+        if isinstance(record, dict):
+            return _persisted_record_to_state(record, run_file=newest,
+                                              project_id=project_id)
+    return None
+
+
+def read_skeleton_state(project, root=None) -> Optional[Dict[str, Any]]:
+    """The project's skeleton state as a plain dict, or ``None`` if it never ran.
+
+    Live in-process state wins while the run is here. Once it is gone (restart,
+    DB re-hydration) a *finished* run is still on disk, so read that back rather
+    than reporting ``none`` -- the fallback is read-only.
+    """
+    state = getattr(project, "skeleton_state", None)
+    if state is not None:
+        return state.to_dict()
+    if root is None:
+        root = getattr(project, "work_dir", "") or getattr(project, "workspace", "")
+    if not root:
+        return None
+    return load_persisted_skeleton_state(
+        root, project_id=str(getattr(project, "id", "") or ""))
 
 
 __all__ = [
@@ -288,6 +417,8 @@ __all__ = [
     "stop_skeleton_run",
     "read_skeleton_state",
     "finalize_skeleton_run",
+    "load_persisted_skeleton_state",
     "ENDED_TOPIC",
     "RUN_DIR_REL",
+    "RUN_FILE_GLOB",
 ]

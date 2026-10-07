@@ -661,3 +661,181 @@ def test_unknown_project_is_still_a_404(make_client, docs_root):
     client, fake = make_client(docs_root)
     r = client.post("/api/projects/nope/start", json={"requirement": "x", "kind": "docs"})
     assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# (6) the finished run survives a lost in-process state (restart / re-hydrate)
+# ---------------------------------------------------------------------------
+
+def test_finished_run_is_readable_after_live_state_is_lost(make_client, docs_root):
+    """A run that finished read back as ``none`` once the process forgot it.
+
+    The live state (``project.skeleton_state``) lives only in the process that
+    started the run; a backend restart -- or a project re-hydrated from the DB --
+    drops it, and the panel then said 未运行 even though the record was on disk.
+    ``GET /skeleton`` must fall back to that record.
+    """
+    client, fake = make_client(docs_root)
+    r = client.post("/api/projects/p1/start",
+                    json={"requirement": "读三份文档写对比报告", "kind": "docs"})
+    assert r.status_code == 200, r.text
+    state = _wait_terminal(client)
+    assert state["status"] == "done" and state["passed"] is True
+    run_id = state["run_id"]
+
+    # Simulate the restart: the in-process state is gone.
+    fake.project.skeleton_state = None
+
+    again = client.get("/api/projects/p1/skeleton").json()
+    assert again["status"] == "done", again
+    assert again["running"] is False
+    assert again["run_id"] == run_id
+    assert again["session_id"] == run_id
+    assert again["project_id"] == "p1"
+    assert again["outcome"] == "passed"
+    assert again["passed"] is True
+    assert again["workspace_kind"] == "docs"
+    assert again["verdict"]["verifier"] == "citations"
+    assert again["verdict"]["evidence"]           # the per-criterion rows survive
+    assert again["artifacts"] == ["outputs/report.md"]
+    assert again["run_file"].endswith(f"skeleton-run-{run_id}.json")
+    assert Path(again["run_file"]).is_file()
+
+
+def test_live_state_is_preferred_over_the_record(make_client, docs_root):
+    """While the run is here, the endpoint reports the live state, not the file."""
+    client, fake = make_client(docs_root)
+    r = client.post("/api/projects/p1/start",
+                    json={"requirement": "读文档写报告", "kind": "docs"})
+    assert r.status_code == 200, r.text
+    live_id = r.json()["run_id"]
+    # A stale record from some earlier run, newer on disk than the live state.
+    run_dir = docs_root / ".kairos" / "skeleton-runs"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    stale = run_dir / "skeleton-run-deadbeef.json"
+    stale.write_text(json.dumps({
+        "run_id": "deadbeef", "outcome": "failed", "attempts": 1,
+        "task": {"instruction": "stale"}, "result": {}, "verdict": {},
+        "history": [],
+    }, ensure_ascii=False), encoding="utf-8")
+    got = client.get("/api/projects/p1/skeleton").json()
+    # the live run (whatever its word) is what the panel already sees
+    assert got["run_id"] == live_id
+
+
+def test_fallback_read_does_not_touch_the_run_directory(make_client, docs_root):
+    """The fallback is strictly read-only: no file is created or rewritten."""
+    client, fake = make_client(docs_root)
+    client.post("/api/projects/p1/start",
+                json={"requirement": "读文档写报告", "kind": "docs"})
+    _wait_terminal(client)
+    fake.project.skeleton_state = None
+
+    run_dir = docs_root / ".kairos" / "skeleton-runs"
+
+    def snapshot():
+        return {str(p.relative_to(docs_root)): (p.stat().st_size, p.stat().st_mtime_ns)
+                for p in docs_root.rglob("*") if p.is_file()}
+
+    before = snapshot()
+    for _ in range(3):
+        r = client.get("/api/projects/p1/skeleton")
+        assert r.status_code == 200 and r.json()["status"] == "done"
+    after = snapshot()
+    # not one file created, deleted, or rewritten anywhere under the workspace
+    assert after == before
+    assert run_dir.is_dir()
+
+
+def test_project_status_is_terminal_after_the_run(make_client, docs_root, monkeypatch):
+    """The project row's "运行中" marker follows the run into its terminal state.
+
+    The row renders 运行中 straight off ``project.status`` (which the loop sets);
+    if the skeleton never clears it, the row stays on 运行中 while the panel says
+    已停止/完成 -- one screen, two answers. It must not survive the run.
+    """
+    progress: dict = {"started": False, "finished": False}
+    monkeypatch.setattr("kairos.skeleton.service.default_generator",
+                        lambda: _slow_generate(progress, delay=0.4))
+    client, fake = make_client(docs_root)
+
+    r = client.post("/api/projects/p1/start",
+                    json={"requirement": "慢任务", "kind": "docs"})
+    assert r.status_code == 200, r.text
+    # while live, the row agrees with the panel
+    assert fake.project.status == "running"
+
+    state = _wait_terminal(client)
+    assert state["status"] == "done"
+    # ...and the marker is gone the moment the run is over
+    assert fake.project.status != "running"
+    assert fake.project.status in ("done", "failed", "stopped")
+
+
+def test_skeleton_llm_call_is_recorded_in_the_cost_ledger(monkeypatch):
+    """A real-model skeleton call lands in the shared cost ledger (kairos.cost).
+
+    The loop's Gate Report reads that ledger for a run's spend; the skeleton
+    path never wrote to it, so the cost panel read 0 calls / $0 after a real
+    run. The call is recorded with the provider's real token counts.
+    """
+    import kairos.cost as cost_mod
+    from kairos.skeleton.service import _record_provider_call
+
+    seen: list = []
+    monkeypatch.setattr(cost_mod, "record_entry", lambda **kw: seen.append(kw))
+
+    _record_provider_call(model="deepseek-chat", provider="deepseek",
+                          usage={"prompt_tokens": 120, "completion_tokens": 40},
+                          duration_ms=850)
+
+    assert len(seen) == 1
+    entry = seen[0]
+    assert entry["model"] == "deepseek-chat"
+    assert entry["provider"] == "deepseek"
+    assert entry["prompt_tokens"] == 120
+    assert entry["completion_tokens"] == 40
+    # no price table on this path: an honest 0.0, never a fabricated figure
+    assert entry["cost_usd"] == 0.0
+
+
+def test_skeleton_call_without_usage_is_still_counted(monkeypatch):
+    """A provider that reports no usage still counts as one call (tokens 0)."""
+    import kairos.cost as cost_mod
+    from kairos.skeleton.service import _record_provider_call
+
+    seen: list = []
+    monkeypatch.setattr(cost_mod, "record_entry", lambda **kw: seen.append(kw))
+
+    _record_provider_call(model="m", provider="p", usage={}, duration_ms=5)
+
+    assert len(seen) == 1
+    assert seen[0]["prompt_tokens"] == 0
+    assert seen[0]["completion_tokens"] == 0
+
+
+def test_corrupt_newest_record_does_not_hide_the_run(tmp_path):
+    """A half-written newer record is skipped, not surfaced as "none"."""
+    import os
+    from kairos.skeleton.runner import load_persisted_skeleton_state
+
+    run_dir = tmp_path / ".kairos" / "skeleton-runs"
+    run_dir.mkdir(parents=True)
+    good = run_dir / "skeleton-run-good.json"
+    good.write_text(json.dumps({
+        "run_id": "good", "outcome": "passed", "attempts": 1,
+        "task": {"instruction": "读文档"}, "result": {"artifacts": ["outputs/report.md"]},
+        "verdict": {"passed": True, "verifier": "citations",
+                    "evidence": [{"criterion": "c", "satisfied": True}]},
+        "history": [],
+    }, ensure_ascii=False), encoding="utf-8")
+    bad = run_dir / "skeleton-run-bad.json"
+    bad.write_text("{ this is not json", encoding="utf-8")
+    # make the corrupt record the newest one
+    newer = good.stat().st_mtime + 60
+    os.utime(bad, (newer, newer))
+
+    state = load_persisted_skeleton_state(tmp_path, project_id="p1")
+    assert state is not None
+    assert state["run_id"] == "good"
+    assert state["status"] == "done"

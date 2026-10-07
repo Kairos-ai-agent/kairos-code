@@ -95,6 +95,12 @@ export function mergeSkeletonState(
   closedRuns: Set<string>,
 ): SkeletonState | null {
   if (!data) return prev;
+  // A "none" answer (the server holds no record) is not news: it must not erase
+  // a run the panel has already shown. That is the 未运行-after-a-finished-run
+  // bug -- the server used to answer "none" for a run whose live state had been
+  // dropped, and the panel blanked. It only seeds the panel when nothing is on
+  // screen yet (prev === null).
+  if (!data.run_id && data.status === 'none') return prev;
   const runId = data.run_id || prev?.run_id || '';
   const closed = isTerminalStatus(data.status)
     || (!!runId && closedRuns.has(runId));

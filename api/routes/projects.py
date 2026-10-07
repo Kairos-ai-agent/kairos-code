@@ -316,7 +316,9 @@ async def get_skeleton_state(project_id: str):
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     from kairos.skeleton.runner import read_skeleton_state
-    state = read_skeleton_state(project)
+    # Prefer live state; fall back to the newest persisted run so a *finished*
+    # run survives a backend restart (the read is read-only).
+    state = read_skeleton_state(project, root=_project_root(project))
     if state is None:
         return {"running": False, "status": "none", "project_id": project_id}
     state["project_id"] = project_id

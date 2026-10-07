@@ -24,6 +24,7 @@ routed here.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
@@ -68,6 +69,34 @@ class SkeletonOutcome:
         }
 
 
+def _record_provider_call(*, model, provider, usage, duration_ms) -> None:
+    """Best-effort: add one real-model call to the shared cost ledger.
+
+    The loop's Gate Report reads ``kairos.cost`` (in-memory buffer + JSONL) for
+    a run's spend. A skeleton call never appeared there, so the cost panel read
+    0 calls / $0 even after a real run. Record the call with the *real* token
+    counts the provider reported; the USD figure is left at 0.0 because no price
+    is known for an arbitrary model on this path (litellm, the price table, is
+    not installed here) and a fabricated figure is worse than an honest zero.
+    Never raises -- a ledger failure must not fail a run.
+    """
+    usage = usage or {}
+    prompt = int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0)
+    completion = int(usage.get("completion_tokens") or usage.get("output_tokens") or 0)
+    try:
+        from kairos import cost as cost_mod
+        cost_mod.record_entry(
+            model=str(model or "unknown"),
+            prompt_tokens=prompt,
+            completion_tokens=completion,
+            cost_usd=0.0,
+            provider=str(provider or "unknown"),
+            duration_ms=int(duration_ms or 0),
+        )
+    except Exception:  # noqa: BLE001 - the ledger must never break a call
+        logger.debug("skeleton cost record failed", exc_info=True)
+
+
 def default_generator() -> Optional[Callable]:
     """A real-model ``generate(prompt) -> str``, or ``None`` if none is set.
 
@@ -75,7 +104,8 @@ def default_generator() -> Optional[Callable]:
     (``kairos.cli._intake_llm`` / ``_skeleton_provider_generator``): the
     ``coder`` role's provider, wrapped as an async ``generate``. Never raises;
     a missing model degrades to ``None`` so the caller can report it instead of
-    crashing a request.
+    crashing a request. Each call is recorded in the shared cost ledger
+    (``kairos.cost``) with the provider's real token usage.
     """
     try:
         from kairos import config as _pkg_config
@@ -87,8 +117,21 @@ def default_generator() -> Optional[Callable]:
         if provider is None:
             return None
 
+        # The provider only exposes the model on its config; capture it once so
+        # the ledger entry carries a real model name.
+        _cfg = getattr(provider, "config", None)
+        _model = getattr(_cfg, "model", "") or ""
+        _provider_name = getattr(_cfg, "provider", "") or ""
+
         async def _generate(prompt: str) -> str:
+            started = time.time()
             response = await provider.complete([LLMMessage(role="user", content=prompt)])
+            _record_provider_call(
+                model=_model,
+                provider=_provider_name,
+                usage=getattr(response, "usage", None),
+                duration_ms=int((time.time() - started) * 1000),
+            )
             return getattr(response, "content", "") or ""
 
         return _generate

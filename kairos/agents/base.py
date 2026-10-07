@@ -704,6 +704,11 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
                               "total_turns": self.MAX_TOOL_TURNS},
                 ))
                 messages = self._build_messages()
+                # Prompt-budget fit (②): trim before sending so a small local
+                # window never rejects the request. No-op without a budget.
+                messages, tool_schemas, _ = await self._fit_request_budget(
+                    messages, tool_schemas, task_id=task.id, turn=turn + 1,
+                )
                 # Per-call timeout so a hung provider can't tie up the whole
                 # dispatch. asyncio.TimeoutError surfaces as a clear failure
                 # to the UI instead of an opaque 2-minute freeze.
@@ -738,7 +743,7 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
                     # our timeout message with "Tool call limit reached".
                     hit_turn_limit = False
                     result = (
-                        f"LLM call timed out after {self._llm_timeout_s:.0f}s "
+                        f"LLM call timed out after {self._llm_timeout_label} "
                         f"on turn {turn + 1}/{self.MAX_TOOL_TURNS}"
                     )
                     await self.message_bus.publish(Message(
@@ -1044,6 +1049,13 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
                 # Always last: request-scoped, never persisted.
                 if _lang_anchor:
                     messages = messages + [LLMMessage(role="user", content=_lang_anchor)]
+                # Prompt-budget fit (②): trim the assembled request BEFORE it is
+                # sent so a small local window (LM Studio 8192) can't reject the
+                # whole call. A no-op that returns the inputs untouched when no
+                # budget is configured, so cloud behaviour is unchanged.
+                messages, tool_schemas, _budget_report = await self._fit_request_budget(
+                    messages, tool_schemas, turn=turn,
+                )
                 # Same overflow contract as the run loop: the provider saying
                 # "too long" buys one compaction + retry, not an error bubble.
                 response = None
@@ -1063,7 +1075,7 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
                         break
                     except asyncio.TimeoutError:
                         return (
-                            f"[chat timed out after {self._llm_timeout_s:.0f}s "
+                            f"[chat timed out after {self._llm_timeout_label} "
                             f"on turn {turn}/{self.total_turns}]"
                         )
                     except Exception as exc:
@@ -1088,6 +1100,33 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
                         getattr(getattr(self, "current_task", None), "id", ""),
                         turn,
                     )
+                    # ① Telemetry: the reply was salvaged from the model's
+                    # hidden-reasoning channel because it left ``content`` empty
+                    # (small local models do this). Recorded so the behaviour is
+                    # explainable and never looks like a silent success.
+                    if getattr(response, "reply_from_reasoning", False):
+                        logger.warning(
+                            "%s: reply came from the reasoning channel "
+                            "(model=%s, turn=%d) — content was empty",
+                            self.agent_id, self._llm_config.model, turn,
+                        )
+                        try:
+                            await self.message_bus.publish(Message(
+                                sender=self.agent_id,
+                                topic="agent.progress",
+                                content=(
+                                    "Reply taken from the model's reasoning "
+                                    "channel (the content channel was empty)."
+                                ),
+                                msg_type="text",
+                                metadata={"task_id": getattr(
+                                    getattr(self, "current_task", None), "id", ""),
+                                    "turn": turn,
+                                    "reason": "reply_from_reasoning"},
+                            ))
+                        except Exception:  # noqa: BLE001
+                            logger.debug("reply_from_reasoning telemetry failed",
+                                         exc_info=True)
                 self._memory.append(LLMMessage(role="assistant", content=response.content or "", tool_calls=response.tool_calls))
 
                 if not response.tool_calls:

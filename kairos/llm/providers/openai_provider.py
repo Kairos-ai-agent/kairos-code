@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import re
-from typing import AsyncIterator, List, Optional
+from typing import Any, AsyncIterator, List, Optional
 
 from kairos.llm.base import BaseLLMProvider, LLMConfig, LLMMessage, LLMResponse, ToolCall
 from kairos.llm.provider_registry import ProviderRegistry
@@ -25,6 +25,21 @@ def _reasoning_tail(text: str, n: int = REASONING_TAIL_CHARS) -> str:
     if not text:
         return ""
     return text if len(text) <= n else text[-n:]
+
+
+def _reasoning_field(message: Any) -> str:
+    """The hidden-reasoning text on a message, under either field name.
+
+    OpenAI-compatible servers disagree: DeepSeek and LM Studio use
+    ``reasoning_content``; some (vLLM's ``--reasoning-parser``, a few Ollama
+    shims) use ``reasoning``. Reading only one of them silently dropped the
+    fallback answer on the other. Returns "" when neither is present.
+    """
+    for attr in ("reasoning_content", "reasoning"):
+        value = getattr(message, attr, None)
+        if value:
+            return value if isinstance(value, str) else str(value)
+    return ""
 
 
 def _normalize_openai_base_url(url: str) -> str:
@@ -131,8 +146,28 @@ class OpenAIProvider(BaseLLMProvider):
         # Hidden reasoning on the non-streaming path arrives whole on the same
         # message. Count it (an empty reply that spent its budget thinking must
         # be explainable) AND keep the tail so the caller can show a thinking
-        # line. It never touches ``content`` below.
-        reasoning_text = getattr(choice.message, "reasoning_content", "") or ""
+        # line. It never touches ``content`` below -- unless ``content`` came
+        # back empty AND there is reasoning to fall back on (see below).
+        reasoning_text = _reasoning_field(choice.message)
+
+        # Small local models (LM Studio's gemma-4-e4b-…, Ollama and friends)
+        # routinely write their WHOLE answer into the hidden-reasoning channel
+        # and leave ``content`` as "". Kairos reads only ``content``, so the
+        # user saw "模型没有返回任何内容" while the model had, in fact, answered.
+        # The fallback is deliberately narrow: it fires only when ``content``
+        # is empty/whitespace AND reasoning is non-empty, and it never merges
+        # the two when content exists (the invariant the module has always
+        # guarded). ``reply_from_reasoning`` records which channel answered.
+        content_text = choice.message.content or ""
+        reply_from_reasoning = False
+        if not content_text.strip() and reasoning_text.strip():
+            content_text = reasoning_text
+            reply_from_reasoning = True
+            logger.warning(
+                "provider returned empty content with %d chars of reasoning; "
+                "using the reasoning channel as the reply (model=%s)",
+                len(reasoning_text), self.config.model,
+            )
 
         # Parse tool calls
         tool_calls = None
@@ -150,7 +185,7 @@ class OpenAIProvider(BaseLLMProvider):
                 ))
 
         return LLMResponse(
-            content=choice.message.content or "",
+            content=content_text,
             model=response.model,
             usage=response.usage.model_dump() if response.usage else {},
             finish_reason=choice.finish_reason or "",
@@ -161,6 +196,7 @@ class OpenAIProvider(BaseLLMProvider):
             # non-streaming caller can show a live thinking line.
             reasoning_chars=len(reasoning_text),
             reasoning_tail=_reasoning_tail(reasoning_text),
+            reply_from_reasoning=reply_from_reasoning,
         )
 
     async def stream(
@@ -204,6 +240,8 @@ class OpenAIProvider(BaseLLMProvider):
         tool_calls_by_index: dict = {}
         finish_reason = ""
         reasoning_chars = 0
+        reasoning_accum = ""
+        content_chars = 0
         usage: dict = {}
         async for chunk in response:
             # Some endpoints attach usage to the last content chunk; others
@@ -231,11 +269,13 @@ class OpenAIProvider(BaseLLMProvider):
             # said nothing". Hand each increment to the consumer as its own
             # typed envelope (never mixed with the content deltas below) so the
             # UI can show a live thinking line.
-            reasoning = getattr(delta, "reasoning_content", None)
+            reasoning = _reasoning_field(delta)
             if reasoning:
                 reasoning_chars += len(reasoning)
+                reasoning_accum += reasoning
                 yield json.dumps({"type": "reasoning", "text": reasoning})
             if delta.content:
+                content_chars += len(delta.content)
                 yield delta.content
             if delta.tool_calls:
                 for tc_delta in delta.tool_calls:
@@ -260,6 +300,22 @@ class OpenAIProvider(BaseLLMProvider):
                     args = tc["arguments"]
                 calls.append({"id": tc["id"], "name": tc["name"], "arguments": args})
             yield json.dumps({"type": "tool_calls", "tool_calls": calls})
+        # Streaming fallback for the same local-model shape as ``complete()``:
+        # the model streamed its whole answer on the reasoning channel and not a
+        # single content delta. Only when there was no content AND no tool call
+        # (a tool call is a legitimate empty-content turn) do we surface the
+        # reasoning as the reply — otherwise the turn reaches the caller blank
+        # and the UI shows "模型没有返回任何内容". It is emitted as an ordinary
+        # text delta so every downstream consumer treats it as the reply.
+        reply_from_reasoning = False
+        if content_chars == 0 and not tool_calls_by_index and reasoning_accum.strip():
+            reply_from_reasoning = True
+            logger.warning(
+                "streamed reply had no content and %d chars of reasoning; "
+                "using the reasoning channel as the reply (model=%s)",
+                reasoning_chars, self.config.model,
+            )
+            yield reasoning_accum
         # Trailing metadata envelope. The stream contract is "plain text
         # deltas plus typed JSON envelopes"; the consumer recognises the
         # ``type`` and never renders this as text.
@@ -267,6 +323,7 @@ class OpenAIProvider(BaseLLMProvider):
             "type": "stream_meta",
             "finish_reason": finish_reason,
             "reasoning_chars": reasoning_chars,
+            "reply_from_reasoning": reply_from_reasoning,
             "usage": usage,
         })
 

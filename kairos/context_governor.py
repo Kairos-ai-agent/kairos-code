@@ -25,6 +25,7 @@ fixed-size context window:
 """
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -35,6 +36,18 @@ from typing import Any
 ELIDED_PLACEHOLDER = (
     "[{tool} output elided to save context — {chars} chars removed. "
     "Re-run the tool if you still need it.]"
+)
+
+#: Injected when a request had to be trimmed to fit a prompt budget. It goes in
+#: as a system message so the model KNOWS the transcript in front of it is
+#: incomplete — trimming silently would leave it asserting stale conclusions as
+#: if the whole history were present.
+CONTEXT_TRIM_NOTICE = (
+    "[context trimmed to fit this model's {budget}-token prompt budget: "
+    "{elided} tool result(s) elided, {tools_dropped} tool schema(s) removed, "
+    "{dropped} older message(s) dropped{system_note}. "
+    "The full conversation is NOT in this request — if a conclusion depends on "
+    "detail you no longer see, say so instead of guessing.]"
 )
 
 #: Tool results newer than this many are never touched.
@@ -213,3 +226,211 @@ def context_stats(messages: Sequence[Any]) -> dict[str, Any]:
         "tool_messages": sum(1 for m in messages if _role_of(m) == "tool"),
         "tool_chars": tool_chars,
     }
+
+
+# ===========================================================================
+# Prompt-budget fitting: keep a request under a model's window BEFORE sending.
+#
+# ``shrink_for_overflow`` above reacts to a provider that already said no. This
+# is the pre-emptive half, and it exists for local models: LM Studio behind an
+# 8192-token window rejects the whole call the moment the assembled prompt
+# (system + history + the full tool catalogue) crosses it — the real failure was
+# ``request (8208 tokens) exceeds the available context size (8192 tokens)``.
+# Nothing here fires unless a budget is supplied, so a cloud model with no
+# known window is untouched.
+# ===========================================================================
+
+#: When fitting a budget, keep at most this many trailing messages verbatim.
+BUDGET_KEEP_RECENT_MESSAGES = OVERFLOW_KEEP_RECENT_MESSAGES
+
+#: The system prompt is the LAST thing trimmed (its instructions matter most),
+#: and even then at least this many characters survive.
+BUDGET_MIN_SYSTEM_CHARS = 2000
+
+#: Marker appended to a system prompt that had to be cut.
+SYSTEM_TRIM_MARKER = "\n\n[… earlier system instructions truncated to fit the model window …]"
+
+
+@dataclass
+class BudgetReport:
+    """What a :func:`fit_to_budget` pass actually changed."""
+
+    budget_tokens: int = 0
+    approx_tokens_before: int = 0
+    approx_tokens_after: int = 0
+    elided: int = 0          # tool bodies stubbed out
+    tools_dropped: int = 0   # tool schemas removed
+    dropped: int = 0         # whole messages removed
+    system_trimmed: bool = False
+
+    @property
+    def trimmed(self) -> bool:
+        return bool(self.elided or self.tools_dropped or self.dropped
+                    or self.system_trimmed)
+
+    def summary(self) -> str:
+        bits = []
+        if self.elided:
+            bits.append(f"{self.elided} tool result(s) elided")
+        if self.tools_dropped:
+            bits.append(f"{self.tools_dropped} tool schema(s) removed")
+        if self.dropped:
+            bits.append(f"{self.dropped} message(s) dropped")
+        if self.system_trimmed:
+            bits.append("system prompt truncated")
+        return ", ".join(bits) or "nothing to do"
+
+
+def approx_prompt_tokens(messages: Sequence[Any],
+                         tools: Sequence[Any] | None = None) -> int:
+    """Rough token count of a whole request (chars/4, the agent's own heuristic).
+
+    Counts message contents AND the tool schemas serialised the way they are
+    sent: the schemas are the block that made a 22-tool request overshoot a
+    small window, so a budget that ignored them would not have prevented it.
+    """
+    chars = sum(len(_content_of(m)) for m in messages)
+    for tool in tools or []:
+        try:
+            chars += len(json.dumps(tool, ensure_ascii=False))
+        except (TypeError, ValueError):
+            chars += len(str(tool))
+    return chars // 4
+
+
+def _tool_name(tool: Any) -> str:
+    if isinstance(tool, dict):
+        return str(tool.get("name") or "")
+    return str(getattr(tool, "name", "") or "")
+
+
+def _over_budget(messages: Sequence[Any], tools: Sequence[Any] | None,
+                 budget: int) -> bool:
+    return approx_prompt_tokens(messages, tools) > budget
+
+
+def _drop_oldest(messages: Sequence[Any], keep_recent: int) -> tuple[list[Any], int]:
+    """Drop the oldest messages, never the system prompts, the newest tail, or
+    the message currently being answered (the last message + last user turn)."""
+    n = len(messages)
+    if keep_recent <= 0 or n <= keep_recent:
+        return list(messages), 0
+    keep_idx = set(range(n - keep_recent, n))
+    for i, m in enumerate(messages):
+        if _role_of(m) == "system":
+            keep_idx.add(i)          # role + skills + summary always survive
+    keep_idx.add(n - 1)              # the message under discussion
+    for i in range(n - 1, -1, -1):   # the user's current message
+        if _role_of(messages[i]) == "user":
+            keep_idx.add(i)
+            break
+    kept = [m for i, m in enumerate(messages) if i in keep_idx]
+    return kept, n - len(kept)
+
+
+def _trim_system(messages: Sequence[Any],
+                 min_chars: int = BUDGET_MIN_SYSTEM_CHARS) -> tuple[list[Any], bool]:
+    """Cut the first system prompt in half (floor ``min_chars``); last resort."""
+    for i, m in enumerate(messages):
+        if _role_of(m) != "system":
+            continue
+        body = _content_of(m)
+        if len(body) <= min_chars:
+            return list(messages), False
+        out = list(messages)
+        out[i] = _with_content(m, body[:max(min_chars, len(body) // 2)] + SYSTEM_TRIM_MARKER)
+        return out, True
+    return list(messages), False
+
+
+def _insert_trim_notice(messages: Sequence[Any], report: BudgetReport) -> list[Any]:
+    """Put the trim notice right after the first system message (or at the top)."""
+    note = CONTEXT_TRIM_NOTICE.format(
+        budget=report.budget_tokens,
+        elided=report.elided,
+        tools_dropped=report.tools_dropped,
+        dropped=report.dropped,
+        system_note=", system prompt truncated" if report.system_trimmed else "",
+    )
+    out = list(messages)
+    notice_msg: Any
+    if out and _role_of(out[0]) == "system":
+        # Clone the shape of an existing message so this works for both the
+        # pydantic LLMMessage and the plain dicts the /compact route uses.
+        notice_msg = _with_content(out[0], note)
+        out.insert(1, notice_msg)
+    else:
+        out.insert(0, {"role": "system", "content": note})
+    return out
+
+
+def fit_to_budget(
+    messages: Sequence[Any],
+    tools: Sequence[Any] | None = None,
+    budget_tokens: int | None = None,
+    *,
+    core_tool_names: Sequence[str] | None = None,
+    keep_recent_messages: int = BUDGET_KEEP_RECENT_MESSAGES,
+) -> tuple[list[Any], Any, BudgetReport]:
+    """Trim a request to fit ``budget_tokens``, cheapest loss first.
+
+    Escalation, in the order the model can best afford:
+
+    1. **elide old tool bodies** — the existing elision mechanism, keeps every
+       message and only stubs the parts that have scrolled out of use;
+    2. **reduce the tool catalogue** to ``core_tool_names`` — the schemas are a
+       fixed overhead on every request (see ``kairos.tools.light_mode``);
+    3. **drop the oldest messages** — never the system prompts, the newest
+       tail, the last user turn, or the message being answered;
+    4. **trim the system prompt** — the last resort, and only to a floor.
+
+    ``budget_tokens`` of ``None`` / 0 / negative returns the inputs unchanged
+    (the historical behaviour). Whenever anything was cut, a ``system`` notice
+    is inserted so the model is told the transcript is incomplete — a silent
+    trim would let it treat a partial history as the whole one.
+
+    Returns ``(messages, tools, report)``. ``tools`` is returned in the same
+    shape it was given (list or None). Pairing broken by step 3 must be
+    repaired by the caller with ``_sanitize_memory``.
+    """
+    had_tools = tools is not None
+    msgs = list(messages)
+    tool_list: list[Any] = list(tools) if tools else []
+    report = BudgetReport(budget_tokens=int(budget_tokens or 0))
+    if not budget_tokens or budget_tokens <= 0:
+        return msgs, (tool_list if had_tools else tools), report
+
+    report.approx_tokens_before = approx_prompt_tokens(msgs, tool_list)
+    if report.approx_tokens_before <= budget_tokens:
+        report.approx_tokens_after = report.approx_tokens_before
+        return msgs, (tool_list if had_tools else tools), report
+
+    # 1) elide tool bodies (never drops a message).
+    if _over_budget(msgs, tool_list, budget_tokens):
+        msgs, elision = elide_old_tool_results(
+            msgs, keep_recent=OVERFLOW_KEEP_RECENT_TOOL_RESULTS,
+        )
+        report.elided += elision.elided
+
+    # 2) reduce the tool catalogue to the core set.
+    if (core_tool_names is not None and tool_list
+            and _over_budget(msgs, tool_list, budget_tokens)):
+        core = set(core_tool_names)
+        kept = [t for t in tool_list if _tool_name(t) in core]
+        report.tools_dropped = len(tool_list) - len(kept)
+        tool_list = kept
+
+    # 3) drop the oldest messages.
+    if _over_budget(msgs, tool_list, budget_tokens):
+        msgs, dropped = _drop_oldest(msgs, keep_recent_messages)
+        report.dropped = dropped
+
+    # 4) trim the system prompt.
+    if _over_budget(msgs, tool_list, budget_tokens):
+        msgs, report.system_trimmed = _trim_system(msgs)
+
+    if report.trimmed:
+        msgs = _insert_trim_notice(msgs, report)
+
+    report.approx_tokens_after = approx_prompt_tokens(msgs, tool_list)
+    return msgs, (tool_list if had_tools else tools), report

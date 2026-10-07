@@ -191,7 +191,14 @@ class SubagentTool(BaseTool):
         prompt = _DISTILL_PROMPT.format(task=task[:500], body=body)
         try:
             parent = self.parent_agent
-            timeout = getattr(parent, "_llm_timeout_s", 120) or 120
+            # ``None`` means the parent runs with no per-call limit (a local
+            # model on a small box): a bare ``or 120`` turned that into a
+            # 2-minute cap. Only a missing/non-numeric/zero attribute falls back
+            # to the 120s default.
+            timeout = getattr(parent, "_llm_timeout_s", 120)
+            if timeout is not None and (not isinstance(timeout, (int, float))
+                                        or timeout <= 0):
+                timeout = 120
             response = await asyncio.wait_for(
                 parent._llm.complete([LLMMessage(role="user", content=prompt)]),
                 timeout=timeout,

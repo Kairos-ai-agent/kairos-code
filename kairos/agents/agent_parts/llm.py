@@ -48,8 +48,127 @@ def _thinking_tail(text: str, n: int = AGENT_THINKING_TAIL_CHARS) -> str:
 
 class AgentLLMMixin:
     @property
-    def _llm_timeout_s(self) -> float:
+    def _llm_timeout_s(self) -> Optional[float]:
+        """Per-call wall-clock timeout in seconds, or ``None`` for no limit.
+
+        ``LLMConfig.timeout_s`` (provider level) governs when set: 0 or a
+        negative number means "no limit" — a local model on modest hardware can
+        legitimately need several minutes for one turn, and the 120s historical
+        default is what made Kairos disconnect (``Client disconnected. Stopping
+        generation...``) mid-answer. Unset (``None``) keeps the exact previous
+        behaviour (``timeout or 60``), so a cloud provider's deadline is never
+        silently lengthened or shortened.
+        """
+        raw = getattr(self._llm_config, "timeout_s", None)
+        if raw is not None:
+            try:
+                value = float(raw)
+            except (TypeError, ValueError):
+                value = None
+            else:
+                return None if value <= 0 else value
         return float(self._llm_config.timeout or 60)
+
+    @property
+    def _llm_timeout_label(self) -> str:
+        """Human label for the per-call timeout, safe when it is unlimited."""
+        seconds = self._llm_timeout_s
+        return "no limit" if seconds is None else f"{seconds:.0f}s"
+
+    def _light_tools_active(self) -> bool:
+        """Whether only the core tool schemas should be advertised (task ③)."""
+        from kairos.tools.light_mode import is_light_mode
+        return is_light_mode(self._llm_config)
+
+    def _prompt_budget(self) -> Optional[int]:
+        """Total prompt-token ceiling for one request, or ``None`` (unset).
+
+        An explicit provider-level ``max_prompt_tokens`` wins; otherwise a known
+        ``context_window`` yields the window minus room for the answer and the
+        fixed request overhead (tool schemas). ``None`` means "no pre-emptive
+        trimming" — the historical behaviour — so nothing changes for a cloud
+        model whose window nobody configured.
+        """
+        explicit = getattr(self._llm_config, "max_prompt_tokens", None)
+        if explicit is not None:
+            try:
+                value = int(explicit)
+            except (TypeError, ValueError):
+                value = 0
+            if value > 0:
+                return value
+        window = getattr(self, "_context_window", None)
+        if not window:
+            return None
+        try:
+            window = int(window)
+        except (TypeError, ValueError):
+            return None
+        if window <= 0:
+            return None
+        reserve_out = getattr(self._llm_config, "max_tokens", 0) or 4096
+        # The reply must fit in the same window; never reserve more than half of
+        # it, or a small window would leave no room for the prompt at all.
+        reserve = min(int(reserve_out), max(512, window // 2))
+        return max(1024, window - reserve)
+
+    async def _fit_request_budget(self, messages, tool_schemas,
+                                  *, task_id: str = "", turn: int = 0):
+        """Trim an assembled request to the prompt budget before it is sent.
+
+        Returns ``(messages, tool_schemas, report)``. A no-op that returns the
+        inputs untouched when no budget is configured. Telemetry rides
+        ``agent.progress`` so a trim is auditable and is never silent.
+        """
+        from kairos.context_governor import fit_to_budget
+        from kairos.tools.light_mode import CORE_TOOL_NAMES
+
+        budget = self._prompt_budget()
+        if not budget:
+            return messages, tool_schemas, None
+        fitted, fitted_tools, report = fit_to_budget(
+            messages, tool_schemas, budget,
+            core_tool_names=CORE_TOOL_NAMES,
+        )
+        if report is None or not report.trimmed:
+            return fitted, fitted_tools, report
+        # Dropping whole messages can break tool-call/reply pairing; the same
+        # repair the overflow path uses keeps the request provider-valid.
+        sanitize = getattr(self, "_sanitize_memory", None)
+        if sanitize is not None:
+            fitted = sanitize(fitted)
+        logger.info(
+            "%s: request trimmed to the %d-token prompt budget — %s "
+            "(~%d → ~%d tokens)",
+            getattr(self, "agent_id", "?"), budget, report.summary(),
+            report.approx_tokens_before, report.approx_tokens_after,
+        )
+        try:
+            await self.message_bus.publish(Message(
+                sender=self.agent_id,
+                topic="agent.progress",
+                content=(
+                    f"Prompt trimmed to fit the model window "
+                    f"(~{report.approx_tokens_before} → "
+                    f"~{report.approx_tokens_after} tokens): {report.summary()}."
+                ),
+                msg_type="text",
+                metadata={
+                    "task_id": task_id,
+                    "turn": turn,
+                    "reason": "prompt_budget_trimmed",
+                    "budget_tokens": budget,
+                    "trimmed": {
+                        "elided": report.elided,
+                        "tools_dropped": report.tools_dropped,
+                        "dropped": report.dropped,
+                        "system_trimmed": report.system_trimmed,
+                    },
+                },
+            ))
+        except Exception:  # noqa: BLE001 - telemetry must never break a call
+            logger.debug("prompt-trim telemetry publish failed", exc_info=True)
+        return fitted, fitted_tools, report
 
     async def _publish_thinking(
         self, text: str, *, task_id: str = "", turn: int = 0,
@@ -123,6 +242,7 @@ class AgentLLMMixin:
         model_name = self._llm_config.model
         usage = {}
         reasoning_chars = 0
+        reply_from_reasoning = False
         chunk_seq = 0
         # Hidden-reasoning text streamed so far, and the last moment we
         # published a (throttled) hint from it.
@@ -190,6 +310,10 @@ class AgentLLMMixin:
                             )
                             reasoning_chars = int(
                                 parsed.get("reasoning_chars") or reasoning_chars
+                            )
+                            reply_from_reasoning = bool(
+                                parsed.get("reply_from_reasoning")
+                                or reply_from_reasoning
                             )
                             stream_usage = parsed.get("usage") or {}
                             if stream_usage:
@@ -277,6 +401,7 @@ class AgentLLMMixin:
             finish_reason=finish_reason,
             tool_calls=accumulated_tool_calls if accumulated_tool_calls else None,
             reasoning_chars=reasoning_chars,
+            reply_from_reasoning=reply_from_reasoning,
         )
 
     def _traced_llm_call(self, messages, tools=None):
@@ -301,11 +426,28 @@ class AgentLLMMixin:
         )
 
     def _get_tool_schemas(self) -> Optional[List[dict]]:
-        """Get tool schemas for LLM function calling."""
+        """Get tool schemas for LLM function calling.
+
+        In light mode (a small local model, or an explicit ``light_tools``) only
+        the core tools' schemas are returned: the ~22-schema catalogue is the
+        largest single block of a small prompt and the block that pushed a real
+        request past an 8192-token window. The tools stay wired on the agent
+        (an unexpected call is still dispatched); only what the model is *told*
+        about is narrowed. Default mode returns every tool, unchanged.
+        """
         if not self.tools:
             return None
+        from kairos.tools.light_mode import is_light_mode, select_light_tools
+
+        chosen = select_light_tools(self.tools) if is_light_mode(
+            self._llm_config) else list(self.tools)
+        if not chosen:
+            # A model misconfigured into light mode but wired with none of the
+            # core tools must not end up with an empty toolset — fall back to
+            # the full list rather than silently disabling tools.
+            chosen = list(self.tools)
         schemas = []
-        for tool in self.tools:
+        for tool in chosen:
             schema = tool.to_schema()
             schemas.append({
                 "name": schema["name"],

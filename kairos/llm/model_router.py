@@ -32,6 +32,35 @@ _HEAVY_TASK_KEYWORDS = (
 )
 
 
+# Provider-level knobs a user sets for a local / small-window model. They live
+# in the openai (or anthropic) provider block of settings.json and turn into
+# LLMConfig fields. Accepted under the snake_case or the camelCase spelling so a
+# hand-edited settings.json or a UI that mirrors one style still works.
+_LOCAL_MODEL_EXTRA_FIELDS = {
+    "context_window": ("context_window", "contextWindow"),
+    "max_prompt_tokens": ("max_prompt_tokens", "maxPromptTokens"),
+    "light_tools": ("light_tools", "lightTools"),
+    "timeout_s": ("timeout_s", "timeoutS"),
+}
+
+
+def _local_model_extras(provider_cfg: Optional[dict]) -> Dict[str, Any]:
+    """The local-model LLMConfig overrides present in a provider block.
+
+    Only keys the user actually set are returned, so a config that predates
+    these fields keeps every default (and every provider behaviour) unchanged.
+    """
+    if not isinstance(provider_cfg, dict):
+        return {}
+    out: Dict[str, Any] = {}
+    for field, keys in _LOCAL_MODEL_EXTRA_FIELDS.items():
+        for key in keys:
+            if provider_cfg.get(key) is not None:
+                out[field] = provider_cfg[key]
+                break
+    return out
+
+
 def resolve_task_tier(requirement: str) -> str:
     """Classify a requirement into a task tier: fast / default / strong.
 
@@ -148,6 +177,10 @@ class ModelRouter:
                             openai_cfg, default="https://api.openai.com/v1",
                             suffix="/chat/completions",
                         ),
+                        # Local-model knobs (context_window / max_prompt_tokens /
+                        # light_tools / timeout_s) when the user set them; nothing
+                        # is passed otherwise, so cloud defaults are unchanged.
+                        **_local_model_extras(openai_cfg),
                     )
                 if anthropic_cfg and (anthropic_cfg.get("apiKey") or anthropic_cfg.get("model")):
                     from kairos.llm.endpoints import resolve_anthropic_base
@@ -160,6 +193,7 @@ class ModelRouter:
                         # is given, so this must resolve to the origin — not to
                         # "…/v1", which used to produce /v1/v1/messages.
                         base_url=resolve_anthropic_base(anthropic_cfg),
+                        **_local_model_extras(anthropic_cfg),
                     )
                 # R37+: the active provider determines which LLMConfig
                 # the Coder / Reviewer actually use. We register both

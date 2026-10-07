@@ -39,6 +39,24 @@ class LLMConfig(BaseModel):
     # rejected, and a fixed budget cannot do that for a window it has never
     # been told about. None = unknown, keep the agent's own budget.
     context_window: Optional[int] = None
+    # Hard ceiling on the PROMPT (system + history + tool schemas) sent in one
+    # request. A local model with a small window (e.g. LM Studio's 8192) rejects
+    # the whole call with "request (8208 tokens) exceeds the available context
+    # size" the moment the assembled prompt crosses it. When set, the request is
+    # trimmed to fit BEFORE it is sent (see kairos.context_governor.fit_to_budget);
+    # None = unchanged (the agent's own budget governs).
+    max_prompt_tokens: Optional[int] = None
+    # Local models are overwhelmed by the full tool catalogue (~22 schemas is
+    # the single biggest chunk of a small prompt) and almost never call any of
+    # them. True registers only the core file/terminal/grep tools. None/False =
+    # unchanged (every tool the agent was wired with is advertised).
+    light_tools: Optional[bool] = None
+    # Per-call wall-clock timeout in seconds. None = the historical default
+    # (``timeout or 60``); 0 or negative = no limit (a slow local model may
+    # legitimately take many minutes on one turn); positive = that many seconds.
+    # Kept separate from ``timeout`` so a config written before this existed
+    # keeps its exact behaviour.
+    timeout_s: Optional[int] = None
 
     @field_validator("base_url")
     @classmethod
@@ -82,6 +100,13 @@ class LLMResponse(BaseModel):
     # and the UI can show a live line. It must never be merged into
     # ``content``, which is the answer and only the answer.
     reasoning_tail: str = ""
+    # Set ONLY when the provider had to fall back to the hidden-reasoning
+    # channel because ``content`` came back empty (a small local model that
+    # writes its whole answer into ``reasoning_content`` and leaves ``content``
+    # as ""). ``content`` then carries that text so the caller has an answer at
+    # all; this flag is the telemetry that records the reply did NOT come from
+    # the model's content channel. False on every normal reply.
+    reply_from_reasoning: bool = False
 
 class BaseLLMProvider(ABC):
     """Abstract base class for LLM providers."""

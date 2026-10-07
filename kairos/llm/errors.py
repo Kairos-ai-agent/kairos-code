@@ -65,6 +65,13 @@ _CONTEXT_LENGTH_MARKERS = (
     "request entity too large",
     "string too long",
     "context window",
+    # LM Studio / llama.cpp wording: "request (8208 tokens) exceeds the
+    # available context size (8192 tokens), try increasing it". Without these
+    # the bundled threshold never matched a local model, so the request was
+    # reported as a hard failure instead of being compacted and retried.
+    "exceeds the available context size",
+    "available context size",
+    "context size exceeded",
 )
 
 
@@ -99,6 +106,8 @@ _STATED_LIMIT_PATTERNS = (
     re.compile(r"context length is\s*(\d+)", re.I),
     re.compile(r"context length of\s*(\d+)", re.I),
     re.compile(r"max(?:imum)?\s+(?:context\s+)?(?:length|tokens)\D{0,24}?(\d{3,9})", re.I),
+    # LM Studio: "exceeds the available context size (8192 tokens)".
+    re.compile(r"available context size\D{0,12}?(\d{3,9})", re.I),
 )
 
 # Below this, a number is a per-request cap (``max_tokens: 1024``) rather than a

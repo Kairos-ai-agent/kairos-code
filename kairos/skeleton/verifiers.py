@@ -123,6 +123,11 @@ def _validate_expression(tree: ast.AST, allowed_names: set) -> None:
     """Reject anything outside the small, escape-proof AST subset."""
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute):
+            # ANY attribute access is rejected, deliberately NOT just dunder
+            # names: ``x.__class__`` is the famous escape door, but ``x.foo``
+            # is the very same door. Do NOT narrow this to dunder-only to make
+            # ``result.output`` parse -- reach into objects with a *callable*
+            # check instead (it is unrestricted and runs as trusted code).
             raise ValueError(
                 "attribute access is not allowed in a string check "
                 "(use a callable check instead)"

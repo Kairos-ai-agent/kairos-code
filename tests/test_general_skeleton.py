@@ -12,6 +12,7 @@ Two things this file proves:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -499,6 +500,43 @@ async def test_string_assertion_still_accepts_simple_conditions(tmp_path):
     assert bad.passed is False
 
 
+async def test_string_assertion_rejects_plain_attribute_access_not_just_dunder(tmp_path):
+    """Regression guard: **any** attribute access is rejected, not only dunder.
+
+    ``_ALLOWED_AST_NODES`` omits ``ast.Attribute`` on purpose. ``x.__class__``
+    is the famous escape vector, but ``x.some_attr`` is the very same door, so
+    the check must NOT be narrowed to dunder-only names (e.g. to make
+    ``result.output`` parse). The supported way to reach into the scope objects
+    is a *callable* check, which is unrestricted and safe. If someone loosens
+    the string evaluator, this test fails.
+    """
+    ws = _doc_workspace(tmp_path)
+    task = Task(instruction="x", output_name="report.md")
+
+    # plain attribute access -> rejected *for being attribute access*
+    for expr in ("result.output", "workspace.root", "task.meta"):
+        verdict = await AssertionVerifier(check=expr).verify(ws, task, WorkerResult(ok=True))
+        assert verdict.passed is False, expr
+        assert "rejected" in verdict.reason, (expr, verdict.reason)
+        assert "attribute" in verdict.reason.lower(), (expr, verdict.reason)
+
+    # a method call on an attribute is rejected too (at the call check, since
+    # the callee is not a whitelisted bare name)
+    for expr in ("output.upper()", "(1).__class__"):
+        verdict = await AssertionVerifier(check=expr).verify(ws, task, WorkerResult(ok=True))
+        assert verdict.passed is False, expr
+        assert "rejected" in verdict.reason, (expr, verdict.reason)
+
+    # the sanctioned alternative: a callable may do exactly the same work
+    def check(workspace, task, result):
+        return (result.output or "").startswith("ok")
+
+    ok = await AssertionVerifier(check=check).verify(
+        ws, task, WorkerResult(ok=True, output="ok!"),
+    )
+    assert ok.passed is True
+
+
 # ---- (3) cross-platform test-command detection -----------------------------
 
 def test_detector_prefers_each_platforms_venv_layout(tmp_path, monkeypatch):
@@ -654,9 +692,27 @@ def test_repo_workspace_outputs_are_run_scoped(tmp_path):
     assert ws2.output_dir == tmp_path / ".kairos" / "skeleton-runs" / "fixed123"
 
 
-# ---- (7) the Coder adapter binds the workspace at behaviour level ----------
+# ---- (7) the Coder adapter hands the workspace root to the agent -----------
+#
+# Two layers are proven here, and they are NOT the same:
+#   * the *serial cwd fallback* -- a cwd-reading agent sees the workspace as the
+#     process cwd during run, and a nested/concurrent entry is refused;
+#   * the *explicit tool binding* -- the real Coder edits through tools whose
+#     root is set at construction (`FileEditTool(allowed_root=X)`), and
+#     CoderWorker re-points those tools at the workspace it is handed.
+# What is still NOT proven (no model / no network): that the full real
+# `kairos.agents.roles.Coder` LLM loop edits inside X. See the honest boundary
+# note on the tool-level test below.
 
-async def test_coder_worker_runs_inside_the_workspace(tmp_path):
+async def test_coder_worker_sets_process_cwd_for_a_cwd_reading_agent(tmp_path):
+    """A cwd-reading agent gets the workspace as the process cwd during run.
+
+    Scope: this proves the *serial cwd fallback* works, i.e. that during the run
+    ``os.getcwd()`` is the workspace and is restored after. It does NOT by
+    itself prove the real Coder's edits land in X -- that is the tool-level
+    binding proven by the tests below.
+    """
+
     class _CwdCoder:
         name = "cwd-coder"
 
@@ -681,6 +737,115 @@ async def test_coder_worker_runs_inside_the_workspace(tmp_path):
     assert Path(coder.seen).resolve() == workspace_x.resolve()
     # the process cwd is restored afterwards
     assert Path(os.getcwd()).resolve() == Path(before).resolve()
+
+
+async def test_nested_serial_workspace_binding_is_rejected(tmp_path):
+    """Re-entrant cwd binding must raise, not silently clobber the cwd."""
+    from kairos.skeleton.adapters import serial_workspace_cwd
+
+    x = tmp_path / "X"
+    x.mkdir()
+    outer_cwd = os.getcwd()
+    with serial_workspace_cwd(str(x)):
+        assert Path(os.getcwd()).resolve() == x.resolve()
+        with pytest.raises(RuntimeError):
+            with serial_workspace_cwd(str(x)):
+                pass
+        # the rejected inner entry did not change the cwd underneath us
+        assert Path(os.getcwd()).resolve() == x.resolve()
+    assert Path(os.getcwd()).resolve() == Path(outer_cwd).resolve()
+
+
+async def test_concurrent_coder_runs_one_binds_the_other_errors(tmp_path):
+    """Two overlapping CoderWorker runs: one holds the cwd, the other errors.
+
+    Exactly one worker may hold the process cwd; the second must report a
+    failure (``ok=False`` with the re-entrancy reason) rather than quietly
+    running in the first worker's directory.
+    """
+    class _SlowCwdCoder:
+        name = "slow-cwd-coder"
+
+        async def run(self, task, plan_mode=False):
+            await asyncio.sleep(0)  # yield so the second worker interleaves
+            return os.getcwd()
+
+    x = tmp_path / "X"
+    y = tmp_path / "Y"
+    x.mkdir()
+    y.mkdir()
+
+    results = await asyncio.gather(
+        CoderWorker(_SlowCwdCoder()).run(RepoWorkspace(x), Task(instruction="a")),
+        CoderWorker(_SlowCwdCoder()).run(RepoWorkspace(y), Task(instruction="b")),
+    )
+
+    assert sorted(r.ok for r in results) == [False, True]
+    loser = next(r for r in results if not r.ok)
+    assert "re-entrant" in (loser.error or "")
+    # the winner really saw its own workspace, not the other's
+    assert Path(next(r for r in results if r.ok).output).resolve() in {x.resolve(), y.resolve()}
+
+
+def test_real_coder_file_tool_writes_into_the_given_root(tmp_path):
+    """The real Coder edits through ``FileEditTool``; its root IS the workspace.
+
+    No LLM: we drive the actual tool the Coder is constructed with
+    (``kairos.tools.file_edit.FileEditTool(allowed_root=X)``) and assert the
+    bytes land in X. This is the primitive the Coder edits with.
+    """
+    from kairos.tools.file_edit import FileEditTool
+
+    x = tmp_path / "X"
+    x.mkdir()
+    tool = FileEditTool(allowed_root=x)
+
+    res = asyncio.run(tool.execute(path="proof.txt", content="written by the coder tool"))
+
+    assert res.success is True, res.error
+    assert (x / "proof.txt").read_text(encoding="utf-8") == "written by the coder tool"
+
+
+async def test_coder_worker_rebinds_real_coder_tools_to_the_workspace(tmp_path):
+    """An agent whose *real* edit tool was built for Y ends up editing X.
+
+    The Coder's write tools are bound at construction (orchestrator:
+    ``FileEditTool(allowed_root=coder_root)``). ``CoderWorker`` re-points those
+    tools at the workspace it is handed, so the actual editing primitive writes
+    into X -- never into the tree the tools were built for.
+
+    Honest boundary: the agent body here just calls its own tool once. This
+    proves the *binding + real tool + real filesystem* layer end to end; it
+    does NOT exercise the full real ``kairos.agents.roles.Coder`` LLM loop
+    (that needs a model, which these tests deliberately do not have).
+    """
+    from kairos.tools.file_edit import FileEditTool
+
+    y = tmp_path / "Y"
+    x = tmp_path / "X"
+    y.mkdir()
+    x.mkdir()
+
+    class _ToolDrivenCoder:
+        name = "tool-driven-coder"
+
+        def __init__(self, tools):
+            self.tools = tools
+
+        async def run(self, task, plan_mode=False):
+            res = await self.tools[0].execute(path="edited.txt", content="edit in X")
+            assert res.success, res.error
+            return "edited"
+
+    coder = _ToolDrivenCoder([FileEditTool(allowed_root=y)])
+    result = await CoderWorker(coder).run(RepoWorkspace(x), Task(instruction="edit"))
+
+    assert result.ok is True
+    # the wrapper re-pointed the real tool at X...
+    assert Path(coder.tools[0]._allowed_root).resolve() == x.resolve()
+    # ...so the file landed in X, not in the tree the tool was built for
+    assert (x / "edited.txt").is_file()
+    assert not (y / "edited.txt").exists()
 
 
 # ---- (8) the CLI wires the skeleton up (end to end, no network) ------------
@@ -720,6 +885,45 @@ def test_skeleton_cli_runs_a_non_code_task_end_to_end(tmp_path):
     assert "SELF_CHECK" in text
     # the run was persisted under the workspace
     assert list((tmp_path / ".kairos" / "skeleton-runs").glob("skeleton-run-*.json"))
+    # nothing leaked into the workspace root: only the inputs and the run/output
+    # directories exist, and no run file or artifact sits at the repo root
+    assert {p.name for p in tmp_path.iterdir()} == {"docs", "outputs", ".kairos"}
+    assert not list(tmp_path.glob("skeleton-run-*.json"))
+    assert not list(tmp_path.glob("*.json"))
+    assert not (tmp_path / "report.md").exists()
+
+
+def test_skeleton_cli_repo_run_artifacts_land_under_a_run_subdir(tmp_path):
+    """``--kind repo`` writes under ``.kairos/skeleton-runs/<run-id>/``.
+
+    The run id names the subdirectory; the repository root gains nothing but
+    ``.kairos`` -- the artifact is not written into the root.
+    """
+    from kairos.cli import EXIT_OK, main
+
+    _write_docs(tmp_path)
+    before = {p.name for p in tmp_path.iterdir()}
+
+    code = main([
+        "skeleton", "run",
+        "--task", "读文档产报告",
+        "--workspace", str(tmp_path),
+        "--kind", "repo",
+        "--verifier", "assertion",
+        "--check", "'SELF_CHECK' in output",
+        "--out-name", "report.md",
+        "--generator", "offline",
+        "--json",
+    ])
+
+    assert code == EXIT_OK
+    runs_dir = tmp_path / ".kairos" / "skeleton-runs"
+    run_subdirs = [p for p in runs_dir.iterdir() if p.is_dir()]
+    assert run_subdirs, "no run-id subdirectory was created"
+    assert any((d / "report.md").is_file() for d in run_subdirs)
+    # the repo root gained nothing new except `.kairos`
+    assert {p.name for p in tmp_path.iterdir()} - before == {".kairos"}
+    assert not (tmp_path / "report.md").exists()
 
 
 def test_skeleton_cli_persists_and_resumes_a_human_gate(tmp_path):

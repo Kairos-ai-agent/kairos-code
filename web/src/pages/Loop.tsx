@@ -17,6 +17,7 @@ import CostDashboard from '../components/CostDashboard';
 import EvalPanel from '../components/EvalPanel';
 import TrendPanel from '../components/TrendPanel';
 import SkillSearchPalette from '../components/SkillSearchPalette';
+import SkeletonPanel from '../components/SkeletonPanel';
 import api, { revertFile } from '../api/client';
 import { useAgentStore } from '../stores/agentStore';
 import { onWebSocketMessage, onWebSocketState } from '../api/client';
@@ -647,6 +648,10 @@ const Loop: React.FC = () => {
         <div style={{ flex: '0 1 380px', minWidth: 280, display: 'flex',
                       flexDirection: 'column', gap: 8, minHeight: 0,
                       overflowY: 'auto' }}>
+
+          {/* General-skeleton run — the non-code path of POST /{id}/start.
+              Reads GET /{id}/skeleton (status + per-criterion Verdict). */}
+          <SkeletonPanel projectId={selectedProject} />
 
           {/* Bug chart + cost */}
           {stats && (

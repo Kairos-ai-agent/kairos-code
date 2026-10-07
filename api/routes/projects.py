@@ -227,7 +227,7 @@ async def start_loop(project_id: str, request: "StartLoopRequest"):
         workspace=_project_root(project),
     )
     if decision.uses_skeleton:
-        return await _skeleton_route_response(project_id, project, requirement, decision)
+        return _start_skeleton_task(project_id, project, requirement, decision)
     try:
         session_id = await _orch().start_loop(project_id, requirement)
     except Exception as e:
@@ -236,51 +236,109 @@ async def start_loop(project_id: str, request: "StartLoopRequest"):
             "session_id": session_id, "message": requirement}
 
 
-async def _skeleton_route_response(project_id: str, project, requirement: str,
-                                   decision) -> dict:
-    """Run a routed non-code task on the skeleton and package the response.
+def _start_skeleton_task(project_id: str, project, requirement: str,
+                         decision) -> dict:
+    """Schedule a routed non-code task on the skeleton and return at once.
 
-    The structured ``Verdict`` (per-criterion ``evidence`` + ``passed``) is in
-    the response *and* in the run record: ``run_general_task`` persists the run
-    as JSON under ``<project>/.kairos/skeleton-runs/`` and publishes it to the
-    orchestrator's message bus, which the existing persistence listener writes
-    to the DB (the same record path the loop's events use).
+    This is the loop's shape applied to the skeleton route: the request does the
+    cheap, synchronous setup (resolve a model, build the state) and hands the
+    slow worker+verifier to a **background asyncio task** -- mirroring
+    ``Orchestrator.start_loop``'s ``asyncio.create_task(run_loop(...))`` -- so the
+    response carries a run id and ``status="running"`` immediately instead of
+    blocking for the whole run. The run's live state lives on
+    ``project.skeleton_state`` (read it via ``GET /{project_id}/skeleton``), its
+    structured ``Verdict`` is persisted to ``<project>/.kairos/skeleton-runs/``,
+    published to the message bus, and a terminal ``skeleton.ended`` event fires
+    when it finishes or is stopped.
     """
-    from kairos.skeleton.service import run_general_task
+    from kairos.skeleton.runner import start_skeleton_run
+    from kairos.skeleton.service import default_generator
 
-    try:
-        outcome = await run_general_task(
-            kind=decision.workspace_kind,
-            root=_project_root(project),
-            instruction=requirement,
-            bus=getattr(_orch(), "message_bus", None),
-        )
-    except Exception as e:  # noqa: BLE001 - surface why the route failed
-        logger.exception("skeleton route failed for project %s", project_id)
+    # Resolve the model *now* -- a cheap, synchronous config read -- so a
+    # misconfigured deployment fails the request honestly (the same 503 the
+    # previous synchronous version returned) instead of a run that dies silently
+    # in the background. Only the (slow) generation runs in the task.
+    generator = default_generator()
+    if generator is None:
+        logger.error("skeleton route failed for project %s: no model provider",
+                     project_id)
         raise HTTPException(
             status_code=503,
-            detail=f"skeleton route failed: {type(e).__name__}: {e}"[:400],
+            detail=("skeleton route failed: RuntimeError: no model provider is "
+                    "configured for the general skeleton"),
         )
-    run = outcome.run
+
+    prev = getattr(project, "skeleton_state", None)
+    if prev is not None and prev.running():
+        raise HTTPException(
+            status_code=409,
+            detail="A skeleton run is already running for this project",
+        )
+
+    state = start_skeleton_run(
+        project=project,
+        kind=decision.workspace_kind,
+        root=str(_project_root(project)),
+        instruction=requirement,
+        generate=generator,
+        bus=getattr(_orch(), "message_bus", None),
+        origin=decision.source,
+        reason=decision.reason,
+    )
     logger.info(
-        "skeleton route: project=%s kind=%s source=%s outcome=%s run=%s",
-        project_id, decision.workspace_kind, decision.source, run.outcome, run.run_id,
+        "skeleton route: project=%s kind=%s source=%s run=%s (background)",
+        project_id, decision.workspace_kind, decision.source, state.run_id,
     )
     return {
-        "status": "started",
+        "status": "running",
         "route": "skeleton",
         "project_id": project_id,
         "workspace_kind": decision.workspace_kind,
         "route_source": decision.source,
         "route_reason": decision.reason,
-        "run_id": run.run_id,
-        "outcome": run.outcome,
-        "passed": run.passed,
-        "verdict": run.verdict.to_dict(),
-        "run_file": outcome.run_file,
-        "artifacts": list(outcome.artifacts or []),
+        "run_id": state.run_id,
+        "session_id": state.session_id,
+        "run_file": state.run_file,
         "message": requirement,
     }
+
+
+@router.get("/{project_id}/skeleton")
+async def get_skeleton_state(project_id: str):
+    """Read the routed skeleton run's live state / result (cf. ``GET /loop``).
+
+    ``running`` is true until the background task finishes; once the terminal
+    ``skeleton.ended`` event has fired the status is ``done`` / ``failed`` /
+    ``stopped`` and the response carries the structured ``Verdict`` (its
+    per-criterion ``evidence``) the verifier produced.
+    """
+    project = _orch().get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+    from kairos.skeleton.runner import read_skeleton_state
+    state = read_skeleton_state(project)
+    if state is None:
+        return {"running": False, "status": "none", "project_id": project_id}
+    state["project_id"] = project_id
+    return state
+
+
+@router.post("/{project_id}/skeleton/stop")
+async def stop_skeleton(project_id: str):
+    """User-initiated stop of a running skeleton run.
+
+    Mirrors ``POST /{project_id}/stop`` for the loop: cancels the background
+    task so Stop takes effect immediately, and the done-callback stamps the
+    terminal ``stopped`` status and publishes ``skeleton.ended`` (so the UI
+    never stays on 运行中).
+    """
+    project = _orch().get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+    from kairos.skeleton.runner import stop_skeleton_run
+    stopped = stop_skeleton_run(project)
+    return {"status": "stopping" if stopped else "no_skeleton_running",
+            "project_id": project_id}
 
 
 # ---------------------------------------------------------------------------

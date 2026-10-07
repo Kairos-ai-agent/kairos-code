@@ -173,12 +173,18 @@ async def run_task(
     revise: Optional[Callable[[Task, Verdict], Optional[Task]]] = None,
     bus=None,
     run_dir=None,
+    run_id: Optional[str] = None,
 ) -> SkeletonRun:
     """Run ``worker`` against ``workspace`` and verify, retrying **only on a
     hard failure** up to ``max_attempts``.
 
     ``revise(task, verdict) -> Task`` (optional) folds the verdict back into the
     next attempt's task.
+
+    ``run_id`` (optional) pins the run's identifier -- a caller that must know
+    the id *before* the run finishes (a background job handing it back at once)
+    passes one; every attempt then shares it, so the persisted record keeps the
+    single id. ``None`` preserves the previous behaviour (a fresh id per run).
 
     Retry policy (the fix for the old ``passed is True or requires_human``
     guard): the loop retries only when the verdict is an explicit
@@ -192,7 +198,8 @@ async def run_task(
     for attempt in range(1, max_attempts + 1):
         result = await worker.run(workspace, current)
         verdict = await verifier.verify(workspace, current, result)
-        run = SkeletonRun(task=current, result=result, verdict=verdict, attempts=attempt)
+        run = SkeletonRun(task=current, result=result, verdict=verdict,
+                          attempts=attempt, run_id=run_id or "")
         _record(run)
         await _publish(bus, f"{RUN_TOPIC}.verified", run)
         if verdict.passed is not False:

@@ -126,8 +126,13 @@ async def run_general_task(
     generate: Optional[Callable] = None,
     run_dir: Any = None,
     bus: Any = None,
+    run_id: Optional[str] = None,
 ) -> SkeletonOutcome:
     """Run one task through the skeleton and verify it; return the outcome.
+
+    ``run_id`` (optional) pins the run's identifier so a caller that must know
+    it *before* the run finishes (the background route) can hand the same id
+    back immediately and find the persisted record under it afterwards.
 
     Raises ``RuntimeError`` when neither an injected ``generate`` nor a
     configured model is available -- the caller surfaces that honestly rather
@@ -149,7 +154,8 @@ async def run_general_task(
     if run_dir is None:
         run_dir = Path(str(root)).expanduser() / ".kairos" / "skeleton-runs"
 
-    run = await run_task(worker, workspace, task, verifier, bus=bus, run_dir=run_dir)
+    run = await run_task(worker, workspace, task, verifier, bus=bus,
+                         run_dir=run_dir, run_id=run_id)
     run_file = str(Path(run_dir) / f"skeleton-run-{run.run_id}.json")
     return SkeletonOutcome(
         run=run,

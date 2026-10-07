@@ -34,6 +34,7 @@ from fastapi.testclient import TestClient
 import api.deps as _api_deps
 from api.app import app
 from api.routes import projects as _projects_routes
+from kairos.core.orchestrator_parts.loopctl import OrchLoopControlMixin
 
 
 # ---------------------------------------------------------------------------
@@ -51,8 +52,14 @@ class FakeProject:
         self.runtime = type("R", (), {"coder_mode": "default", "coder_policy": None})()
 
 
-class FakeOrchestrator:
-    """Enough of the Orchestrator: get_project, a bus, and a counted start_loop."""
+class FakeOrchestrator(OrchLoopControlMixin):
+    """Enough of the Orchestrator: get_project, a bus, and a counted start_loop.
+
+    It inherits the *real* ``stop_loop`` / ``_on_loop_done`` (via
+    ``OrchLoopControlMixin``), so ``POST /{id}/stop`` exercised here runs the
+    product's loop-stop code, not a stand-in: a cancelled loop task fires the
+    same done-callback that publishes the terminal ``loop.ended``.
+    """
 
     def __init__(self, project: FakeProject) -> None:
         from kairos.core.message_bus import MessageBus
@@ -60,6 +67,10 @@ class FakeOrchestrator:
         self.project = project
         self.message_bus = MessageBus()
         self.start_loop_calls: list = []
+        self.stop_loop_calls: list = []
+        self._projects = {project.id: project}
+        self._db = _FakeDb()
+        self._dispatch_tasks: set = set()
 
     def get_project(self, project_id: str):
         return self.project if project_id == self.project.id else None
@@ -67,6 +78,76 @@ class FakeOrchestrator:
     async def start_loop(self, project_id: str, requirement: str) -> str:
         self.start_loop_calls.append((project_id, requirement))
         return "sess-1"
+
+    def stop_loop(self, project_id: str) -> bool:
+        # Record the dispatch, then run the *real* stop_loop unchanged.
+        self.stop_loop_calls.append(project_id)
+        return OrchLoopControlMixin.stop_loop(self, project_id)
+
+
+class _FakeDb:
+    """The bits ``_on_loop_done`` touches, none of which matter here."""
+
+    def save_project(self, project) -> None:
+        pass
+
+    def load_loop_rounds(self, project_id, limit: int = 20):
+        return []
+
+
+class _CancelledLoopTask:
+    """Minimal stand-in for an asyncio loop task a Stop cancels.
+
+    ``cancel()`` marks it done and fires the done-callback the way a real
+    cancelled task does — mirroring ``start_loop``'s
+    ``add_done_callback(lambda t: self._on_loop_done(project_id, t))``
+    (``kairos/core/orchestrator.py:1002``) — so the loop reaches the same
+    terminal state through the same code.
+    """
+
+    def __init__(self) -> None:
+        self._callbacks: list = []
+        self._done = False
+        self._cancelled = False
+
+    def add_done_callback(self, cb) -> None:
+        self._callbacks.append(cb)
+
+    def done(self) -> bool:
+        return self._done
+
+    def cancelled(self) -> bool:
+        return self._cancelled
+
+    def cancel(self) -> bool:
+        self._cancelled = True
+        self._done = True
+        for cb in self._callbacks:
+            cb(self)
+        return True
+
+    def exception(self):
+        return None
+
+
+def _arm_running_loop(fake: FakeOrchestrator, project_id: str = "p1") -> _CancelledLoopTask:
+    """Give the project a running loop the way ``start_loop`` would.
+
+    A ``LoopSession`` plus an in-flight task whose done-callback is the real
+    ``_on_loop_done`` — so cancelling it publishes ``loop.ended`` exactly as a
+    real run does.
+    """
+    from kairos.loop.review_loop import LoopSession
+
+    project = fake.project
+    project.loop_session = LoopSession(
+        project=project, message_bus=fake.message_bus,
+        coder=object(), reviewer=object(),
+    )
+    task = _CancelledLoopTask()
+    task.add_done_callback(lambda t: fake._on_loop_done(project_id, t))
+    project.loop_task = task
+    return task
 
 
 def _fake_generate(prompt: str) -> str:
@@ -419,6 +500,147 @@ def test_stop_with_nothing_running_is_reported(make_client, docs_root):
     r = client.post("/api/projects/p1/skeleton/stop")
     assert r.status_code == 200, r.text
     assert r.json()["status"] == "no_skeleton_running"
+
+
+# ---------------------------------------------------------------------------
+# (4b) THE MERGED STOP: the generic /stop dispatches to whoever is running
+# ---------------------------------------------------------------------------
+
+def test_generic_stop_with_only_the_loop_is_byte_identical(make_client, code_root):
+    """Only the loop is live -> the generic /stop is today's route, word for word.
+
+    It must call the same ``stop_loop`` with the same argument, return the exact
+    same two-key body, and reach the same terminal ``loop.ended`` -- and it must
+    not drag the skeleton path in.
+    """
+    client, fake = make_client(code_root)
+    _arm_running_loop(fake)
+
+    r = client.post("/api/projects/p1/stop")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    # today's exact body: same keys, same order, no extra "stopped" field
+    assert body == {"status": "stopping", "project_id": "p1"}
+    assert list(body.keys()) == ["status", "project_id"]
+
+    # the loop path was the only one taken
+    assert fake.stop_loop_calls == ["p1"]
+    # the same terminal event the loop has always published
+    ended = _wait_topic(fake.message_bus, "loop.ended")
+    assert ended.metadata["status"] == "stopped"
+    assert ended.metadata["project_id"] == "p1"
+    # the skeleton side did nothing at all
+    assert getattr(fake.project, "skeleton_state", None) is None
+    topics = {m.topic for m in fake.message_bus.get_history(limit=100)}
+    assert "skeleton.ended" not in topics
+
+
+def test_generic_stop_stops_a_lone_skeleton_run(make_client, docs_root, monkeypatch):
+    """Only the skeleton is live -> the generic /stop reaches its terminal state.
+
+    (The old generic /stop could not touch the skeleton at all; this is the
+    behaviour the merge adds.)
+    """
+    progress: dict = {"started": False, "finished": False}
+    monkeypatch.setattr("kairos.skeleton.service.default_generator",
+                        lambda: _slow_generate(progress, delay=5.0))
+    client, fake = make_client(docs_root)
+
+    start = client.post("/api/projects/p1/start",
+                        json={"requirement": "很慢的任务", "kind": "docs"})
+    assert start.status_code == 200, start.text
+    assert start.json()["status"] == "running"
+
+    deadline = time.time() + 2.0
+    while not progress["started"] and time.time() < deadline:
+        time.sleep(0.01)
+    assert progress["started"] is True
+
+    # the GENERIC stop, not the skeleton alias
+    stop = client.post("/api/projects/p1/stop")
+    assert stop.status_code == 200, stop.text
+    assert stop.json()["status"] == "stopping"
+    assert stop.json()["stopped"] == ["skeleton"]
+    # the loop side was consulted but had nothing to stop
+    assert fake.stop_loop_calls == ["p1"]
+
+    state = _wait_terminal(client)
+    assert state["status"] == "stopped"
+    assert state["running"] is False
+    assert progress["finished"] is False
+    ended = _wait_topic(fake.message_bus, "skeleton.ended")
+    assert ended.metadata["status"] == "stopped"
+    assert ended.metadata["project_id"] == "p1"
+
+
+def test_generic_stop_stops_both_when_both_run(make_client, docs_root, monkeypatch):
+    """Both live -> both stop, and the body names both."""
+    progress: dict = {"started": False, "finished": False}
+    monkeypatch.setattr("kairos.skeleton.service.default_generator",
+                        lambda: _slow_generate(progress, delay=5.0))
+    client, fake = make_client(docs_root)
+
+    start = client.post("/api/projects/p1/start",
+                        json={"requirement": "很慢的任务", "kind": "docs"})
+    assert start.json()["status"] == "running"
+    _arm_running_loop(fake)
+    deadline = time.time() + 2.0
+    while not progress["started"] and time.time() < deadline:
+        time.sleep(0.01)
+    assert progress["started"] is True
+
+    stop = client.post("/api/projects/p1/stop")
+    assert stop.status_code == 200, stop.text
+    assert stop.json()["status"] == "stopping"
+    assert stop.json()["stopped"] == ["loop", "skeleton"]
+
+    # skeleton terminal state + event
+    state = _wait_terminal(client)
+    assert state["status"] == "stopped" and state["running"] is False
+    skel_ended = _wait_topic(fake.message_bus, "skeleton.ended")
+    assert skel_ended.metadata["status"] == "stopped"
+    # loop terminal state + event
+    assert fake.project.status == "stopped"
+    loop_ended = _wait_topic(fake.message_bus, "loop.ended")
+    assert loop_ended.metadata["status"] == "stopped"
+
+
+def test_generic_stop_with_nothing_running_matches_today(make_client, code_root):
+    """Neither live -> the body is exactly today's (no invented error shape)."""
+    client, fake = make_client(code_root)
+
+    r = client.post("/api/projects/p1/stop")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body == {"status": "no_loop_running", "project_id": "p1"}
+    assert list(body.keys()) == ["status", "project_id"]
+    # both sides were consulted
+    assert fake.stop_loop_calls == ["p1"]
+
+
+def test_skeleton_stop_alias_still_stops(make_client, docs_root, monkeypatch):
+    """The alias ``POST /{id}/skeleton/stop`` is kept and still works."""
+    progress: dict = {"started": False, "finished": False}
+    monkeypatch.setattr("kairos.skeleton.service.default_generator",
+                        lambda: _slow_generate(progress, delay=5.0))
+    client, fake = make_client(docs_root)
+
+    start = client.post("/api/projects/p1/start",
+                        json={"requirement": "很慢的任务", "kind": "docs"})
+    assert start.json()["status"] == "running"
+    deadline = time.time() + 2.0
+    while not progress["started"] and time.time() < deadline:
+        time.sleep(0.01)
+
+    stop = client.post("/api/projects/p1/skeleton/stop")
+    assert stop.status_code == 200, stop.text
+    # the alias keeps its own (unchanged) body shape
+    assert stop.json() == {"status": "stopping", "project_id": "p1"}
+
+    state = _wait_terminal(client)
+    assert state["status"] == "stopped" and state["running"] is False
+    ended = _wait_topic(fake.message_bus, "skeleton.ended")
+    assert ended.metadata["status"] == "stopped"
 
 
 # ---------------------------------------------------------------------------

@@ -468,13 +468,44 @@ async def chat(project_id: str, request: "ChatRequest"):
 
 @router.post("/{project_id}/stop")
 async def stop_loop(project_id: str):
-    """User-initiated stop of the loop."""
+    """User-initiated stop of whatever is running for this project.
+
+    One Stop button must stop *everything* alive on the project, so this route
+    dispatches to whichever path is live instead of only the loop:
+
+    * only the loop -> calls ``stop_loop`` exactly as before and returns the
+      same body (``{"status": "stopping", "project_id": ...}``) and the same
+      terminal ``loop.ended`` event -- byte-for-byte today's behaviour;
+    * only the skeleton -> the skeleton stop path (terminal ``skeleton.ended``);
+    * both -> both, and the body lists what was stopped under ``stopped``;
+    * neither -> the same body as today (``{"status": "no_loop_running", ...}``).
+
+    The alias ``POST /{project_id}/skeleton/stop`` is kept, so a caller that
+    still targets the skeleton directly keeps working.
+    """
     project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
-    stopped = _orch().stop_loop(project_id)
-    return {"status": "stopping" if stopped else "no_loop_running",
-            "project_id": project_id}
+    # Loop side first, unchanged: this is the exact call today made, and its
+    # return value still decides the "no_loop_running" fallback below.
+    loop_stopped = _orch().stop_loop(project_id)
+    # Skeleton side: a no-op when the project never ran the skeleton (or it
+    # already finished), so a loop-only stop is byte-for-byte the old route.
+    from kairos.skeleton.runner import stop_skeleton_run
+    skeleton_stopped = stop_skeleton_run(project)
+
+    stopped = [name for name, hit in
+               (("loop", loop_stopped), ("skeleton", skeleton_stopped)) if hit]
+    if not stopped:
+        # Nothing was running. Keep today's exact response -- do not invent a
+        # new error shape.
+        return {"status": "no_loop_running", "project_id": project_id}
+    if stopped == ["loop"]:
+        # Loop-only: keep today's exact response body.
+        return {"status": "stopping", "project_id": project_id}
+    # At least the skeleton was stopped: say so (and name the loop too when
+    # both were live).
+    return {"status": "stopping", "project_id": project_id, "stopped": stopped}
 
 
 @router.get("/{project_id}/plan")

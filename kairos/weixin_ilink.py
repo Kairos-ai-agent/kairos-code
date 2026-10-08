@@ -43,13 +43,15 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import inspect
 import json
 import logging
+import re
 import secrets
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence
 from urllib.parse import quote, urljoin
 
 import aiosqlite
@@ -79,6 +81,15 @@ __all__ = [
     "build_client_id",
     "extract_text",
     "is_user_message",
+    "WEIXIN_CDN_BASE_URL",
+    "WEIXIN_MEDIA_MAX_BYTES",
+    "MediaRef",
+    "MediaDownloadError",
+    "extract_media_refs",
+    "build_cdn_download_url",
+    "parse_aes_key",
+    "decrypt_aes_ecb",
+    "download_media_to",
     "ILinkClient",
     "WeixinLoginSession",
     "WeixinAccount",
@@ -142,6 +153,36 @@ _MEDIA_LABELS = {
     MessageItemType["VIDEO"]: "[视频]",
     MessageItemType["FILE"]: "[文件]",
     MessageItemType["VOICE"]: "[语音]",
+}
+
+# ---------------------------------------------------------------------------
+# 入站媒体（图片 / 文件 / 视频）—— 协议常量
+# ---------------------------------------------------------------------------
+#
+# 事实来源：官方 MIT 许可插件 ``@tencent-weixin/openclaw-weixin@2.4.9`` 的
+# TypeScript 源码（本地只读副本，**代码不搬进本仓库**）：
+#
+# * item 形状 / 字段名        ``media/media-download.js``
+# * CDN 下载 URL 形状         ``cdn/cdn-url.js`` + ``auth/accounts.js:CDN_BASE_URL``
+# * AES-128-ECB + key 解析    ``cdn/aes-ecb.js`` + ``cdn/pic-decrypt.js``
+# * 单媒体大小上限            ``channel.js`` configSchema ``maxSingleMediaBytes``
+#                             （默认 26214400 = 25 MiB）
+#
+# 我们**没有**真实 iLink 入站响应样本：以上是照源码推断的字段名/形状，
+# 与真实网关是否逐字一致未经实测（见模块末的“未经真样本验证”说明）。
+
+#: 微信 CDN 根地址（官方 ``auth/accounts.js:9`` 的 ``CDN_BASE_URL``）。
+WEIXIN_CDN_BASE_URL = "https://novac2c.cdn.weixin.qq.com/c2c"
+
+#: 单个媒体文件大小上限：25 MiB（官方 ``maxSingleMediaBytes`` 默认值）。
+WEIXIN_MEDIA_MAX_BYTES = 26214400
+
+#: 我们要下载的媒体类型 → (分类名, item 里的子对象字段名)。
+#: VOICE 不在本轮范围：语音已有转写文本兜底（``voice_item.text``）。
+_MEDIA_ITEM_FIELDS = {
+    MessageItemType["IMAGE"]: ("image", "image_item"),
+    MessageItemType["VIDEO"]: ("video", "video_item"),
+    MessageItemType["FILE"]: ("file", "file_item"),
 }
 
 
@@ -341,6 +382,311 @@ def is_user_message(msg: Dict[str, Any]) -> bool:
     if not (msg.get("from_user_id") or "").strip():
         return False
     return bool(extract_text(msg))
+
+
+def _callable_accepts_media(fn: Any) -> bool:
+    """dispatch 回调是否愿意接收第 4 个参数（入站媒体引用）。
+
+    老的三参 ``dispatch(account_id, chat_id, text)`` 仍然完全可用——这条通道
+    只在回调**声明了**第 4 个位置参数（或关键字 ``media``）时才把媒体交给它，
+    否则退回原来的三参调用，保证既有注入的假 dispatch 不被破坏。
+    """
+    if fn is None:
+        return False
+    try:
+        sig = inspect.signature(fn)
+    except (TypeError, ValueError):
+        return False
+    positional = 0
+    for p in sig.parameters.values():
+        if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD):
+            positional += 1
+        elif p.kind == p.KEYWORD_ONLY and p.name == "media":
+            return True
+    return positional >= 4
+
+
+# ---------------------------------------------------------------------------
+# 入站媒体：取引用 → 下载 → 解密 → 落盘
+# ---------------------------------------------------------------------------
+
+@dataclass
+class MediaRef:
+    """一条待下载的入站媒体项（字段名/形状照官方协议，原样保留）。
+
+    ``kind`` 是 ``image`` / ``video`` / ``file``。密钥有两种来源：
+
+    * ``image_item.aeskey``（32 位十六进制串）优先用于图片；
+    * ``media.aes_key``（base64）用于其它类型，图片无前者时也用它。
+
+    服务端若直给 ``media.full_url`` 就优先用它，否则用
+    ``encrypt_query_param`` 拼 CDN 下载地址。
+    """
+
+    kind: str
+    item_type: int
+    label: str
+    encrypt_query_param: str = ""
+    aes_key: str = ""
+    image_aeskey_hex: str = ""
+    full_url: str = ""
+    file_name: str = ""
+
+    @property
+    def has_media(self) -> bool:
+        """这条 item 里到底有没有可下载的媒体地址。"""
+        return bool(self.encrypt_query_param or self.full_url)
+
+
+class MediaDownloadError(RuntimeError):
+    """入站媒体下载 / 解密 / 落盘失败；``reason`` 是可直接展示的中文原因。"""
+
+    def __init__(self, reason: str, *, kind: str = "",
+                 too_large: bool = False) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.kind = kind
+        self.too_large = too_large
+
+
+def extract_media_refs(msg: Dict[str, Any]) -> List[MediaRef]:
+    """从一条 ``WeixinMessage`` 里取出图片 / 视频 / 文件的下载引用。
+
+    与 :func:`extract_text` 并存：文本走 ``extract_text``（媒体仍给出占位符
+    ``[图片]``，保证只有媒体、没有正文的消息也能通过 ``is_user_message``），
+    媒体引用走这里再真正下载。没有可下载地址的 item 会被跳过。
+    """
+    refs: List[MediaRef] = []
+    for item in (msg.get("item_list") or []):
+        if not isinstance(item, dict):
+            continue
+        itype = item.get("type")
+        spec = _MEDIA_ITEM_FIELDS.get(itype)
+        if spec is None:
+            continue
+        kind, field = spec
+        sub = item.get(field) or {}
+        media = sub.get("media") or {}
+        ref = MediaRef(
+            kind=kind,
+            item_type=itype,
+            label=_MEDIA_LABELS.get(itype, f"[{kind}]"),
+            encrypt_query_param=str(media.get("encrypt_query_param") or ""),
+            aes_key=str(media.get("aes_key") or ""),
+            image_aeskey_hex=(str(sub.get("aeskey") or "") if kind == "image"
+                              else ""),
+            full_url=str(media.get("full_url") or ""),
+            file_name=str(sub.get("file_name") or ""),
+        )
+        if ref.has_media:
+            refs.append(ref)
+    return refs
+
+
+def build_cdn_download_url(encrypted_query_param: str,
+                           cdn_base_url: str = WEIXIN_CDN_BASE_URL) -> str:
+    """拼 CDN 下载地址（官方 ``cdn/cdn-url.js:buildCdnDownloadUrl``）。"""
+    return (f"{cdn_base_url.rstrip('/')}/download"
+            f"?encrypted_query_param={quote(str(encrypted_query_param), safe='')}")
+
+
+def parse_aes_key(aes_key_base64: str) -> bytes:
+    """``CDNMedia.aes_key`` → 16 字节 AES key（官方 ``pic-decrypt.js:parseAesKey``）。
+
+    两种编码都要认：base64(原始 16 字节) 和 base64(32 位十六进制串)。
+    """
+    try:
+        decoded = base64.b64decode(str(aes_key_base64 or ""), validate=False)
+    except Exception as exc:  # noqa: BLE001 - binascii.Error 等
+        raise MediaDownloadError("aes_key 不是合法 base64") from exc
+    if len(decoded) == 16:
+        return decoded
+    if len(decoded) == 32:
+        try:
+            text = decoded.decode("ascii")
+        except UnicodeDecodeError:
+            text = ""
+        if re.fullmatch(r"[0-9a-fA-F]{32}", text or ""):
+            return bytes.fromhex(text)
+    raise MediaDownloadError(
+        "aes_key 必须是 16 字节原始 key 或 32 位十六进制串")
+
+
+def _pkcs7_unpad(data: bytes) -> bytes:
+    """去掉 PKCS7 填充（Node 的 decipher.final() 会自动做，Python 不会）。"""
+    if not data:
+        raise MediaDownloadError("解密结果为空")
+    pad = data[-1]
+    if pad < 1 or pad > 16 or pad > len(data):
+        raise MediaDownloadError("解密结果填充非法（密钥或数据不匹配）")
+    return data[:-pad]
+
+
+def decrypt_aes_ecb(ciphertext: bytes, key: bytes) -> bytes:
+    """AES-128-ECB + PKCS7 解密（官方 ``cdn/aes-ecb.js:decryptAesEcb``）。"""
+    if len(key) != 16:
+        raise MediaDownloadError("AES key 长度不是 16 字节")
+    try:
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    except ImportError as exc:  # pragma: no cover - 部署缺依赖时才触发
+        raise MediaDownloadError("服务端缺少 cryptography 依赖，无法解密媒体") from exc
+    decryptor = Cipher(algorithms.AES(key), modes.ECB()).decryptor()
+    return decryptor.update(ciphertext) + decryptor.finalize()
+
+
+_IMAGE_MAGIC = (
+    (b"\x89PNG\r\n\x1a\n", ".png"),
+    (b"\xff\xd8\xff", ".jpg"),
+    (b"GIF87a", ".gif"),
+    (b"GIF89a", ".gif"),
+)
+
+
+def _ext_from_magic(data: bytes) -> str:
+    """按魔数猜图片后缀（图片协议不带原文件名）。"""
+    for sig, ext in _IMAGE_MAGIC:
+        if data.startswith(sig):
+            return ext
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return ".webp"
+    if data[:2] == b"BM":
+        return ".bmp"
+    return ""
+
+
+def _safe_media_name(name: str) -> str:
+    """只留 basename、去穿越、去非法字符（与 Web 附件目录同一套命名纪律）。"""
+    base = Path(str(name or "")).name.replace("\\", "_").strip()
+    if base in ("", ".", ".."):
+        return ""
+    for ch in '<>:"|?*\x00':
+        base = base.replace(ch, "_")
+    return base[:180]
+
+
+def _unique_media_path(dir_path: Path, name: str) -> Path:
+    """``cat.png`` → ``cat.png`` / ``cat-1.png`` …"""
+    target = dir_path / name
+    if not target.exists():
+        return target
+    stem, suffix = target.stem, target.suffix
+    for i in range(1, 1000):
+        cand = dir_path / f"{stem}-{i}{suffix}"
+        if not cand.exists():
+            return cand
+    return dir_path / f"{stem}-{secrets.token_hex(3)}{suffix}"
+
+
+def _media_filename(ref: MediaRef, data: bytes) -> str:
+    """给落盘文件起名：文件保留原名，图片/视频用带魔数后缀的生成名。"""
+    token = secrets.token_hex(6)
+    if ref.kind == "file":
+        base = _safe_media_name(ref.file_name)
+        if not base:
+            return f"weixin-file-{token}{_ext_from_magic(data) or '.bin'}"
+        if not Path(base).suffix:
+            base += _ext_from_magic(data) or ".bin"
+        return base
+    if ref.kind == "video":
+        return f"weixin-video-{token}.mp4"
+    return f"weixin-image-{token}{_ext_from_magic(data) or '.img'}"
+
+
+def _resolve_media_key(ref: MediaRef) -> Optional[bytes]:
+    """取这条媒体的 AES key；图片可能没有（明文下载），返回 None。"""
+    if ref.kind == "image":
+        hex_key = (ref.image_aeskey_hex or "").strip()
+        if hex_key:
+            if re.fullmatch(r"[0-9a-fA-F]{32}", hex_key):
+                return bytes.fromhex(hex_key)
+            raise MediaDownloadError("image_item.aeskey 不是 32 位十六进制串")
+        if ref.aes_key:
+            return parse_aes_key(ref.aes_key)
+        return None
+    if ref.aes_key:
+        return parse_aes_key(ref.aes_key)
+    return None
+
+
+async def _httpx_fetch_media(url: str, max_bytes: int) -> bytes:
+    """默认取字节流：流式读，超限即中止（不把整个大文件先读进内存）。"""
+    import httpx
+
+    async with httpx.AsyncClient(timeout=API_TIMEOUT, follow_redirects=True) as client:
+        async with client.stream("GET", url) as resp:
+            if resp.status_code >= 400:
+                raise MediaDownloadError(f"CDN 返回 HTTP {resp.status_code}")
+            declared = resp.headers.get("content-length")
+            if declared and declared.isdigit() and int(declared) > max_bytes:
+                raise MediaDownloadError(
+                    f"文件超过 {max_bytes // (1024 * 1024)} MiB 上限",
+                    too_large=True)
+            chunks: List[bytes] = []
+            total = 0
+            async for chunk in resp.aiter_bytes():
+                total += len(chunk)
+                if total > max_bytes:
+                    raise MediaDownloadError(
+                        f"文件超过 {max_bytes // (1024 * 1024)} MiB 上限",
+                        too_large=True)
+                chunks.append(chunk)
+    return b"".join(chunks)
+
+
+async def download_media_to(
+    ref: MediaRef,
+    dest_dir: Path,
+    *,
+    cdn_base_url: str = WEIXIN_CDN_BASE_URL,
+    max_bytes: int = WEIXIN_MEDIA_MAX_BYTES,
+    fetcher: Optional[Callable[[str, int], Awaitable[bytes]]] = None,
+) -> Path:
+    """下载 + 解密一条入站媒体，写进 ``dest_dir``，返回写入的绝对路径。
+
+    失败一律抛 :class:`MediaDownloadError`（带可读 ``reason``），**绝不静默**。
+    ``fetcher`` 仅供离线测试注入；默认走 ``httpx`` 打真实 CDN。
+    """
+    if not ref.has_media:
+        raise MediaDownloadError("消息里没有可下载的媒体地址", kind=ref.kind)
+
+    url = ref.full_url.strip() or build_cdn_download_url(
+        ref.encrypt_query_param, cdn_base_url)
+    fetch = fetcher or _httpx_fetch_media
+    try:
+        raw = await fetch(url, max_bytes + 16)
+    except MediaDownloadError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - 网络/超时/协议等
+        raise MediaDownloadError(
+            f"下载失败: {type(exc).__name__}", kind=ref.kind) from exc
+
+    key = _resolve_media_key(ref)
+    if key is None and ref.kind != "image":
+        raise MediaDownloadError("缺少解密密钥（aes_key）", kind=ref.kind)
+
+    data = raw
+    if key is not None:
+        try:
+            data = _pkcs7_unpad(decrypt_aes_ecb(raw, key))
+        except MediaDownloadError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise MediaDownloadError(
+                f"解密失败: {type(exc).__name__}", kind=ref.kind) from exc
+
+    if len(data) > max_bytes:
+        raise MediaDownloadError(
+            f"文件超过 {max_bytes // (1024 * 1024)} MiB 上限",
+            kind=ref.kind, too_large=True)
+
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    target = _unique_media_path(dest_dir, _media_filename(ref, data))
+    try:
+        target.write_bytes(data)
+    except OSError as exc:
+        raise MediaDownloadError(
+            f"写盘失败: {type(exc).__name__}", kind=ref.kind) from exc
+    return target
 
 
 # ---------------------------------------------------------------------------
@@ -1020,6 +1366,8 @@ class WeixinChannel:
         self.store = store
         self._dispatch = dispatch
         self._client_factory = client_factory
+        # dispatch 是否声明了第 4 个参数（入站媒体引用）。老的三参回调保持原样。
+        self._dispatch_takes_media = _callable_accepts_media(dispatch)
         self.base_url = base_url
         self.bot_agent = bot_agent
         self.poll_interval = poll_interval
@@ -1129,11 +1477,17 @@ class WeixinChannel:
 
     async def handle_message(self, account_id: str, client: ILinkClient,
                              msg: Dict[str, Any]) -> Optional[str]:
-        """处理一条入站消息：取正文 → dispatch → 发回回复。"""
+        """处理一条入站消息：取正文 + 媒体引用 → dispatch → 发回回复。
+
+        媒体（图片/文件/视频）不在这里下载：本层不知道消息属于哪个项目。
+        我们把 :class:`MediaRef` 列表交给 dispatch 回调（若它声明了第 4 个
+        参数），由它落到该项目的附件目录并按 Web 同一套折进提示词。
+        """
         if not is_user_message(msg):
             return None
         from_user = (msg.get("from_user_id") or "").strip()
         text = extract_text(msg)
+        media_refs = extract_media_refs(msg)
 
         context_token = msg.get("context_token") or \
             await self.store.get_context_token(account_id, from_user)
@@ -1143,7 +1497,11 @@ class WeixinChannel:
 
         reply = ""
         if self._dispatch is not None:
-            reply = await self._dispatch(account_id, from_user, text) or ""
+            if self._dispatch_takes_media:
+                reply = await self._dispatch(
+                    account_id, from_user, text, media_refs) or ""
+            else:
+                reply = await self._dispatch(account_id, from_user, text) or ""
         if reply:
             await client.send_message(build_text_message(
                 from_user, reply, context_token=context_token))

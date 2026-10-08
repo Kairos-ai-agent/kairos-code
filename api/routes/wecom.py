@@ -279,18 +279,63 @@ async def _dispatch(chat_id: str, text: str, orchestrator) -> str:
         return (f"当前项目: {project_id}" if project_id
                 else "尚未绑定项目，先 /use <id> 或直接发消息自动创建。")
 
-    # 默认：普通文本 / /chat 都走 agent。
+    # 默认：普通文本 / /chat 都走 agent。与 Web ``/chat``、IM、微信入口同一条
+    # 路由：先判定车道（编码/长任务 → Coder，闲聊 → 通用车道），详见
+    # ``_answer_message``。
     prompt = " ".join(args) if cmd == "chat" else text
     project = await _resolve_project(chat_id, orchestrator)
     coder = getattr(project, "coder", None) if project is not None else None
     if coder is None:
         return "当前会话还没有可用的 agent。"
     try:
-        reply = await coder.chat(prompt)
+        reply = await _answer_message(project, prompt)
     except Exception as exc:  # noqa: BLE001
         logger.exception("wecom: agent chat failed for %s", chat_id)
         return f"agent 出错: {type(exc).__name__}"
     return reply or ""
+
+
+async def _answer_message(project, text: str) -> str:
+    """按 Web ``/chat`` 同一条路由决定车道：编码/长任务走 Coder，闲聊走通用车道。
+
+    与 ``api/routes/im.py:_answer_inbound``、``api/routes/weixin.py:_answer_message``
+    同构——Round 37 的路由覆盖到企业微信入口，不再让每条成员消息都直连 Coder。
+
+    - 复用 ``kairos.task_router.route_task``（``requirement`` = 用户原文，
+      ``workspace`` = 项目根），判定输入与 ``api/routes/projects.py:chat`` 一致。
+    - 通用车道返回空 / 无模型 / 抛异常时**回退到 Coder**，等价于改动前的行为，
+      保证「纯文本消息仍能拿到回复」不回归（不会变成什么都不回）。
+    - 企业微信这条入口目前只处理文本消息（``webhook`` 对非 text 静默确认），
+      所以不像微信那样需要一条「带媒体直接走 Coder」的旁路。
+    """
+    try:
+        from api.routes.projects import _project_root
+        from kairos.skeleton.service import run_chat_reply
+        from kairos.task_router import route_task
+    except Exception:  # noqa: BLE001 - 路由只是优化，失败不致命
+        logger.exception("wecom: 路由依赖不可用，保持 Coder 车道")
+        return await project.coder.chat(text)
+
+    root = _project_root(project)
+    try:
+        decision = route_task(requirement=text, workspace=root)
+    except Exception:  # noqa: BLE001 - 判定失败即保持原行为
+        logger.exception("wecom: 路由判定失败，保持 Coder 车道")
+        return await project.coder.chat(text)
+
+    if not decision.uses_skeleton:
+        return await project.coder.chat(text)
+
+    try:
+        reply = await run_chat_reply(
+            kind=decision.workspace_kind, root=str(root), message=text)
+    except Exception:  # noqa: BLE001 - 通用车道出错不能丢掉这一轮
+        logger.exception("wecom: 通用车道失败，回退 Coder")
+        return await project.coder.chat(text)
+
+    if reply is None or not reply.strip():
+        return await project.coder.chat(text)
+    return reply
 
 
 async def _resolve_project(chat_id: str, orchestrator) -> Optional[Any]:

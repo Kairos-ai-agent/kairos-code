@@ -995,6 +995,12 @@ async def harness_run(project_id: str, body: RunHarnessBody):
                       "work_dir": str(work_dir),
                       "harness_task": task.name},
         )
+        # 故意**不**走闲聊/通用车道路由：这是把一条**排队的 agent task**
+        # （长任务）交给 Coder 执行，语义上本就属于 Coder 车道——路由器把
+        # 「编码意图 / 长任务」判到 Coder 正是为了服务这类工作，因此这里再
+        # 调一次 ``route_task`` 只会多做一次 workspace 扫描，并不会改变结果。
+        # 所以保留直连；若日后真要统一入口，须先在此补 ``route_task``，
+        # 否则 tests/test_chat_entrances_route.py 的源码守卫会失败。
         try:
             await project.coder.chat(ag_task.description or task.prompt)
         except Exception:

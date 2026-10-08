@@ -6,6 +6,32 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **默认车道从「循环」改成「通用车道」——这是一条用户可见的默认行为变更。**
+  一条没有编码意图、也没有长任务信号的普通消息，此前一律交给 Coder（走
+  Coder/Reviewer 循环），现在改为在通用车道（`kairos.skeleton`）上回答：
+  同一条会话记录、同样的回复字段，只是不再为一个「你好」拉起整个循环。
+  带编码意图、显式 `kind`、plan / 长任务的消息仍然走原来的循环。设
+  `KAIROS_ROUTE_DEFAULT=loop` 可逐个进程退回旧默认（不设、空值、`skeleton`
+  或任意无法识别的值都保持新默认）。
+
+  这一轮把落到各入口上的路由接线补齐，新增/覆盖了四个口子：
+
+  - **路由覆盖**：Web `/chat`、`/start`、IM、微信、企业微信五个入口都先过
+    `route_task` 判定车道。其中企业微信自建应用入口（`api/routes/wecom.py`）
+    此前仍在绕过路由、把每条成员消息直连 Coder，现与 Web/IM/微信同构：闲聊
+    走通用车道，通用车道无模型 / 抛异常 / 返回空时回退 Coder——纯文本消息仍
+    能拿到回复，不会变成什么都不回。
+  - **媒体收件**：微信入站的图片 / 文件 / 视频先落盘到项目附件目录，再按 Web
+    会话同一套折进提示词交给 agent（带媒体的消息保持直连 Coder，避免通用车道
+    看不到附件块而丢掉用户刚发的文件）。
+  - **zip 防护**：`kairos/tools/zipguard.py` 在解压前只读 zip 中央目录，按声明
+    尺寸拒绝爆炸包；`xlsx_read` / `doc_read` 打开表格与文档前统一过这道闸。
+  - **源码级 CI 守卫**：`tests/test_chat_entrances_route.py` 枚举仓库里所有
+    「把用户消息交给 coder」的调用点，任何未过路由、又不在带理由白名单里的新
+    入口都会让测试失败并指名 `文件:行`。
+
 ### Fixed
 
 - **「全自动模式」此前是空转的：选和不选没有任何区别。** `approval_mode` 只有写入

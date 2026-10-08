@@ -644,3 +644,164 @@ def test_read_only_mode_keeps_the_readers_and_drops_the_interpreter():
     assert {"data_analyze", "xlsx_read", "doc_read"} <= names
     assert "python_run" not in names
     assert any("python_run" in n for n, _r in policy.blocked)
+
+
+# ===========================================================================
+# (7) reader hardening: ZIP-bomb guard + byte-limited header sniff
+# ===========================================================================
+
+
+def _patch_central_sizes(path: Path, sizes: dict) -> None:
+    """Rewrite ``(compress_size, file_size)`` in a zip's *central directory*.
+
+    A zip bomb lies in the central directory about how large a part expands to.
+    Building a real 200 MiB part would cost 200 MiB of RAM, so the test lies the
+    same way -- and ``zipfile`` reads exactly those declared sizes from the
+    central directory (``getinfo``/``infolist``), which is what the guard
+    inspects.
+    """
+    data = bytearray(path.read_bytes())
+    pos = 0
+    while True:
+        pos = data.find(b"PK\x01\x02", pos)
+        if pos < 0:
+            break
+        name_len = int.from_bytes(data[pos + 28:pos + 30], "little")
+        extra_len = int.from_bytes(data[pos + 30:pos + 32], "little")
+        comment_len = int.from_bytes(data[pos + 32:pos + 34], "little")
+        name = bytes(data[pos + 46:pos + 46 + name_len]).decode("utf-8", "replace")
+        if name in sizes:
+            comp, size = sizes[name]
+            data[pos + 20:pos + 24] = comp.to_bytes(4, "little")
+            data[pos + 24:pos + 28] = size.to_bytes(4, "little")
+        pos += 46 + name_len + extra_len + comment_len
+    path.write_bytes(bytes(data))
+
+
+def _spy_on_zip_reads(monkeypatch) -> dict:
+    """Count ``ZipFile.read`` calls so a test can prove nothing was expanded."""
+    counter = {"n": 0}
+    real_read = zipfile.ZipFile.read
+
+    def spy(self, name, pwd=None):
+        counter["n"] += 1
+        return real_read(self, name, pwd)
+
+    monkeypatch.setattr(zipfile.ZipFile, "read", spy)
+    return counter
+
+
+async def test_xlsx_read_refuses_a_declared_oversized_part_without_decompressing(
+        ws, monkeypatch):
+    """A part declaring > 32 MiB is refused from the central directory alone."""
+    write_xlsx(ws / "bomb.xlsx", [["a"], ["1"]])
+    _patch_central_sizes(ws / "bomb.xlsx",
+                         {"xl/worksheets/sheet1.xml": (1024, 200 * 1024 * 1024)})
+    reads = _spy_on_zip_reads(monkeypatch)
+
+    res = await XlsxReadTool(allowed_root=ws).execute(path="bomb.xlsx")
+
+    assert res.success is False
+    error = res.error or ""
+    assert "32.0 MiB" in error and "200.0 MiB" in error   # limit + actual value
+    assert reads["n"] == 0, "the guard decompressed something before refusing"
+
+
+async def test_xlsx_read_refuses_an_absurd_compression_ratio(ws, monkeypatch):
+    """8 MiB out of a 1 KiB part is 8192:1, over the 100:1 cap."""
+    write_xlsx(ws / "ratio.xlsx", [["a"], ["1"]])
+    _patch_central_sizes(ws / "ratio.xlsx",
+                         {"xl/worksheets/sheet1.xml": (1024, 8 * 1024 * 1024)})
+    reads = _spy_on_zip_reads(monkeypatch)
+
+    res = await XlsxReadTool(allowed_root=ws).execute(path="ratio.xlsx")
+
+    assert res.success is False
+    assert "8192:1" in (res.error or "") and "100:1" in (res.error or "")
+    assert reads["n"] == 0
+
+
+async def test_xlsx_read_refuses_a_declared_total_over_the_cap(ws):
+    """Five 30 MiB parts (each under the per-part cap, ratio 2:1) sum to 150 MiB."""
+    path = ws / "total.xlsx"
+    write_xlsx(path, [["a"], ["1"]])
+    with zipfile.ZipFile(path, "a", zipfile.ZIP_DEFLATED) as z:
+        for i in range(2, 6):
+            z.writestr(f"xl/worksheets/sheet{i}.xml", "<x/>")
+    _patch_central_sizes(path, {
+        f"xl/worksheets/sheet{i}.xml": (15 * 1024 * 1024, 30 * 1024 * 1024)
+        for i in range(1, 6)})
+
+    res = await XlsxReadTool(allowed_root=ws).execute(path="total.xlsx")
+
+    assert res.success is False
+    error = res.error or ""
+    assert "128.0 MiB" in error and "150.0 MiB" in error
+
+
+async def test_doc_read_refuses_a_declared_oversized_part_without_decompressing(
+        ws, monkeypatch):
+    write_docx(ws / "bomb.docx", ["hello"])
+    _patch_central_sizes(ws / "bomb.docx",
+                         {"word/document.xml": (1024, 200 * 1024 * 1024)})
+    reads = _spy_on_zip_reads(monkeypatch)
+
+    res = await DocReadTool(allowed_root=ws).execute(path="bomb.docx")
+
+    assert res.success is False
+    assert "32.0 MiB" in (res.error or "") and "200.0 MiB" in (res.error or "")
+    assert reads["n"] == 0
+
+
+async def test_a_normal_document_is_still_read_after_the_guard(ws):
+    """The guard must not reject honest files."""
+    write_docx(ws / "ok.docx", ["fine"])
+    write_xlsx(ws / "ok.xlsx", [["x"], ["y"]])
+
+    d = await DocReadTool(allowed_root=ws).execute(path="ok.docx")
+    x = await XlsxReadTool(allowed_root=ws).execute(path="ok.xlsx")
+
+    assert d.success is True, d.error
+    assert "fine" in d.output
+    assert x.success is True, x.error
+    assert "y" in x.output
+
+
+async def test_the_header_sniff_reads_eight_bytes_not_the_whole_file(ws, monkeypatch):
+    """Both readers must smell the magic number by reading 8 bytes, not by
+    pulling the whole file into memory via ``Path.read_bytes()``."""
+    (ws / "old.doc").write_bytes(
+        b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 4096)
+    (ws / "old.xls").write_bytes(
+        b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 4096)
+
+    calls = {"n": 0}
+    real_read_bytes = Path.read_bytes
+
+    def spy(self):
+        calls["n"] += 1
+        return real_read_bytes(self)
+
+    monkeypatch.setattr(Path, "read_bytes", spy)
+
+    d = await DocReadTool(allowed_root=ws).execute(path="old.doc")
+    x = await XlsxReadTool(allowed_root=ws).execute(path="old.xls")
+
+    # Both still detect the legacy format...
+    assert d.success is False and ".docx" in (d.error or "")
+    assert x.success is False and ".xlsx" in (x.error or "")
+    # ...without ever reading a whole file to do it.
+    assert calls["n"] == 0
+
+
+def test_python_run_no_longer_overclaims_sandboxing():
+    """The tool text must not claim a sandbox / confinement it does not have."""
+    text = PythonRunTool.__doc__ or ""
+    text += "\n" + PythonRunTool.description
+    lower = text.lower()
+    assert "not a security sandbox" in lower
+    assert "sandboxed interpreter" not in lower        # the old overclaim
+    assert "confined to the project" not in lower      # the old overclaim
+    # The honest facts are stated.
+    assert "python -i" in lower
+    assert "exec_process" in lower

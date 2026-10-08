@@ -18,6 +18,7 @@ from xml.etree import ElementTree as ET
 
 from kairos.capabilities import Capability
 from kairos.tools.base import BaseTool, ToolResult
+from kairos.tools.zipguard import ZipBombError, guard_zip
 
 MAX_OUTPUT = 50_000
 DEFAULT_MAX_CHARS = 50_000
@@ -164,7 +165,11 @@ class DocReadTool(BaseTool):
         limit = max(200, min(MAX_CHARS_LIMIT, limit))
 
         try:
-            head = file_path.read_bytes()[:8]
+            # Sniff only the first 8 bytes -- read exactly that many, never the
+            # whole file (``read_bytes()[:8]`` pulled the entire document into
+            # memory just to look at its magic number).
+            with open(file_path, "rb") as _fh:
+                head = _fh.read(8)
         except OSError as exc:
             return ToolResult(success=False, output="",
                               error=f"Could not read {path}: {exc}")
@@ -177,6 +182,9 @@ class DocReadTool(BaseTool):
 
         try:
             with zipfile.ZipFile(file_path) as zf:
+                # Refuse a ZIP bomb *before* decompressing anything: the guard
+                # reads the central directory only (kairos.tools.zipguard).
+                guard_zip(zf, path)
                 names = zf.namelist()
                 if "word/document.xml" in names:
                     kind, text = "docx", _docx_text(zf, names)
@@ -197,6 +205,10 @@ class DocReadTool(BaseTool):
                 success=False, output="",
                 error=(f"{path} contains malformed XML inside the document "
                        f"({exc}); the file is corrupt."))
+        except ZipBombError as exc:
+            # A declared-size guard hit: the file looks like (or is) a bomb.
+            # Reported as-is -- the message names the limit and the value.
+            return ToolResult(success=False, output="", error=str(exc))
         except DocReadError as exc:
             return ToolResult(success=False, output="", error=str(exc))
         except Exception as exc:  # noqa: BLE001 - one readable line, no stack

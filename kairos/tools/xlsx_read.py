@@ -19,6 +19,7 @@ from xml.etree import ElementTree as ET
 
 from kairos.capabilities import Capability
 from kairos.tools.base import BaseTool, ToolResult
+from kairos.tools.zipguard import ZipBombError, guard_zip
 
 MAIN_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -271,7 +272,11 @@ class XlsxReadTool(BaseTool):
         cols_cap = self._coerce_int(max_cols, DEFAULT_MAX_COLS, 1, MAX_COLS_LIMIT)
 
         try:
-            head = file_path.read_bytes()[:8]
+            # Sniff only the first 8 bytes -- read exactly that many, never the
+            # whole file (``read_bytes()[:8]`` pulled the entire workbook into
+            # memory just to look at its magic number).
+            with open(file_path, "rb") as _fh:
+                head = _fh.read(8)
         except OSError as exc:
             return ToolResult(success=False, output="",
                               error=f"Could not read {path}: {exc}")
@@ -284,6 +289,9 @@ class XlsxReadTool(BaseTool):
 
         try:
             with zipfile.ZipFile(file_path) as zf:
+                # Refuse a ZIP bomb *before* decompressing anything: the guard
+                # reads the central directory only (kairos.tools.zipguard).
+                guard_zip(zf, path)
                 names = zf.namelist()
                 shared = _shared_strings(zf, names)
                 sheets = _sheet_map(zf, names)
@@ -301,6 +309,10 @@ class XlsxReadTool(BaseTool):
                 success=False, output="",
                 error=(f"{path} contains malformed XML inside the workbook "
                        f"({exc}); the file is corrupt."))
+        except ZipBombError as exc:
+            # A declared-size guard hit: the file looks like (or is) a bomb.
+            # Reported as-is -- the message names the limit and the value.
+            return ToolResult(success=False, output="", error=str(exc))
         except XlsxError as exc:
             return ToolResult(success=False, output="", error=str(exc))
         except Exception as exc:  # noqa: BLE001 - one readable line, no stack

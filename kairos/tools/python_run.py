@@ -16,9 +16,13 @@ Every safety property is explicit:
   says so.
 * **Bounded output.** stdout and stderr are each capped, with an explicit
   marker naming the cap and how many characters were dropped.
-* **Working directory fenced.** An explicit ``cwd`` is resolved through the
-  same :meth:`BaseTool._resolve_safe` every file tool uses, so it cannot leave
-  the tool's root; the default is the root itself.
+* **Working directory *default*, not a boundary.** An explicit ``cwd`` is
+  resolved through the same :meth:`BaseTool._resolve_safe` every file tool
+  uses, so the directory Kairos *starts the child in* cannot be named outside
+  the tool's root; the default is the root itself. This chooses where the
+  snippet begins -- it is **not** an access control: the snippet itself can
+  read, write and ``chdir`` anywhere the Kairos process can (see the note on
+  :class:`PythonRunTool`).
 * **Approval.** Declaring :data:`Capability.EXEC_PROCESS` makes the sentinel's
   ladder ask for it (``kairos.sentinel`` consults
   :func:`kairos.capabilities.runtime_capabilities`), unlike a read-only tool.
@@ -70,13 +74,29 @@ def _cap(text: str) -> Tuple[str, bool, int]:
 
 
 class PythonRunTool(BaseTool):
-    """Run a short Python snippet in a separate, sandboxed interpreter.
+    """Run a short Python snippet in a separate Python interpreter process.
 
     Use it for a self-contained computation the model cannot do reliably by
     hand — arithmetic, parsing, a quick data transformation — without opening a
     shell. The snippet runs with a hard timeout and its standard output and
     error are returned, capped. It has no access to the conversation; give it
     everything it needs in the code itself.
+
+    What "separate interpreter" means — and does **not** mean:
+
+    * It really is a *separate process*: a fresh interpreter launched as
+      ``python -I <script>`` with a fixed working directory, so the snippet
+      cannot corrupt Kairos's own in-process state and ``-I`` fixes
+      ``sys.path`` / ignores ``PYTHON*`` env vars and the user site dir.
+    * It is **not a security sandbox.** ``-I`` restricts nothing but import
+      search; the snippet keeps the *same* filesystem, subprocess and network
+      reach as the Kairos process. The working directory is a *default
+      location*, not an access-control boundary — the snippet can ``open()`` or
+      ``chdir()`` anywhere Kairos itself can reach.
+    * The one defence is the gate: declaring :data:`Capability.EXEC_PROCESS`
+      routes every call through the sentinel's approval ladder
+      (``kairos.sentinel``), so running a snippet is an explicit, reviewed
+      "execute a process" decision. Treat the code as fully privileged.
 
     Example usage:
         - Calculate: {"code": "print(1 + 1)"}
@@ -88,8 +108,13 @@ class PythonRunTool(BaseTool):
     description = (
         "Run a short Python snippet in a separate interpreter process and "
         "return its stdout/stderr. Bounded by a timeout (default 10s, max 60s) "
-        "and capped output. Its working directory is confined to the project "
-        "root. Use it for self-contained computation; it cannot see the chat."
+        "and capped output. This is NOT a security sandbox: the snippet is run "
+        "as `python -I` with a fixed working directory, and it keeps the full "
+        "filesystem, subprocess and network access of the Kairos process "
+        "(the working directory is a default location, not an access "
+        "boundary). The safeguard is that it declares the EXEC_PROCESS "
+        "capability, so every call requires approval. Use it for "
+        "self-contained computation; it cannot see the chat."
     )
 
     #: Running a child process. This is what makes the sentinel ask for

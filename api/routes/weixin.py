@@ -31,11 +31,19 @@ from pydantic import BaseModel
 from kairos.feishu import parse_command
 from kairos.weixin_ilink import (
     DEFAULT_BOT_TYPE,
+    WEIXIN_MEDIA_MAX_BYTES,
     ILinkClient,
     ILinkError,
+    MediaDownloadError,
     WeixinAccountStore,
     WeixinChannel,
     WeixinLoginSession,
+    download_media_to,
+)
+from api.routes.projects import (
+    ATTACHMENTS_DIRNAME,
+    _project_root,
+    attachment_prompt_block,
 )
 
 logger = logging.getLogger(__name__)
@@ -155,16 +163,121 @@ async def _session_for_qr(qrcode: str) -> WeixinLoginSession:
 # 分发：账号 + 聊天对象 → 独立项目 → agent
 # ---------------------------------------------------------------------------
 
+async def _fold_inbound_media(project, prompt: str, media) -> str:
+    """把入站媒体落盘到项目附件目录，并按 Web 同一套折进提示词。
+
+    复用 ``api/routes/projects.py`` 的 ``attachment_prompt_block``（成功项）——
+    与 Web 会话完全一致的 ``[附件]`` 块，路径相对项目根、Coder 的 file 工具
+    能直接读；**不另写一套附件逻辑**。
+
+    失败 / 超限 / 不支持的类型都会追加一段可读的 ``[微信媒体]`` 说明，交给
+    agent（它会把结论讲给用户），**绝不静默**。
+    """
+    root = _project_root(project)
+    out_dir = root / ATTACHMENTS_DIRNAME
+    rels: List[str] = []
+    failures: List[str] = []
+
+    for ref in media or []:
+        label = getattr(ref, "label", "") or "[媒体]"
+        try:
+            path = await download_media_to(ref, out_dir)
+        except MediaDownloadError as exc:
+            reason = exc.reason
+            if exc.too_large:
+                reason += "（占位符 %s 保留）" % label
+            failures.append(f"- {label} {reason}")
+            logger.warning("weixin: 媒体未下载 kind=%s reason=%s",
+                           getattr(ref, "kind", ""), reason)
+            continue
+        except Exception as exc:  # noqa: BLE001 - 一条坏媒体不该拖垮整条消息
+            failures.append(f"- {label} 下载失败: {type(exc).__name__}")
+            logger.exception("weixin: 媒体处理异常 kind=%s",
+                             getattr(ref, "kind", ""))
+            continue
+
+        rels.append(f"{ATTACHMENTS_DIRNAME}/{path.name}")
+        # 图片额外经 multimodal 校验（复用现有图片机制）。注意：Coder.chat 只收
+        # 文本，这里不注入 content parts —— 那会改 Coder/loop，本轮被禁止。
+        if getattr(ref, "kind", "") == "image":
+            try:
+                from kairos.multimodal import load_image
+                load_image(path, max_bytes=WEIXIN_MEDIA_MAX_BYTES)
+            except Exception as exc:  # noqa: BLE001
+                failures.append(f"- {label} 已保存但图片校验失败: {exc}")
+
+    blocks: List[str] = []
+    if prompt:
+        blocks.append(prompt)
+    if rels:
+        try:
+            block = attachment_prompt_block(root, rels)
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"- 附件说明生成失败: {exc}")
+        else:
+            if block:
+                blocks.append(block)
+    if failures:
+        blocks.append("[微信媒体] 以下内容未能交给 agent：\n" + "\n".join(failures))
+    return "\n\n".join(blocks)
+
+
+async def _answer_message(project, text: str, *, has_media: bool) -> str:
+    """按 Web ``/chat`` 同一条路由决定车道：编码/长任务走 Coder，闲聊/问答走通用。
+
+    - 复用 ``kairos.task_router.route_task``（``requirement`` = 用户原文，
+      ``workspace`` = 项目根），判定输入与 ``api/routes/projects.py:chat`` 一致。
+    - 通用车道返回空 / 无模型 / 抛异常时**回退到 Coder**，等价于改动前的行为，
+      保证「纯文本消遣消息仍能拿到回复」不回归（不会变成什么都不回）。
+    - **带媒体**（图片/文件/视频）的消息**保持原行为**直接走 Coder：通用车道只
+      收文本，看不到已折进提示词的附件块，若走通用会丢掉用户刚发来的文件。
+    """
+    if has_media:
+        return await project.coder.chat(text)
+    try:
+        from api.routes.projects import _project_root
+        from kairos.skeleton.service import run_chat_reply
+        from kairos.task_router import route_task
+    except Exception:  # noqa: BLE001 - 路由只是优化，失败不致命
+        logger.exception("weixin: 路由依赖不可用，保持 Coder 车道")
+        return await project.coder.chat(text)
+
+    root = _project_root(project)
+    try:
+        decision = route_task(requirement=text, workspace=root)
+    except Exception:  # noqa: BLE001 - 判定失败即保持原行为
+        logger.exception("weixin: 路由判定失败，保持 Coder 车道")
+        return await project.coder.chat(text)
+
+    if not decision.uses_skeleton:
+        return await project.coder.chat(text)
+
+    try:
+        reply = await run_chat_reply(
+            kind=decision.workspace_kind, root=str(root), message=text)
+    except Exception:  # noqa: BLE001 - 通用车道出错不能丢掉这一轮
+        logger.exception("weixin: 通用车道失败，回退 Coder")
+        return await project.coder.chat(text)
+
+    if reply is None or not reply.strip():
+        return await project.coder.chat(text)
+    return reply
+
+
 def make_dispatch(orchestrator, store: WeixinAccountStore
-                  ) -> Callable[[str, str, str], Any]:
+                  ) -> Callable[..., Any]:
     """构造 channel 用的 dispatch 回调。
 
     与 ``api/routes/wecom.py:_dispatch`` 同构：普通文本走 agent，``/`` 开头
     的命令同上；每个「账号 + 聊天对象」映射到**独立的 Kairos 项目**（首次
     发消息时自动创建，绑定记录在 store）。
+
+    入站媒体（图片/文件/视频）由 channel 以第 4 个参数 ``media`` 传来；这里
+    下载到该项目的附件目录，再按 Web 会话同一套折进提示词。
     """
 
-    async def dispatch(account_id: str, chat_id: str, text: str) -> str:
+    async def dispatch(account_id: str, chat_id: str, text: str,
+                       media: Optional[List[Any]] = None) -> str:
         cmd, args = parse_command(text)
         if cmd == "noop":
             return ""
@@ -194,8 +307,13 @@ def make_dispatch(orchestrator, store: WeixinAccountStore
         coder = getattr(project, "coder", None) if project is not None else None
         if coder is None:
             return "当前会话还没有可用的 agent。"
+        if media:
+            # 入站图片/文件/视频：真下载到项目附件目录，按 Web 同一套折进提示词。
+            prompt = await _fold_inbound_media(project, prompt, media)
         try:
-            reply = await coder.chat(prompt)
+            # Round 37 路由：编码/长任务走 Coder（原样），闲聊/问答走通用车道；
+            # 带媒体的消息保持原行为（见 ``_answer_message``）。
+            reply = await _answer_message(project, prompt, has_media=bool(media))
         except Exception as exc:  # noqa: BLE001
             logger.exception("weixin: agent chat failed for %s/%s",
                              account_id, chat_id)

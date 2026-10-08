@@ -131,6 +131,15 @@ class Settings(BaseSettings):
     # and for code paths that already hold a ``Settings``).
     route_default: str = Field(default="skeleton", alias="KAIROS_ROUTE_DEFAULT")
 
+    # Global "full access" switch, as a *string* so the same 1/true/yes/on
+    # spellings the env var accepts also work from a `.env` file. Consumed by
+    # ``kairos.access_control.is_full_access`` as the middle tier: the process
+    # env var is read first (cheapest, and what a test/shell export sets), this
+    # `.env`-loaded field second, and ``settings.json:fullAccess`` last. An
+    # empty/unset value means "not set here" -- it must not force the switch
+    # off, so the settings store is still consulted.
+    full_access: str = Field(default="", alias="KAIROS_FULL_ACCESS")
+
     # Paths — anchored (absolute), NOT CWD-relative. The backend is
     # launched from different working directories by different
     # launchers; a CWD-relative data_dir made every restart load a

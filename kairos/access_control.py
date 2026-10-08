@@ -32,18 +32,42 @@ import os
 _TRUTHY = {"1", "true", "yes", "on"}
 
 
+def _settings_full_access() -> bool:
+    """``KAIROS_FULL_ACCESS`` as loaded by ``kairos.config.settings``.
+
+    A value written into the project's ``.env`` file is not in ``os.environ``
+    -- pydantic-settings loads it onto the ``Settings`` object -- so reading
+    that field is what makes a ``.env`` fallback take effect. Never raises.
+    """
+    try:
+        from kairos.config.settings import settings
+
+        value = str(getattr(settings, "full_access", "") or "").strip().lower()
+    except Exception:  # noqa: BLE001 - a config read must not break the check
+        return False
+    return value in _TRUTHY
+
+
 def is_full_access() -> bool:
     """Return ``True`` when the user has opted into unrestricted access.
 
-    The environment variable is checked first (cheapest), then
-    ``settings.json:fullAccess``. Either source being truthy enables
-    it. A falsey env value does *not* force it off — the settings value
-    is still consulted, matching the "either source, whichever is true"
-    contract. Any error while reading the settings store is treated as
-    "not enabled" (the safe default).
+    Three sources are consulted, in order, and *any* truthy one enables it:
+
+    1. the process environment variable ``KAIROS_FULL_ACCESS`` (cheapest);
+    2. the same variable as loaded by ``kairos.config.settings`` from the
+       project's ``.env`` file (env vars are not the only way to set it);
+    3. ``settings.json:fullAccess``.
+
+    A falsey value at any tier does *not* force the switch off — the later
+    tiers are still consulted, matching the "either source, whichever is true"
+    contract. Any error while reading the settings store is treated as "not
+    enabled" (the safe default). The truthy spellings are always
+    ``{"1", "true", "yes", "on"}`` (trimmed, case-insensitive).
     """
     env_value = os.environ.get("KAIROS_FULL_ACCESS", "").strip().lower()
     if env_value in _TRUTHY:
+        return True
+    if _settings_full_access():
         return True
     try:
         from kairos.settings_store import get_store

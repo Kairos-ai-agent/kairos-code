@@ -18,6 +18,7 @@ design (see ``kairos/task_router.CODING_INTENT_TERMS``).
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -438,3 +439,101 @@ def test_large_workspace_scan_is_bounded(tmp_path):
         (tmp_path / f"f{i}.py").write_text("x=1\n", encoding="utf-8")
     s2 = scan_workspace(tmp_path, max_files=3)
     assert s2["total_files"] <= 3
+
+
+# ---------------------------------------------------------------------------
+# (Round 37 follow-up) widened coding vocabulary: common verbs of *making a
+# change*, so a real code request is not answered as prose
+# ---------------------------------------------------------------------------
+
+def test_the_common_coding_verbs_are_in_the_vocabulary():
+    """The words a user actually types for a change must reach the loop.
+
+    Each of these is a whole word or a two-character word; they are the
+    "新增 / 开发 / 创建 ..." family that was missing, so a request like
+    "给接口加个去重" fell through to prose.
+    """
+    for term in ("新增", "开发", "创建", "新建", "添加", "增加", "写上",
+                 "写一个", "改写", "删掉", "add", "create", "page"):
+        assert term in CODING_INTENT_TERMS, term
+
+
+def test_the_single_character_add_is_deliberately_absent():
+    """A bare 「加」 as a *substring* would fire on 加班 / 参加 / 加油.
+
+    That would drag ordinary prose onto the loop, so only the multi-character
+    forms are listed -- the deliberately crude heuristic may still misfire, but
+    not on the single most common non-coding 加-word.
+    """
+    assert "加" not in CODING_INTENT_TERMS
+    assert detect_coding_intent("明天的加班安排能不能排一下") is None
+    assert detect_coding_intent("我要参加这个评审会") is None
+    # ...while the coding sense ("add X") is still caught by a two-char form.
+    assert detect_coding_intent("新增一个导出按钮") == "新增"
+
+
+@pytest.mark.parametrize("text", [
+    "给接口加个去重",
+    "这个页面新增一个删除按钮",
+    "帮我开发一个登录功能",
+    "create a settings page",
+    "add a new endpoint",
+])
+def test_a_common_change_request_reaches_the_loop_on_an_empty_workspace(
+        tmp_path, text):
+    """Regression: an *empty* workspace offers no signal, so the text alone has
+    to say "this is a code task" -- otherwise the request is answered as prose."""
+    d = route_task(requirement=text, workspace=tmp_path)
+    assert d.route == ROUTE_LOOP, text
+    assert d.source == "coding_intent"
+    assert d.workspace_kind == WS_REPO
+
+
+# ---------------------------------------------------------------------------
+# (Round 37 follow-up) the .env fallback for KAIROS_ROUTE_DEFAULT
+# ---------------------------------------------------------------------------
+
+def _settings_stub(monkeypatch, value):
+    """Put ``value`` on the ``kairos.config.settings`` singleton as loaded from
+    a ``.env`` file would be -- without touching ``os.environ``.
+
+    ``default_route`` imports ``settings`` lazily, so patching the module
+    attribute is what the real lookup reads.
+    """
+    import kairos.config.settings as settings_module
+    monkeypatch.setattr(settings_module, "settings",
+                        SimpleNamespace(route_default=value), raising=False)
+
+
+def test_route_default_falls_back_to_settings_when_the_env_is_unset(
+        tmp_path, monkeypatch):
+    """A value written into ``.env`` lands on the Settings object, NOT in
+    ``os.environ`` -- before the fix it was read by nobody."""
+    _clear_route_default(monkeypatch)
+    _settings_stub(monkeypatch, "loop")
+    assert default_route() == ROUTE_LOOP
+    # And it actually reroutes an undecided task, end to end.
+    d = route_task(workspace=tmp_path)
+    assert d.route == ROUTE_LOOP and d.source == "default"
+
+
+def test_the_env_still_outranks_the_settings_fallback(monkeypatch):
+    _settings_stub(monkeypatch, "loop")
+    monkeypatch.setenv(ROUTE_DEFAULT_ENV, "skeleton")
+    assert default_route() == ROUTE_SKELETON
+
+
+@pytest.mark.parametrize("value", ["skeleton", "", "banana", "loopback"])
+def test_the_settings_fallback_is_validated_like_the_env(monkeypatch, value):
+    _clear_route_default(monkeypatch)
+    _settings_stub(monkeypatch, value)
+    assert default_route() == ROUTE_SKELETON
+
+
+def test_a_missing_settings_object_degrades_to_the_skeleton_default(monkeypatch):
+    """A settings read that blows up must not break routing."""
+    _clear_route_default(monkeypatch)
+    import kairos.config.settings as settings_module
+    monkeypatch.setattr(settings_module, "settings", SimpleNamespace(),
+                        raising=False)          # no route_default attribute
+    assert default_route() == ROUTE_SKELETON

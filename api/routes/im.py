@@ -372,6 +372,56 @@ def _project_label(account, chat_id: str, chat_name: str) -> str:
     return label[:60]
 
 
+async def _answer_inbound(project, text: str) -> str:
+    """Answer one inbound IM message, routed like the web ``/chat`` route.
+
+    Round 37 routing reaches the IM entry too: the message goes through
+    :func:`kairos.task_router.route_task` with the *same* inputs the web chat
+    route uses (the user's own text as ``requirement``, the project root as
+    ``workspace``). A coding-intent / long / code-looking message keeps today's
+    Coder path; a signal-free conversational message is answered on the same
+    general lane (``kairos.skeleton.service.run_chat_reply``) the web route
+    uses.
+
+    A general-lane miss -- no model provider configured, an empty answer, or an
+    exception -- falls back to the Coder, so a plain message never regresses
+    from "gets a reply" to "gets nothing". The project is guaranteed to have a
+    Coder by the caller (the same precondition as before this change), so a
+    Coder-less conversation keeps its existing 502 -- this helper neither adds
+    nor removes that check.
+    """
+    try:
+        from api.routes.projects import _project_root
+        from kairos.skeleton.service import run_chat_reply
+        from kairos.task_router import route_task
+    except Exception:  # noqa: BLE001 - routing is an optimisation, never fatal
+        logger.exception("im: routing imports unavailable; using the coder lane")
+        return await project.coder.chat(text)
+
+    root = _project_root(project)
+    try:
+        decision = route_task(requirement=text, workspace=root)
+    except Exception:  # noqa: BLE001 - a router failure keeps today's behaviour
+        logger.exception("im: route decision failed; using the coder lane")
+        return await project.coder.chat(text)
+
+    if not decision.uses_skeleton:
+        return await project.coder.chat(text)
+
+    try:
+        reply = await run_chat_reply(
+            kind=decision.workspace_kind, root=str(root), message=text)
+    except Exception:  # noqa: BLE001 - a lane miss must not lose the turn
+        logger.exception("im: general lane failed; falling back to the coder")
+        return await project.coder.chat(text)
+
+    if reply is None or not reply.strip():
+        # No model provider on the general lane, or an empty answer: keep
+        # today's behaviour instead of queuing nothing.
+        return await project.coder.chat(text)
+    return reply
+
+
 @router.post("/{account_id}/inbound")
 async def inbound(account_id: str, request: Request,
                   orchestrator=Depends(get_orchestrator)):
@@ -438,7 +488,10 @@ async def inbound(account_id: str, request: Request,
         logger.exception("im: failed to persist inbound message")
 
     try:
-        reply = await project.coder.chat(text)
+        # Round 37: the same router the web /chat route uses decides the lane;
+        # a signal-free conversational message is answered on the general lane
+        # and a coding/long task keeps this Coder path (see ``_answer_inbound``).
+        reply = await _answer_inbound(project, text)
     except Exception as exc:  # noqa: BLE001
         logger.exception("im: chat failed for %s/%s", account_id, chat_id)
         raise HTTPException(

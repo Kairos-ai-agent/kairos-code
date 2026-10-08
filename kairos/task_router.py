@@ -107,15 +107,21 @@ _REPO_ALIASES = frozenset({
 #: misfire is observed.
 CODING_INTENT_TERMS = (
     # -- Chinese (substring match) --
+    # NB: no single-character "加" -- as a *substring* it would fire on 加班 /
+    # 参加 / 加油 and misroute ordinary prose to the loop. The two-character
+    # forms below carry the coding sense ("add X") without that blast radius.
     "修复", "修", "改", "修改", "实现", "重构", "调试", "排查", "测试",
     "报错", "异常", "错误", "函数", "变量", "文件", "代码", "脚本",
     "提交", "编译", "构建", "部署", "接口", "模块", "依赖", "补丁",
     "合并", "分支", "单元测试", "回滚", "配置", "改动",
+    "新增", "开发", "创建", "新建", "添加", "增加", "写上", "写一个",
+    "改写", "删掉",
     # -- English (leading word-boundary match) --
     "fix", "bug", "refactor", "implement", "debug", "test", "function",
     "method", "commit", "merge", "compile", "build", "deploy", "patch",
     "endpoint", "api", "code", "script", "module", "repo", "repository",
-    "dependency", "rollback", "config", "diff", "syntax",
+    "dependency", "rollback", "config", "diff", "syntax", "feature",
+    "add", "page", "create",
 )
 
 #: Extensions that read as *documents* (inputs a report is written from).
@@ -377,19 +383,46 @@ def _heuristic_kind(signals: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def _settings_route_default() -> str:
+    """``KAIROS_ROUTE_DEFAULT`` as loaded by ``kairos.config.settings``.
+
+    The env var is also read straight from ``os.environ`` (see
+    :func:`default_route`), but a value written into the project's ``.env``
+    file is *not* in ``os.environ`` -- pydantic-settings loads it into the
+    ``Settings`` singleton instead. Reading that field here is what makes a
+    ``.env`` fallback actually take effect. Never raises: a missing module or a
+    settings object without the field degrades to an empty string (and thus to
+    the skeleton default).
+    """
+    try:
+        from kairos.config.settings import settings
+
+        return str(getattr(settings, "route_default", "") or "")
+    except Exception:  # noqa: BLE001 - a config read must never break routing
+        return ""
+
+
 def default_route() -> str:
     """The lane an *undecided* task takes (see ``KAIROS_ROUTE_DEFAULT``).
 
     Read at call time -- never frozen at import -- so an operator or a test can
-    flip it without a restart. The default is now :data:`ROUTE_SKELETON`: an
-    undecided task (no explicit kind, no long-task flag, no coding intent, no
-    workspace evidence) goes to the domain-neutral general lane -- "平时 chat
-    走通用". Only the exact value ``"loop"`` (trimmed, case-insensitive)
-    restores the historical behaviour; everything else -- unset, empty,
-    ``"skeleton"``, or a typo -- yields the new skeleton default. Explicit,
-    long-task, coding-intent and heuristic signals always outrank this.
+    flip it without a restart. ``os.environ`` wins (so a shell export and a test
+    override take effect immediately); when it is unset the value loaded by
+    :mod:`kairos.config.settings` is consulted, which is what makes a
+    ``.env``-file setting work -- that value lives on the ``Settings`` object,
+    not in ``os.environ``.
+
+    The default is now :data:`ROUTE_SKELETON`: an undecided task (no explicit
+    kind, no long-task flag, no coding intent, no workspace evidence) goes to
+    the domain-neutral general lane -- "平时 chat 走通用". Only the exact value
+    ``"loop"`` (trimmed, case-insensitive) restores the historical behaviour;
+    everything else -- unset, empty, ``"skeleton"``, or a typo -- yields the new
+    skeleton default. Explicit, long-task, coding-intent and heuristic signals
+    always outrank this.
     """
     value = (os.environ.get(ROUTE_DEFAULT_ENV) or "").strip().lower()
+    if not value:
+        value = _settings_route_default().strip().lower()
     return ROUTE_LOOP if value == ROUTE_LOOP else ROUTE_SKELETON
 
 

@@ -92,6 +92,20 @@ def env(tmp_path):
     im_routes.set_store(None)
 
 
+@pytest.fixture(autouse=True)
+def _offline_general_lane(monkeypatch):
+    """Keep these wiring tests offline now that inbound consults the router.
+
+    A signal-free inbound message (e.g. "hello") resolves to the general lane
+    (round 37), and that lane would otherwise resolve the configured provider
+    and make a real network call. Pinning "no model" makes the general lane
+    fall back to the Coder -- i.e. exactly the pre-change behaviour -- so the
+    tests below assert the wiring without leaving the machine. The routing
+    itself is covered explicitly by the lane tests further down.
+    """
+    monkeypatch.setattr("kairos.skeleton.service.default_generator", lambda: None)
+
+
 def signed(secret: str, body: bytes, ts: str | None = None) -> Dict[str, str]:
     stamp = ts or str(int(time.time()))
     return {TIMESTAMP_HEADER: stamp,
@@ -309,6 +323,64 @@ def test_an_agent_failure_does_not_queue_a_reply(env):
                      {"chat_id": "chat-1", "text": "hi"})
     assert r.status_code == 502
     assert asyncio.run(store.pending("wx-a")) == []
+
+
+# --------------------------------------------------------------------- routing
+# Round 37: inbound goes through the same router the web /chat route uses. A
+# coding-intent / long task keeps the Coder; a signal-free conversational
+# message is answered on the general lane. These three tests pin the split and
+# the no-regression guarantee (a plain message still yields a reply).
+
+
+def test_a_coding_message_still_reaches_the_coder(env):
+    client, store, orch = env
+    make_account(store)
+    text = "修复 src/auth 里的登录 bug"
+    r = post_inbound(client, "wx-a", "s3cret", {"chat_id": "chat-1", "text": text})
+    assert r.status_code == 200
+    pid = r.json()["project_id"]
+    # The Coder lane, byte-for-byte as before the routing change.
+    assert orch.projects[pid].coder.calls == [text]
+    queued = asyncio.run(store.pending("wx-a"))
+    assert [m.text for m in queued] == [f"reply: {text}"]
+
+
+def test_a_plain_message_is_answered_on_the_general_lane(env, monkeypatch):
+    """闲聊/问答走通用车道，且不复用 Coder。"""
+    client, store, orch = env
+    make_account(store)
+    seen = []
+
+    async def fake_general(*, kind, root, message, **kwargs):
+        seen.append((kind, message))
+        return "通用车道回复"
+
+    monkeypatch.setattr("kairos.skeleton.service.run_chat_reply", fake_general)
+    text = "你好呀，今天过得怎么样"
+    r = post_inbound(client, "wx-a", "s3cret", {"chat_id": "chat-1", "text": text})
+    assert r.status_code == 200
+    pid = r.json()["project_id"]
+    assert seen == [("repo", text)]
+    assert orch.projects[pid].coder.calls == []    # the Coder was NOT used
+    queued = asyncio.run(store.pending("wx-a"))
+    assert [m.text for m in queued] == ["通用车道回复"]
+
+
+def test_a_plain_message_still_gets_a_reply_without_a_general_lane_model(env):
+    """不回归：通用车道没有模型时回退 Coder，纯文本消息仍能拿到回复。
+
+    The autouse fixture pins default_generator -> None, so the general lane
+    yields nothing and the route must fall back -- never a silent no-reply.
+    """
+    client, store, orch = env
+    make_account(store)
+    r = post_inbound(client, "wx-a", "s3cret",
+                     {"chat_id": "chat-1", "text": "今天天气不错呀"})
+    assert r.status_code == 200
+    pid = r.json()["project_id"]
+    assert orch.projects[pid].coder.calls == ["今天天气不错呀"]
+    queued = asyncio.run(store.pending("wx-a"))
+    assert [m.text for m in queued] == ["reply: 今天天气不错呀"]
 
 
 # -------------------------------------------------------------------- outbound

@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -279,3 +280,70 @@ async def test_default_allowlisted_command_still_runs(tmp_path):
     res = await term.execute("echo hello_default")
     assert res.success, res.error
     assert "hello_default" in res.output
+
+
+# ---------------------------------------------------------------------------
+# (c) enabled via the KAIROS_FULL_ACCESS value loaded from a .env file
+#
+# pydantic-settings loads `.env` onto the `Settings` object, not into
+# `os.environ`, so a `.env`-only setting used to be read by nobody. The check
+# now consults that field as the middle tier: env var > settings field >
+# settings.json. These tests set ONLY the settings field.
+# ---------------------------------------------------------------------------
+
+
+def _settings_env_file_stub(monkeypatch, value):
+    """Put ``value`` on the ``kairos.config.settings`` singleton, the way a
+    ``.env`` file value would be loaded -- without touching ``os.environ``."""
+    import kairos.config.settings as settings_module
+    monkeypatch.setattr(settings_module, "settings",
+                        SimpleNamespace(full_access=value), raising=False)
+
+
+def test_settings_field_from_env_file_enables_full_access(monkeypatch):
+    monkeypatch.delenv("KAIROS_FULL_ACCESS", raising=False)
+    _settings_env_file_stub(monkeypatch, "1")
+    assert is_full_access() is True
+
+
+@pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on", " on ", "On"])
+def test_settings_field_accepts_the_same_truthy_spellings(monkeypatch, value):
+    monkeypatch.delenv("KAIROS_FULL_ACCESS", raising=False)
+    _settings_env_file_stub(monkeypatch, value)
+    assert is_full_access() is True
+
+
+@pytest.mark.parametrize("value", ["", "0", "false", "off", "no", "banana"])
+def test_settings_field_non_truthy_does_not_force_the_switch_on(monkeypatch, value):
+    """A falsey field must not force it *off* either -- the store is consulted."""
+    monkeypatch.delenv("KAIROS_FULL_ACCESS", raising=False)
+    _settings_env_file_stub(monkeypatch, value)
+    assert is_full_access() is False
+
+
+def test_the_env_var_still_outranks_the_settings_field(monkeypatch):
+    _settings_env_file_stub(monkeypatch, "")
+    monkeypatch.setenv("KAIROS_FULL_ACCESS", "yes")
+    assert is_full_access() is True
+
+
+def test_a_missing_settings_object_does_not_enable_full_access(monkeypatch):
+    monkeypatch.delenv("KAIROS_FULL_ACCESS", raising=False)
+    import kairos.config.settings as settings_module
+    monkeypatch.setattr(settings_module, "settings", SimpleNamespace(),
+                        raising=False)          # no full_access attribute
+    assert is_full_access() is False
+
+
+@pytest.mark.asyncio
+async def test_settings_field_switch_actually_lifts_confinement(tmp_path,
+                                                                monkeypatch):
+    """The real effect, not just the predicate: a `.env`-only value lets an
+    otherwise-refused command run."""
+    monkeypatch.delenv("KAIROS_FULL_ACCESS", raising=False)
+    _settings_env_file_stub(monkeypatch, "1")
+    assert is_full_access() is True
+    term = TerminalTool(allowed_cwd=str(tmp_path / "ws"))
+    res = await term.execute(_py_cmd("ENVFILE_OK"))
+    assert res.success, res.error
+    assert "ENVFILE_OK" in res.output

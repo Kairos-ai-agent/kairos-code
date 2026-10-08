@@ -34,6 +34,19 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **「全权访问」开关此前也是空转的：拨了没用。** 工具沙箱的判定 `is_full_access()`
+  只读进程环境变量 `KAIROS_FULL_ACCESS`，而界面上的开关（`settings.json:fullAccess`，
+  `POST /api/projects/settings` 写入）**从来没有被任何人读过**——所以拨开关只改它自己的
+  显示，文件工具照样被围在项目目录里（新装的机器上表现为"除了 C 盘其他盘都读不到"）。
+  现在判定读三层，任一为真即开：环境变量 → 经 `kairos.config.settings` 加载的 `.env`
+  字段（pydantic-settings 会把值放上 Settings 对象、而不是 `os.environ`，所以此前写进
+  `.env` 的 `KAIROS_FULL_ACCESS` 同样无效）→ `settings.json:fullAccess`。
+  判据每次调用重算，改完立即生效、无需重启。
+
+  顺带：`tests/test_terminal_shell_selection.py::test_metadata_reports_no_shell_when_sandboxed`
+  此前隐含假设"不设任何开关就是沙箱态"，在带 `settings.json` 的环境里必然失败；现改为在用例
+  内显式 patch（不依赖环境），断言本身未放宽。
+
 - **「全自动模式」此前是空转的：选和不选没有任何区别。** `approval_mode` 只有写入
   （设置接口）和一个回读给 UI 的 getter，而 `get_sentinel()` 永远构造 SUGGEST 模式
   的哨兵——界面上选 full-auto 对 agent 的实际行为毫无影响，它照样每一项都问你。

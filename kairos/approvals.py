@@ -24,7 +24,7 @@ import logging
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +67,27 @@ class ApprovalChannel:
         self._pending: Dict[str, ApprovalRequest] = {}
         self._waiters: Dict[str, "asyncio.Future[bool]"] = {}
         self._history: List[Dict[str, Any]] = []
+        # Opt-in per-request timeout override; None keeps the behaviour every
+        # caller had before this existed (see ``set_timeout_resolver``).
+        self._timeout_resolver: Optional[Callable[..., Optional[float]]] = None
 
     def attach_bus(self, bus: Any) -> None:
         """Wire the message bus after construction (the app builds it later)."""
         self._bus = bus
+
+    def set_timeout_resolver(
+            self, resolver: Optional[Callable[..., Optional[float]]]) -> None:
+        """Give one front-end its own wait window without moving the default.
+
+        ``resolver(tool, resource, project_id)`` returns seconds for *this*
+        question, or ``None`` to keep :attr:`_timeout_s`. It exists because a
+        channel whose user answers from their phone (the Weixin bridge) needs a
+        longer window than a UI that shows a banner, and the answer must not be
+        "raise the timeout for everyone" -- the web banner's 120s is right for
+        a browser and wrong for a phone. Opt-in and default-off, so a process
+        that never calls this keeps the exact behaviour it had.
+        """
+        self._timeout_resolver = resolver
 
     # -- observation ------------------------------------------------------
 
@@ -104,6 +121,12 @@ class ApprovalChannel:
         raises for a denial or a timeout: an unanswered question is an answer,
         and it is "no".
         """
+        if timeout_s is None and self._timeout_resolver is not None:
+            try:
+                timeout_s = self._timeout_resolver(tool, resource, project_id)
+            except Exception as exc:  # noqa: BLE001 - a broken resolver is not a yes
+                logger.debug("approval timeout resolver failed: %s", exc)
+                timeout_s = None
         req = ApprovalRequest(
             id=uuid.uuid4().hex[:12],
             tool=tool,

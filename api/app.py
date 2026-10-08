@@ -19,6 +19,7 @@ from kairos.config.settings import settings
 from kairos.metrics import install_middleware, install_metrics_endpoint
 from api.auth import install_auth, token_configured
 from api.deps import orchestrator
+from api import deps as _deps
 from api.routes.agents import router as agents_router
 from api.routes.agents_md import router as agents_md_router
 from api.routes.projects import router as projects_router
@@ -82,66 +83,85 @@ _im_store: IMAccountStore | None = None
 # 微信 iLink 通道：账号存储 + 每账号一条后台长轮询协程。
 _weixin_store: WeixinAccountStore | None = None
 _weixin_channel: WeixinChannel | None = None
+# 微信审批桥：把闸门的 ASK 推到微信会话、把 /approve /deny 接回审批通道。
+_weixin_approval_bridge = None
+
+
+def _orch():
+    """Resolve the live orchestrator at call time.
+
+    Same shim as ``api/routes/projects.py:_orch`` (keep the two in sync): look
+    the instance up on ``api.deps`` on every call instead of closing over the
+    ``from api.deps import orchestrator`` name above, so tests that monkeypatch
+    ``api.deps.orchestrator`` are seen here too.
+
+    These lifespan blocks used to *call* ``_orch()`` without it ever being
+    defined in this module. The ``NameError`` was swallowed by the surrounding
+    ``except``, so the approval channel, the long-running registry / autonomous
+    worker and the daemon supervisor never came up — the gate's ASK verdict had
+    no channel and fell through to allowing the action. See
+    ``tests/test_lifespan_subsystems.py``.
+    """
+    return _deps.orchestrator
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup/shutdown lifecycle."""
     global _browser_manager
-    # R38.6 §32: bring up the browser manager. We do this
-    # BEFORE the agents load so the Workbench "Browser" tab
-    # is ready by the time the user opens it. Failure here
-    # must NOT crash the whole app — the user can still
-    # chat / edit code; only the Browser tab is degraded.
+    # Subsystems that must not depend on the browser being up.
+    #
+    # These used to sit *inside* the browser-manager ``try`` below, one level
+    # deeper: a browser that failed to start (no browser in the image, a
+    # locked profile) took the approval channel, the long-running registry and
+    # the daemon supervisor down with it. Each one gets its own ``try`` now and
+    # degrades alone. (They also used to call an ``_orch()`` this module never
+    # defined — the swallowed ``NameError`` is why none of them ever came up.)
+    from kairos.config.settings import settings as kairos_settings
+
+    # The gate can ask now. Before this line the permission ladder's ASK
+    # verdict had no channel to ask through and fell through to allowing the
+    # action (see kairos/approvals.py). The UI polls /api/approvals and
+    # answers; a question nobody answers still resolves, to a refusal.
     try:
-        from kairos.config.settings import settings as kairos_settings
-        _browser_manager = BrowserManager(
-            data_dir=kairos_settings.data_dir,
+        from kairos import approvals
+        approvals.set_channel(
+            approvals.ApprovalChannel(message_bus=_orch().message_bus))
+        log.info("Approval channel ready")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("approval channel unavailable: %s", exc)
+
+    # R38.6.4: prime the long-running registry with the message bus so async
+    # subagents / goals / autonomous runs can publish subagent.completed
+    # events. ``reg`` stays None when this fails, and the two blocks below are
+    # skipped cleanly rather than raising NameError.
+    reg = None
+    try:
+        from kairos.long_running import LongRunningRegistry, set_registry
+        reg = LongRunningRegistry(
+            message_bus=_orch().message_bus,
+            persist_dir=kairos_settings.data_dir / ".kairos",
         )
-        await _browser_manager.start()
-        browser_routes.set_manager(_browser_manager)
-        # The agent's `browser` tool drives this same manager, so a
-        # navigation the model performs is visible in the Browser tab and
-        # its screenshot is of the page the user is already looking at.
-        set_default_manager(_browser_manager)
-        log.info("Browser manager started (R38.6 §32)")
-        # The gate can ask now. Before this line, the permission ladder's ASK
-        # verdict had to be resolved by policy -- there was no channel to ask
-        # through (see kairos/approvals.py). The UI polls /api/approvals and
-        # answers; a question nobody answers still resolves, to a refusal.
+        set_registry(reg)
+        log.info("Long-running registry primed (R38.6 §34)")
+    except Exception as exc:  # noqa: BLE001
+        log.debug("long-running registry init failed: %s", exc)
+
+    if reg is not None:
+        # R38.6.4: the autonomous worker consumes /autonomous job_ids off
+        # that same registry.
         try:
-            from kairos import approvals
-            approvals.set_channel(
-                approvals.ApprovalChannel(message_bus=_orch().message_bus))
-            log.info("Approval channel ready")
-        except Exception as exc:  # noqa: BLE001
-            log.warning("approval channel unavailable: %s", exc)
-        # R38.6.4: prime the long-running registry with the
-        # message bus so async subagents / goals / autonomous
-        # runs can publish subagent.completed events.
-        try:
-            from kairos.long_running import LongRunningRegistry, set_registry
-            reg = LongRunningRegistry(
-                message_bus=_orch().message_bus,
-                persist_dir=kairos_settings.data_dir / ".kairos",
+            from kairos.autonomous_worker import (
+                AutonomousWorker, set_worker,
             )
-            set_registry(reg)
-            log.info("Long-running registry primed (R38.6 §34)")
-            # R38.6.4: also start the autonomous worker that
-            # consumes /autonomous job_ids off the same registry.
-            try:
-                from kairos.autonomous_worker import (
-                    AutonomousWorker, set_worker,
-                )
-                w = AutonomousWorker(orchestrator=_orch(), long_running_registry=reg)
-                w.attach(_orch(), reg)
-                await w.start()
-                set_worker(w)
-                log.info("Autonomous worker running (R38.6 §34)")
-            except Exception as exc:  # noqa: BLE001
-                log.debug("autonomous worker start failed: %s", exc)
+            w = AutonomousWorker(orchestrator=_orch(), long_running_registry=reg)
+            w.attach(_orch(), reg)
+            await w.start()
+            set_worker(w)
+            log.info("Autonomous worker running (R38.6 §34)")
         except Exception as exc:  # noqa: BLE001
-            log.debug("long-running registry init failed: %s", exc)
+            log.debug("autonomous worker start failed: %s", exc)
+
         # R38.6.4: Daemon supervisor. Emits a daemon.heartbeat
         # event every 5s. Even though the current uvicorn process
         # is single-process, this gives the UI a "daemon alive"
@@ -156,6 +176,23 @@ async def lifespan(app: FastAPI):
             log.info("Daemon supervisor started id=%s", s.daemon_id)
         except Exception as exc:  # noqa: BLE001
             log.debug("daemon supervisor start failed: %s", exc)
+
+    # R38.6 §32: bring up the browser manager. We do this
+    # BEFORE the agents load so the Workbench "Browser" tab
+    # is ready by the time the user opens it. Failure here
+    # must NOT crash the whole app — the user can still
+    # chat / edit code; only the Browser tab is degraded.
+    try:
+        _browser_manager = BrowserManager(
+            data_dir=kairos_settings.data_dir,
+        )
+        await _browser_manager.start()
+        browser_routes.set_manager(_browser_manager)
+        # The agent's `browser` tool drives this same manager, so a
+        # navigation the model performs is visible in the Browser tab and
+        # its screenshot is of the page the user is already looking at.
+        set_default_manager(_browser_manager)
+        log.info("Browser manager started (R38.6 §32)")
     except Exception as exc:  # noqa: BLE001
         log.warning("Browser manager failed to start: %s", exc)
         _browser_manager = None
@@ -236,7 +273,7 @@ async def lifespan(app: FastAPI):
     # 微信官方 ClawBot / iLink 通道（纯 Python，无 OpenClaw/npm）：多账号
     # 扫码登录 + 每账号一条独立长轮询协程。账号/游标/绑定落在 data/weixin.db；
     # 只有已登录（有 token）且启用的账号才会在启动时起轮询。
-    global _weixin_store, _weixin_channel
+    global _weixin_store, _weixin_channel, _weixin_approval_bridge
     try:
         from kairos.config.settings import settings as _kairos_settings
         _weixin_store = WeixinAccountStore(
@@ -256,6 +293,35 @@ async def lifespan(app: FastAPI):
                     log.debug("weixin account start failed %s: %s",
                               _acct.account_id, exc)
         log.info("WeChat iLink channel ready")
+        # 审批接线：闸门（kairos/sentinel.py 的 authorize_async）问出的问题不再
+        # 只有网页在看 —— 属于微信会话的问题会被脱敏后推到那个会话，该会话里的
+        # /approve /deny 通过 ApprovalChannel.resolve 接回来（与 Web 端同一个
+        # 方法），超时（KAIROS_WEIXIN_APPROVAL_TIMEOUT，默认 300 秒）按拒绝结清。
+        # 这里失败只是这条通道降级（问题仍会超时拒绝），不影响 app 启动。
+        try:
+            from kairos import approvals as _approvals
+            from kairos.weixin_approvals import WeixinApprovalBridge
+            _weixin_approval_bridge = WeixinApprovalBridge(
+                _weixin_store, _weixin_channel, orchestrator=orchestrator)
+            # ``orchestrator`` is the instance imported from api.deps at the top of
+            # this module; the sibling blocks above call a ``_orch()`` that does
+            # not exist in this file (see the warning below), so this one uses the
+            # real name.
+            _weixin_approval_bridge.attach(
+                message_bus=orchestrator.message_bus,
+                approval_channel=_approvals.get_channel())
+            weixin_routes.set_approval_bridge(_weixin_approval_bridge)
+            log.info("WeChat approval bridge ready")
+            if _approvals.get_channel() is None:
+                # No channel means the gate never asks, so there is nothing for
+                # this bridge to push; approvals stay fail-closed and silent.
+                log.warning(
+                    "WeChat approval bridge: no approval channel in this "
+                    "process — WeChat approvals stay fail-closed "
+                    "(see docs/WEIXIN_ILINK.md §7)")
+        except Exception as exc:  # noqa: BLE001
+            _weixin_approval_bridge = None
+            log.warning("WeChat approval bridge unavailable: %s", exc)
     except Exception as exc:  # noqa: BLE001
         log.warning("WeChat iLink setup failed: %s", exc)
 
@@ -302,6 +368,24 @@ async def lifespan(app: FastAPI):
             await _browser_manager.stop()
         except Exception:  # noqa: BLE001
             pass
+    # R38.6.4: the daemon supervisor (a heartbeat every 5s) and the autonomous
+    # worker (the /autonomous queue) own background tasks. They are started in
+    # the startup half above and must be stopped here, or they outlive the
+    # client that started them and the test/process never settles.
+    try:
+        from kairos.daemon import get_supervisor
+        _supervisor = get_supervisor()
+        if _supervisor is not None:
+            await _supervisor.stop()
+    except Exception as exc:  # noqa: BLE001
+        log.debug("daemon supervisor stop failed: %s", exc)
+    try:
+        from kairos.autonomous_worker import get_worker
+        _autonomous_worker = get_worker()
+        if _autonomous_worker is not None:
+            await _autonomous_worker.stop()
+    except Exception as exc:  # noqa: BLE001
+        log.debug("autonomous worker stop failed: %s", exc)
     if _feishu_forwarder is not None:
         try:
             await _feishu_forwarder.stop()
@@ -313,6 +397,11 @@ async def lifespan(app: FastAPI):
         except Exception:  # noqa: BLE001
             pass
     # 微信 iLink：停掉每个账号的长轮询协程（并尽量通知服务端会话结束）。
+    if _weixin_approval_bridge is not None:
+        try:
+            _weixin_approval_bridge.detach()
+        except Exception:  # noqa: BLE001
+            pass
     if _weixin_channel is not None:
         try:
             await _weixin_channel.stop_all()

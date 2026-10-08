@@ -15,9 +15,11 @@
 | 文件 | 作用 |
 |---|---|
 | `kairos/weixin_ilink.py` | 协议核心：`ILinkClient`（7 个端点）、`WeixinLoginSession`、`WeixinAccountStore`、`WeixinChannel` |
+| `kairos/weixin_approvals.py` | 审批桥：把闸门的 ASK 推到微信会话，把 `/approve` `/deny` `/stop` 接回现有的审批与停止机制 |
 | `api/routes/weixin.py` | REST 接口（取码 / 出图 / 轮询 / 账号 / 发送 / 绑定）+ 分发到 agent |
 | `web/src/components/WeixinPanel.tsx` | 桌面界面：左下角「微信」入口 + 右侧弹层（出码 / 轮询 / 多账号） |
 | `tests/test_weixin_ilink.py` | 离线测试：本地 `http.server` 假网关，30 个用例 |
+| `tests/test_weixin_approvals.py` | 离线测试：审批推送 / 回答 / 超时 / 并发 / 不确定，29 个用例 |
 | `web/src/test/weixinPanel.test.tsx` | 前端弹层测试：出图 / 状态机 / 账号列表，9 个用例 |
 | `api/app.py` | lifespan 里建 store / channel 并挂载路由 |
 
@@ -59,8 +61,9 @@ curl -X DELETE http://127.0.0.1:8000/api/weixin/accounts/<id>
 curl http://127.0.0.1:8000/api/weixin/bindings
 ```
 
-内置命令（在微信聊天里直接发）：`/status`、`/projects`、`/use <project_id>`、
-`/chat <text>`、`/help`。普通文本默认直接和当前项目的 agent 对话。
+内置命令（在微信聊天里直接发，**大小写不敏感**）：`/status`、`/projects`、
+`/use <project_id>`、`/chat <text>`、`/help`，以及审批与停止用的 `/approve`、
+`/deny`、`/stop`（见第七节）。普通文本默认直接和当前项目的 agent 对话。
 
 数据落在 `data/weixin.db`（账号 token、每账号游标、context_token、绑定）。
 **token 不硬编码、不进 API 响应、不写日志**：`store.list_accounts()` /
@@ -209,3 +212,75 @@ curl http://127.0.0.1:8000/api/weixin/bindings
   对）。但**扫码之后的 `getupdates` 收发消息没有在真实微信上端到端跑过**
   （需要真实手机扫码）。收发链路的正确性目前由离线 mock 网关测试覆盖；
   桌面弹层也只被 vitest 覆盖，**没有用真手机扫过这张后端出的图**。
+
+## 七、审批与停止（微信侧）
+
+**这条通道以前只有文本层**：agent 需要人批准一个动作时，闸门（`kairos/sentinel.py`
+的 `authorize_async`）会把问题发布到审批通道（`kairos/approvals.py`），但微信里
+既看不见这个问题、也没法回答 —— 于是需要人批的动作等于卡住或被拒。现在接上了
+三件事（实现：`kairos/weixin_approvals.py`）：
+
+* **推送**：属于某个微信会话的问题，作为**一条文本**推到那个会话。正文只有
+  动作名 + 关键参数的人类可读描述，并且**已脱敏**（复用
+  `kairos/sentinel.redact`，另遮掉连接串里的 `user:password@`）、**已截断**
+  （单字段 ≤200 字符）：不会倾倒整条命令，不会带出 token / 密钥 / 连接串。
+* **回答**：在那个会话里回 `/approve`、`/deny`、`/stop`（**大小写不敏感**，
+  可带参数，`/approve 1` 用于多问时选号）。`/approve` / `/deny` 调的是
+  `ApprovalChannel.resolve` —— 与网页端 `POST /api/approvals/{id}` **同一个
+  方法**；`/stop` 走 `orchestrator.stop_loop` + `skeleton.runner.stop_skeleton_run`
+  —— 与 `POST /api/projects/{id}/stop` **同一对调用**。没有另建第二套机制，
+  网页端的审批行为**只增不改**。
+* **超时**：等待有时限，默认 **300 秒**，用环境变量
+  `KAIROS_WEIXIN_APPROVAL_TIMEOUT`（秒，可小数）调整；取值非法 / 非正数时退回
+  300（不会变成「瞬间超时」）。到点按**拒绝**结清，并回一条可读文本告知
+  「已超时、按拒绝处理」。这个时限只作用于**微信发起**的问题（判据是处理该入站
+  消息期间设置的 `current_session`）—— 网页端的等待时间一字未改；实现方式是
+  `ApprovalChannel.set_timeout_resolver` 这个**默认关闭**的可选钩子。
+
+**全程 fail-closed** —— 任何一条不满足都不放行：
+
+| 情况 | 行为 |
+|---|---|
+| 超时（默认 300 秒） | **拒绝** + 可读文本 |
+| 推不出去（微信出站失败） | **拒绝**（不登记、不等） |
+| 会话对不上（项目没绑到这个会话） | **拒绝**（不推给无关会话） |
+| 本会话已有未决问题 | 新的问题**直接拒绝**（同会话同时只有一个未决） |
+| `/approve` 参数解析不了（`/approve 2`、`/approve abc`、多余参数） | **拒绝**，绝不猜 |
+| 没有待审批时发 `/approve` / `/deny` | 什么都不改，回一句可读提示 |
+
+并发：每条入站消息在**独立任务**里处理，所以一个会话停在等审批上不会阻塞同一
+微信账号下的其它会话 —— 否则用来回答 `/approve` 的那条消息会被堵在后面，审批
+永远等不到回答（`WeixinChannel._poll_loop` 因此改成每条消息一个任务）。
+
+### 未经真机验证（重要）
+
+**本轮没有在真实微信上端到端验证过审批流程。** 它需要真机扫码登录 + 真实的
+`getupdates` 消息流，而扫码之后的收发链路本身也还没在真实微信上跑过（见第六
+节）。离线测试覆盖的是：消息推送与脱敏、`/approve` `/deny` `/stop` 的解析与
+接线、超时 / 推送失败 / 会话对不上 / 同会话并发 / 多问选号各自的 fail-closed
+行为（`tests/test_weixin_approvals.py`，29 个用例 —— 用**真实的**消息总线与审批
+通道驱动，只把微信出站 `send_text` 换成假的）。
+
+**已知前置缺陷（本轮**没有**修，因为它会改变网页端的审批行为）：**
+`api/app.py` 的 lifespan 里那一段「装审批通道」用的是 `_orch()`，而 **`api/app.py`
+里根本没有 `_orch` 这个名字**（`_orch()` 定义在 `api/routes/projects.py:73`，是
+「按调用时刻解析 `deps.orchestrator`」的 shim，`api/routes/*.py` 从那里导入/调用；
+`api/app.py` 既没定义它也没导入它）→ 启动时 `NameError: name '_orch' is not defined`
+被那段 try/except 吞成一条日志
+`approval channel unavailable: name '_orch' is not defined` —— 进程里
+**没有**审批通道，闸门就不会把 ASK 变成问题（非 strict 下 ASK 直接按
+`default-allow` 放行；strict 下直接按拒绝）。这段在引入审批通道的那个 commit
+（`c6c3a44`）里就是这样，属于先于本轮存在的缺陷。
+
+后果：本桥在真实进程里**目前收不到任何问题**（它会照常接线并 fail-closed，是
+空转而不是不安全）。让这条链路真正跑起来只需要把 `api/app.py` 里那 **6 处**
+`_orch()` 调用换成 `from api.routes.projects import _orch`（推荐 —— 它是按调用时刻
+解析 `deps.orchestrator` 的 shim），或直接改用模块级的 `deps.orchestrator` /
+`orchestrator`（后者是 import 时绑定的实例，正是那个 shim 的 docstring 警告过的
+陈旧引用写法）—— 但那会让**网页端**的 ASK 从「按策略放行」变成「弹问题、120 秒
+不答即拒绝」，即改变网页端行为，超出本轮「只增不删、不改网页端审批行为」的边界，
+故留给上层决定。本轮的补充：lifespan 会在没有通道时打一条 warning 说明这一点。
+
+**没有做的**：微信侧没有富媒体审批卡片（只发一条纯文本）、没有审批面板 / 历史、
+没有把「记住这个决定」（`remember`）接到微信（只走网页端）、没有为多问做列表
+渲染（只支持 `/approve 1` 选号）。

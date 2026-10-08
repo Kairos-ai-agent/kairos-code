@@ -45,6 +45,7 @@ from api.routes.projects import (
     _project_root,
     attachment_prompt_block,
 )
+from kairos.weixin_approvals import APPROVAL_COMMANDS, stop_project
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,10 @@ router = APIRouter(prefix="/api/weixin", tags=["weixin"])
 # 运行期依赖，由 api/app.py 的 lifespan 注入。
 _channel: Optional[WeixinChannel] = None
 _store: Optional[WeixinAccountStore] = None
+# 审批桥：把闸门的问题推到微信、把 /approve /deny 接回现有的审批机制。
+# 由 api/app.py 的 lifespan 注入；为 None 时这几个命令回一条可读提示
+# （待审批的动作仍会按超时自动拒绝 —— fail-closed 不变）。
+_approval_bridge: Optional[Any] = None
 # 取二维码 / 轮询登录时用的客户端工厂（测试可指向本地 mock）。
 _login_client_factory: Optional[Callable[[], ILinkClient]] = None
 # 进行中的登录会话：qrcode id → WeixinLoginSession。
@@ -77,12 +82,19 @@ def set_dependencies(channel: Optional[WeixinChannel] = None,
         _login_client_factory = login_client_factory
 
 
+def set_approval_bridge(bridge: Optional[Any]) -> None:
+    """注入审批桥（由 api/app.py 的 lifespan 调用）。"""
+    global _approval_bridge
+    _approval_bridge = bridge
+
+
 def reset_dependencies() -> None:
     """测试用：清空注入的依赖与会话。"""
-    global _channel, _store, _login_client_factory
+    global _channel, _store, _login_client_factory, _approval_bridge
     _channel = None
     _store = None
     _login_client_factory = None
+    _approval_bridge = None
     _sessions.clear()
     _qr_png_cache.clear()
 
@@ -264,6 +276,40 @@ async def _answer_message(project, text: str, *, has_media: bool) -> str:
     return reply
 
 
+async def _control_command(orchestrator, store: WeixinAccountStore,
+                           account_id: str, chat_id: str, cmd: str,
+                           args: List[str]) -> str:
+    """微信里的 ``/approve`` · ``/deny`` · ``/stop``。
+
+    **不另建一套**：``/approve`` / ``/deny`` 由审批桥调用
+    ``ApprovalChannel.resolve``（与 Web 端 ``POST /api/approvals/{id}`` 同一个
+    方法）；``/stop`` 走 ``orchestrator.stop_loop`` + ``stop_skeleton_run``
+    （与 ``POST /{id}/stop`` 同一对调用）。桥没接线时 ``/stop`` 仍能停，
+    ``/approve`` / ``/deny`` 回一条可读提示 —— 未决问题照旧按超时拒绝。
+    """
+    if _approval_bridge is not None:
+        try:
+            reply = await _approval_bridge.handle_command(account_id, chat_id,
+                                                          cmd, args)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("weixin: 审批命令处理失败 %s", cmd)
+            return f"处理失败：{type(exc).__name__}"
+        if reply is not None:
+            return reply
+    if cmd == "stop":
+        # 停止本身不依赖审批：桥不在也走同一条停止路径。
+        try:
+            project_id = await store.lookup(account_id, chat_id)
+        except Exception:  # noqa: BLE001
+            logger.exception("weixin: /stop 绑定查询失败")
+            return "查询会话绑定失败，无法停止。"
+        if not project_id:
+            return "这个会话还没有绑定项目，没有可停止的任务。"
+        _names, text = stop_project(orchestrator, project_id)
+        return text
+    return "审批通道未接线：这条命令暂时无效；需要人批的操作会按超时自动拒绝。"
+
+
 def make_dispatch(orchestrator, store: WeixinAccountStore
                   ) -> Callable[..., Any]:
     """构造 channel 用的 dispatch 回调。
@@ -281,8 +327,13 @@ def make_dispatch(orchestrator, store: WeixinAccountStore
         cmd, args = parse_command(text)
         if cmd == "noop":
             return ""
+        if cmd in APPROVAL_COMMANDS:
+            # 审批 / 停止：接到**现有**的审批与停止机制上（见 _control_command）。
+            return await _control_command(orchestrator, store, account_id,
+                                          chat_id, cmd, args)
         if cmd == "help":
             return ("/status · /projects · /use <id> · /chat <text> · /help\n"
+                    "/approve · /deny · /stop —— 回答需要审批的操作 / 停止当前运行\n"
                     "直接发消息即与当前项目的 agent 对话。")
         if cmd == "use":
             if not args:

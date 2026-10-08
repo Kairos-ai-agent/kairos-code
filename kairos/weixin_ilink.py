@@ -49,9 +49,11 @@ import logging
 import re
 import secrets
 import time
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence
+from typing import (Any, Awaitable, Callable, Dict, List, Optional, Sequence,
+                    Tuple)
 from urllib.parse import quote, urljoin
 
 import aiosqlite
@@ -95,6 +97,7 @@ __all__ = [
     "WeixinAccount",
     "WeixinAccountStore",
     "WeixinChannel",
+    "current_session",
 ]
 
 # ---------------------------------------------------------------------------
@@ -184,6 +187,22 @@ _MEDIA_ITEM_FIELDS = {
     MessageItemType["VIDEO"]: ("video", "video_item"),
     MessageItemType["FILE"]: ("file", "file_item"),
 }
+
+
+# ---------------------------------------------------------------------------
+# 当前正在处理的入站会话
+# ---------------------------------------------------------------------------
+#
+# ``WeixinChannel.handle_message`` 在处理一条入站消息期间把它设成
+# ``(account_id, from_user_id)``。审批桥（``kairos/weixin_approvals.py``）在闸门
+# 把 ASK 变成问题时读它：只有**同一条协程链**里的问题才是这个微信会话发起的，
+# 于是「微信发起的问题用微信的等待时限 / 推到微信」这件事是确定的，
+# 不会顺手改到 Web 端的审批。
+#
+# 放进本模块（而不是桥里）是为了不产生循环导入：桥 import 本模块，本模块
+# 不该反过来 import 桥。
+current_session: ContextVar[Optional[Tuple[str, str]]] = ContextVar(
+    "kairos_weixin_current_session", default=None)
 
 
 # ---------------------------------------------------------------------------
@@ -1374,6 +1393,10 @@ class WeixinChannel:
         self._clients: Dict[str, ILinkClient] = {}
         self._tasks: Dict[str, asyncio.Task] = {}
         self._stopping: set = set()
+        # 正在处理中的入站消息任务。每条消息单独一个任务（而不是在轮询协程里
+        # await），否则一个卡住的 agent 轮次会把**同一个账号**的后续消息（包括
+        # 用来回答审批的 /approve）一起堵在后面 —— 审批就永远收不到回答。
+        self._message_tasks: set = set()
 
     # -- 客户端 ---------------------------------------------------------
 
@@ -1426,6 +1449,16 @@ class WeixinChannel:
                 await task
             except (asyncio.CancelledError, Exception):  # noqa: BLE001
                 pass
+        # 收尾该账号还在处理的消息任务（可能正停在等审批上），不让它们
+        # 随着账号一起变成孤儿任务。
+        for msg_task in list(self._message_tasks):
+            msg_task.cancel()
+        for msg_task in list(self._message_tasks):
+            try:
+                await msg_task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
+        self._message_tasks.clear()
         client = self._clients.pop(account_id, None)
         if client is not None:
             try:
@@ -1467,13 +1500,32 @@ class WeixinChannel:
             for msg in msgs:
                 if account_id in self._stopping:
                     break
-                try:
-                    await self.handle_message(account_id, client, msg)
-                except Exception:  # noqa: BLE001 - 一条坏消息不该拖垮轮询
-                    logger.exception("weixin 处理消息失败 account=%s", account_id)
+                # 每条消息交给独立任务：一个停在等审批（或跑长任务）的轮次
+                # 不能把同一账号后续消息里的 /approve 一起堵死。异常在任务内部
+                # 兜住（一条坏消息不该拖垮轮询）。
+                self._spawn_message_task(account_id, client, msg)
 
             if not msgs:
                 await asyncio.sleep(self.poll_interval)
+
+    def _spawn_message_task(self, account_id: str, client: ILinkClient,
+                            msg: Dict[str, Any]) -> None:
+        """把一条入站消息丢进独立任务，并记账以便账号停止时一起收尾。"""
+        task = asyncio.create_task(
+            self._handle_message_safe(account_id, client, msg),
+            name=f"weixin-msg-{account_id}")
+        self._message_tasks.add(task)
+        task.add_done_callback(self._message_tasks.discard)
+
+    async def _handle_message_safe(self, account_id: str, client: ILinkClient,
+                                   msg: Dict[str, Any]) -> None:
+        """``handle_message`` 的任务壳：异常只记日志，不炸掉任务。"""
+        try:
+            await self.handle_message(account_id, client, msg)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - 一条坏消息不该拖垮轮询
+            logger.exception("weixin 处理消息失败 account=%s", account_id)
 
     async def handle_message(self, account_id: str, client: ILinkClient,
                              msg: Dict[str, Any]) -> Optional[str]:
@@ -1497,11 +1549,17 @@ class WeixinChannel:
 
         reply = ""
         if self._dispatch is not None:
-            if self._dispatch_takes_media:
-                reply = await self._dispatch(
-                    account_id, from_user, text, media_refs) or ""
-            else:
-                reply = await self._dispatch(account_id, from_user, text) or ""
+            # 处理这条消息期间标记「当前会话」：审批桥据此判断闸门刚问出的
+            # 那个问题属不属于这个微信会话（见模块顶部的 ``current_session``）。
+            token = current_session.set((account_id, from_user))
+            try:
+                if self._dispatch_takes_media:
+                    reply = await self._dispatch(
+                        account_id, from_user, text, media_refs) or ""
+                else:
+                    reply = await self._dispatch(account_id, from_user, text) or ""
+            finally:
+                current_session.reset(token)
         if reply:
             await client.send_message(build_text_message(
                 from_user, reply, context_token=context_token))

@@ -6,6 +6,50 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **微信（ClawBot / iLink）通道接上了「审批 / 停止」，这条通道不再只有文本层。**
+  此前 agent 需要人批准一个动作时，闸门（`kairos/sentinel.py` 的
+  `authorize_async`）问出的问题只有网页端看得见，微信里既看不到、也没法回答 ——
+  等于默默卡住或被拒。现在：
+
+  - **把问题推到微信**：属于某个微信会话的审批问题，脱敏后作为**一条文本**推到
+    那个会话（复用现成的出站能力，不新造通道）。正文只有动作名 + 关键参数的人类
+    可读描述，复用 `kairos/sentinel.redact` 脱敏并额外遮掉连接串里的
+    `user:password@`，单字段截断到 200 字符 —— 不倾倒大块命令，不带出
+    密钥 / 令牌 / 连接串。
+  - **把回答接回现有机制**：会话里的 `/approve`、`/deny`、`/stop`（**大小写不
+    敏感**，可带参数，`/approve 1` 用于多问时选号）分别接到
+    `ApprovalChannel.resolve`（与网页端 `POST /api/approvals/{id}` **同一个方法**）
+    和 `orchestrator.stop_loop` + `skeleton.runner.stop_skeleton_run`（与
+    `POST /{id}/stop` **同一对调用**）。**没有另建一套审批或停止**；`/help` 也补上
+    了这三条。
+  - **超时自动拒绝**：等待默认 **300 秒**（`KAIROS_WEIXIN_APPROVAL_TIMEOUT` 秒，
+    可小数；非法值退回默认），到点按**拒绝**结清并回一条可读文本告知。该时限只
+    作用于微信发起的问题 —— 新增的 `ApprovalChannel.set_timeout_resolver` 是
+    **默认关闭**的可选钩子，网页端的等待时间与行为不变。
+  - **全程 fail-closed**：推不出去、会话对不上、本会话已有未决问题、`/approve`
+    参数解析不了，一律**拒绝**，绝无自动批准路径。每个入站会话同时只允许一个
+    未决问题；入站消息改成**每条一个任务**处理，因此一个会话停在等审批上不会阻塞
+    同一账号的其它会话（否则用来回答 `/approve` 的那条消息会被堵在同一个轮询
+    协程后面，审批永远收不到回答）。
+
+  **未经真机验证**：这条链路**没有在真实微信上端到端跑过**（需要真机扫码 +
+  真实的 `getupdates` 消息流，而扫码之后的收发链路本身也还没上真机）。离线覆盖见
+  `tests/test_weixin_approvals.py`（29→31 个用例，用**真实的**消息总线与审批通道
+  驱动，只把微信出站换成假的）；细节与「没有做的事」见 `docs/WEIXIN_ILINK.md` 第七节。
+
+  **还有一个先于本轮存在的前置缺陷**（本轮**没有**修，因为修它会改变网页端审批
+  行为）：`api/app.py` 的 lifespan 装审批通道时调用了本文件里不存在的 `_orch()`
+  （`from api.deps import orchestrator` 才是实例名），于是
+  `approvals.set_channel(...)` 从未生效 —— 进程里没有审批通道，闸门就不会把 ASK
+  变成问题。因此本桥在真实进程里目前是**空转**（照常接线、fail-closed），而不是
+  不安全。把 `api/app.py` 里那 6 处 `_orch()` 调用改成
+  `from api.routes.projects import _orch`（该 shim 按调用时刻解析
+  `deps.orchestrator`）即可让整条链路生效（代价是网页端 ASK 从「按策略放行」变为
+  「弹问题、120 秒不答即拒绝」），该决定留给上层。lifespan 现在会在缺通道时打一条
+  warning 说明。
+
 ### Changed
 
 - **默认车道从「循环」改成「通用车道」——这是一条用户可见的默认行为变更。**

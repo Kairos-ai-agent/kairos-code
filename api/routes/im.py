@@ -372,7 +372,7 @@ def _project_label(account, chat_id: str, chat_name: str) -> str:
     return label[:60]
 
 
-async def _answer_inbound(project, text: str) -> str:
+async def _answer_inbound(project, text: str, bus=None) -> str:
     """Answer one inbound IM message, routed like the web ``/chat`` route.
 
     Round 37 routing reaches the IM entry too: the message goes through
@@ -419,6 +419,23 @@ async def _answer_inbound(project, text: str) -> str:
         # No model provider on the general lane, or an empty answer: keep
         # today's behaviour instead of queuing nothing.
         return await project.coder.chat(text)
+
+    # 通用车道成功返回：把这条回复发到总线上（订阅者落库），这样在网页线程里
+    # 才看得到它。**只在这里发**——Coder 车道（``project.coder.chat``）自己会发
+    # ``agent.chat``（``kairos/agents/base.py``），通道层再发一次就是双气泡。
+    # 与 ``api/routes/projects.py`` 的通用车道同形；发布失败只记日志（历史是
+    # 锦上添花，绝不改变回复）。
+    if bus is not None:
+        try:
+            from kairos.core.message_bus import Message as _BusMessage
+            await bus.publish(_BusMessage(
+                sender=f"{project.id}.skeleton", topic="agent.chat",
+                content=reply, msg_type="text",
+                metadata={"project_id": project.id, "route": "skeleton",
+                          "source": "im"},
+            ))
+        except Exception:  # noqa: BLE001 - 历史是锦上添花，失败只记日志
+            logger.exception("im: 发布通用车道回复失败")
     return reply
 
 
@@ -491,7 +508,8 @@ async def inbound(account_id: str, request: Request,
         # Round 37: the same router the web /chat route uses decides the lane;
         # a signal-free conversational message is answered on the general lane
         # and a coding/long task keeps this Coder path (see ``_answer_inbound``).
-        reply = await _answer_inbound(project, text)
+        reply = await _answer_inbound(
+            project, text, bus=getattr(orchestrator, "message_bus", None))
     except Exception as exc:  # noqa: BLE001
         logger.exception("im: chat failed for %s/%s", account_id, chat_id)
         raise HTTPException(

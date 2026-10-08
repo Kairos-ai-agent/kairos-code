@@ -236,7 +236,8 @@ async def _fold_inbound_media(project, prompt: str, media) -> str:
 
 
 async def _answer_message(project, text: str, *,
-                          route_text: Optional[str] = None) -> str:
+                          route_text: Optional[str] = None,
+                          bus: Optional[Any] = None) -> str:
     """按 Web ``/chat`` 同一条路由决定车道：编码/长任务走 Coder，闲聊/问答走通用。
 
     - 复用 ``kairos.task_router.route_task``（``workspace`` = 项目根）判定车道。
@@ -279,6 +280,23 @@ async def _answer_message(project, text: str, *,
 
     if reply is None or not reply.strip():
         return await project.coder.chat(text)
+
+    # 通用车道成功返回：把这条回复发到总线上（订阅者落库），这样在网页线程里
+    # 才看得到它。**只在这里发**——Coder 车道（``project.coder.chat``）自己会发
+    # ``agent.chat``（``kairos/agents/base.py``），通道层再发一次就是双气泡。
+    # 与 ``api/routes/projects.py`` 的通用车道同形；发布失败只记日志（历史是
+    # 锦上添花，绝不改变回复）。
+    if bus is not None:
+        try:
+            from kairos.core.message_bus import Message as _BusMessage
+            await bus.publish(_BusMessage(
+                sender=f"{project.id}.skeleton", topic="agent.chat",
+                content=reply, msg_type="text",
+                metadata={"project_id": project.id, "route": "skeleton",
+                          "source": "weixin"},
+            ))
+        except Exception:  # noqa: BLE001 - 历史是锦上添花，失败只记日志
+            logger.exception("weixin: 发布通用车道回复失败")
     return reply
 
 
@@ -368,12 +386,33 @@ def make_dispatch(orchestrator, store: WeixinAccountStore
         if media:
             # 入站图片/文件/视频：真下载到项目附件目录，按 Web 同一套折进提示词。
             prompt = await _fold_inbound_media(project, prompt, media)
+
+        # 把用户这条消息写进项目聊天历史（直写库、不上总线），与
+        # ``api/routes/im.py`` 同形：这样在网页里打开这个项目能看到同一条线程。
+        # 落库用折好附件块后的 ``prompt``（agent 实际看到的内容），与网页
+        # ``projects.py`` 一致；metadata 带来源与定位。历史是锦上添花——任何
+        # 失败只记日志，绝不改变下面的回复、也绝不影响出站发送。
+        try:
+            from kairos.core.message_bus import Message as _BusMessage
+            _db = getattr(orchestrator, "_db", None)
+            if _db is not None:
+                _db.save_message(_BusMessage(
+                    sender="user", receiver=f"{project.id}.coder",
+                    topic="user.chat", content=prompt, msg_type="text",
+                    metadata={"project_id": project.id, "source": "weixin",
+                              "account_id": account_id, "chat_id": chat_id},
+                ))
+        except Exception:  # noqa: BLE001 - history is a nicety, not the job
+            logger.exception("weixin: failed to persist inbound message")
+
         try:
             # Round 37 路由：编码/长任务走 Coder（原样），闲聊/问答走通用车道。
             # 纯文本与带媒体走**同一条**路由（通用车道现在能读附件，见
             # ``_answer_message``）。判定用用户原文 ``raw_text``，与 Web ``/chat``
             # 传 ``request.message`` 一致；附件块只进 ``prompt``，不进判定。
-            reply = await _answer_message(project, prompt, route_text=raw_text)
+            reply = await _answer_message(
+                project, prompt, route_text=raw_text,
+                bus=getattr(orchestrator, "message_bus", None))
         except Exception as exc:  # noqa: BLE001
             logger.exception("weixin: agent chat failed for %s/%s",
                              account_id, chat_id)

@@ -287,15 +287,34 @@ async def _dispatch(chat_id: str, text: str, orchestrator) -> str:
     coder = getattr(project, "coder", None) if project is not None else None
     if coder is None:
         return "当前会话还没有可用的 agent。"
+
+    # 把用户这条消息写进项目聊天历史（直写库、不上总线），与 Web ``/chat``、
+    # IM、微信入口一致：这样在网页里打开这个项目能看到同一条线程。历史是
+    # 锦上添花——任何失败只记日志，绝不改变回复、也不影响 webhook 的回包。
     try:
-        reply = await _answer_message(project, prompt)
+        from kairos.core.message_bus import Message as _BusMessage
+        _db = getattr(orchestrator, "_db", None)
+        if _db is not None:
+            _db.save_message(_BusMessage(
+                sender="user", receiver=f"{project.id}.coder",
+                topic="user.chat", content=prompt, msg_type="text",
+                metadata={"project_id": project.id, "source": "wecom",
+                          "chat_id": chat_id},
+            ))
+    except Exception:  # noqa: BLE001 - history is a nicety, not the job
+        logger.exception("wecom: failed to persist inbound message")
+
+    try:
+        reply = await _answer_message(
+            project, prompt, bus=getattr(orchestrator, "message_bus", None))
     except Exception as exc:  # noqa: BLE001
         logger.exception("wecom: agent chat failed for %s", chat_id)
         return f"agent 出错: {type(exc).__name__}"
     return reply or ""
 
 
-async def _answer_message(project, text: str) -> str:
+async def _answer_message(project, text: str,
+                          bus: Optional[Any] = None) -> str:
     """按 Web ``/chat`` 同一条路由决定车道：编码/长任务走 Coder，闲聊走通用车道。
 
     与 ``api/routes/im.py:_answer_inbound``、``api/routes/weixin.py:_answer_message``
@@ -335,6 +354,23 @@ async def _answer_message(project, text: str) -> str:
 
     if reply is None or not reply.strip():
         return await project.coder.chat(text)
+
+    # 通用车道成功返回：把这条回复发到总线上（订阅者落库），这样在网页线程里
+    # 才看得到它。**只在这里发**——Coder 车道（``project.coder.chat``）自己会发
+    # ``agent.chat``（``kairos/agents/base.py``），通道层再发一次就是双气泡。
+    # 与 ``api/routes/projects.py`` 的通用车道同形；发布失败只记日志（历史是
+    # 锦上添花，绝不改变回复）。
+    if bus is not None:
+        try:
+            from kairos.core.message_bus import Message as _BusMessage
+            await bus.publish(_BusMessage(
+                sender=f"{project.id}.skeleton", topic="agent.chat",
+                content=reply, msg_type="text",
+                metadata={"project_id": project.id, "route": "skeleton",
+                          "source": "wecom"},
+            ))
+        except Exception:  # noqa: BLE001 - 历史是锦上添花，失败只记日志
+            logger.exception("wecom: 发布通用车道回复失败")
     return reply
 
 

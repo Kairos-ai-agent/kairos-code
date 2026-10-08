@@ -168,6 +168,39 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **微信 / 企微 / IM 发的东西在网页聊天页看不到。** 网页线程**只读库**（`GET /{id}/chat-messages`
+  → `Persistence.load_messages(chat_only=True)`，只认 `CHAT_TOPICS`）；四个入站入口里只有网页端
+  **既**把用户那条落库成 `user.chat`（`projects.py:544`）**又**把通用车道的回复发上总线
+  （`:429`）。微信与企微**两边都缺**（grep 实测各 0 处），IM 缺回复那半边 ⇒ 你在网页上打开
+  项目，看不到对方在微信里说了什么，闲聊的回复也不在。
+
+  照 `im.py:477-487`（落库模板）与 `projects.py:426-441`（回复上总线模板）把三个通道补齐：
+
+  | 模块 | 进消息 `user.chat` | 通用车道回复 `agent.chat` |
+  |---|---|---|
+  | `projects.py`（网页，原本就对） | 2（未动） | 1（未动） |
+  | `im.py` | 1（未动） | **0 → 1** |
+  | `wecom.py` | **0 → 1** | **0 → 1** |
+  | `weixin.py` | **0 → 1** | **0 → 1** |
+
+  - **落库用折好附件块后的提示词**（`prompt`，即 agent 实际看到的内容）⇒ 与网页端一致；
+    metadata 带 `project_id` + `source`（`weixin`/`wecom`/`im`）+ `account_id`/`chat_id`，
+    以后排查能一眼看出这条从哪来。
+  - **绝不双气泡**：通道层**只在通用车道成功返回之后**发布回复；Coder 车道的
+    `project.coder.chat()` 自己会发 `agent.chat`（`kairos/agents/base.py:1232`），而所有
+    Coder 回退分支都在发布之前 `return`。
+  - **历史是锦上添花**：所有落库/发布都 `try/except` + 只记日志 ⇒ **任何失败都不改变回复、
+    也不影响出站发送**（发不出去比看不到历史严重得多）。有测试注入「`save_message`/`publish`
+    抛异常」并断言回复**逐字不变**。
+  - **新守卫 `tests/test_channel_history_parity.py`**：对每个入站通道模块断言「有把进消息落成
+    `user.chat`」+「通用车道会发 `agent.chat`」，白名单条目必须带理由、**过期会被报出来**。
+    **红→绿双证**：修前它逐条指名 `wecom.py`/`weixin.py`（进消息）与 `im/wecom/weixin`
+    （回复）；修后 18 条全绿。**父任务独立复验**：把 `wecom.py` 的落库临时改名 → 守卫立刻
+    报红并指名它 → 还原后绿。
+  - **局限（如实）**：**无真机验证**——没有真微信/企微账号，全部离线（假 client/stub）；
+    「打开网页看到微信那条」只在**数据层边界**（落库 + 上总线）被证明，没有对着真 UI + 真 bot
+    跑过。两条守卫检查是**源码级**（AST），观察不到活的 WebSocket 渲染。
+
 - **前端一直在调、后端不存在的三个端点：现在按前端的现有契约做出来了。** 与「检查点面板」
   同一类（两层各自都有、中间对不上），但这次是**只有前端有、后端没有**：
   `GET /projects/{id}/stats`（Loop 页的分数条形图 / tokens / 失败连击 / 无进展计数卡片）、

@@ -338,6 +338,20 @@ def build_parser() -> argparse.ArgumentParser:
                              help="Why (recorded on the run).")
     p_sk_resume.add_argument("--json", action="store_true", dest="json_output")
 
+    p_sk_eval = skeleton_sub.add_parser(
+        "eval",
+        help="Evaluate general-task runs: three-way pass rate (undecided is "
+             "never a pass), abstention rate and per-criterion satisfaction, "
+             "computed from the persisted run records.",
+    )
+    p_sk_eval.add_argument(
+        "path", nargs="?", default=".",
+        help="Workspace dir to search for .kairos/skeleton-runs/ run records "
+             "(default: cwd), or a single run-record JSON file.",
+    )
+    p_sk_eval.add_argument("--json", action="store_true", dest="json_output",
+                           help="Emit the full metrics report as JSON.")
+
     # ---- index (rebuild the project-files full-text retrieval index) -----
     p_index = sub.add_parser(
         "index",
@@ -1012,8 +1026,10 @@ def _run_skeleton(args: argparse.Namespace) -> int:
     command = getattr(args, "skeleton_command", None)
     if command == "resume":
         return _run_skeleton_resume(args)
+    if command == "eval":
+        return _run_skeleton_eval(args)
     if command != "run":
-        print("error: `kairos skeleton` needs a subcommand (run|resume)",
+        print("error: `kairos skeleton` needs a subcommand (run|resume|eval)",
               file=sys.stderr)
         return EXIT_BAD_INPUT
 
@@ -1072,6 +1088,21 @@ def _run_skeleton_resume(args: argparse.Namespace) -> int:
         sys.stdout.write(f"run file : {path}\n")
     sys.stdout.flush()
     return EXIT_OK if run.passed else EXIT_FAILED
+
+
+def _run_skeleton_eval(args: argparse.Namespace) -> int:
+    """Dispatch ``kairos skeleton eval`` to :mod:`kairos.general_eval`.
+
+    The metrics are computed entirely from the persisted run records -- no
+    model, no network. A run that measured nothing (empty dir / no records /
+    all malformed) exits non-zero with the reason printed.
+    """
+    from kairos import general_eval
+
+    argv = [args.path]
+    if getattr(args, "json_output", False):
+        argv.append("--json")
+    return EXIT_OK if general_eval.cli_main(argv) == 0 else EXIT_FAILED
 
 
 def _serve_legacy(host: Optional[str] = None, port: Optional[int] = None) -> int:

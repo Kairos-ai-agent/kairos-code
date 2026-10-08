@@ -25,7 +25,7 @@ from kairos.tools.subagent import SubagentTool
 from kairos.tools.terminal import TerminalTool
 from kairos.tools.webfetch import WebFetchTool, WebSearchTool
 
-
+logger = logging.getLogger(__name__)
 
 
 class OrchReferenceMixin:
@@ -66,19 +66,44 @@ class OrchReferenceMixin:
     def delete_reference_file(self, file_id: str) -> bool:
         return self._db.delete_file(file_id)
 
-    def build_reference_digest(self, project_id: str) -> str:
+    def build_reference_digest(self, project_id: str, query: str = "") -> str:
         """Build a prompt-friendly digest of all uploaded reference
         files. Small files are inlined verbatim so the Coder can
         read them; large files are truncated to a preview with a
         `… truncated` marker. Returns "" when no files exist so
         the caller can splice it in without a sentinel check.
+
+        ``query`` (the requirement) is optional. When the project has more
+        reference files than the digest can inline, they are ordered by
+        relevance to ``query`` using the file-content RAG index
+        (``Persistence.search_files_content``) so the *relevant* files make the
+        cut instead of whichever happened to be uploaded first. A project at or
+        under the inline limit, or a call with no query, keeps the old
+        newest-first order exactly.
         """
         files = self._db.list_files(project_id)
         if not files:
             return ""
+        inline_limit = 8
+        ranked = False
+        if query and query.strip() and len(files) > inline_limit:
+            try:
+                hit_result = self._db.search_files_content(
+                    query, k=len(files), project_id=project_id)
+                hits = hit_result.get("hits") or []
+                if hits:
+                    rank = {h.get("file_id"): i for i, h in enumerate(hits)}
+                    files = sorted(files, key=lambda f: rank.get(f["id"], len(files)))
+                    ranked = True
+            except Exception:
+                logger.debug("reference digest: relevance ranking failed (non-fatal)",
+                             exc_info=True)
+                files = self._db.list_files(project_id)
         chunks = ["## 参考资料"]
+        if ranked:
+            chunks.append("(ranked by relevance to the task; most relevant first)")
         preview_bytes = 3000
-        for meta in files[:8]:
+        for meta in files[:inline_limit]:
             payload = self._db.get_file(meta["id"])
             if not payload:
                 continue

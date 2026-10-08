@@ -215,7 +215,8 @@ class Workspace(ABC):
         return "\n\n".join(chunks)
 
     def as_prompt_context(
-        self, refs: Optional[List[str]] = None, *, max_chars: Optional[int] = None
+        self, refs: Optional[List[str]] = None, *, max_chars: Optional[int] = None,
+        query: Optional[str] = None,
     ) -> str:
         """Render inputs **with their bodies**, bounded and honest.
 
@@ -233,22 +234,60 @@ class Workspace(ABC):
           then blamed for saying "no input was provided";
         * when the ceiling is reached, the tail is cut and a ``[TRUNCATED]``
           note names every input that was cut short or omitted entirely.
+
+        ``query`` (optional) is the task text. When the workspace's combined
+        body size exceeds the ceiling **and** a query is given, the ceiling is
+        spent on the inputs that actually match the task (ranked excerpts via
+        :func:`kairos.memory.doc_search.render_relevant_excerpts`, each naming
+        its source file) instead of on whatever ``resources()`` happened to
+        list first. A small workspace, or one where nothing matches the query,
+        renders exactly as it always did -- this only changes what a *large*
+        workspace hands the model.
         """
         cap = MAX_WORKSPACE_CONTEXT_CHARS if max_chars is None else int(max_chars)
         chosen = list(refs) if refs is not None else self.resources()
         if not chosen:
             return ("(workspace exposes no readable inputs: resources() returned "
                     "an empty list)")
-        blocks: List[str] = []
-        used = 0
-        truncated: List[str] = []
+
+        # Read each body once; keep unreadable inputs as an explicit string.
+        read: List[tuple] = []  # (ref, body_or_None, error_or_None)
+        total = 0
         for ref in chosen:
             try:
                 body = self.read(ref)
             except Exception as exc:  # honest, never silent
-                blocks.append(f"INPUT: {ref}\n(unreadable: {exc})")
+                read.append((ref, None, str(exc)))
                 continue
             body = "" if body is None else str(body)
+            total += len(body)
+            read.append((ref, body, None))
+
+        # Large workspace + a task to steer by -> spend the ceiling on relevant
+        # excerpts instead of on the first inputs in list order.
+        if query and str(query).strip() and total > cap:
+            docs = [{"file": ref, "body": body}
+                    for ref, body, err in read if err is None]
+            try:
+                from kairos.memory.doc_search import render_relevant_excerpts
+                text, _meta = render_relevant_excerpts(query, docs, cap=cap)
+            except Exception:  # retrieval must never break a run
+                text = None
+            if text:
+                # Never hide an unreadable input: fold those in honestly.
+                unreadable = [ref for ref, _b, err in read if err is not None]
+                if unreadable:
+                    text += ("\n\n(unreadable inputs: " + ", ".join(unreadable) + ")")
+                return text
+
+        # Small workspace (or nothing matched): the historical bounded render.
+        blocks: List[str] = []
+        used = 0
+        truncated: List[str] = []
+        for ref, body, err in read:
+            if err is not None:
+                blocks.append(f"INPUT: {ref}\n(unreadable: {err})")
+                continue
             remaining = cap - used
             if remaining <= 0:
                 truncated.append(ref)

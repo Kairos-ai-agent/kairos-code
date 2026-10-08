@@ -917,7 +917,7 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
         project.status = "running"
         self._db.save_project(project)
 
-        ref_digest = self.build_reference_digest(project_id)
+        ref_digest = self.build_reference_digest(project_id, query=requirement)
         pref_block = self.build_preferences_block(project_id)
         mem_block = self.build_memory_block(project_id, requirement)
         if ref_digest:

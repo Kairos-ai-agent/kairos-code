@@ -393,7 +393,9 @@ class PromptWorker(Worker):
 
     async def run(self, workspace: Workspace, task: Task) -> WorkerResult:
         refs = task.inputs if task.inputs is not None else workspace.resources()
-        context = workspace.as_prompt_context(refs, max_chars=self.max_context_chars)
+        context = workspace.as_prompt_context(
+            refs, max_chars=self.max_context_chars, query=task.instruction
+        )
         prompt = self._PROMPT.format(
             instruction=task.instruction,
             context=context,

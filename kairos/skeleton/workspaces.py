@@ -148,14 +148,16 @@ class RepoWorkspace(FileWorkspace):
         return f"REPO FILES ({len(chosen)}):\n{listing}{more}"
 
     def as_prompt_context(
-        self, refs: Optional[List[str]] = None, *, max_chars: Optional[int] = None
+        self, refs: Optional[List[str]] = None, *, max_chars: Optional[int] = None,
+        query: Optional[str] = None,
     ) -> str:
         # Deliberately NOT the base body-inlining behaviour: a repository's
         # files are read through the Coder's tools, not crammed into a prompt.
         # Keep the same bounded listing ``as_context`` has always produced, so
         # adding the capped renderer to the interface does not change what a
-        # repo worker sees. (``max_chars`` is accepted and ignored -- a listing
-        # is already bounded.)
+        # repo worker sees. (``max_chars`` and ``query`` are accepted and
+        # ignored -- a listing is already bounded and already task-agnostic by
+        # design; a repo worker greps for what it needs.)
         return self.as_context(refs)
 
 

@@ -72,6 +72,11 @@ class ProjectStoreMixin:
         with sqlite3.connect(self.db_path) as conn:
             conn.execute('DELETE FROM projects WHERE id = ?', (project_id,))
             conn.execute('DELETE FROM project_files WHERE project_id = ?', (project_id,))
+            try:
+                from kairos.memory import doc_search
+                doc_search.drop_project(conn, project_id)
+            except Exception:
+                pass
 
     def delete_project_memory(self, project_id: str) -> None:
         """Wipe every per-project table when the project is deleted."""
@@ -81,6 +86,11 @@ class ProjectStoreMixin:
             try:
                 conn.execute('DELETE FROM loop_rounds_fts WHERE project_id = ?', (project_id,))
             except sqlite3.OperationalError:
+                pass
+            try:
+                from kairos.memory import doc_search
+                doc_search.drop_project(conn, project_id)
+            except Exception:
                 pass
 
     def add_preference(self, project_id: str, kind: str, rule: str) -> int:

@@ -338,6 +338,18 @@ def build_parser() -> argparse.ArgumentParser:
                              help="Why (recorded on the run).")
     p_sk_resume.add_argument("--json", action="store_true", dest="json_output")
 
+    # ---- index (rebuild the project-files full-text retrieval index) -----
+    p_index = sub.add_parser(
+        "index",
+        help="Rebuild the project-files full-text (FTS5) index that backs "
+             "document retrieval (RAG) over uploaded reference files.",
+    )
+    p_index.add_argument(
+        "--project", default="",
+        help="Only rebuild this project id (default: every project).",
+    )
+    p_index.add_argument("--json", action="store_true", dest="json_output")
+
     return parser
 
 
@@ -562,7 +574,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"kairos-code {__version__}")
         return 0
     if not argv or argv[0] not in ("serve", "exec", "gate", "demo", "worker",
-                                   "accept", "skeleton", "-h", "--help"):
+                                   "accept", "skeleton", "index", "-h", "--help"):
         # Bare command (or unknown) → legacy server mode
         return _serve_legacy()
 
@@ -598,6 +610,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 130
     if args.command == "skeleton":
         return _run_skeleton(args)
+    if args.command == "index":
+        return _run_index(args)
     return EXIT_BAD_INPUT
 
 
@@ -815,6 +829,43 @@ def _run_gate(args: argparse.Namespace) -> int:
     if args.quiet:
         argv += ["--quiet"]
     return gate_mod.main(argv)
+
+
+# ---------------------------------------------------------------------------
+# index (rebuild the project-files full-text retrieval index)
+# ---------------------------------------------------------------------------
+
+
+def _run_index(args: argparse.Namespace) -> int:
+    """Rebuild the file-content (RAG) index over ``project_files``.
+
+    Opens the same DB the server uses (``settings.data_dir/kairos.db``) and
+    re-indexes every uploaded reference file's content into the FTS5 table.
+    Idempotent; scope to one project with ``--project``. Reports the number of
+    documents indexed -- and, honestly, when the SQLite has no usable FTS5.
+    """
+    from kairos.config.settings import settings
+    from kairos.core.persistence import Persistence
+    from kairos.memory import doc_search
+
+    project_id = (getattr(args, "project", "") or "").strip() or None
+    db = Persistence(settings.data_dir / "kairos.db")
+    count = db.rebuild_file_index(project_id)
+    kind = "fts5-trigram" if doc_search.trigram_available() else (
+        "fts5-unicode61" if doc_search.fts5_available() else "scan")
+    payload = {
+        "status": "ok",
+        "indexed": count,
+        "project": project_id or "(all)",
+        "index_kind": kind,
+        "db": str(db.db_path),
+    }
+    if getattr(args, "json_output", False):
+        print(json.dumps(payload, ensure_ascii=False))
+    else:
+        print(f"indexed {count} document(s) into the {kind} index "
+              f"for {project_id or 'all projects'}")
+    return EXIT_OK
 
 
 # ---------------------------------------------------------------------------

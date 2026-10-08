@@ -8,6 +8,36 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **微信（ClawBot / iLink）回复改成「分段渐进投递」—— 注意，它*不是* token 级流式。**
+  这条通道此前把整条回复**一次性**发出去：回复有多长，用户就等多久、然后收到**一坨**。
+  现在长回复会按自然边界切成几段、分几条消息先后发出（短回复仍是一条，**逐字不变**）。
+  **先把话说清楚**：本通道拿到的回复就是一个**完整字符串**，不是 token 流 ——
+  `kairos/skeleton/service.py:run_chat_reply` 返回 `Optional[str]`、
+  `kairos/agents/agent_parts/chat.py` 的 `AgentChatMixin.chat(...) -> str` 也返回
+  字符串。所以这里做的是**「最终文本分段落渐进投递」**，**不是**「逐字吐出」：用户
+  能看到**分段到达**，**看不到**打字机逐字。真实感上限如此，代码与文档均如实标注。
+
+  - **条数**：回复短（≤ **360** 字符，一个微信气泡舒适显示约 6 行的量）→ **只发
+    一条**；回复长 → 最多 **N=3** 条（env `KAIROS_WEIXIN_STREAM_CHUNKS` 可调，另设
+    **硬上限 6**）；置 `1` 即**完全关闭**分段。切法与内容**只增不改**短回复路径。
+  - **逐字不重复不丢**：所有分段拼起来 `"".join(chunks)` **逐字等于**最终回复；不会
+    最后再补一条完整版。
+  - **只在自然边界切**：空行（段落）/ 换行 / 句末（`。！？；` 与「后接空白」的英文
+    `.!?;`）；**不切进 ```` ``` ```` 代码块内部**、**不在字中间切**（`3.14` /
+    `file.py` 不会被拦腰截断）；找不到合适边界就**宁可不拆**（保持单条）。
+  - **中途失败不丢尾**：某一段发送失败时，把**剩下的**拼成一条整体**重投 ≥1 次**
+    （复用同一 `client_id` 供服务端去重）；重投仍失败则返回 `ok=False` 且
+    `failed_at` **显式指明边界**并记一条 ERROR —— **绝不静默截断**。
+  - **隔离**：只作用于 `WeixinChannel.handle_message` 的回复路径。审批推送 / 测试
+    `/send` 走的 `send_text` 仍是**单条**；网页、IM、企微（`api/routes/wecom.py`）
+    的出站**一字未改**。
+  - **未做**：没有把 Coder 内部真实的 token 级流式（`agents/.../llm.py` 的
+    `_stream_complete` 把 delta 发布成消息总线 `stream.chunk` 事件）接到微信 —— 那是
+    **推送式事件**而非可 `await` 的生成器，且相关文件属红线。**未经真机验证**：没有
+    在真实微信上实测分段到达的观感 / 条数体验。实现：`kairos/weixin_ilink.py`
+    （`split_reply_for_delivery` / `WeixinChannel.deliver_reply` / `ReplyDelivery`）；
+    离线覆盖：`tests/test_weixin_streaming.py`（16 个用例）。
+
 - **通用车道（`kairos.skeleton`）现在带只读文件工具，能真的读用户附件。**
   通用车道此前一个工具都没有（`kairos/skeleton/service.py` 的 worker 只收
   `generate(prompt) -> str`），所以把附件折成 `[附件]` 提示词给它时它**读不了**

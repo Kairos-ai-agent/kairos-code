@@ -46,6 +46,7 @@ import base64
 import inspect
 import json
 import logging
+import os
 import re
 import secrets
 import time
@@ -81,6 +82,12 @@ __all__ = [
     "parse_weixin_api_json",
     "build_text_message",
     "build_client_id",
+    "WEIXIN_STREAM_MAX_CHUNKS",
+    "WEIXIN_STREAM_MAX_CHUNKS_HARD_LIMIT",
+    "WEIXIN_STREAM_SHORT_MAX_CHARS",
+    "WEIXIN_STREAM_ENV",
+    "stream_max_chunks",
+    "split_reply_for_delivery",
     "extract_text",
     "is_user_message",
     "WEIXIN_CDN_BASE_URL",
@@ -337,6 +344,227 @@ def parse_weixin_api_json(raw_text: str) -> Any:
 def build_client_id() -> str:
     """出站消息的 ``client_id``（本地唯一，服务端用来去重）。"""
     return f"kairos-weixin-{secrets.token_hex(8)}"
+
+
+# ---------------------------------------------------------------------------
+# 出站：分段渐进投递（**不是 token 级流式** —— 务必先读这段）
+# ---------------------------------------------------------------------------
+#
+# 实话实说：本通道拿到回复时，它已经是一个**完整字符串**了。依据：
+#
+#   * ``api/routes/weixin.py:_answer_message`` 调 ``kairos.skeleton.service.
+#     run_chat_reply`` —— 它返回 ``Optional[str]``（``kairos/skeleton/service.py``
+#     第 273/281 行前后），不是异步生成器；
+#   * 同一条路径上的 ``project.coder.chat(text)`` 也返回 ``str``
+#     （``kairos/agents/agent_parts/chat.py`` 的 ``async def chat(...) -> str``）。
+#
+# 所以这里做的**不是**「逐字吐出」，而是**把最终文本按自然边界切成几段、分几条
+# 消息先后发出去**。用户能看到的是「分段到达」，**看不到**「打字机逐字」。这是
+# 当前架构下能达到的真实感上限，请勿在文档/UI 里宣称它是流式。
+#
+# 本仓库**确实**存在 token 级流式，但只在 Coder/agent 内部：``kairos/agents/
+# agent_parts/llm.py`` 的 ``_stream_complete`` 把每个 delta 发布成消息总线上的
+# ``stream.chunk`` 事件（供网页端渲染打字机）。那是**推送式事件**，不是能
+# ``await`` 出来的生成器，而且 ``agents/base.py``/``agents/roles/`` 属本轮红线、
+# 不改。要让它驱动微信，得有一条「订阅总线 → 按段发微信」的桥且不碰红线，本轮
+# 不做（见下）。
+#
+# 设计纪律（微信不是浏览器 —— 每发一条都可能给对方推提醒）：
+#
+#   1. 回复短 → **只发一条**，与改动前逐字一致，不做任何「打字机」；
+#   2. 回复长 → 最多 N 条（默认 3，env 可调，另有硬上限），逐条发出；
+#   3. 所有分段拼起来**逐字等于**最终回复（不重复、不丢字、不另补一条完整版）；
+#   4. 只在自然边界（空行 / 换行 / 句末）切，**不切进代码块、不在字中间切**，
+#      找不到合适边界就宁可不拆；
+#   5. 中途发送失败 → 把**剩下的**拼成一条至少再投一次；仍失败则**明确报错**，
+#      绝不静默截断（见 :class:`ReplyDelivery` 的 ``ok`` / ``failed_at``）。
+
+#: 长回复默认最多拆成几条（env ``KAIROS_WEIXIN_STREAM_CHUNKS`` 可覆盖）。
+WEIXIN_STREAM_MAX_CHUNKS = 3
+#: 总条数**硬上限**：即使 env 要更多也不超过它，防止把聊天窗口刷爆。
+WEIXIN_STREAM_MAX_CHUNKS_HARD_LIMIT = 6
+#: 短回复阈值（字符）：``len(text) <= 此值`` 只发一条。依据：微信一个文本气泡
+#: 舒适显示约 6 行，按每行 ~60 字符估约 360 字符；短于它的回复再拆，只会多推
+#: 一条提醒而不增加可读性 —— 所以阈值取 360，宁少拆。
+WEIXIN_STREAM_SHORT_MAX_CHARS = 360
+#: 中途失败后，把「剩余部分」整体重投的次数（≥1，见模块顶部纪律 5）。
+WEIXIN_STREAM_REMAINDER_RETRIES = 2
+#: 段与段之间的停顿毫秒（env ``KAIROS_WEIXIN_STREAM_DELAY_MS``）。默认 0（不停顿）；
+#: 给一个正值（如 400）能让分段**到达得更错落**，但**不改变条数、不改变内容**。
+WEIXIN_STREAM_DELAY_MS = 0
+
+#: env 名：最多拆几条。
+WEIXIN_STREAM_ENV = "KAIROS_WEIXIN_STREAM_CHUNKS"
+#: env 名：段间停顿毫秒。
+WEIXIN_STREAM_DELAY_ENV = "KAIROS_WEIXIN_STREAM_DELAY_MS"
+
+
+def stream_max_chunks() -> int:
+    """最多拆几条：读 env ``KAIROS_WEIXIN_STREAM_CHUNKS``，夹在 ``1..硬上限``。
+
+    取值非整数时退回 :data:`WEIXIN_STREAM_MAX_CHUNKS`。置 **1 即完全关闭分段**
+    （永远单条，与改动前逐字一致）。每次调用都重新读 env，便于运行期调整/测试。
+    """
+    raw = os.environ.get(WEIXIN_STREAM_ENV, "").strip()
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        n = WEIXIN_STREAM_MAX_CHUNKS
+    return max(1, min(n, WEIXIN_STREAM_MAX_CHUNKS_HARD_LIMIT))
+
+
+def _stream_delay_seconds() -> float:
+    """段间停顿（秒），读 env ``KAIROS_WEIXIN_STREAM_DELAY_MS``，默认 0。"""
+    raw = os.environ.get(WEIXIN_STREAM_DELAY_ENV, "").strip()
+    try:
+        ms = int(raw)
+    except (TypeError, ValueError):
+        ms = WEIXIN_STREAM_DELAY_MS
+    return max(0, ms) / 1000.0
+
+
+#: 代码围栏（````` ``` ````` 或 ``~~~``，允许前导空格）。
+_FENCE_RE = re.compile(r"^\s*(?:```|~~~)")
+#: 中文句末标点：本身即句子边界，可切。
+_CJK_SENTENCE_END = "。！？；"
+#: 英文句末标点：只在**后面是空白 / 串尾**、且前一个字符不是数字时才当边界，
+#: 避免把 ``3.14``、``file.py``、``e.g.`` 拦腰切断。
+_ASCII_SENTENCE_END = ".!?;"
+
+
+def _line_cut_allowed(is_delim: bool, in_fence_before: bool) -> bool:
+    """「这一行的行末能不能作为切点」——用来保护代码块。
+
+    * 普通行：只有**不在围栏内部**才能切（围栏内部的代码行被保护）；
+    * 围栏分隔行：**开**围栏的那一行行末不能切（否则把围栏与代码切开），
+      **闭**围栏的那一行行末可以切（切在整段代码块之后是安全的）。
+    """
+    if is_delim:
+        return in_fence_before
+    return not in_fence_before
+
+
+def _scan_cut_positions(text: str) -> List[Tuple[int, int]]:
+    """扫出所有**安全**切点 ``(pos, rank)``（切在 ``pos`` 之前，左段 = ``text[:pos]``）。
+
+    ``rank`` 越小越自然：0=空行、1=换行、2=句末；列表按 ``pos`` 升序、同一 ``pos``
+    取最小 rank。安全 = 不在代码块内部、不在字中间：**代码块内部的换行 / 句号
+    一律不作为切点**（``_line_cut_allowed`` 保证）。
+    """
+    n = len(text)
+    cuts: Dict[int, int] = {}
+
+    def _add(pos: int, rank: int) -> None:
+        # 端点不作为切点：pos<=0 会切出空左段；pos>=n 会切出空右段。
+        if pos <= 0 or pos >= n:
+            return
+        if pos not in cuts or rank < cuts[pos]:
+            cuts[pos] = rank
+
+    offset = 0
+    in_fence = False
+    for line in text.splitlines(keepends=True):
+        is_delim = bool(_FENCE_RE.match(line))
+        in_fence_before = in_fence
+        line_start = offset
+        line_end = offset + len(line)
+        ends_nl = line.endswith(("\n", "\r"))
+
+        # 行末切点：空行 → rank 0（段落），其余换行 → rank 1。
+        if ends_nl and _line_cut_allowed(is_delim, in_fence_before):
+            is_blank = line.strip("\r\n") == ""
+            _add(line_end, 0 if is_blank else 1)
+
+        # 行内句末切点：只在**普通、且在围栏外**的行里找。
+        if (not is_delim) and (not in_fence_before):
+            for j, ch in enumerate(line):
+                after = line_start + j + 1
+                if ch in _CJK_SENTENCE_END:
+                    _add(after, 2)
+                elif ch in _ASCII_SENTENCE_END:
+                    nxt = text[after] if after < n else ""
+                    prev = text[after - 2] if after >= 2 else ""
+                    if (nxt == "" or nxt.isspace()) and not prev.isdigit():
+                        _add(after, 2)
+
+        if is_delim:
+            in_fence = not in_fence
+        offset = line_end
+
+    return sorted(cuts.items())
+
+
+def _pick_cut(cuts: List[Tuple[int, int]], start: int, target: int,
+              min_left: int) -> Optional[int]:
+    """在 ``(start, ...)`` 里挑一个切点，避免切出**过小的左段**。
+
+    优先 ``<= target`` 的**最靠后**者（切得匀）；若它相对 ``start`` 还不够长
+    （``< min_left``）且后方还有更远的自然边界，就改用 ``> target`` 的**最靠前**者
+    —— 宁可这一段切长一点，也不要在开头切出一个 5 个字的小气泡。都没有 → ``None``。
+    """
+    last_le: Optional[int] = None
+    first_gt: Optional[int] = None
+    for pos, _rank in cuts:
+        if pos <= start:
+            continue
+        if pos <= target:
+            last_le = pos
+        else:
+            first_gt = pos
+            break
+    if last_le is not None and (last_le - start) >= min_left:
+        return last_le
+    if first_gt is not None:
+        return first_gt
+    return last_le
+
+
+def split_reply_for_delivery(text: str, *,
+                             max_chunks: Optional[int] = None,
+                             short_max: Optional[int] = None) -> List[str]:
+    """把**完整回复**切成 ≤N 段（拼接逐字等于原文），供分段投递使用。
+
+    * 空串 → ``[]``；短回复（``len <= short_max``）或 ``max_chunks <= 1`` →
+      ``[text]``（单段，调用方据此走与改动前一致的「一条」路径）；
+    * 只切在 :func:`_scan_cut_positions` 给出的自然边界上；找不到边界就
+      **不拆**（宁可单条，也不在字中间 / 代码块里切）。
+
+    **逐字保证**：返回的是 ``text`` 的连续切片 ``[0:c1], [c1:c2], ...`` 且每个切点
+    都 ``> 上一个切点``，故 ``"".join(result) == text`` 恒成立（不重复、不丢字）。
+    """
+    text = "" if text is None else str(text)
+    if not text:
+        return []
+    if max_chunks is None:
+        max_chunks = stream_max_chunks()
+    max_chunks = max(1, min(int(max_chunks), WEIXIN_STREAM_MAX_CHUNKS_HARD_LIMIT))
+    if short_max is None:
+        short_max = WEIXIN_STREAM_SHORT_MAX_CHARS
+
+    n = len(text)
+    if max_chunks <= 1 or n <= short_max:
+        return [text]
+
+    cuts = _scan_cut_positions(text)
+    if not cuts:
+        return [text]
+
+    chunks: List[str] = []
+    start = 0
+    remaining = max_chunks
+    min_left = max(1, short_max // 3)     # 左段最小长度，避免切出小气泡
+    while remaining > 1 and (n - start) > short_max:
+        left = n - start
+        target = start + -(-left // remaining)          # ceil(left / remaining)
+        cut = _pick_cut(cuts, start, target, min_left)
+        if cut is None:
+            break                                        # 找不到自然边界 → 不拆
+        chunks.append(text[start:cut])
+        start = cut
+        remaining -= 1
+    if start < n:
+        chunks.append(text[start:])
+    return chunks if chunks else [text]
 
 
 def build_text_message(to_user_id: str, text: str, *,
@@ -1361,6 +1589,32 @@ class WeixinAccountStore:
 # WeixinChannel
 # ---------------------------------------------------------------------------
 
+@dataclass
+class ReplyDelivery:
+    """一次分段投递的结果（给调用方 / 测试看「失败边界」用）。
+
+    **不是 token 流**（见模块顶部说明）：``chunks`` 是对**完整回复**按自然边界
+    切出的段，``"".join(chunks)`` 逐字等于原文。
+
+    * ``ok=True`` ⇒ 用户拿到了**完整**回复（可能一条，也可能多条）；
+      此时 ``delivered_text == "".join(chunks)``。
+    * ``ok=False`` ⇒ 从第 ``failed_at`` 段起投递失败且重投仍失败；
+      ``sent_chunks`` 是已成功发出的条数，``delivered_text`` 是**实际已送达**的
+      前缀 —— 边界在此**显式可见**，绝不静默截断（日志另有一条 ERROR）。
+    """
+
+    chunks: List[str]
+    sent_chunks: int
+    ok: bool
+    failed_at: Optional[int] = None
+    error: str = ""
+    delivered_text: str = ""
+
+    @property
+    def total_chunks(self) -> int:
+        return len(self.chunks)
+
+
 class WeixinChannel:
     """后台编排：每账号一条长轮询协程，收到消息交给 agent 再发回。
 
@@ -1561,11 +1815,98 @@ class WeixinChannel:
             finally:
                 current_session.reset(token)
         if reply:
-            await client.send_message(build_text_message(
-                from_user, reply, context_token=context_token))
+            # 分段渐进投递（不是 token 流）：短回复一条、长回复 ≤N 条，拼接逐字
+            # 等于 reply。中途失败会把剩余整体重投，仍失败则 report.ok=False
+            # 且 report.failed_at 指出边界 —— 下面记一条 ERROR，决不静默截断。
+            report = await self.deliver_reply(
+                client, from_user, reply, context_token=context_token)
+            if not report.ok:
+                logger.error(
+                    "weixin: 回复未完整投递 account=%s chat=%s sent=%d/%d "
+                    "failed_at=%s error=%s",
+                    account_id, from_user, report.sent_chunks,
+                    report.total_chunks, report.failed_at, report.error)
         return reply
 
-    # -- 出站 -----------------------------------------------------------
+    # -- 出站（发送） ----------------------------------------------------
+
+    async def _send_reply_chunk(self, client: ILinkClient, to_user_id: str,
+                                text: str, context_token: Optional[str],
+                                client_id: str) -> Dict[str, Any]:
+        """发一段回复。``client_id`` 在**同一段的多次尝试间复用**，供服务端去重。"""
+        return await client.send_message(build_text_message(
+            to_user_id, text, context_token=context_token, client_id=client_id))
+
+    async def deliver_reply(self, client: ILinkClient, to_user_id: str,
+                            text: str, *,
+                            context_token: Optional[str] = None,
+                            max_chunks: Optional[int] = None) -> ReplyDelivery:
+        """把一条**完整回复**分段渐进投递给一个聊天对象。
+
+        —— **不是 token 流**：``text`` 到手时已是完整字符串（见模块顶部说明）。
+        短回复（≤ 阈值）就是一条，与改动前逐字一致；长回复按自然边界切成
+        ≤ ``max_chunks`` 段逐条发出，拼接逐字等于 ``text``。
+
+        中途失败 → 把**剩余部分**拼成一条再投
+        :data:`WEIXIN_STREAM_REMAINDER_RETRIES` 次（≥1）；仍失败则返回
+        ``ok=False``（``failed_at`` 指出边界），**绝不静默截断**。
+
+        ``send_text``（审批推送 / 测试 `/send`）不走这里，仍是单条 —— 与改动前
+        一致。
+        """
+        chunks = split_reply_for_delivery(text, max_chunks=max_chunks)
+        if not chunks:
+            return ReplyDelivery([], 0, True, None, "", "")
+
+        delay = _stream_delay_seconds()
+        delivered: List[str] = []
+        for i, chunk in enumerate(chunks):
+            if i and delay:
+                await asyncio.sleep(delay)
+            try:
+                # client_id 生成一次、本段（含潜在重试）复用，防服务端重复落库。
+                await self._send_reply_chunk(
+                    client, to_user_id, chunk, context_token, build_client_id())
+            except Exception as exc:  # noqa: BLE001 - 出站失败要显式处理，不吞
+                return await self._deliver_remainder(
+                    client, to_user_id, chunks, i, delivered, context_token, exc)
+            delivered.append(chunk)
+        return ReplyDelivery(chunks, len(chunks), True, None, "",
+                             "".join(delivered))
+
+    async def _deliver_remainder(
+        self, client: ILinkClient, to_user_id: str, chunks: List[str],
+        failed_index: int, delivered: List[str], context_token: Optional[str],
+        first_exc: Exception,
+    ) -> ReplyDelivery:
+        """第 ``failed_index`` 段发送失败：把**剩余部分**拼成一条整体重投。
+
+        剩余的 ``"".join(chunks[failed_index:])`` 是一条**完整**的剩余文本，所以
+        用户最终要么拿到它（合并成一条），要么收到 ``ok=False`` 的明确失败 —— 不会
+        在微信里留半截。重投复用同一个 ``client_id``（服务端去重）。
+        """
+        remainder = "".join(chunks[failed_index:])
+        rest_client_id = build_client_id()
+        last_exc: Exception = first_exc
+        for _attempt in range(max(1, WEIXIN_STREAM_REMAINDER_RETRIES)):
+            try:
+                await self._send_reply_chunk(client, to_user_id, remainder,
+                                             context_token, rest_client_id)
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                continue
+            delivered.append(remainder)
+            return ReplyDelivery(chunks, len(delivered), True, None, "",
+                                 "".join(delivered))
+        logger.error(
+            "weixin: 分段投递失败，第 %d/%d 段起（已送达 %d 条）重投 %d 次仍失败: %s",
+            failed_index + 1, len(chunks), len(delivered),
+            WEIXIN_STREAM_REMAINDER_RETRIES, type(last_exc).__name__)
+        return ReplyDelivery(
+            chunks, len(delivered), False, failed_index,
+            f"{type(last_exc).__name__}: {last_exc}", "".join(delivered))
+
+    # -- 出站（主动发送） ------------------------------------------------
 
     async def send_text(self, account_id: str, to_user_id: str, text: str,
                         context_token: Optional[str] = None) -> Dict[str, Any]:

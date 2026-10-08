@@ -243,7 +243,13 @@ async def test_metadata_reports_git_bash(tmp_path, monkeypatch):
     assert "system32" not in bash_path.lower()
 
 
-async def test_metadata_reports_no_shell_when_sandboxed(tmp_path):
+async def test_metadata_reports_no_shell_when_sandboxed(tmp_path, monkeypatch):
+    # State the premise instead of inheriting it. This test is *about* the
+    # sandboxed terminal, so nothing may report full access: the global switch
+    # reads the env var, the settings/.env field and settings.json:fullAccess,
+    # and any of them being truthy would (correctly) enable the shell. Patching
+    # the module that uses it follows test_fs_roots.py's established idiom.
+    monkeypatch.setattr(term_mod, "is_full_access", lambda: False)
     term = TerminalTool(allowed_cwd=str(tmp_path))
     res = await term.execute("echo a && echo b")     # refused: argv mode, no shell
     assert not res.success

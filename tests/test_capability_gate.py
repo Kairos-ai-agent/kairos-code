@@ -538,3 +538,38 @@ def test_every_base_tool_subclass_has_a_wrapped_execute():
                     f"{sub.__name__}.execute is not routed through the gate"
                 seen += 1
     assert seen >= 15
+
+
+async def test_read_cache_is_scoped_to_the_project_root(tmp_path):
+    """同一相对路径在两个项目里是**不同文件**。
+
+    ToolResult 缓存（kairos/tools/cache.py）是**进程级单例**：循环每轮清一次，闲聊
+    车道以前从不清。而 ``file_read`` 的键只用传入的 ``path``（不含根）⇒ 项目 A 读
+    ``a.txt`` 之后，项目 B 读 ``a.txt`` 会拿到 **A 的内容**（跨项目读取泄漏）。这正是
+    本地全量能复现、而 CI 逐文件分片跑所以从来没红过的那类问题。
+    """
+    from kairos.tools.file_read import FileReadTool
+
+    root_a = tmp_path / "a"
+    root_b = tmp_path / "b"
+    root_a.mkdir()
+    root_b.mkdir()
+    (root_a / "a.txt").write_text("AAA-content", encoding="utf-8")
+    (root_b / "a.txt").write_text("BBB-content", encoding="utf-8")
+
+    from_a = await FileReadTool(allowed_root=root_a).execute(path="a.txt")
+    from_b = await FileReadTool(allowed_root=root_b).execute(path="a.txt")
+    assert from_a.output == "AAA-content"
+    assert from_b.output == "BBB-content", (
+        "同一个相对路径在不同项目里读到了同一份内容 —— 缓存键丢了根"
+    )
+
+
+def test_the_general_lane_starts_its_turn_with_a_clean_cache():
+    """车道每一轮（= 一次聊天）开始时必须清缓存，别把上一轮/别的项目的读带进来。"""
+    import inspect
+
+    from kairos.skeleton import read_tools
+
+    src = inspect.getsource(read_tools.run_read_tool_loop)
+    assert "clear_round" in src, "通用车道的读工具环没有清进程级缓存"

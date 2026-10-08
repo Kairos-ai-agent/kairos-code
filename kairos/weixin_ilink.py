@@ -99,6 +99,19 @@ __all__ = [
     "parse_aes_key",
     "decrypt_aes_ecb",
     "download_media_to",
+    "UploadMediaType",
+    "WEIXIN_UPLOAD_MAX_ATTEMPTS",
+    "WEIXIN_MAX_OUTBOUND_FILES",
+    "MediaUploadError",
+    "WeixinMediaUpload",
+    "aes_ecb_padded_size",
+    "encrypt_aes_ecb",
+    "build_cdn_upload_url",
+    "upload_file_to_cdn",
+    "build_file_media",
+    "build_file_message_item",
+    "build_file_message",
+    "resolve_sendable_files",
     "ILinkClient",
     "WeixinLoginSession",
     "WeixinAccount",
@@ -937,6 +950,471 @@ async def download_media_to(
 
 
 # ---------------------------------------------------------------------------
+# 出站媒体（agent 生成/引用的文件）—— 取参数 → AES-ECB 加密 → 上传 CDN → 文件消息项
+# ---------------------------------------------------------------------------
+#
+# 这是入站媒体那套（:func:`extract_media_refs` / :func:`download_media_to`）的
+# **镜像**：入站是「拿 encrypt_query_param → 下载密文 → 用 aes_key 解密 → 落盘」；
+# 出站是「本地明文 → 用**新生成的** aes_key 加密 → 上传 CDN → 拿回
+# encrypt_query_param → 写进文件消息项」。两边用的是**同一个** AES-128-ECB +
+# PKCS7 方案、**同一套 key 解析**（出站写进去的 ``media.aes_key`` 就是
+# base64(32 位十六进制串)，正是入站 :func:`parse_aes_key` 认的两种编码之一），
+# 所以「发出去的项」与「收到时的项」字段形状一一对应。
+#
+# 事实来源：官方 MIT 许可插件 ``@tencent-weixin/openclaw-weixin@2.4.9`` 的
+# TypeScript 源码（本地只读副本，**代码不搬进本仓库**，只借字段形状/接口事实）：
+#
+# * 上传链各步（hash → 生成 filekey/aeskey → getUploadUrl → 加密 → POST）
+#                              ``cdn/upload.ts`` 的 ``uploadMediaToCdn``
+# * AES-128-ECB 加密 / 密文长度 ``cdn/aes-ecb.ts``
+# * CDN 上传 URL 形状           ``cdn/cdn-url.ts:buildCdnUploadUrl``
+# * CDN POST 与响应头           ``cdn/cdn-upload.ts``（``x-encrypted-param``）
+# * 取上传参数的请求字段         ``api/api.ts:getUploadUrl`` / ``api/types.ts:GetUploadUrlReq``
+# * media_type 取值            ``api/types.ts:UploadMediaType``
+# * file 消息项字段形状         ``messaging/send.ts:sendFileMessageWeixin``
+# * ``media.aes_key`` 的编码    ``messaging/send.ts``（``Buffer.from(hex).toString("base64")``）
+#
+# 我们**没有**真实 iLink 上传响应样本：以上是照源码推断的字段名/形状，与真实网关
+# 是否逐字一致未经实测（见模块末的「未经真样本验证」说明）。
+#
+# 安全：``aeskey`` / ``filekey`` / 上传参数都是**每次调用新生成**的临时值，绝不写进
+# 日志、异常信息或测试快照；日志只记文件名与错误类型。
+
+#: proto: UploadMediaType —— 取上传参数时的 ``media_type``。
+#: 出站只走 FILE（见 :func:`build_file_message_item`），与入站 ``MessageItemType.FILE``
+#: (=4) 对应。
+UploadMediaType = {"IMAGE": 1, "VIDEO": 2, "FILE": 3, "VOICE": 4}
+
+#: CDN 上传失败重试次数（官方 ``cdn/cdn-upload.ts:UPLOAD_MAX_RETRIES`` = 3）。
+#: 4xx（客户端错误）不重试；服务端错误 / 网络错重试。
+WEIXIN_UPLOAD_MAX_ATTEMPTS = 3
+
+#: 一条回复里**最多**发几个文件。保守：只发「回复里明确点名的、工作区内真实存在
+#: 的文件」，且封顶，避免把聊天窗口刷爆（见 :func:`resolve_sendable_files`）。
+WEIXIN_MAX_OUTBOUND_FILES = 3
+
+
+class MediaUploadError(RuntimeError):
+    """出站文件上传 / 加密失败；``reason`` 是可直接展示的中文原因。
+
+    ``too_large=True`` 表示超限（不上传）；``client_error=True`` 表示 CDN 明确
+    拒绝了这次上传（4xx），不应重试。
+    """
+
+    def __init__(self, reason: str, *, too_large: bool = False,
+                 client_error: bool = False) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.too_large = too_large
+        self.client_error = client_error
+
+
+@dataclass
+class WeixinMediaUpload:
+    """一次成功上传的结果（字段名照官方 ``UploadedFileInfo``）。"""
+
+    filekey: str
+    download_encrypted_query_param: str   # → file_item.media.encrypt_query_param
+    aeskey_hex: str                       # → base64 后进 file_item.media.aes_key
+    file_size: int                        # 明文大小 → file_item.len
+    file_size_ciphertext: int             # 密文大小（AES-ECB + PKCS7）
+
+
+def aes_ecb_padded_size(plaintext_size: int) -> int:
+    """AES-128-ECB 加密后的密文长度（PKCS7 补齐到 16 的整数倍）。
+
+    官方 ``cdn/aes-ecb.ts:aesEcbPaddedSize``：``ceil((n + 1) / 16) * 16`` ——
+    注意 **+1**：明文恰好是 16 的整数倍时，PKCS7 仍要再加一整块填充。
+    """
+    n = max(0, int(plaintext_size))
+    return ((n + 1 + 15) // 16) * 16
+
+
+def encrypt_aes_ecb(plaintext: bytes, key: bytes) -> bytes:
+    """AES-128-ECB + PKCS7 加密（官方 ``cdn/aes-ecb.ts:encryptAesEcb``）。
+
+    Node 的 ``createCipheriv`` 默认就加 PKCS7 填充，Python 不会 —— 所以这里
+    自己补填充。与 :func:`decrypt_aes_ecb` 严格互为逆运算（见测试）。
+    """
+    if len(key) != 16:
+        raise MediaUploadError("AES key 长度不是 16 字节")
+    try:
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    except ImportError as exc:  # pragma: no cover - 部署缺依赖时才触发
+        raise MediaUploadError("服务端缺少 cryptography 依赖，无法加密媒体") from exc
+    pad = 16 - (len(plaintext) % 16)
+    padded = plaintext + bytes([pad]) * pad
+    enc = Cipher(algorithms.AES(key), modes.ECB()).encryptor()
+    return enc.update(padded) + enc.finalize()
+
+
+def build_cdn_upload_url(upload_param: str, filekey: str,
+                         cdn_base_url: str = WEIXIN_CDN_BASE_URL) -> str:
+    """拼 CDN **上传**地址（官方 ``cdn/cdn-url.ts:buildCdnUploadUrl``）。
+
+    与下载地址 :func:`build_cdn_download_url` 同源：同一个 CDN 根，路径改成
+    ``/upload``，多带一个 ``filekey``。服务端若直给 ``upload_full_url`` 就优先用
+    它（见 :func:`upload_file_to_cdn`），这个函数只是兜底拼接。
+    """
+    return (f"{cdn_base_url.rstrip('/')}/upload"
+            f"?encrypted_query_param={quote(str(upload_param), safe='')}"
+            f"&filekey={quote(str(filekey), safe='')}")
+
+
+def build_file_media(encrypt_query_param: str, aeskey_hex: str) -> Dict[str, Any]:
+    """构造 ``file_item.media``（proto: CDNMedia）。
+
+    字段形状照官方 ``messaging/send.ts:sendFileMessageWeixin``：
+
+    * ``encrypt_query_param``：CDN 下载参数（上传成功后由响应头给出）；
+    * ``aes_key``：**base64(32 位十六进制串)** —— 官方是
+      ``Buffer.from(hex).toString("base64")``，即「先把 hex 当 ASCII 字节，再 base64」。
+      这正是入站 :func:`parse_aes_key` 认的第二种编码，两边因此可对扣；
+    * ``encrypt_type``：1（打包缩略图/中图等信息），照官方出站固定值。
+    """
+    return {
+        "encrypt_query_param": str(encrypt_query_param or ""),
+        "aes_key": base64.b64encode(
+            str(aeskey_hex or "").encode("ascii")).decode("ascii"),
+        "encrypt_type": 1,
+    }
+
+
+def build_file_message_item(file_name: str, *, plaintext_size: int,
+                            encrypt_query_param: str,
+                            aeskey_hex: str) -> Dict[str, Any]:
+    """构造一条 ``FILE``（type=4）消息项（proto: MessageItem）。
+
+    字段形状照官方 ``messaging/send.ts:sendFileMessageWeixin``：
+
+    ::
+
+        {
+          "type": 4,                         # MessageItemType.FILE
+          "file_item": {
+            "media": { "encrypt_query_param": <CDN 下载参数>,
+                       "aes_key": <base64(hex)>, "encrypt_type": 1 },
+            "file_name": "<用户看到的文件名>",
+            "len": "<明文字节数，字符串>"
+          }
+        }
+
+    与入站 :func:`extract_media_refs` 的 ``file_item`` 读法（``file_name`` +
+    ``media.encrypt_query_param`` + ``media.aes_key``）严格对称。官方此处**不写**
+    ``md5``（类型里是可选项），本实现同样不写，保持逐字段一致。
+    """
+    return {
+        "type": MessageItemType["FILE"],
+        "file_item": {
+            "media": build_file_media(encrypt_query_param, aeskey_hex),
+            "file_name": str(file_name or "")[:180],
+            "len": str(int(plaintext_size)),
+        },
+    }
+
+
+def build_file_message(to_user_id: str, item: Dict[str, Any], *,
+                       context_token: Optional[str] = None,
+                       run_id: Optional[str] = None,
+                       client_id: Optional[str] = None) -> Dict[str, Any]:
+    """把一条文件项包成 ``sendmessage`` 的 ``WeixinMessage``（一条消息只装一个项）。
+
+    官方 ``messaging/send.ts`` 的 ``sendMediaItems`` 明确「Each item is sent as its
+    own request so that item_list always has exactly one entry」—— 这里照做。
+    其余字段（``from_user_id`` 空串、BOT、FINISH、``context_token`` 原样回带）与
+    :func:`build_text_message` 完全一致。
+    """
+    msg: Dict[str, Any] = {
+        "from_user_id": "",
+        "to_user_id": to_user_id,
+        "client_id": client_id or build_client_id(),
+        "message_type": MessageType["BOT"],
+        "message_state": MessageState["FINISH"],
+        "item_list": [item],
+    }
+    if context_token:
+        msg["context_token"] = context_token
+    if run_id:
+        msg["run_id"] = run_id
+    return msg
+
+
+async def _httpx_post_cdn(url: str, ciphertext: bytes) -> str:
+    """默认上传实现：POST 密文到 CDN，返回响应头 ``x-encrypted-param``。
+
+    这是**唯一**会打真实 CDN 的地方；测试一律注入 ``poster``，绝不联网。
+    """
+    import httpx
+
+    async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+        resp = await client.post(
+            url, content=ciphertext,
+            headers={"Content-Type": "application/octet-stream"})
+    if 400 <= resp.status_code < 500:
+        # 明确被拒（含服务端给的 x-error-message）→ 不重试。
+        raise MediaUploadError(
+            f"CDN 上传被拒 HTTP {resp.status_code}", client_error=True)
+    if resp.status_code != 200:
+        raise MediaUploadError(f"CDN 上传失败 HTTP {resp.status_code}")
+    param = resp.headers.get("x-encrypted-param")
+    if not param:
+        raise MediaUploadError("CDN 响应缺少 x-encrypted-param 头")
+    return param
+
+
+async def upload_file_to_cdn(
+    path: Path | str,
+    *,
+    client: Any,
+    to_user_id: str,
+    cdn_base_url: str = WEIXIN_CDN_BASE_URL,
+    max_bytes: int = WEIXIN_MEDIA_MAX_BYTES,
+    poster: Optional[Callable[[str, bytes], Awaitable[str]]] = None,
+    attempts: int = WEIXIN_UPLOAD_MAX_ATTEMPTS,
+) -> WeixinMediaUpload:
+    """把一个本地文件上传到微信 CDN，返回构造文件项所需的一切。
+
+    步骤（官方 ``cdn/upload.ts:uploadMediaToCdn`` 的镜像）：
+
+    1. 读明文，算 ``rawsize`` 与 ``rawfilemd5``（md5 十六进制）；
+    2. 算密文长度 ``filesize``（AES-ECB + PKCS7）；明文超 ``max_bytes`` → 直接拒；
+    3. 新生成 ``filekey``（16 随机字节的 hex）与 ``aeskey``（16 随机字节）；
+    4. ``client.get_upload_url(...)`` 取上传参数；
+    5. 用 ``aeskey`` 加密明文，POST 到上传地址，取回 ``x-encrypted-param``。
+
+    失败一律抛 :class:`MediaUploadError`；``client`` 缺 ``get_upload_url``（例如
+    测试注入的假 client）也抛这个（不静默）。``poster`` 仅供离线测试注入。
+    """
+    p = Path(str(path))
+    try:
+        size = p.stat().st_size
+    except OSError as exc:
+        raise MediaUploadError(f"读取文件失败: {type(exc).__name__}") from exc
+    if size > max_bytes:
+        raise MediaUploadError(
+            f"文件超过 {max_bytes // (1024 * 1024)} MiB 上限", too_large=True)
+    try:
+        plaintext = p.read_bytes()
+    except OSError as exc:
+        raise MediaUploadError(f"读取文件失败: {type(exc).__name__}") from exc
+
+    import hashlib
+
+    rawsize = len(plaintext)
+    rawfilemd5 = hashlib.md5(plaintext).hexdigest()
+    filesize = aes_ecb_padded_size(rawsize)
+    filekey = secrets.token_hex(16)
+    aeskey = secrets.token_bytes(16)
+
+    get_upload_url = getattr(client, "get_upload_url", None)
+    if get_upload_url is None:
+        raise MediaUploadError("当前客户端不支持取上传参数（get_upload_url）")
+    try:
+        resp = await get_upload_url(
+            filekey=filekey, media_type=UploadMediaType["FILE"],
+            to_user_id=to_user_id, rawsize=rawsize, rawfilemd5=rawfilemd5,
+            filesize=filesize, aeskey=aeskey.hex(), no_need_thumb=True)
+    except MediaUploadError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - 网络/协议/鉴权等
+        raise MediaUploadError(
+            f"取上传参数失败: {type(exc).__name__}") from exc
+    if not isinstance(resp, dict):
+        raise MediaUploadError("取上传参数返回了非对象")
+
+    upload_full_url = str(resp.get("upload_full_url") or "").strip()
+    upload_param = str(resp.get("upload_param") or "").strip()
+    if not upload_full_url and not upload_param:
+        raise MediaUploadError("服务端未返回上传地址（需要 upload_full_url 或 upload_param）")
+    url = upload_full_url or build_cdn_upload_url(upload_param, filekey, cdn_base_url)
+
+    ciphertext = encrypt_aes_ecb(plaintext, aeskey)
+    post = poster or _httpx_post_cdn
+    last_exc: MediaUploadError = MediaUploadError("CDN 上传失败")
+    for attempt in range(1, max(1, int(attempts)) + 1):
+        try:
+            download_param = await post(url, ciphertext)
+        except MediaUploadError as exc:
+            last_exc = exc
+            if exc.client_error:      # 4xx 明确被拒 → 不重试
+                raise
+        except Exception as exc:  # noqa: BLE001 - 网络错误 → 可重试
+            last_exc = MediaUploadError(f"CDN 上传失败: {type(exc).__name__}")
+        else:
+            if not download_param:
+                raise MediaUploadError("CDN 未返回下载参数")
+            return WeixinMediaUpload(
+                filekey=filekey,
+                download_encrypted_query_param=str(download_param),
+                aeskey_hex=aeskey.hex(),
+                file_size=rawsize,
+                file_size_ciphertext=filesize,
+            )
+        logger.debug("weixin: CDN 上传第 %d/%d 次失败", attempt, attempts)
+    raise last_exc
+
+
+# 路径候选：一段不含空白/引号/括号/中文标点的连续串；其**最后一段**要含一个点
+# （像 ``报告.md`` / ``outputs/report.md`` / ``C:\x\a.txt`` 这样带后缀），否则不算。
+# 「带不带路径分隔符」都可——裸文件名（``报告.md``）在项目根下真实存在时也是有意义
+# 的相对路径；是否存在 / 是否在围墙内由 :func:`resolve_sendable_files` 用同一套
+# 围墙判定来过滤。这样普通中文句子、单字、无后缀的词都不会被当成文件。
+_PATH_TOKEN_RE = re.compile(r"""[^\s"'`<>|*?\[\](){}，。；：、]+""")
+
+
+def _candidate_path_tokens(text: str) -> List[str]:
+    """从回复文本里扫出「像文件路径」的候选串（保守：最后一段必须带 ``.后缀``）。"""
+    out: List[str] = []
+    for match in _PATH_TOKEN_RE.finditer(text or ""):
+        token = match.group(0).strip(".,;:!?…—-")
+        token = token.rstrip("/\\")
+        if not token:
+            continue
+        last = re.split(r"[\\/]", token)[-1]
+        if "." not in last.strip("."):
+            continue
+        out.append(token)
+    return out
+
+
+def _path_token_variants(token: str) -> List[str]:
+    """一个候选 token 的若干切法：**中文常和路径粘连**（``已生成报告.md``）。
+
+    中文里词与词之间没有空格，所以「已生成报告.md」会是一个整 token，直接拿去解析
+    会找不到文件。这里额外给出「逐步去掉**前导**非 ASCII 字符」和「逐步去掉**尾随**
+    非 ASCII 字符」的变体（``已生成报告.md`` → ``生成报告.md`` → ``成报告.md`` →
+    ``报告.md`` …）。**哪一个真的存在由后面的围墙判定 + ``is_file`` 决定**，所以
+    这些变体只是多几次「猜」，不会凭空造出文件、也不会越过围墙。
+    """
+    variants = [token]
+    for i, ch in enumerate(token):
+        if ord(ch) > 127:
+            variants.append(token[i + 1:])
+        else:
+            break
+    for j in range(len(token) - 1, -1, -1):
+        if ord(token[j]) > 127:
+            variants.append(token[:j])
+        else:
+            break
+    return variants
+
+
+#: 绝不外发的**文件名**（小写比较）。这些名字本身就意味"里面是凭据/配置"，
+#: 不该因为模型在回复里提了一句就被自动上传到第三方 CDN。
+WEIXIN_NEVER_SEND_NAMES = frozenset({
+    ".env", "settings.json", "credentials.json", "secrets.json",
+    "id_rsa", "id_ed25519", "id_ecdsa", "id_dsa", "known_hosts", ".netrc", "netrc",
+})
+#: 绝不外发的**后缀**。
+WEIXIN_NEVER_SEND_SUFFIXES = (
+    ".env", ".pem", ".key", ".pfx", ".p12", ".jks", ".keystore", ".ppk",
+    ".db", ".sqlite", ".sqlite3", ".kdbx",
+)
+#: 路径里出现这些**目录名**（任一层）即拒。
+WEIXIN_NEVER_SEND_DIRS = frozenset({".git", ".ssh", ".gnupg", ".aws"})
+#: 文件名（主名）里含这些词即拒 —— 宁可少发，也不要因为模型提了一句
+#: "token.txt" 就把令牌上传出去。（这条会影响自动外发，用户仍能在文本回复里
+#: 看到路径，自行决定。）
+WEIXIN_NEVER_SEND_WORDS = (
+    "secret", "credential", "password", "passwd", "token", "apikey", "api_key", "private",
+)
+#: 内容嗅探读多少字节（只读这么多，避免为一个启发式把大文件整个读进内存）。
+WEIXIN_CONTENT_SNIFF_BYTES = 65536
+
+
+def _refuse_to_send(path: Path) -> bool:
+    """这个文件**绝不**自动外发吗？
+
+    触发规则是启发式（"回复里提到的、工作区内真实存在的文件"），已知会把模型只是
+    *提及* 的文件也选中。若不做这道闸，一句"你正在看的 ``data/settings.json``"
+    就会把带密钥的文件加密上传到第三方 CDN —— 那不是 UX 问题，是凭据外泄。
+
+    三道判据，任一命中即拒（宁可不发，文本回复照旧会把文件在哪告诉用户）：
+    文件/目录名形状、后缀、以及**内容里出现凭据形状**（复用 ``kairos.sentinel``
+    自己的脱敏规则；内容变了就说明里面有东西会被脱敏 ⇒ 不发）。
+    """
+    name = path.name.lower()
+    if name in WEIXIN_NEVER_SEND_NAMES:
+        return True
+    if name.endswith(WEIXIN_NEVER_SEND_SUFFIXES):
+        return True
+    if any(part.lower() in WEIXIN_NEVER_SEND_DIRS for part in path.parts):
+        return True
+    stem = path.stem.lower()
+    if any(word in stem for word in WEIXIN_NEVER_SEND_WORDS):
+        return True
+    try:
+        sample = path.open("rb").read(WEIXIN_CONTENT_SNIFF_BYTES)
+    except OSError:
+        return True     # 读不了就不要发
+    if b"-----BEGIN" in sample and b"PRIVATE KEY" in sample:
+        return True
+    try:
+        from kairos.sentinel import redact
+    except Exception:  # noqa: BLE001
+        return True     # 没有脱敏器就无法判断 ⇒ 不发
+    text_sample = sample.decode("utf-8", errors="ignore")
+    return redact(text_sample) != text_sample
+
+
+def resolve_sendable_files(
+    text: str,
+    root: Any,
+    *,
+    max_files: int = WEIXIN_MAX_OUTBOUND_FILES,
+    max_bytes: int = WEIXIN_MEDIA_MAX_BYTES,
+) -> List[Path]:
+    """**启发式**：从回复文本里挑出「工作区内真实存在、且不超限」的文件路径。
+
+    **这只是启发式，不是可靠的「产出文件」信号** —— 本仓库的 ``run_chat_reply``
+    / ``coder.chat`` 都只返回 ``str``，路径上没有任何「我产出了哪些文件」的字段
+    （见 ``kairos/skeleton/service.py`` 与 ``kairos/agents/agent_parts/chat.py``）。
+    所以这里退而求其次：**扫描回复文本里出现的、位于项目工作区内且真实存在的
+    文件路径**，最多 ``max_files`` 个、每个 ≤ ``max_bytes``。
+
+    围墙判定与只读文件工具**同一套**：``kairos.tools.base.resolve_within_root``
+    （相对路径按 root 解析、绝对路径原样、``..``/软链都会解析后重新检查是否仍在
+    root 之内；``is_full_access()`` 时按同一策略放行）。围墙外 / 不存在 / 目录 /
+    超限的候选一律跳过 —— 找不到就返回 ``[]``，调用方据此**不发任何文件**、
+    只发文本（与改动前逐字一致）。
+    """
+    if not text or root is None:
+        return []
+    from kairos.tools.base import resolve_within_root
+
+    root_path = Path(str(root))
+    seen: set = set()
+    picked: List[Path] = []
+    for token in _candidate_path_tokens(str(text)):
+        if len(picked) >= max(0, int(max_files)):
+            break
+        for variant in _path_token_variants(token):
+            if len(picked) >= max(0, int(max_files)):
+                break
+            try:
+                candidate = resolve_within_root(variant, root_path)
+            except (PermissionError, OSError, ValueError):
+                continue    # 围墙外 / 非法路径 → 不发
+            try:
+                if not candidate.is_file():
+                    continue
+                size = candidate.stat().st_size
+            except OSError:
+                continue
+            if size > max_bytes:
+                continue    # 超限 → 不发
+            if _refuse_to_send(candidate):
+                continue    # 凭据/配置形状 → 绝不上传
+            key = str(candidate)
+            if key in seen:
+                continue
+            seen.add(key)
+            picked.append(candidate)
+    return picked
+
+
+# ---------------------------------------------------------------------------
 # ILinkClient
 # ---------------------------------------------------------------------------
 
@@ -1106,6 +1584,46 @@ class ILinkClient:
                 f"sendMessage ret={data.get('ret')} "
                 f"errmsg={data.get('errmsg', '')}", ret=data.get("ret"))
         return data
+
+    async def get_upload_url(
+        self, *,
+        filekey: str,
+        media_type: int,
+        to_user_id: str,
+        rawsize: int,
+        rawfilemd5: str,
+        filesize: int,
+        aeskey: str,
+        no_need_thumb: bool = True,
+        timeout: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """取 CDN 上传参数（``ilink/bot/getuploadurl``）。
+
+        字段照官方 ``api/api.ts:getUploadUrl`` / ``api/types.ts:GetUploadUrlReq``：
+        ``filekey``、``media_type``（:data:`UploadMediaType`）、``to_user_id``、
+        明文大小 ``rawsize``、明文 md5 ``rawfilemd5``、密文大小 ``filesize``、
+        ``no_need_thumb``、``aeskey``（十六进制串）。响应形如
+        ``{upload_param?, upload_full_url?, thumb_upload_param?}`` —— 前两者至少
+        有一个非空（由 :func:`upload_file_to_cdn` 校验）。
+
+        与 ``send_message`` 一样是**鉴权**请求（带 token）；``aeskey`` 是本条上传
+        的临时密钥，除本请求体外绝不外传、不落日志。
+        """
+        body = {
+            "filekey": filekey,
+            "media_type": media_type,
+            "to_user_id": to_user_id,
+            "rawsize": rawsize,
+            "rawfilemd5": rawfilemd5,
+            "filesize": filesize,
+            "no_need_thumb": no_need_thumb,
+            "aeskey": aeskey,
+            "base_info": self.base_info(),
+        }
+        raw = await self._request("POST", "ilink/bot/getuploadurl", body=body,
+                                  timeout=timeout or self.api_timeout,
+                                  with_auth=True)
+        return self._check_error(parse_weixin_api_json(raw))
 
     async def get_config(self, ilink_user_id: str,
                          context_token: Optional[str] = None, *,
@@ -1635,10 +2153,15 @@ class WeixinChannel:
                  client_factory: Optional[Callable[..., ILinkClient]] = None,
                  base_url: str = ILINK_BASE_URL,
                  bot_agent: str = DEFAULT_BOT_AGENT,
-                 poll_interval: float = 0.3) -> None:
+                 poll_interval: float = 0.3,
+                 workspace_resolver: Optional[Callable[[str, str], Any]] = None) -> None:
         self.store = store
         self._dispatch = dispatch
         self._client_factory = client_factory
+        # 「账号 + 聊天对象 → 该项目工作区根」的解析器（可由路由注入，同步或异步都
+        # 行）。**为 None 时完全不发文件**（与改动前逐字一致）——文件发送是可选
+        # 能力，且只在能确定围墙根时才启用（见 _resolve_root / deliver_files）。
+        self.workspace_resolver = workspace_resolver
         # dispatch 是否声明了第 4 个参数（入站媒体引用）。老的三参回调保持原样。
         self._dispatch_takes_media = _callable_accepts_media(dispatch)
         self.base_url = base_url
@@ -1815,6 +2338,13 @@ class WeixinChannel:
             finally:
                 current_session.reset(token)
         if reply:
+            # 出站文件（可选能力）：**先发文件、再发文本** —— 用户先看到东西、再看
+            # 说明。文件来自「回复里点名 + 工作区内真实存在」的**启发式**（没有可靠
+            # 的「产出文件」信号，见 resolve_sendable_files）。这条路整体 best-effort：
+            # 没有围墙根 / 没有文件 / 取参数失败 / 加密或上传失败 / 超限 / 围墙外 ——
+            # 一律**什么都不发**（不改下面这条文本回复），**绝不**吞掉或重复发文本。
+            await self.deliver_files_before_reply(
+                client, account_id, from_user, reply, context_token)
             # 分段渐进投递（不是 token 流）：短回复一条、长回复 ≤N 条，拼接逐字
             # 等于 reply。中途失败会把剩余整体重投，仍失败则 report.ok=False
             # 且 report.failed_at 指出边界 —— 下面记一条 ERROR，决不静默截断。
@@ -1836,6 +2366,80 @@ class WeixinChannel:
         """发一段回复。``client_id`` 在**同一段的多次尝试间复用**，供服务端去重。"""
         return await client.send_message(build_text_message(
             to_user_id, text, context_token=context_token, client_id=client_id))
+
+    # -- 出站文件（启发式，best-effort）--------------------------------
+
+    async def _resolve_workspace_root(self, account_id: str,
+                                      chat_id: str) -> Optional[str]:
+        """解析「账号 + 聊天对象」对应项目的工作区根；解析不出返回 None。
+
+        ``workspace_resolver`` 可以是同步函数、也可以是协程（路由那个要查 store，
+        是异步的）—— 两种都支持。任何异常都当「拿不到根」处理（不抛），因为拿不到
+        根只会导致「不发文件」，不该影响这条回复。
+        """
+        resolver = self.workspace_resolver
+        if resolver is None:
+            return None
+        try:
+            root = resolver(account_id, chat_id)
+            if inspect.isawaitable(root):
+                root = await root
+        except Exception:  # noqa: BLE001 - 拿不到根只是不发文件
+            logger.debug("weixin: 解析工作区根失败（不发文件）", exc_info=True)
+            return None
+        root = str(root or "").strip()
+        return root or None
+
+    async def send_files_best_effort(self, client: ILinkClient, to_user_id: str,
+                                     paths: Sequence[Path], *,
+                                     context_token: Optional[str] = None) -> int:
+        """逐个上传并发送文件项；**绝不抛异常**，返回成功发出的个数。
+
+        一个文件失败（取参数 / 加密 / 上传 / 发送任一环节）只记一条日志 —— 记的是
+        **文件名与错误类型**，不含 aeskey / filekey / 上传参数等临时密钥 —— 然后继续
+        下一个，不让单个坏文件影响其它文件或后面的文本回复。
+        """
+        sent = 0
+        for path in paths:
+            try:
+                upload = await upload_file_to_cdn(
+                    path, client=client, to_user_id=to_user_id)
+                item = build_file_message_item(
+                    Path(str(path)).name,
+                    plaintext_size=upload.file_size,
+                    encrypt_query_param=upload.download_encrypted_query_param,
+                    aeskey_hex=upload.aeskey_hex)
+                await client.send_message(build_file_message(
+                    to_user_id, item, context_token=context_token))
+            except Exception as exc:  # noqa: BLE001 - 一个文件失败不该影响文本回复
+                logger.error("weixin: 文件未发出 name=%s error=%s",
+                             Path(str(path)).name, type(exc).__name__)
+                continue
+            sent += 1
+        return sent
+
+    async def deliver_files_before_reply(self, client: ILinkClient,
+                                         account_id: str, to_user_id: str,
+                                         reply: str,
+                                         context_token: Optional[str] = None) -> int:
+        """启发式地把回复里点名的、工作区内的文件发出去（**先于**文本回复）。
+
+        返回成功发出的文件数（``0`` = 没发任何文件：没配解析器 / 没找到合格文件 /
+        全失败）。任何情况下都**不抛**、**不改**文本回复 —— 文件发不出时，文本本身
+        就写着文件在哪，用户仍然知道东西在哪，故**不另补一条**说明（避免重复消息）。
+        """
+        try:
+            root = await self._resolve_workspace_root(account_id, to_user_id)
+            if not root:
+                return 0
+            files = resolve_sendable_files(reply, root)
+            if not files:
+                return 0
+            return await self.send_files_best_effort(
+                client, to_user_id, files, context_token=context_token)
+        except Exception:  # noqa: BLE001 - 文件这条路整体 best-effort
+            logger.exception("weixin: 出站文件流程异常（已忽略，文本照发）")
+            return 0
 
     async def deliver_reply(self, client: ILinkClient, to_user_id: str,
                             text: str, *,
@@ -1916,3 +2520,26 @@ class WeixinChannel:
             context_token = await self.store.get_context_token(account_id, to_user_id)
         return await client.send_message(build_text_message(
             to_user_id, text, context_token=context_token))
+
+
+# ---------------------------------------------------------------------------
+# 未经真样本验证（诚实边界）
+# ---------------------------------------------------------------------------
+#
+# 本模块里**所有**「微信 CDN 媒体」相关的字段名 / 形状，都是照官方 MIT 许可插件
+# ``@tencent-weixin/openclaw-weixin@2.4.9`` 的 TypeScript 源码推断的（源码文件名
+# 见各段注释），**不是**从真实网关的响应抓下来的样本：
+#
+# * 入站：``item_list`` 里 ``image_item`` / ``video_item`` / ``file_item`` 的子字段、
+#   ``media.encrypt_query_param`` / ``media.aes_key`` / ``image_item.aeskey``、
+#   ``cdn/cdn-url.js`` 的下载 URL 形状；
+# * 出站：``ilink/bot/getuploadurl`` 的请求字段与 ``{upload_param, upload_full_url}``
+#   响应、``cdn/cdn-url.js`` 的上传 URL 形状、CDN 上传响应头 ``x-encrypted-param``、
+#   以及 ``file_item``（type=4）的 ``file_name`` / ``len`` 与 ``media.aes_key`` 的
+#   base64(hex) 编码。
+#
+# 这些**没有在真实微信上端到端跑过**（需要真机扫码登录 + 真实收发链路）。离线测试
+# 只覆盖本地加解密往返、字段形状与兼底逻辑（见 ``tests/test_weixin_media_inbound.py``
+# 与 ``tests/test_weixin_media_outbound.py``）。若真机字段名与推断不符，先改这里，
+# 再改测试。
+

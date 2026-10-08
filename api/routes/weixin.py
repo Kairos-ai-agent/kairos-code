@@ -383,6 +383,37 @@ def make_dispatch(orchestrator, store: WeixinAccountStore
     return dispatch
 
 
+def make_workspace_resolver(orchestrator, store: WeixinAccountStore
+                            ) -> Callable[[str, str], Any]:
+    """构造 channel 用的「账号 + 聊天对象 → 工作区根」解析器（异步）。
+
+    出站文件那条路要用**项目工作区根**做围墙判定（``resolve_sendable_files`` 里调
+    ``kairos.tools.base.resolve_within_root``，与只读文件工具同一套）。这里复用
+    ``_resolve_project`` 用的同一条绑定链：``store.lookup`` → ``orchestrator.
+    get_project`` → ``_project_root``。**只读**——它不创建项目（没绑定就返回 None，
+    于是不发文件）。任何异常都当「解析不出」处理（返回 None），绝不影响文本回复。
+    """
+
+    async def resolve_root(account_id: str, chat_id: str) -> Optional[str]:
+        try:
+            project_id = await store.lookup(account_id, chat_id)
+        except Exception:  # noqa: BLE001 - 查绑定失败只是不发文件
+            logger.debug("weixin: 查会话绑定失败（不发文件）", exc_info=True)
+            return None
+        if not project_id:
+            return None
+        project = orchestrator.get_project(project_id)
+        if project is None:
+            return None
+        try:
+            return str(_project_root(project))
+        except Exception:  # noqa: BLE001
+            logger.debug("weixin: 解析项目根失败（不发文件）", exc_info=True)
+            return None
+
+    return resolve_root
+
+
 async def _resolve_project(orchestrator, store: WeixinAccountStore,
                            account_id: str, chat_id: str):
     """找到（必要时创建）这个「账号 + 聊天对象」对应的项目。"""

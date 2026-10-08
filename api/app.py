@@ -281,7 +281,11 @@ async def lifespan(app: FastAPI):
         await _weixin_store.init()
         _weixin_channel = WeixinChannel(
             _weixin_store,
-            dispatch=weixin_routes.make_dispatch(orchestrator, _weixin_store))
+            dispatch=weixin_routes.make_dispatch(orchestrator, _weixin_store),
+            # 出站文件（agent 生成/引用的文件）需要项目工作区根做围墙判定；解析器
+            # 只读绑定表，拿不到根就不发文件（见 make_workspace_resolver）。
+            workspace_resolver=weixin_routes.make_workspace_resolver(
+                orchestrator, _weixin_store))
         weixin_routes.set_dependencies(
             channel=_weixin_channel, store=_weixin_store)
         for _acct in await _weixin_store.list_accounts():

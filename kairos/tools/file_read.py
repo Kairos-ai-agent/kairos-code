@@ -213,18 +213,25 @@ class FileReadTool(BaseTool):
                       limit: Any = None, **kwargs) -> ToolResult:
         from kairos.tools.cache import get_cache, make_key
         cache = get_cache()
-        # offset/limit MUST be part of the key or a continuation read would
-        # return the cached first window.
-        ck = make_key(self.name, path=path, offset=offset, limit=limit)
-        cached = cache.get(ck)
-        if cached is not None:
-            return cached
+        # The key must include the *root*: the same relative path is a different
+        # file in every project, and the cache is a process-wide singleton (the
+        # loop clears it per round; the chat lane does not), so keying on
+        # ``path`` alone served project A's file contents to project B — a
+        # cross-project read leak. Resolve first, then key on the resolved
+        # absolute path. When the path is refused outright there is nothing to
+        # resolve, so key on root+path to keep the refusal per-root too.
         try:
             file_path = self._resolve_safe(path)
         except PermissionError as e:
+            ck = make_key(self.name, path=f"{self._allowed_root}::{path}",
+                          offset=offset, limit=limit)
             result = ToolResult(success=False, output="", error=str(e))
             cache.set(ck, result)
             return result
+        ck = make_key(self.name, path=str(file_path), offset=offset, limit=limit)
+        cached = cache.get(ck)
+        if cached is not None:
+            return cached
 
         if not file_path.exists():
             result = ToolResult(success=False, output="", error=f"File not found: {path}")

@@ -8,6 +8,52 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **微信出站文件：一组「绝不自动外发」的判据（比上面那条特性本身更要紧）。** 触发规则是
+  启发式，会把模型只是**提及**的文件也选中 ⇒ 不做闸的话，一句「你正在看的
+  `data/settings.json`」就会把**带密钥的文件加密上传到第三方 CDN** —— 那不是体验问题，
+  是凭据外泄。现在三道判据任一命中即拒：① 名字/后缀/目录形状（`.env*`、`settings.json`、
+  `credentials*.json`、`id_rsa`/`id_ed25519`、`*.pem`/`*.key`/`*.p12`/`*.jks`、`*.db`/
+  `*.sqlite*`、路径里的 `.git`/`.ssh`/`.gnupg`/`.aws`、以及主名含 `secret`/`credential`/
+  `password`/`token`/`apikey`/`private`）② 内容是私钥（`-----BEGIN … PRIVATE KEY-----`）
+  ③ **内容里出现凭据形状**（复用 `kairos.sentinel` 自己的脱敏规则：脱敏后与原文不同就拒）。
+  正常交付物照旧发（`outputs/report.md` 之类不受影响）；被拒的文件只体现在「没发出去」，
+  文本回复本来就写着路径。
+
+- **微信（ClawBot / iLink）现在能把 agent 生成/引用的文件发给用户 —— 但它用的是
+  「保守启发式」，不是可靠的产出信号。先把话说清楚**：本通道拿到的回复就是一个
+  **完整字符串**（`kairos/skeleton/service.py:run_chat_reply` 返回 `Optional[str]`、
+  `kairos/agents/agent_parts/chat.py` 的 `AgentChatMixin.chat(...) -> str` 亦然），
+  路径上**没有任何「我产出了哪些文件」的字段**。所以触发规则只能取启发式：**扫描
+  回复文本里出现的、位于该项目工作区内、且真实存在的文件路径**，最多 **3** 个、每个
+  ≤ **25 MiB**；找不到就不发任何文件、只发文本（**不改变现有行为**）。**没有**实现
+  「把所有附件都发回去」这类反人类的默认行为。
+
+  - **上传链**（`kairos/weixin_ilink.py`，与入站下载/解密**互为镜像**）：读明文 →
+    算 `rawfilemd5` / 密文长度（AES-128-ECB + PKCS7）→ 新生成 `filekey`/`aeskey` →
+    `ilink/bot/getuploadurl` 取参数 → 用 `aeskey` 加密 → POST 到 CDN（响应头
+    `x-encrypted-param`）→ 构造 `file_item`（type=4）。`media.aes_key` 写的是
+    **base64(32 位十六进制串)**，正是入站 `parse_aes_key` 认的编码，两边可对扣。
+  - **顺序**：**先发文件、再发文本**（用户先看到东西、再看说明）；长回复的分段投递
+    照旧（条数上限不变），文件只是排在最前面。
+  - **兼底与安全**：没配解析器 / 拿不到工作区根 / 取参数失败 / 加密或上传失败 /
+    超限 / 路径在围墙外 —— **一律不发**，**绝不吞掉或重复发**那条文本回复（不另补
+    「文件在哪」的说明，因为文本本身就写着路径）。围墙判定与只读文件工具同一套
+    （`kairos.tools.base.resolve_within_root`）。`aeskey`/`filekey`/上传参数都是每次
+    调用新生成的临时值，**不进日志、不进异常、不进测试快照**。
+  - **隔离**：只作用于 `WeixinChannel.handle_message` 的回复路径。`send_text`（审批
+    推送 / 测试 `/send`）不动；网页、IM、企微的出站**一字未改**；分段投递的参数与
+    行为**未改**。新增一个可选的 `workspace_resolver` 注入点（`api/app.py` 接线、
+    `api/routes/weixin.py:make_workspace_resolver`），**为 None 时完全不发文件**。
+  - **字段出处**：出站字段形状照腾讯官方 MIT 许可插件
+    `@tencent-weixin/openclaw-weixin@2.4.9` 的 TypeScript 源码推断（`cdn/upload.ts`/
+    `cdn/aes-ecb.ts`/`cdn/cdn-url.ts`/`cdn/cdn-upload.ts`/`api/api.ts`/`api/types.ts`/
+    `messaging/send.ts`），**只借接口事实、不搬其代码**（MIT 与本仓许可不同）。
+  - **未经真机验证**：没有在真实微信上端到端跑过「发文件」；字段名/形状是照源码推断
+    的，不是真响应样本。离线覆盖：`tests/test_weixin_media_outbound.py`（30 个用例：
+    AES 往返与入站解密对扣 / 密钥编码镜像 / 文件项字段形状 / 超 25 MiB 不发 / 围墙外
+    不发 / 拿不到上传参数或上传报错退纯文本且文本不丢不重 / 无文件时逐字不变 / 文件
+    先于文本）。
+
 - **微信（ClawBot / iLink）回复改成「分段渐进投递」—— 注意，它*不是* token 级流式。**
   这条通道此前把整条回复**一次性**发出去：回复有多长，用户就等多久、然后收到**一坨**。
   现在长回复会按自然边界切成几段、分几条消息先后发出（短回复仍是一条，**逐字不变**）。
@@ -121,6 +167,18 @@ All notable changes to this project are documented here. The format follows
     入口都会让测试失败并指名 `文件:行`。
 
 ### Fixed
+
+- **读文件的内容缓存漏了「根」⇒ 一个项目能读到另一个项目的同名文件。** `file_read` 的
+  结果缓存（`kairos/tools/cache.py`）是**进程级单例**，键只用**传入的路径字符串**、
+  不含解析后的根 ⇒ 项目 A 读过 `a.txt` 之后，项目 B 读 `a.txt` 会**拿到 A 的内容**
+  （跨项目读取泄漏）。同一根因还有第二个面：缓存自称「per-round」、由循环每轮清一次，
+  而**通用车道从不清** ⇒ 闲聊车道与 Coder 的循环共用同一份陈旧条目（Coder 刚写完的文件，
+  车道读到的可能还是改前内容）。修法两处：① 键改用**解析后的绝对路径**（围墙外/被拒的
+  情况用 `根::路径`，使拒绝也按根隔离）；② 通用车道的读工具环在**每一轮开始时清缓存**，
+  与循环遵守同一个契约。回归 `tests/test_capability_gate.py::test_read_cache_is_scoped_to_the_project_root`。
+
+  这个缺陷是**本地全量跑才暴露**的（`test_the_lane_stops_at_the_turn_budget` 写下的
+  `a.txt` 污染了同进程后面的用例）：CI 是**逐文件分片**跑，跨文件污染在 CI 里不会发生。
 
 - **「全权访问」开关此前也是空转的：拨了没用。** 工具沙箱的判定 `is_full_access()`
   只读进程环境变量 `KAIROS_FULL_ACCESS`，而界面上的开关（`settings.json:fullAccess`，

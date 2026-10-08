@@ -165,6 +165,19 @@ async def run_read_tool_loop(
     """
     from kairos.llm.base import LLMMessage
 
+    # The tool-result cache (kairos/tools/cache.py) is documented as
+    # per-round and is a process-wide singleton. The loop runner clears it
+    # every round; this lane never did, so entries survived across turns,
+    # projects and the Coder's own rounds — that is how a read in project A
+    # could answer a read in project B, and how a read after the Coder wrote
+    # a file could return the pre-write contents. A chat turn is this lane's
+    # round: start it clean.
+    try:
+        from kairos.tools.cache import clear_round
+        clear_round()
+    except Exception:  # noqa: BLE001
+        pass
+
     schemas = []
     for tool in tools:
         if not is_read_only(tool):

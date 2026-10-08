@@ -21,6 +21,8 @@
 | `tests/test_weixin_ilink.py` | 离线测试：本地 `http.server` 假网关，30 个用例 |
 | `tests/test_weixin_approvals.py` | 离线测试：审批推送 / 回答 / 超时 / 并发 / 不确定，29 个用例 |
 | `tests/test_weixin_streaming.py` | 离线测试：分段渐进投递（短回复一条 / 长回复 ≤N 且逐字 / 代码块保护 / 失败兼底 / env），16 个用例 |
+| `tests/test_weixin_media_inbound.py` | 离线测试：入站媒体下载 / 解密 / 落盘（假 CDN），用例见文件 |
+| `tests/test_weixin_media_outbound.py` | 离线测试：出站文件（AES 往返 / 密钥镜像 / 字段形状 / 超限 / 围墙 / 失败兼底 / 无文件不回归），30 个用例 |
 | `web/src/test/weixinPanel.test.tsx` | 前端弹层测试：出图 / 状态机 / 账号列表，9 个用例 |
 | `api/app.py` | lifespan 里建 store / channel 并挂载路由 |
 
@@ -200,9 +202,11 @@ curl http://127.0.0.1:8000/api/weixin/bindings
 
 ## 六、已知限制与未验证项
 
-- **只做文本**：图片 / 视频 / 文件 / 语音的 CDN 下载与 AES 解密（微信 CDN 那套）
-  **本轮未实现**，预留了扩展位（`MessageItemType` 已枚举，媒体会降级成
-  `[图片]` 之类的占位文本）。`getuploadurl` 端点也未封装。
+- **媒体**：入站图片 / 视频 / 文件的 CDN 下载与 AES 解密**已实现**（见第八节前的
+  「入站媒体」说明与 `tests/test_weixin_media_inbound.py`），出站文件的
+  「取参数 → 加密 → 上传 → 文件消息项」**已实现**（见第九节与
+  `tests/test_weixin_media_outbound.py`）。**语音**不下载：直接用
+  `voice_item.text`（语音转文字）当正文。
 - **配对码流程**：`need_verifycode` 已识别并支持带 `verify_code` 继续轮询，但
   没有做完整的「多次输错 → 刷新 / 锁定」体验打磨。
 - **群聊**：`group_id` 已解析但未按群维度分流，仍按发送者会话处理。
@@ -338,3 +342,87 @@ agent_parts/llm.py` 的 `_stream_complete` 把每个 delta 发布成消息总线
 纯文本单条路径不回归、`send_text` 仍单条（`tests/test_weixin_streaming.py`，16 个
 用例）。**未做**：token 级真流式（见上）；段与段之间的「正在输入」指示（`sendtyping`
 已有封装但本轮未接）。
+
+## 九、出站文件（把 agent 生成/引用的文件发给用户）
+
+微信侧现在能把**文件**发给正在聊的那个人 —— 但**触发用的是保守启发式，不是可靠的
+「产出信号」**，这一点必须说清楚。
+
+实现：`kairos/weixin_ilink.py`（`upload_file_to_cdn` / `build_file_message_item` /
+`resolve_sendable_files` / `WeixinChannel.deliver_files_before_reply`）；
+接线：`api/routes/weixin.py:make_workspace_resolver`（`api/app.py` 把它注入 channel）。
+
+### 触发规则的真实依据（**是启发式**）
+
+本通道拿到的回复就是一个**完整字符串**，路径上**没有**「我产出了哪些文件」的字段：
+
+* `kairos/skeleton/service.py:run_chat_reply(...) -> Optional[str]`（第 273/281 行前后）；
+* `kairos/agents/agent_parts/chat.py` 的 `AgentChatMixin.chat(...) -> str`。
+
+两者都只回文本。所以退而求其次，用一条**明确标注为启发式**的规则：**扫描回复文本
+里出现的、位于该项目工作区内、且真实存在的文件路径**，最多 **3** 个、每个
+≤ **25 MiB**。找不到就不发任何文件、只发文本（**与改动前逐字一致**）。**没有**实现
+「把所有附件都发回去」这类反人类的默认行为。
+
+* 候选 = 回复里「最后一段带 `.后缀`」的连续串（`outputs/report.md`、`报告.md`、
+  `C:\x\a.txt`）。中文里词与句**没有空格**（`已生成报告.md`），所以还会把「去掉前导 /
+  尾随非 ASCII 字符」的变体也拿来试（`已生成报告.md` → `报告.md`）——**哪一个真的存在
+  由围墙判定 + `is_file` 决定**。
+* 围墙判定与只读文件工具**同一套**：`kairos.tools.base.resolve_within_root`
+  （相对路径按项目根解析、绝对路径原样、`..`/软链解析后重新检查；`is_full_access()`
+  时按同一策略放行）。
+* **已知的假阳性风险**：模型只是**顺口提到**一个工作区内真实存在的文件（例如「你现在
+  在看的 `foo.py`」），也会被当成要发的文件。这源于「没有产出信号」这个客观限制，
+  不是疏忽 —— 若日后有了可靠的产出清单，应改用那个。
+
+### 上传链（与入站**互为镜像**）
+
+| 步骤 | 出站（本改动） | 入站（已有） |
+|---|---|---|
+| 密钥 | 每次新生成 16 随机字节 `aeskey` | 从 `media.aes_key` 解析 |
+| 加解密 | `encrypt_aes_ecb`（AES-128-ECB + PKCS7） | `decrypt_aes_ecb`（同一方案，逆运算） |
+| key 编码 | `media.aes_key = base64(32 位 hex 串)` | `parse_aes_key` 认 base64(16 字节) 与 base64(32 位 hex) |
+| 传输 | POST 密文到 CDN，取回 `x-encrypted-param` | GET 密文，`encrypt_query_param` 拼下载 URL |
+| 项 | `file_item{media, file_name, len}`（type=4） | `extract_media_refs` 读同一组字段 |
+
+出站链路：读明文 → `rawfilemd5` / 密文长度（`aes_ecb_padded_size`）→ 新生成
+`filekey`/`aeskey` → `ILinkClient.get_upload_url`（POST `ilink/bot/getuploadurl`，字段
+照官方 `GetUploadUrlReq`）→ 用 `aeskey` 加密 → POST 到 `upload_full_url`（缺则用
+`build_cdn_upload_url` 拼）→ 取响应头 `x-encrypted-param` → `build_file_message_item`。
+
+**字段出处**：全部照腾讯官方 MIT 许可插件 `@tencent-weixin/openclaw-weixin@2.4.9` 的
+TypeScript 源码推断 —— `cdn/upload.ts`（上传各步）、`cdn/aes-ecb.ts`（加解密/密文长度）、
+`cdn/cdn-url.ts`（上传 URL）、`cdn/cdn-upload.ts`（POST 与响应头）、`api/api.ts`
+（`getUploadUrl`）与 `api/types.ts`（`GetUploadUrlReq`/`UploadMediaType`/`FileItem`）、
+`messaging/send.ts`（`sendFileMessageWeixin` 与 `media.aes_key` 的 base64 编码）。
+**只借接口事实、不搬其代码**（MIT 与本仓许可不同）。
+
+### 顺序与兼底
+
+* **先发文件、再发文本**：用户先看到东西、再看说明。长回复的分段投递**照旧**（条数
+  上限不变），文件只是排在最前面。
+* **四条兼底路径，任一失败都退回纯文本**：① 没配解析器 / 拿不到工作区根；② 取上传
+  参数失败或没返回上传地址；③ 加密 / 上传 POST 失败；④ 超限或在围墙外。任一失败
+  **都不发文件**、**绝不吞掉或重复发**那条文本回复 —— 文本本身就写着文件在哪，故
+  **不另补**一条「文件在……」的说明（避免重复消息）。
+* **安全**：`aeskey` / `filekey` / 上传参数都是**每次调用新生成**的临时值，**不进
+  日志、不进异常、不进测试快照**（日志只记文件名与错误类型）。`token` 仍只在
+  `Authorization` 头里。
+
+### 隔离
+
+只作用于 `WeixinChannel.handle_message` 的回复路径：`send_text`（审批推送 / 测试
+`/send`）不动；网页、IM、企微（`api/routes/wecom.py`）的出站**一字未改**；分段投递
+的参数与行为**未改**。文件发送是**可选能力** —— `WeixinChannel.workspace_resolver`
+为 `None` 时完全不发文件（与改动前逐字一致）。
+
+### 未经真机验证（重要）
+
+**没有在真实微信上端到端跑过「发文件」。** 出站所有字段名 / 形状（`getuploadurl` 的
+请求与 `{upload_param, upload_full_url}` 响应、CDN 响应头 `x-encrypted-param`、
+`file_item` 的字段、`media.aes_key` 的 base64(hex) 编码）都是**照官方源码推断**的，
+**不是真响应样本**。离线测试覆盖：AES 往返且与入站解密对扣、密钥编码镜像（出站项用
+入站那套读回并解密）、文件项字段形状与注释一字不差、超 25 MiB / 围墙外 / 目录 / 不存在
+都不发、拿不到上传参数或上传报错退纯文本且文本不丢不重、无文件时不产生任何额外消息、
+文件先于文本（`tests/test_weixin_media_outbound.py`，30 个用例）。**未做**：把图片/视频
+按 IMAGE/VIDEO 项发送（本轮只发 FILE 项）、上传进度 / 大文件分片、真机联调。

@@ -8,6 +8,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **通用车道（`kairos.skeleton`）现在带只读文件工具，能真的读用户附件。**
+  通用车道此前一个工具都没有（`kairos/skeleton/service.py` 的 worker 只收
+  `generate(prompt) -> str`），所以把附件折成 `[附件]` 提示词给它时它**读不了**
+  文件——这正是微信通道此前要「带媒体强制走 Coder」的原因。现在通用车道在回答
+  前可以调用一组**只读**工具（`file_read` / `doc_read` / `xlsx_read` /
+  `data_analyze` / `grep` / `find`），与 Coder/Reviewer 用的是**同一批**真工具、
+  同一套项目目录围墙（`fence_path` / `_resolve_safe`，`is_full_access()` 放行）
+  与同一道 zip 防护（`kairos/tools/zipguard.py`）。工具集**绝不含**写文件 / 执行
+  进程 / 网络类工具：新增的 `kairos/skeleton/read_tools.py` 既只构造只读工具，
+  又在执行前对调用再做一次「能力 ⊆ `READ_FILE`」的判定。只读能力按
+  `requires_approval` 的阶梯本就不弹问，所以闲聊车道不会因为读文件而弹出审批。
+
 - **微信（ClawBot / iLink）通道接上了「审批 / 停止」，这条通道不再只有文本层。**
   此前 agent 需要人批准一个动作时，闸门（`kairos/sentinel.py` 的
   `authorize_async`）问出的问题只有网页端看得见，微信里既看不到、也没法回答 ——
@@ -68,8 +80,10 @@ All notable changes to this project are documented here. The format follows
     走通用车道，通用车道无模型 / 抛异常 / 返回空时回退 Coder——纯文本消息仍
     能拿到回复，不会变成什么都不回。
   - **媒体收件**：微信入站的图片 / 文件 / 视频先落盘到项目附件目录，再按 Web
-    会话同一套折进提示词交给 agent（带媒体的消息保持直连 Coder，避免通用车道
-    看不到附件块而丢掉用户刚发的文件）。
+    会话同一套折进提示词交给 agent。**带媒体的消息与纯文本走同一条路由**
+    （判定只看用户文本）——通用车道现在带只读文件工具，能真的读到附件块，
+    所以不再需要为「带媒体」绕回 Coder；通用车道无模型 / 抛异常 / 返回空时
+    照旧回退 Coder，消息仍能拿到回复。
   - **zip 防护**：`kairos/tools/zipguard.py` 在解压前只读 zip 中央目录，按声明
     尺寸拒绝爆炸包；`xlsx_read` / `doc_read` 打开表格与文档前统一过这道闸。
   - **源码级 CI 守卫**：`tests/test_chat_entrances_route.py` 枚举仓库里所有

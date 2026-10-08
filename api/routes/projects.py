@@ -223,6 +223,15 @@ async def start_loop(project_id: str, request: "StartLoopRequest"):
     # code-looking workspace) resolves to the loop, and an undecided task now
     # resolves to the general lane -- KAIROS_ROUTE_DEFAULT=loop restores the
     # old loop default.
+    #
+    # Note the attachment block above is folded in *before* the route decision,
+    # so an attachment-bearing /start is routed on the block text as well. That
+    # is deliberate: /start is the explicit "do this task" button, and its
+    # folded block ("用户上传了以下文件 ...") reads as coding intent, which is
+    # the right lane for a user who just pressed start. /chat does the opposite
+    # on purpose -- it routes on the user's own words and folds the block only
+    # inside the lane (see _chat_on_general_lane), because a chat turn that
+    # merely carries a file is still a chat turn.
     from kairos.task_router import route_task
     decision = route_task(
         explicit_kind=(request.kind or request.workspace_kind or ""),

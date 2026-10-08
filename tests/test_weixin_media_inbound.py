@@ -278,6 +278,24 @@ def _patch_fetcher(monkeypatch, fetcher) -> None:
     monkeypatch.setattr(wx, "download_media_to", _patched)
 
 
+@pytest.fixture(autouse=True)
+def _pin_lane_to_coder(monkeypatch):
+    """本文件只验「媒体下载 + 折进提示词」，不验车道选择；把车道钉在 Coder。
+
+    ``dispatch`` 现在对带媒体的消息与纯文本一致地过 ``_answer_message`` 路由
+    （通用车道带上只读文件工具后能读附件）。车道选择由
+    ``test_weixin_lane_routing.py`` 覆盖；这里只断言媒体真的落盘、真的按 Web 同一
+    套折进 agent 收到的提示词。为了让这些用例保持**离线**且不依赖是否配了模型，
+    把 ``_answer_message`` 钉在 Coder —— 与 ``test_dispatch_plain_text_is_unchanged``
+    此前自己打的桩同一个形状。
+    """
+    async def _coder_only(proj, text, **kwargs):
+        return await proj.coder.chat(text)
+
+    monkeypatch.setattr(wx, "_answer_message", _coder_only)
+
+
+
 async def test_dispatch_downloads_media_into_project_attachments(tmp_path,
                                                                  monkeypatch):
     work = tmp_path / "proj"
@@ -349,7 +367,8 @@ async def test_dispatch_plain_text_is_unchanged(tmp_path, monkeypatch):
     project = _FakeProject(work)
     store = await _store(tmp_path)
     # 只验“媒体折叠”这一层：把车道选择固定为 Coder，避免受路由改动/网络影响。
-    async def _coder_only(proj, text, *, has_media: bool = False):
+    # （带媒体的路径同理，由上面的 autouse fixture 统一钉住。）
+    async def _coder_only(proj, text, **kwargs):
         return await proj.coder.chat(text)
 
     monkeypatch.setattr(wx, "_answer_message", _coder_only)

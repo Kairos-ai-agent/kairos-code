@@ -179,8 +179,9 @@ async def _fold_inbound_media(project, prompt: str, media) -> str:
     """把入站媒体落盘到项目附件目录，并按 Web 同一套折进提示词。
 
     复用 ``api/routes/projects.py`` 的 ``attachment_prompt_block``（成功项）——
-    与 Web 会话完全一致的 ``[附件]`` 块，路径相对项目根、Coder 的 file 工具
-    能直接读；**不另写一套附件逻辑**。
+    与 Web 会话完全一致的 ``[附件]`` 块，路径相对项目根，Coder 的 file 工具与
+    通用车道的只读文件工具（``kairos/skeleton/read_tools.py``）都能直接读；
+    **不另写一套附件逻辑**。
 
     失败 / 超限 / 不支持的类型都会追加一段可读的 ``[微信媒体]`` 说明，交给
     agent（它会把结论讲给用户），**绝不静默**。
@@ -234,18 +235,22 @@ async def _fold_inbound_media(project, prompt: str, media) -> str:
     return "\n\n".join(blocks)
 
 
-async def _answer_message(project, text: str, *, has_media: bool) -> str:
+async def _answer_message(project, text: str, *,
+                          route_text: Optional[str] = None) -> str:
     """按 Web ``/chat`` 同一条路由决定车道：编码/长任务走 Coder，闲聊/问答走通用。
 
-    - 复用 ``kairos.task_router.route_task``（``requirement`` = 用户原文，
-      ``workspace`` = 项目根），判定输入与 ``api/routes/projects.py:chat`` 一致。
+    - 复用 ``kairos.task_router.route_task``（``workspace`` = 项目根）判定车道。
+    - **判定输入 = 用户自己的文字**（``route_text``，与 Web ``/chat`` 传
+      ``request.message`` 一致），**不是**折了附件块之后的提示词：附件块里那句
+      「用户上传了以下文件」含「文件」二字，会被路由的编码词表读成编码意图而把
+      带附件的闲聊又推回 Coder。``text`` 才是交给车道（含附件块）的内容。
+    - **带媒体与纯文本走同一条路由**：通用车道现在带只读文件工具
+      （``kairos/skeleton/read_tools.py``），能真的读到已折进提示词的附件块
+      （``attachment_prompt_block``），所以这条通道不再需要为「带媒体」绕回
+      Coder——判定只看用户文本，与网页端完全一致。
     - 通用车道返回空 / 无模型 / 抛异常时**回退到 Coder**，等价于改动前的行为，
-      保证「纯文本消遣消息仍能拿到回复」不回归（不会变成什么都不回）。
-    - **带媒体**（图片/文件/视频）的消息**保持原行为**直接走 Coder：通用车道只
-      收文本，看不到已折进提示词的附件块，若走通用会丢掉用户刚发来的文件。
+      保证「消息仍能拿到回复」不回归（不会变成什么都不回）。
     """
-    if has_media:
-        return await project.coder.chat(text)
     try:
         from api.routes.projects import _project_root
         from kairos.skeleton.service import run_chat_reply
@@ -255,8 +260,9 @@ async def _answer_message(project, text: str, *, has_media: bool) -> str:
         return await project.coder.chat(text)
 
     root = _project_root(project)
+    route_input = text if route_text is None else route_text
     try:
-        decision = route_task(requirement=text, workspace=root)
+        decision = route_task(requirement=route_input, workspace=root)
     except Exception:  # noqa: BLE001 - 判定失败即保持原行为
         logger.exception("weixin: 路由判定失败，保持 Coder 车道")
         return await project.coder.chat(text)
@@ -353,7 +359,8 @@ def make_dispatch(orchestrator, store: WeixinAccountStore
             return (f"当前项目: {project_id}" if project_id
                     else "尚未绑定项目，先 /use <id> 或直接发消息自动创建。")
 
-        prompt = " ".join(args) if cmd == "chat" else text
+        raw_text = " ".join(args) if cmd == "chat" else text
+        prompt = raw_text
         project = await _resolve_project(orchestrator, store, account_id, chat_id)
         coder = getattr(project, "coder", None) if project is not None else None
         if coder is None:
@@ -362,9 +369,11 @@ def make_dispatch(orchestrator, store: WeixinAccountStore
             # 入站图片/文件/视频：真下载到项目附件目录，按 Web 同一套折进提示词。
             prompt = await _fold_inbound_media(project, prompt, media)
         try:
-            # Round 37 路由：编码/长任务走 Coder（原样），闲聊/问答走通用车道；
-            # 带媒体的消息保持原行为（见 ``_answer_message``）。
-            reply = await _answer_message(project, prompt, has_media=bool(media))
+            # Round 37 路由：编码/长任务走 Coder（原样），闲聊/问答走通用车道。
+            # 纯文本与带媒体走**同一条**路由（通用车道现在能读附件，见
+            # ``_answer_message``）。判定用用户原文 ``raw_text``，与 Web ``/chat``
+            # 传 ``request.message`` 一致；附件块只进 ``prompt``，不进判定。
+            reply = await _answer_message(project, prompt, route_text=raw_text)
         except Exception as exc:  # noqa: BLE001
             logger.exception("weixin: agent chat failed for %s/%s",
                              account_id, chat_id)

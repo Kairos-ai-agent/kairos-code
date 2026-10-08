@@ -141,6 +141,64 @@ def default_generator() -> Optional[Callable]:
         return None
 
 
+def _provider_tool_client(provider):
+    """Wrap a tool-aware provider as a ``complete(messages, tools=)`` client.
+
+    The provider already speaks native function calling -- the Coder/Reviewer
+    use it -- so this is a thin adapter that also records each call in the
+    shared cost ledger, mirroring :func:`default_generator`.
+    """
+    _cfg = getattr(provider, "config", None)
+    _model = getattr(_cfg, "model", "") or ""
+    _provider_name = getattr(_cfg, "provider", "") or ""
+
+    class _ToolClient:
+        async def complete(self, messages, tools=None):
+            started = time.time()
+            response = await provider.complete(messages, tools=tools)
+            _record_provider_call(
+                model=_model,
+                provider=_provider_name,
+                usage=getattr(response, "usage", None),
+                duration_ms=int((time.time() - started) * 1000),
+            )
+            return response
+
+    return _ToolClient()
+
+
+def default_tool_client():
+    """A tool-capable model client for the general lane, or ``None``.
+
+    This is the same seam :func:`default_generator` uses (the ``coder`` role's
+    provider, which the Coder/Reviewer already drive native function calling
+    with), except the returned client accepts tool schemas -- so the general
+    lane can actually *open* the files it is told about.
+
+    Returns ``None`` when no provider can run: none is configured, or the one
+    that resolves has neither an api key nor a base url (a keyless config can
+    only fail, so the caller keeps today's prompt-only path instead of dialing
+    an endpoint that is guaranteed to reject it). Never raises.
+    """
+    try:
+        from kairos import config as _pkg_config
+        from kairos.llm.model_router import ModelRouter
+
+        cfg = Path(_pkg_config.__file__).parent / "models_config.yaml"
+        provider = ModelRouter(config_path=cfg.resolve()).get_provider_for_role("coder")
+        if provider is None:
+            return None
+        _cfg = getattr(provider, "config", None)
+        api_key = (getattr(_cfg, "api_key", "") or "").strip()
+        base_url = (getattr(_cfg, "base_url", "") or "").strip()
+        if not api_key and not base_url:
+            return None
+        return _provider_tool_client(provider)
+    except Exception as exc:  # noqa: BLE001 - a missing tool client must not raise
+        logger.info("no tool-capable model for the general skeleton (%s)", exc)
+        return None
+
+
 def build_workspace(kind: str, root: Any):
     """The workspace the CLI would build for ``kind`` at ``root``."""
     root = Path(str(root)).expanduser()
@@ -177,6 +235,27 @@ _CHAT_PROMPT = (
 )
 
 
+#: System prompt for the general lane when it is given the read-only file tools
+#: (the usual case in production). Like ``_CHAT_PROMPT`` it asks for a plain
+#: answer -- but it also tells the model it may *open* the files the user
+#: attached, which is the whole point of giving this lane tools. The toolset is
+#: read-only, so the prompt states that limit plainly: the model must not claim
+#: to have written a file, run a command or reached the network.
+_TOOL_CHAT_PROMPT = (
+    "You are answering the user's message conversationally, inside their "
+    "project workspace.\n\n"
+    "You have read-only tools: use file_read to open a text file (or list a "
+    "directory), doc_read for a .docx/.pptx, xlsx_read for a .xlsx, "
+    "data_analyze for a .csv/.tsv, and grep/find to locate files. When the "
+    "user attached a file (a [附件 / attachments] block names its path), open "
+    "it before answering. The tools can only READ inside the project "
+    "directory -- you cannot write files, run commands or reach the network, "
+    "so never claim to have done any of those. When you have what you need, "
+    "answer the question directly and briefly.\n\n"
+    "WORKSPACE CONTEXT:\n{context}"
+)
+
+
 def undecided_chat_verdict() -> Verdict:
     """The verdict a conversational general-lane turn carries: ``undecided``.
 
@@ -198,6 +277,7 @@ async def run_chat_reply(
     message: str,
     generate: Optional[Callable] = None,
     max_context_chars: Optional[int] = None,
+    tool_client: Any = None,
 ) -> Optional[str]:
     """One conversational turn on the general lane; the reply text, or ``None``.
 
@@ -206,15 +286,44 @@ async def run_chat_reply(
     (``passed is None``) by design. This deliberately does **not** call
     ``PromptWorker.run``: that worker *emits an artifact* (writes a deliverable
     file) and demands citations, neither of which fits a chat turn and both of
-    which would pollute the user's workspace on every "你好". It reuses the two
-    parts of the skeleton that do fit -- the same generator seam
-    (:func:`default_generator`) and the same bounded workspace-context renderer
-    (:meth:`kairos.skeleton.contracts.Workspace.as_prompt_context`).
+    which would pollute the user's workspace on every "你好".
 
-    Returns ``None`` when no model provider is configured (the caller surfaces
-    that honestly instead of pretending a turn ran).
+    Two model seams, tried in order:
+
+    * **Read-only tools (preferred).** When a tool-capable client is available
+      (``tool_client``, else :func:`default_tool_client`) the turn runs through
+      :func:`kairos.skeleton.read_tools.run_read_tool_loop`: the model may open
+      the files the user attached (the ``[附件]`` block) with the same
+      sandboxed, capability-gated readers the Coder uses. This is what makes
+      the general lane able to *read* an attachment instead of only being told
+      its path.
+    * **Prompt only (fallback).** Otherwise the historical seam
+      (:func:`default_generator`, a ``generate(prompt) -> str``) is used -- the
+      general lane degrades to a single text answer, exactly as before the
+      tools existed.
+
+    Returns ``None`` when neither seam has a model (the caller surfaces that
+    honestly instead of pretending a turn ran).
     """
     workspace = build_workspace(kind, root)
+
+    client = tool_client if tool_client is not None else default_tool_client()
+    if client is not None:
+        from kairos.skeleton.read_tools import read_only_tools, run_read_tool_loop
+
+        tools = read_only_tools(workspace.root)
+        context = workspace.as_prompt_context(
+            max_chars=max_context_chars, query=message)
+        system = _TOOL_CHAT_PROMPT.format(context=context)
+        try:
+            text = await run_read_tool_loop(
+                client=client, tools=tools, system_prompt=system,
+                message=message)
+        except Exception:  # a provider failure must surface, not be swallowed
+            logger.exception("general-lane tool loop failed")
+            raise
+        return "" if text is None else str(text)
+
     generator = generate if generate is not None else default_generator()
     if generator is None:
         return None
@@ -282,6 +391,7 @@ async def run_general_task(
 __all__ = [
     "SkeletonOutcome",
     "default_generator",
+    "default_tool_client",
     "build_workspace",
     "build_verifier",
     "run_general_task",

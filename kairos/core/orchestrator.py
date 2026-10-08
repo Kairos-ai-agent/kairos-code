@@ -56,17 +56,21 @@ from kairos.llm.base import LLMConfig
 from kairos.llm.model_router import ModelRouter
 from kairos.tools.base import ToolResult
 from kairos.tools.code_search import CodeSearchTool
+from kairos.tools.data_analyze import DataAnalyzeTool
+from kairos.tools.doc_read import DocReadTool
 from kairos.tools.file_edit import FileEditReplaceTool, FileEditTool, MultiEditTool
 from kairos.tools.file_read import FileReadTool
 from kairos.tools.find import FindTool
 from kairos.tools.git_tool import GitTool
 from kairos.tools.grep_tool import GrepTool
 from kairos.tools.history_search import HistorySearchTool
+from kairos.tools.python_run import PythonRunTool
 from kairos.tools.subagent import (SubagentResultTool, SubagentStatusTool,
                                    SubagentTool)
 from kairos.tools.terminal import TerminalTool
 from kairos.tools.todos import WriteTodosTool
 from kairos.tools.webfetch import WebFetchTool, WebSearchTool
+from kairos.tools.xlsx_read import XlsxReadTool
 
 
 @dataclasses.dataclass(eq=False)
@@ -471,6 +475,13 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
             # Without it in the tool list the whole plan-panel mechanism is
             # unreachable: the LLM never calls a tool it has not been told about.
             WriteTodosTool(allowed_root=coder_root),
+            # P0-5 general-purpose tools (the credential-free batch). The three
+            # read-only tools can only read inside the coder root; python_run
+            # declares EXEC_PROCESS, so the sentinel's ladder asks for it.
+            DataAnalyzeTool(allowed_root=coder_root),
+            XlsxReadTool(allowed_root=coder_root),
+            DocReadTool(allowed_root=coder_root),
+            PythonRunTool(allowed_root=coder_root),
         ]
 
         # R38.6 §30: auto-checkpoint the project's files before any
@@ -567,6 +578,13 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
             CodeSearchTool(allowed_root=reviewer_root),
             GitTool(allowed_root=reviewer_root),
             TerminalTool(allowed_cwd=reviewer_root),
+            # P0-5 read-only general tools: the Reviewer verifies data and
+            # documents too, and these can only read inside its root. The
+            # interpreter stays with the Coder (the Reviewer already has the
+            # shell for the checks it needs).
+            DataAnalyzeTool(allowed_root=reviewer_root),
+            XlsxReadTool(allowed_root=reviewer_root),
+            DocReadTool(allowed_root=reviewer_root),
         ]
 
         # The Reviewer gets the browser too: "does it actually render" is a

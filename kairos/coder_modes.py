@@ -64,6 +64,8 @@ _MUTATING_TOOL_NAMES: Set[str] = {
     "checkpoint",
     "webfetch",  # considered side-effecting (network + can trigger actions)
     "create_agent", "delete_agent",
+    # P0-5: running a Python snippet is process execution.
+    "python_run",
 }
 
 # Tools considered read-only — allowed in READ_ONLY mode.
@@ -74,6 +76,8 @@ _READ_ONLY_ALLOW: Set[str] = {
     # Past-session recall opens kairos.db with mode=ro and never writes;
     # it is safe (and useful) in read_only mode.
     "history_search",
+    # P0-5: these read a file inside the root and write nothing.
+    "data_analyze", "xlsx_read", "doc_read",
 }
 
 

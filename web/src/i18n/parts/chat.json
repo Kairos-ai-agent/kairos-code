@@ -19,6 +19,26 @@
     "zh": "Enter 发送 · Shift+Enter 换行 · 📎 拖拽 / 粘贴 / 点回形针上传任意格式文件",
     "en": "Enter to send · Shift+Enter for newline · 📎 drag, paste, or click the paperclip to attach any file"
   },
+  "chat.composer.fullAccess": {
+    "zh": "全权访问",
+    "en": "Full access"
+  },
+  "chat.composer.fullAccessConfirm": {
+    "zh": "开启全权访问？agent 将能读写任意路径（含工作目录之外）。",
+    "en": "Turn on full access? The agent will then be able to read and write any path, including outside the working directory."
+  },
+  "chat.composer.fullAccessReadFailed": {
+    "zh": "读取全权访问状态失败，请检查后端连接。",
+    "en": "Could not read the full-access state — check the backend connection."
+  },
+  "chat.composer.fullAccessTip": {
+    "zh": "关闭工具沙箱：允许 agent 读写工作目录之外的路径。全局生效。",
+    "en": "Disables the tool sandbox: lets the agent read and write paths outside the working directory. Applies globally."
+  },
+  "chat.composer.fullAccessWriteFailed": {
+    "zh": "保存全权访问设置失败，已恢复原状态。",
+    "en": "Could not save the full-access setting — reverted to the previous state."
+  },
   "chat.composer.intentChat": {
     "zh": "聊天",
     "en": "Chat"

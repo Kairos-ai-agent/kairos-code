@@ -16,10 +16,11 @@ const Wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 );
 
 vi.mock('../api/client', () => ({
-  default: { post: vi.fn(), delete: vi.fn() },
+  default: { get: vi.fn(), post: vi.fn(), delete: vi.fn() },
 }));
 
 const mockedApi = api as unknown as {
+  get: ReturnType<typeof vi.fn>;
   post: ReturnType<typeof vi.fn>;
   delete: ReturnType<typeof vi.fn>;
 };
@@ -35,6 +36,12 @@ const PROJECT = {
 
 describe('ChatComposer (Auto mode)', () => {
   beforeEach(() => {
+    mockedApi.get.mockReset();
+    // The composer now hosts the full-access switch, which reads
+    // /projects/settings on mount. These tests don't exercise it, so the
+    // read is left pending: a resolved promise would setState after the
+    // synchronous test body and trip React's act() warning.
+    mockedApi.get.mockImplementation(() => new Promise(() => {}));
     mockedApi.post.mockReset();
     mockedApi.delete.mockReset();
     useChatStore.setState({ currentProject: null });

@@ -47,6 +47,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { classifyIntent } from '../utils/intent';
 import { startDictation, isSpeechInputSupported, type Dictation } from '../lib/speechInput';
 import FolderPicker from './FolderPicker';
+import FullAccessToggle from './FullAccessToggle';
 import { useT } from '../i18n';
 
 /** One uploaded chat attachment (shape returned by the upload endpoint). */
@@ -609,6 +610,10 @@ const ChatComposer: React.FC<Props> = ({
               aria-label={t('chat.composer.send')}
             />
           </Tooltip>
+          {/* Global "full access" switch (settings.fullAccess) — sits right of
+              Send. Turning it on lifts the tool sandbox (one Popconfirm);
+              the value is read from / persisted to /projects/settings. */}
+          <FullAccessToggle />
           {/* R38: model ID chip on the rightmost of the action row.
               Click to open Settings → LLM Models. The chip shows
               which model the next message will use (the active

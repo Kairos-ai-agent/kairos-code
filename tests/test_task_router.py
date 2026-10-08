@@ -207,3 +207,92 @@ def test_large_workspace_scan_is_bounded(tmp_path):
         (tmp_path / f"f{i}.py").write_text("x=1\n", encoding="utf-8")
     s2 = scan_workspace(tmp_path, max_files=3)
     assert s2["total_files"] <= 3
+
+
+# ---------------------------------------------------------------------------
+# KAIROS_ROUTE_DEFAULT: the *undecided* lane can be configured, default loop
+# ---------------------------------------------------------------------------
+
+from kairos.task_router import ROUTE_DEFAULT_ENV, default_route  # noqa: E402
+
+
+def _clear_route_default(monkeypatch):
+    monkeypatch.delenv(ROUTE_DEFAULT_ENV, raising=False)
+
+
+def test_default_route_is_loop_when_unset(monkeypatch):
+    _clear_route_default(monkeypatch)
+    assert default_route() == ROUTE_LOOP
+
+
+@pytest.mark.parametrize("value", ["loop", "LOOP", " loop ", "", "   ", "banana", "skel", "skeletonn"])
+def test_default_route_is_loop_for_everything_but_the_exact_word(monkeypatch, value):
+    """Unset, 'loop', a typo -- all keep the historical default, unchanged."""
+    monkeypatch.setenv(ROUTE_DEFAULT_ENV, value)
+    assert default_route() == ROUTE_LOOP
+
+
+@pytest.mark.parametrize("value", ["skeleton", "SKELETON", " Skeleton "])
+def test_default_route_is_skeleton_only_for_the_exact_word(monkeypatch, value):
+    monkeypatch.setenv(ROUTE_DEFAULT_ENV, value)
+    assert default_route() == ROUTE_SKELETON
+
+
+def test_undecided_default_stays_loop_without_the_env(tmp_path, monkeypatch):
+    """Baseline: with nothing set, the undecided case is today's loop, verbatim."""
+    _clear_route_default(monkeypatch)
+    d = route_task(workspace=tmp_path)  # empty dir -> undecided
+    assert d.route == ROUTE_LOOP
+    assert d.source == "default"
+    assert d.workspace_kind == WS_REPO
+    # the reason text is the unchanged one
+    assert "unchanged behaviour" in d.reason
+
+
+def test_undecided_task_routes_to_skeleton_when_env_is_skeleton(tmp_path, monkeypatch):
+    monkeypatch.setenv(ROUTE_DEFAULT_ENV, "skeleton")
+    d = route_task(workspace=tmp_path)  # empty dir -> undecided
+    assert d.route == ROUTE_SKELETON
+    assert d.uses_skeleton is True
+    assert d.source == "default"
+    # workspace_kind is unchanged from today's default branch (a repo default)
+    assert d.workspace_kind == WS_REPO
+    assert ROUTE_DEFAULT_ENV in d.reason
+
+
+def test_skeleton_default_does_not_reroute_an_explicit_repo(tmp_path, monkeypatch):
+    """An explicit code signal outranks the configured default."""
+    monkeypatch.setenv(ROUTE_DEFAULT_ENV, "skeleton")
+    _docs_only(tmp_path)  # would heuristically be docs
+    d = route_task(explicit_kind="repo", workspace=tmp_path)
+    assert d.route == ROUTE_LOOP
+    assert d.source == "explicit"
+
+
+def test_skeleton_default_does_not_reroute_an_explicit_docs(tmp_path, monkeypatch):
+    monkeypatch.setenv(ROUTE_DEFAULT_ENV, "skeleton")
+    d = route_task(explicit_kind="docs", workspace=tmp_path)
+    assert d.route == ROUTE_SKELETON and d.source == "explicit"
+
+
+def test_skeleton_default_leaves_the_heuristic_repo_on_the_loop(tmp_path, monkeypatch):
+    """A decided-``repo`` workspace stays on the loop even under the override."""
+    monkeypatch.setenv(ROUTE_DEFAULT_ENV, "skeleton")
+    _code_repo(tmp_path)
+    d = route_task(workspace=tmp_path)
+    assert d.route == ROUTE_LOOP
+    assert d.source == "heuristic"
+    assert d.workspace_kind == WS_REPO
+
+
+def test_skeleton_default_still_sends_a_docs_workspace_to_the_skeleton(tmp_path, monkeypatch):
+    monkeypatch.setenv(ROUTE_DEFAULT_ENV, "skeleton")
+    _docs_only(tmp_path)
+    d = route_task(workspace=tmp_path)
+    assert d.route == ROUTE_SKELETON and d.source == "heuristic"
+
+
+def test_loop_value_keeps_undecided_on_the_loop(tmp_path, monkeypatch):
+    monkeypatch.setenv(ROUTE_DEFAULT_ENV, "loop")
+    d = route_task(workspace=tmp_path)
+    assert d.route == ROUTE_LOOP and d.source == "default"

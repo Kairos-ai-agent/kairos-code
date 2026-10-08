@@ -22,14 +22,25 @@ Priority (safety first)
    markers **and** no source files. Every code-ish signal pulls the decision
    back to the loop.
 3. **Otherwise the original loop.** An ambiguous or unscannable workspace is
-   *undecided*, and undecided means ``route="loop"`` -- byte for byte today's
-   behaviour.
+   *undecided*, and by default undecided means ``route="loop"`` -- byte for
+   byte today's behaviour. An operator may change *only* this undecided
+   default with ``KAIROS_ROUTE_DEFAULT=skeleton`` (see below); explicit and
+   heuristic signals always outrank it.
 
 The heuristic is deliberately one-sided: a false "docs" reading would move a
 code task off the loop, which is the failure worth designing against, so a
 workspace with a ``.git``, a ``package.json``/``pyproject.toml``/``tests/``,
 or any source file is a ``repo`` no matter how many markdown files it also
 holds. When nothing decides, the answer is the loop -- never a guess.
+
+Configuring the default lane
+----------------------------
+``KAIROS_ROUTE_DEFAULT`` selects what an *undecided* task does. Only the exact
+value ``"skeleton"`` does anything: it sends a task the router could not place
+(no explicit kind, no workspace evidence) to the skeleton instead of the loop.
+Absent, empty, ``"loop"``, or any unrecognised value leaves the historical
+loop default in place. It is read at call time (never frozen at import), so it
+can be flipped per process/request without a restart.
 """
 from __future__ import annotations
 
@@ -44,6 +55,11 @@ logger = logging.getLogger(__name__)
 #: The two routes a task can take.
 ROUTE_LOOP = "loop"
 ROUTE_SKELETON = "skeleton"
+
+#: Environment variable / settings key naming the route an *undecided* task
+#: takes. Only the exact value ``"skeleton"`` changes anything; every other
+#: value (including a typo) keeps the historical loop default unchanged.
+ROUTE_DEFAULT_ENV = "KAIROS_ROUTE_DEFAULT"
 
 #: The two workspace kinds the skeleton understands (``RepoWorkspace`` /
 #: ``DocSetWorkspace``).
@@ -261,6 +277,19 @@ def _heuristic_kind(signals: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def default_route() -> str:
+    """The route an *undecided* task takes (see ``KAIROS_ROUTE_DEFAULT``).
+
+    Read at call time -- never frozen at import -- so an operator or a test can
+    flip it without a restart. Returns :data:`ROUTE_SKELETON` **only** for the
+    exact value ``"skeleton"`` (trimmed, case-insensitive). Everything else --
+    unset, empty, ``"loop"``, or an unrecognised value such as a typo --
+    returns :data:`ROUTE_LOOP`, i.e. the behaviour the router has always had.
+    """
+    value = (os.environ.get(ROUTE_DEFAULT_ENV) or "").strip().lower()
+    return ROUTE_SKELETON if value == ROUTE_SKELETON else ROUTE_LOOP
+
+
 def route_task(
     *,
     explicit_kind: Any = None,
@@ -304,6 +333,18 @@ def route_task(
             signals=signals,
             source="heuristic",
         )
+    if default_route() == ROUTE_SKELETON:
+        return RouteDecision(
+            route=ROUTE_SKELETON,
+            workspace_kind=WS_REPO,
+            reason=(
+                "no explicit signal and the workspace is ambiguous -> "
+                "KAIROS_ROUTE_DEFAULT=skeleton routes the undecided default to "
+                "the skeleton (explicit and heuristic signals still win)"
+            ),
+            signals=signals,
+            source="default",
+        )
     return RouteDecision(
         route=ROUTE_LOOP,
         workspace_kind=WS_REPO,
@@ -319,9 +360,11 @@ def route_task(
 __all__ = [
     "RouteDecision",
     "route_task",
+    "default_route",
     "scan_workspace",
     "ROUTE_LOOP",
     "ROUTE_SKELETON",
+    "ROUTE_DEFAULT_ENV",
     "WS_REPO",
     "WS_DOCS",
 ]

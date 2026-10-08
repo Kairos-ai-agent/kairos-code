@@ -175,7 +175,7 @@ const Loop: React.FC = () => {
           api.get(`/projects/${selectedProject}/plan`),
           api.get(`/projects/${selectedProject}/stats`).catch(() => null),
           api.get(`/projects/${selectedProject}/ask`).catch(() => null),
-          api.get(`/projects/${selectedProject}/checkpoint`).catch(() => null),
+          api.get(`/projects/${selectedProject}/checkpoints`).catch(() => null),
         ]);
         if (!cancelled) {
           setLoop(loopR.data);
@@ -200,7 +200,7 @@ const Loop: React.FC = () => {
   const loadDiff = useCallback(async (from: number, to: number) => {
     if (!selectedProject) return;
     try {
-      const r = await api.get(`/projects/${selectedProject}/diff`, {
+      const r = await api.get(`/projects/${selectedProject}/checkpoints/diff`, {
         params: { from_round: from, to_round: to },
       });
       setDiffPatch(r.data.patch || '');
@@ -248,7 +248,7 @@ const Loop: React.FC = () => {
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
-          await api.post(`/projects/${selectedProject}/checkpoint`, { sha });
+          await api.post(`/projects/${selectedProject}/checkpoints/restore`, { sha });
           message.success(t('loop.rollback.success'));
         } catch (e: any) {
           message.error(e?.message || t('loop.rollback.failed'));

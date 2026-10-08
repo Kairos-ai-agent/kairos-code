@@ -12,6 +12,8 @@ Endpoints
        → restores the working tree to that checkpoint
   GET  /api/projects/{project_id}/checkpoints/{sha}/diff
        → unified diff vs current working tree
+  GET  /api/projects/{project_id}/checkpoints/diff?from_round=&to_round=
+       → unified diff between two rounds' checkpoints (checkpoint vs checkpoint)
   POST /api/projects/{project_id}/checkpoints
        body: {"label": "before risky change", "round": 3}
        → explicit checkpoint; round defaults to 0
@@ -76,7 +78,7 @@ class CreateCheckpointRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-@router.get("/projects/{project_id}/checkpoints")
+@router.get("/{project_id}/checkpoints")
 def list_project_checkpoints(project_id: str, limit: int = 50) -> Dict[str, Any]:
     """Return all kairos-tagged checkpoints, newest first."""
     work_dir = _resolve_project(project_id)
@@ -84,7 +86,7 @@ def list_project_checkpoints(project_id: str, limit: int = 50) -> Dict[str, Any]
     return {"project_id": project_id, "checkpoints": items, "count": len(items)}
 
 
-@router.post("/projects/{project_id}/checkpoints/restore")
+@router.post("/{project_id}/checkpoints/restore")
 def restore_checkpoint(project_id: str, req: RestoreRequest) -> Dict[str, Any]:
     """Reset the working tree to a checkpoint."""
     if not req.sha or not req.sha.strip():
@@ -100,7 +102,58 @@ def restore_checkpoint(project_id: str, req: RestoreRequest) -> Dict[str, Any]:
     }
 
 
-@router.get("/projects/{project_id}/checkpoints/{sha}/diff")
+@router.get("/{project_id}/checkpoints/diff")
+def diff_rounds(project_id: str, from_round: int, to_round: int) -> Dict[str, Any]:
+    """Unified diff between the checkpoints of two rounds.
+
+    The Loop page's diff viewer selects two *rounds* (not raw SHAs); each round
+    maps to the kairos checkpoint commit for that round, so the patch is
+    `git diff <from_sha> <to_sha>` — checkpoint vs checkpoint, not the working
+    tree. (The per-SHA `/checkpoints/{sha}/diff` route answers a different
+    question: that checkpoint vs the current working tree.)
+    """
+    work_dir = _resolve_project(project_id)
+    by_round = {cp["round"]: cp["sha"] for cp in list_checkpoints(work_dir, limit=1000)}
+    sha_from = by_round.get(from_round)
+    sha_to = by_round.get(to_round)
+    if not sha_from or not sha_to:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "no checkpoint for round(s): "
+                f"from_round={from_round} to_round={to_round}"
+            ),
+        )
+    try:
+        proc = subprocess.run(
+            ["git", "diff", sha_from, sha_to],
+            cwd=str(work_dir),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+            **hidden_kwargs(),
+        )
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="git not installed")
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=500, detail="git diff timed out")
+    if proc.returncode not in (0, 1):  # 1 means there are differences
+        raise HTTPException(
+            status_code=500, detail=proc.stderr.strip() or "git diff failed"
+        )
+    return {
+        "project_id": project_id,
+        "from_round": from_round,
+        "to_round": to_round,
+        "from_sha": sha_from,
+        "to_sha": sha_to,
+        "patch": proc.stdout,
+    }
+
+
+@router.get("/{project_id}/checkpoints/{sha}/diff")
 def diff_checkpoint(project_id: str, sha: str) -> Dict[str, Any]:
     """Return a unified diff between `sha` and the current working tree."""
     work_dir = _resolve_project(project_id)
@@ -130,7 +183,7 @@ def diff_checkpoint(project_id: str, sha: str) -> Dict[str, Any]:
     }
 
 
-@router.post("/projects/{project_id}/checkpoints")
+@router.post("/{project_id}/checkpoints")
 def create_checkpoint(
     project_id: str, req: CreateCheckpointRequest
 ) -> Dict[str, Any]:

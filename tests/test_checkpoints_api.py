@@ -39,6 +39,7 @@ list_project_checkpoints = _checkpoints_routes.list_project_checkpoints
 restore_checkpoint = _checkpoints_routes.restore_checkpoint
 diff_checkpoint = _checkpoints_routes.diff_checkpoint
 create_checkpoint = _checkpoints_routes.create_checkpoint
+diff_rounds = _checkpoints_routes.diff_rounds
 
 
 # ---------------------------------------------------------------------------
@@ -242,3 +243,34 @@ def test_diff_unknown_sha_returns_500(git_project):
         diff_checkpoint("p1", "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
     # git diff returns 128 for unknown rev → route returns 500.
     assert "500" in str(exc.value)
+
+
+# ---------------------------------------------------------------------------
+# diff_rounds — the Loop page's round-to-round diff viewer (GET
+# /projects/{id}/checkpoints/diff?from_round=&to_round=)
+# ---------------------------------------------------------------------------
+
+
+def _checkpoint_version(path: Path, text: str, round_no: int) -> None:
+    (path / "README.md").write_text(text, encoding="utf-8")
+    ckpt.checkpoint_round(path, round_no=round_no, score=90,
+                          summary=f"round {round_no}", approved=True)
+
+
+def test_diff_rounds_returns_patch_between_two_checkpoints(git_project):
+    _checkpoint_version(git_project, "v1\n", 1)
+    _checkpoint_version(git_project, "v2\n", 2)
+
+    resp = diff_rounds("p1", from_round=1, to_round=2)
+    assert resp["from_round"] == 1 and resp["to_round"] == 2
+    assert resp["from_sha"] and resp["to_sha"]
+    assert "README.md" in resp["patch"]
+    assert "-v1" in resp["patch"]   # old line, from round 1's checkpoint
+    assert "+v2" in resp["patch"]   # new line, from round 2's checkpoint
+
+
+def test_diff_rounds_unknown_round_404(git_project):
+    _checkpoint_version(git_project, "v1\n", 1)
+    with pytest.raises(Exception) as exc:
+        diff_rounds("p1", from_round=1, to_round=99)
+    assert "404" in str(exc.value)

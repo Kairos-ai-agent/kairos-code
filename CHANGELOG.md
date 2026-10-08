@@ -168,6 +168,32 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **Loop 页的「检查点 / 差异 / 回滚」面板是坏的：前端调的路径后端一个都不存在。** 这是又一起
+  「静默空转」——但机制和之前几起不同：**两层都写了，中间的线从没被断言过**。后端
+  `api/routes/checkpoints.py` 的路由自身写了 `/projects/{id}/checkpoints`，却又被
+  `api/app.py` 以 `prefix="/api/projects"` 挂载 ⇒ 生效路径成了
+  **`/api/projects/projects/{id}/checkpoints`**（前端永远调不到）；前端 `Loop.tsx` 调的是
+  完全另一套单数路径 `/projects/{id}/checkpoint` 与 `/projects/{id}/diff`，后端**全无**；
+  列表那次请求后面跟着 `.catch(() => null)`，**把 404 吞掉** ⇒ 面板永远空白、不报错、
+  用户只会以为「没有数据」。
+
+  修法：后端去掉路由自身多余的 `/projects`（挂载前缀不动，影响面最小）⇒ 生效路径
+  `/api/projects/{id}/checkpoints…`；前端三处改调复数路径；差异视图需要的是
+  **按轮次**的比较（`from_round`/`to_round` → `{patch}`），而原有的
+  `checkpoints/{sha}/diff` 返回的是「检查点 vs 工作区」，答的是另一个问题 ⇒ 新增
+  `GET /{project_id}/checkpoints/diff` 按轮次映射 sha 后 `git diff <from> <to>`。
+  已能工作的 `POST /{project_id}/checkpoint/revert_file` 未动。
+
+  并新增 `tests/test_frontend_route_parity.py`：扫描前端所有 `api.<method>(...)` 的静态路径
+  模板，断言每一条都能在 `app.openapi()` 的真实路由表里找到且方法一致（不可静态解析的
+  计数跳过、已知缺失的进**带原因的白名单**，白名单过期也会报）。**这道守卫在修复前
+  逐条指名了上面三条路径**（红→绿双证）。
+
+  顺带被它照出来的**三处同类问题**（本次未修，在白名单里可见）：
+  `GET /api/projects/{id}/stats`、`GET /api/projects/{id}/plan/visualization`、
+  `POST /api/projects/{id}/requirements` —— 前端在调、后端同样不存在。
+  （README 曾把 `/stats` 列为已实现端点，本轮文档审计已把它删掉。）
+
 - **读文件的内容缓存漏了「根」⇒ 一个项目能读到另一个项目的同名文件。** `file_read` 的
   结果缓存（`kairos/tools/cache.py`）是**进程级单例**，键只用**传入的路径字符串**、
   不含解析后的根 ⇒ 项目 A 读过 `a.txt` 之后，项目 B 读 `a.txt` 会**拿到 A 的内容**

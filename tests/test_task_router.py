@@ -1,11 +1,19 @@
-"""Routing: which path does a task take -- the code loop, or the skeleton?
+"""Routing: which path does a task take -- the code loop, or the general lane?
 
-The safety property under test is that the router is *one-sided*: it only ever
-sends a task to the skeleton when the caller explicitly says so or the
-workspace positively looks like a document set. Everything else -- including
-"cannot tell" -- resolves to the loop, i.e. today's behaviour, unchanged.
+The router is now two-sided but still conservative: it sends a task to the
+**loop** when there is a positive code signal (an explicit ``kind=repo``, a
+multi-step / plan-mode "long task", a coding-intent word in the message, or a
+workspace that looks like a repo), and to the **general lane (skeleton)**
+otherwise. An undecided task (no signal at all) now defaults to the general
+lane -- "平时 chat 走通用" -- and ``KAIROS_ROUTE_DEFAULT=loop`` restores the
+historical loop default one process at a time.
 
-Priority, in order: explicit signal > heuristic > default (loop).
+Priority, in order: explicit kind > long task > coding intent > workspace
+heuristic > default.
+
+The coding-intent vocabulary is a deliberately crude, in-code, auditable list;
+it WILL misfire on prose that merely mentions a code word, and that is by
+design (see ``kairos/task_router.CODING_INTENT_TERMS``).
 """
 from __future__ import annotations
 
@@ -14,11 +22,15 @@ from pathlib import Path
 import pytest
 
 from kairos.task_router import (
+    CODING_INTENT_TERMS,
+    ROUTE_DEFAULT_ENV,
     ROUTE_LOOP,
     ROUTE_SKELETON,
     RouteDecision,
     WS_DOCS,
     WS_REPO,
+    default_route,
+    detect_coding_intent,
     route_task,
     scan_workspace,
 )
@@ -67,6 +79,15 @@ def test_explicit_repo_kind_routes_to_the_loop(tmp_path, value):
     assert d.source == "explicit"
 
 
+def test_explicit_repo_kind_in_a_docs_workspace_routes_to_the_loop(tmp_path):
+    """(test 5) An explicit code signal keeps the loop even for a docs root."""
+    _docs_only(tmp_path)
+    d = route_task(explicit_kind="repo", workspace=tmp_path)
+    assert d.route == ROUTE_LOOP
+    assert d.source == "explicit"
+    assert d.workspace_kind == WS_REPO
+
+
 def test_explicit_docs_beats_a_repo_workspace(tmp_path):
     """An explicit document task does not need a docs-only directory."""
     _code_repo(tmp_path)  # has pyproject.toml + a .py file -> heuristic says repo
@@ -88,15 +109,15 @@ def test_explicit_param_beats_metadata(tmp_path):
     assert d.route == ROUTE_LOOP
 
 
-def test_unrecognized_explicit_value_falls_through(tmp_path):
+def test_unrecognized_explicit_value_falls_to_the_default_lane(tmp_path):
     """A caller's typo must not silently reroute -- it falls to the default."""
     d = route_task(explicit_kind="banana", workspace=tmp_path)  # empty dir too
-    assert d.route == ROUTE_LOOP
+    assert d.route == ROUTE_SKELETON          # the (new) default lane
     assert d.source == "default"
 
 
 # ---------------------------------------------------------------------------
-# the heuristic: conservative, one-sided
+# the workspace heuristic: conservative, code wins
 # ---------------------------------------------------------------------------
 
 def test_heuristic_routes_a_document_set_to_the_skeleton(tmp_path):
@@ -147,25 +168,177 @@ def test_a_test_directory_is_an_engineering_marker(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# default: undecidable -> the loop, exactly as today
+# (test 3) a code repo with a *plain question* still takes the loop,
+#          byte-for-byte today's coder path
 # ---------------------------------------------------------------------------
 
-def test_empty_workspace_is_undecided_and_defaults_to_the_loop(tmp_path):
-    d = route_task(workspace=tmp_path)
+def test_code_repo_workspace_with_a_plain_question_takes_the_loop(tmp_path):
+    _code_repo(tmp_path)
+    d = route_task(requirement="这个项目是做什么的？", workspace=tmp_path)
     assert d.route == ROUTE_LOOP
+    assert d.source == "heuristic"          # the workspace decided, not the text
+    assert d.workspace_kind == WS_REPO
+
+
+# ---------------------------------------------------------------------------
+# (test 4) a docs project with a plain question takes the general lane
+# ---------------------------------------------------------------------------
+
+def test_docs_workspace_with_a_plain_question_takes_the_general_lane(tmp_path):
+    _docs_only(tmp_path)
+    d = route_task(requirement="帮我总结一下这几份文档", workspace=tmp_path)
+    assert d.route == ROUTE_SKELETON
+    assert d.source == "heuristic"
+    assert d.workspace_kind == WS_DOCS
+
+
+# ---------------------------------------------------------------------------
+# (test 1) plain small talk with no signal -> the general lane (new default)
+# ---------------------------------------------------------------------------
+
+def test_plain_smalltalk_on_an_undecided_workspace_takes_the_general_lane(tmp_path):
+    d = route_task(requirement="你好，今天天气怎么样？", workspace=tmp_path)
+    assert d.route == ROUTE_SKELETON
+    assert d.source == "default"
+    assert d.uses_skeleton is True
+
+
+# ---------------------------------------------------------------------------
+# (test 2) coding intent -> the loop, even on an ambiguous workspace
+# ---------------------------------------------------------------------------
+
+def test_chinese_coding_intent_routes_to_the_loop(tmp_path):
+    d = route_task(requirement="修复 src/auth 里的登录 bug", workspace=tmp_path)
+    assert d.route == ROUTE_LOOP
+    assert d.source == "coding_intent"
+    assert d.signals["coding_intent"]
+    assert "coding intent" in d.reason
+
+
+@pytest.mark.parametrize("text", [
+    "fix the auth bug",
+    "please refactor this module",
+    "implement the endpoint",
+    "debug why the test fails",
+    "add a function to parse it",
+    "commit and merge this branch",
+])
+def test_english_coding_intent_routes_to_the_loop(tmp_path, text):
+    d = route_task(requirement=text, workspace=tmp_path)
+    assert d.route == ROUTE_LOOP
+    assert d.source == "coding_intent"
+
+
+def test_coding_intent_beats_a_docs_workspace(tmp_path):
+    """A coding word outranks the docs heuristic (intent > workspace shape)."""
+    _docs_only(tmp_path)
+    d = route_task(requirement="重构这里的代码", workspace=tmp_path)
+    assert d.route == ROUTE_LOOP
+    assert d.source == "coding_intent"
+
+
+def test_coding_vocabulary_is_in_code_and_auditable():
+    # the exact examples the task named must be present in the fixed list
+    for term in ("修", "改", "实现", "重构", "测试", "报错", "异常", "函数",
+                 "文件", "提交", "commit", "refactor", "implement", "debug",
+                 "bug", "test", "function"):
+        assert term in CODING_INTENT_TERMS, term
+
+
+def test_ascii_coding_terms_use_a_leading_word_boundary():
+    # 'code' must not match inside 'decode' (a leading word boundary)
+    assert detect_coding_intent("please decode this string") is None
+    assert detect_coding_intent("commit the change") == "commit"
+
+
+def test_detect_coding_intent_is_safe_on_odd_inputs():
+    assert detect_coding_intent(None) is None
+    assert detect_coding_intent("") is None
+    assert detect_coding_intent(12345) is None
+    assert detect_coding_intent("今天天气不错") is None
+
+
+# ---------------------------------------------------------------------------
+# (test: long-task signal) a multi-step / plan-mode task -> the loop
+# ---------------------------------------------------------------------------
+
+def test_long_task_flag_routes_to_the_loop(tmp_path):
+    d = route_task(workspace=tmp_path, long_task=True)
+    assert d.route == ROUTE_LOOP
+    assert d.source == "long_task"
+    assert d.signals["long_task"] is True
+
+
+def test_plan_mode_metadata_is_a_long_task_signal(tmp_path):
+    d = route_task(workspace=tmp_path, metadata={"require_plan": True})
+    assert d.route == ROUTE_LOOP and d.source == "long_task"
+
+
+def test_a_plan_id_is_a_long_task_signal(tmp_path):
+    d = route_task(workspace=tmp_path, metadata={"plan_id": "p-123"})
+    assert d.route == ROUTE_LOOP and d.source == "long_task"
+
+
+def test_a_plan_id_alone_is_a_long_task_signal():
+    # no workspace, but a plan id -> the loop, named as a long task
+    d = route_task(metadata={"plan_id": "p-123"})
+    assert d.route == ROUTE_LOOP and d.source == "long_task"
+
+
+# ---------------------------------------------------------------------------
+# default: undecidable -> the general lane; KAIROS_ROUTE_DEFAULT=loop restores
+#          the historical loop default
+# ---------------------------------------------------------------------------
+
+def _clear_route_default(monkeypatch):
+    monkeypatch.delenv(ROUTE_DEFAULT_ENV, raising=False)
+
+
+def test_default_route_is_skeleton_when_unset(monkeypatch):
+    _clear_route_default(monkeypatch)
+    assert default_route() == ROUTE_SKELETON
+
+
+@pytest.mark.parametrize("value", ["skeleton", "SKELETON", " Skeleton ", "", "   ",
+                                   "banana", "skel", "loopback"])
+def test_default_route_is_skeleton_for_everything_but_the_exact_word(monkeypatch, value):
+    """Only the exact word 'loop' changes the default back."""
+    monkeypatch.setenv(ROUTE_DEFAULT_ENV, value)
+    assert default_route() == ROUTE_SKELETON
+
+
+@pytest.mark.parametrize("value", ["loop", "LOOP", " loop "])
+def test_default_route_is_loop_only_for_the_exact_word(monkeypatch, value):
+    monkeypatch.setenv(ROUTE_DEFAULT_ENV, value)
+    assert default_route() == ROUTE_LOOP
+
+
+def test_undecided_default_is_the_general_lane_without_the_env(tmp_path, monkeypatch):
+    """Baseline: with nothing set, an undecided task goes to the general lane."""
+    _clear_route_default(monkeypatch)
+    d = route_task(workspace=tmp_path)  # empty dir -> undecided
+    assert d.route == ROUTE_SKELETON
+    assert d.source == "default"
+    assert d.workspace_kind == WS_REPO
+    assert "general lane" in d.reason
+
+
+def test_empty_workspace_is_undecided_and_defaults_to_the_general_lane(tmp_path):
+    d = route_task(workspace=tmp_path)
+    assert d.route == ROUTE_SKELETON
     assert d.source == "default"
     assert d.workspace_kind == WS_REPO
 
 
-def test_no_workspace_at_all_defaults_to_the_loop():
+def test_no_workspace_at_all_defaults_to_the_general_lane():
     d = route_task()
-    assert d.route == ROUTE_LOOP
+    assert d.route == ROUTE_SKELETON
     assert d.source == "default"
 
 
-def test_a_missing_directory_defaults_to_the_loop(tmp_path):
+def test_a_missing_directory_defaults_to_the_general_lane(tmp_path):
     d = route_task(workspace=tmp_path / "does-not-exist")
-    assert d.route == ROUTE_LOOP
+    assert d.route == ROUTE_SKELETON
     assert d.signals["scanned"] is False
 
 
@@ -173,7 +346,55 @@ def test_workspace_with_only_unknown_files_is_undecided(tmp_path):
     (tmp_path / "data.bin").write_bytes(b"\x00\x01")
     (tmp_path / "notes").write_text("no extension", encoding="utf-8")
     d = route_task(workspace=tmp_path)
+    assert d.route == ROUTE_SKELETON and d.source == "default"
+
+
+# ---------------------------------------------------------------------------
+# (test 6) the escape hatch: KAIROS_ROUTE_DEFAULT=loop restores the old default
+# ---------------------------------------------------------------------------
+
+def test_loop_default_keeps_undecided_on_the_loop(tmp_path, monkeypatch):
+    monkeypatch.setenv(ROUTE_DEFAULT_ENV, "loop")
+    d = route_task(workspace=tmp_path)  # empty dir -> undecided
     assert d.route == ROUTE_LOOP and d.source == "default"
+    assert ROUTE_DEFAULT_ENV in d.reason
+
+
+def test_loop_default_does_not_reroute_an_explicit_repo(tmp_path, monkeypatch):
+    """An explicit code signal outranks the configured default."""
+    monkeypatch.setenv(ROUTE_DEFAULT_ENV, "loop")
+    _docs_only(tmp_path)  # would heuristically be docs
+    d = route_task(explicit_kind="repo", workspace=tmp_path)
+    assert d.route == ROUTE_LOOP
+    assert d.source == "explicit"
+
+
+def test_loop_default_does_not_reroute_an_explicit_docs(tmp_path, monkeypatch):
+    monkeypatch.setenv(ROUTE_DEFAULT_ENV, "loop")
+    d = route_task(explicit_kind="docs", workspace=tmp_path)
+    assert d.route == ROUTE_SKELETON and d.source == "explicit"
+
+
+def test_loop_default_leaves_the_heuristic_repo_on_the_loop(tmp_path, monkeypatch):
+    monkeypatch.setenv(ROUTE_DEFAULT_ENV, "loop")
+    _code_repo(tmp_path)
+    d = route_task(workspace=tmp_path)
+    assert d.route == ROUTE_LOOP
+    assert d.source == "heuristic"
+    assert d.workspace_kind == WS_REPO
+
+
+def test_loop_default_still_sends_a_docs_workspace_to_the_general_lane(tmp_path, monkeypatch):
+    monkeypatch.setenv(ROUTE_DEFAULT_ENV, "loop")
+    _docs_only(tmp_path)
+    d = route_task(workspace=tmp_path)
+    assert d.route == ROUTE_SKELETON and d.source == "heuristic"
+
+
+def test_loop_default_does_not_reroute_a_coding_intent_message(tmp_path, monkeypatch):
+    monkeypatch.setenv(ROUTE_DEFAULT_ENV, "loop")
+    d = route_task(requirement="修复登录 bug", workspace=tmp_path)
+    assert d.route == ROUTE_LOOP and d.source == "coding_intent"
 
 
 # ---------------------------------------------------------------------------
@@ -199,6 +420,16 @@ def test_decision_dict_is_loggable(tmp_path):
     assert isinstance(payload["signals"], dict) and payload["reason"]
 
 
+def test_coding_intent_decision_is_loggable(tmp_path):
+    """The route decision is never silent: route/source/reason are all present."""
+    d = route_task(requirement="fix the bug", workspace=tmp_path)
+    payload = d.to_dict()
+    assert payload["route"] == ROUTE_LOOP
+    assert payload["source"] == "coding_intent"
+    assert payload["reason"]
+    assert payload["signals"]["coding_intent"]
+
+
 def test_large_workspace_scan_is_bounded(tmp_path):
     """The scan never walks an unbounded tree -- it stops at max_files."""
     s = scan_workspace(tmp_path, max_files=3)  # empty dir, just must not hang
@@ -207,92 +438,3 @@ def test_large_workspace_scan_is_bounded(tmp_path):
         (tmp_path / f"f{i}.py").write_text("x=1\n", encoding="utf-8")
     s2 = scan_workspace(tmp_path, max_files=3)
     assert s2["total_files"] <= 3
-
-
-# ---------------------------------------------------------------------------
-# KAIROS_ROUTE_DEFAULT: the *undecided* lane can be configured, default loop
-# ---------------------------------------------------------------------------
-
-from kairos.task_router import ROUTE_DEFAULT_ENV, default_route  # noqa: E402
-
-
-def _clear_route_default(monkeypatch):
-    monkeypatch.delenv(ROUTE_DEFAULT_ENV, raising=False)
-
-
-def test_default_route_is_loop_when_unset(monkeypatch):
-    _clear_route_default(monkeypatch)
-    assert default_route() == ROUTE_LOOP
-
-
-@pytest.mark.parametrize("value", ["loop", "LOOP", " loop ", "", "   ", "banana", "skel", "skeletonn"])
-def test_default_route_is_loop_for_everything_but_the_exact_word(monkeypatch, value):
-    """Unset, 'loop', a typo -- all keep the historical default, unchanged."""
-    monkeypatch.setenv(ROUTE_DEFAULT_ENV, value)
-    assert default_route() == ROUTE_LOOP
-
-
-@pytest.mark.parametrize("value", ["skeleton", "SKELETON", " Skeleton "])
-def test_default_route_is_skeleton_only_for_the_exact_word(monkeypatch, value):
-    monkeypatch.setenv(ROUTE_DEFAULT_ENV, value)
-    assert default_route() == ROUTE_SKELETON
-
-
-def test_undecided_default_stays_loop_without_the_env(tmp_path, monkeypatch):
-    """Baseline: with nothing set, the undecided case is today's loop, verbatim."""
-    _clear_route_default(monkeypatch)
-    d = route_task(workspace=tmp_path)  # empty dir -> undecided
-    assert d.route == ROUTE_LOOP
-    assert d.source == "default"
-    assert d.workspace_kind == WS_REPO
-    # the reason text is the unchanged one
-    assert "unchanged behaviour" in d.reason
-
-
-def test_undecided_task_routes_to_skeleton_when_env_is_skeleton(tmp_path, monkeypatch):
-    monkeypatch.setenv(ROUTE_DEFAULT_ENV, "skeleton")
-    d = route_task(workspace=tmp_path)  # empty dir -> undecided
-    assert d.route == ROUTE_SKELETON
-    assert d.uses_skeleton is True
-    assert d.source == "default"
-    # workspace_kind is unchanged from today's default branch (a repo default)
-    assert d.workspace_kind == WS_REPO
-    assert ROUTE_DEFAULT_ENV in d.reason
-
-
-def test_skeleton_default_does_not_reroute_an_explicit_repo(tmp_path, monkeypatch):
-    """An explicit code signal outranks the configured default."""
-    monkeypatch.setenv(ROUTE_DEFAULT_ENV, "skeleton")
-    _docs_only(tmp_path)  # would heuristically be docs
-    d = route_task(explicit_kind="repo", workspace=tmp_path)
-    assert d.route == ROUTE_LOOP
-    assert d.source == "explicit"
-
-
-def test_skeleton_default_does_not_reroute_an_explicit_docs(tmp_path, monkeypatch):
-    monkeypatch.setenv(ROUTE_DEFAULT_ENV, "skeleton")
-    d = route_task(explicit_kind="docs", workspace=tmp_path)
-    assert d.route == ROUTE_SKELETON and d.source == "explicit"
-
-
-def test_skeleton_default_leaves_the_heuristic_repo_on_the_loop(tmp_path, monkeypatch):
-    """A decided-``repo`` workspace stays on the loop even under the override."""
-    monkeypatch.setenv(ROUTE_DEFAULT_ENV, "skeleton")
-    _code_repo(tmp_path)
-    d = route_task(workspace=tmp_path)
-    assert d.route == ROUTE_LOOP
-    assert d.source == "heuristic"
-    assert d.workspace_kind == WS_REPO
-
-
-def test_skeleton_default_still_sends_a_docs_workspace_to_the_skeleton(tmp_path, monkeypatch):
-    monkeypatch.setenv(ROUTE_DEFAULT_ENV, "skeleton")
-    _docs_only(tmp_path)
-    d = route_task(workspace=tmp_path)
-    assert d.route == ROUTE_SKELETON and d.source == "heuristic"
-
-
-def test_loop_value_keeps_undecided_on_the_loop(tmp_path, monkeypatch):
-    monkeypatch.setenv(ROUTE_DEFAULT_ENV, "loop")
-    d = route_task(workspace=tmp_path)
-    assert d.route == ROUTE_LOOP and d.source == "default"

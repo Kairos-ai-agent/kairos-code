@@ -143,7 +143,14 @@ def test_unbounded_false_enforces_safety_cap():
 
 
 def _make_mock_orch():
-    """Return a minimal orchestrator stub with one project + Coder."""
+    """Return a minimal orchestrator stub with one project + Coder.
+
+    The project's ``work_dir`` is set to a **code-looking** directory (this
+    repo) so the router deterministically picks the Coder lane. ``/chat`` now
+    routes (see ``kairos/task_router.py``), and a bare ``MagicMock`` work_dir
+    scans as "undecided" -> the general lane; these four tests are about the
+    Coder lane, so the workspace must look like code.
+    """
     from kairos.core.message_bus import MessageBus
     bus = MessageBus()
 
@@ -152,6 +159,7 @@ def _make_mock_orch():
     project.coder = MagicMock()
     project.coder.run = MagicMock()
     project.message_bus = bus
+    project.work_dir = str(Path(__file__).resolve().parents[1])
 
     orch = MagicMock()
     orch.get_project = MagicMock(return_value=project)

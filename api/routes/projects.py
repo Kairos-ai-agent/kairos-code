@@ -219,12 +219,15 @@ async def start_loop(project_id: str, request: "StartLoopRequest"):
     if block:
         requirement = f"{requirement}\n\n{block}" if requirement.strip() else block
     # Decide the path. Pure read (a workspace scan); it never mutates the
-    # request, and a code task (or an undecidable workspace) resolves to the
-    # loop, so the block below is byte-for-byte the previous behaviour.
+    # request. A code task (an explicit kind, a coding-intent requirement, or a
+    # code-looking workspace) resolves to the loop, and an undecided task now
+    # resolves to the general lane -- KAIROS_ROUTE_DEFAULT=loop restores the
+    # old loop default.
     from kairos.task_router import route_task
     decision = route_task(
         explicit_kind=(request.kind or request.workspace_kind or ""),
         workspace=_project_root(project),
+        requirement=requirement,
     )
     if decision.uses_skeleton:
         return _start_skeleton_task(project_id, project, requirement, decision)
@@ -348,30 +351,146 @@ async def stop_skeleton(project_id: str):
 # ---------------------------------------------------------------------------
 
 
+async def _chat_on_general_lane(project_id: str, project, request,
+                                decision) -> dict:
+    """Answer a routed chat turn on the general (skeleton) lane -- no Coder.
+
+    The reply travels the *same* chat channel the Coder lane uses, so the
+    thread renders it identically: the user's message is persisted to the DB
+    (``user.chat``) and the reply is published on the bus as an ``agent.chat``
+    message (the topic the chat thread turns into a reply bubble), with the
+    route decision stamped on its metadata. The return body carries today's
+    chat fields (``project_id`` / ``reply`` / ``mode`` / ``message``) plus
+    ``route`` / ``route_source`` / ``route_reason`` so the decision is never
+    silent -- and a ``verdict`` that is ``passed=None`` (the general lane runs
+    no verifier: a chat answer has no pass/fail, so it is *undecided* by
+    design).
+
+    The model is resolved inside ``run_chat_reply`` (a cheap config read); when
+    there is none the request fails honestly with a 503 rather than returning
+    an empty bubble.
+    """
+    from kairos.core.message_bus import Message as _BusMessage
+    from kairos.skeleton.service import run_chat_reply, undecided_chat_verdict
+
+    text = (request.message or "").strip()
+    if not text and not request.attachments:
+        raise HTTPException(status_code=400, detail="message is required")
+    # Fold attachments the same way the Coder lane does, so the general lane
+    # sees what the user attached and the persisted message keeps the list.
+    block = attachment_prompt_block(_project_root(project), request.attachments)
+    if block:
+        text = f"{text}\n\n{block}" if text else block
+
+    root = str(_project_root(project))
+    # Persist the user's own message, mirroring the Coder lane, so a refresh
+    # keeps the question. Straight to the DB (not the bus) so the live stream
+    # doesn't double-render a bubble the UI already showed optimistically.
+    try:
+        _orch()._db.save_message(_BusMessage(
+            sender="user", receiver=f"{project_id}.coder",
+            topic="user.chat", content=text, msg_type="text",
+            metadata={"project_id": project_id},
+        ))
+    except Exception:
+        logger.exception("failed to persist user chat message (general lane)")
+
+    reply = await run_chat_reply(
+        kind=decision.workspace_kind, root=root, message=text,
+    )
+    if reply is None:
+        logger.error(
+            "general-lane chat failed for project %s: no model provider",
+            project_id)
+        raise HTTPException(
+            status_code=503,
+            detail=("general lane failed: no model provider is configured for "
+                    "the conversational route"),
+        )
+    reply = reply.strip()
+    if not reply:
+        # The chat invariant: never return an empty bubble (the UI would show
+        # nothing and look like a hang).
+        reply = ("（通用车道没有返回内容）当前配置的模型没有产出回答，请重试一次；"
+                 "若持续出现，请在设置里检查模型与 API Key。")
+
+    bus = getattr(_orch(), "message_bus", None)
+    if bus is not None:
+        try:
+            await bus.publish(_BusMessage(
+                sender=f"{project_id}.skeleton", topic="agent.chat",
+                content=reply, msg_type="text",
+                metadata={
+                    "project_id": project_id,
+                    "route": "skeleton",
+                    "route_source": decision.source,
+                    "route_reason": decision.reason,
+                    "workspace_kind": decision.workspace_kind,
+                },
+            ))
+        except Exception:
+            logger.exception("failed to publish general-lane chat reply")
+
+    logger.info(
+        "chat route: project=%s route=skeleton source=%s reason=%s",
+        project_id, decision.source, decision.reason)
+    return {
+        "project_id": project_id,
+        "reply": reply,
+        "mode": "chat",
+        "message": text,
+        "route": "skeleton",
+        "route_source": decision.source,
+        "route_reason": decision.reason,
+        "workspace_kind": decision.workspace_kind,
+        "verdict": undecided_chat_verdict().to_dict(),
+    }
+
+
 @router.post("/{project_id}/chat")
 async def chat(project_id: str, request: "ChatRequest"):
-    """Send a single user message to the Coder and return the reply.
+    """Send a single user message and return the reply -- routed.
 
-    Unlike ``/start`` this does NOT kick off the Coder <-> Reviewer
-    loop. It's a conversational endpoint: the user types something,
-    the Coder responds once, the response comes back over the wire
-    + a WebSocket event so the chat thread can render it.
+    Unlike ``/start`` this does NOT kick off the Coder <-> Reviewer loop. The
+    message is first run through the router (:mod:`kairos.task_router`), which
+    picks one of two lanes:
 
-    Use cases (Round 37):
-      - "What does this function do?"
-      - "Explain the difference between X and Y."
-      - "Suggest a name for this module."
-      - Quick questions that don't need a multi-round loop.
+    * **Coder lane (loop).** A coding-intent message, a long / plan-mode turn
+      (``require_plan`` / ``plan_id``), or a code-looking workspace keeps
+      today's behaviour exactly: the Coder answers once via ``coder.chat()``,
+      publishes ``agent.chat``, and the response is
+      ``{"project_id", "reply", "mode": "chat", "message"}`` -- byte for byte.
+    * **General lane (skeleton).** An ordinary question with no code signal
+      on an undecided workspace is answered conversationally on the
+      domain-neutral general lane (no Coder, no verifier). It travels the
+      *same* chat channel (persisted ``user.chat`` + an ``agent.chat`` reply)
+      and returns the same fields plus ``route`` / ``route_source`` /
+      ``route_reason`` so the decision is never silent.
 
-    For anything that involves writing files / running tools / making
-    commits, the user clicks "Run as task" and the chat composer
-    posts to ``/start`` instead.
+    ``KAIROS_ROUTE_DEFAULT=loop`` restores the old "everything to the Coder"
+    default. Use cases (Round 37) -- "What does this function do?", "Explain X
+    vs Y", "Suggest a name" -- are now answered on whichever lane fits.
     """
     try:
         project = _orch().get_project(project_id)
         if not project:
             raise HTTPException(status_code=404,
                                 detail=f"Project not found: {project_id}")
+
+        # Route first. This is a pure, side-effect-free read, so the Coder
+        # branch below stays byte-for-byte today's code: same order, same
+        # bodies, same events.
+        from kairos.task_router import route_task
+        decision = route_task(
+            requirement=(request.message or ""),
+            workspace=_project_root(project),
+            long_task=bool(request.require_plan or request.plan_id),
+        )
+        if decision.uses_skeleton:
+            return await _chat_on_general_lane(project_id, project, request,
+                                               decision)
+
+        # ---- Coder lane: today's code, unchanged ----
         if not project.coder:
             # R38.6.4: surface the underlying attach errors so the
             # user can see WHY the Coder wasn't wired (MCP failure,

@@ -122,13 +122,14 @@ class Settings(BaseSettings):
     # even on Windows (will raise); "asyncio" disables.
     loop: str = Field(default="auto", alias="KAIROS_LOOP")
     # Lane a task takes when the router cannot decide (no explicit kind, no
-    # workspace evidence). "loop" (default) keeps the historical behaviour
-    # byte-for-byte; only the exact value "skeleton" reroutes the *undecided*
-    # case onto the domain-neutral skeleton. Explicit and heuristic signals
-    # always outrank this. Consumed by ``kairos.task_router.default_route``,
+    # long-task flag, no coding intent, no workspace evidence). "skeleton"
+    # (default) sends the *undecided* case to the domain-neutral general lane
+    # ("平时 chat 走通用"); only the exact value "loop" restores the historical
+    # behaviour byte-for-byte. Explicit, long-task, coding-intent and heuristic
+    # signals always outrank this. Consumed by ``kairos.task_router.default_route``,
     # which reads the env var at call time (this field is for discoverability
     # and for code paths that already hold a ``Settings``).
-    route_default: str = Field(default="loop", alias="KAIROS_ROUTE_DEFAULT")
+    route_default: str = Field(default="skeleton", alias="KAIROS_ROUTE_DEFAULT")
 
     # Paths — anchored (absolute), NOT CWD-relative. The backend is
     # launched from different working directories by different

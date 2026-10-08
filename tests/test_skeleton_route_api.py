@@ -49,6 +49,7 @@ class FakeProject:
         self.loop_task = None
         self.loop_session = None
         self.metadata: dict = {}
+        self.coder = None
         self.runtime = type("R", (), {"coder_mode": "default", "coder_policy": None})()
 
 
@@ -86,13 +87,46 @@ class FakeOrchestrator(OrchLoopControlMixin):
 
 
 class _FakeDb:
-    """The bits ``_on_loop_done`` touches, none of which matter here."""
+    """The bits ``_on_loop_done`` touches, plus the chat message sink."""
+
+    def __init__(self) -> None:
+        self.saved: list = []
 
     def save_project(self, project) -> None:
         pass
 
+    def save_message(self, msg) -> None:
+        # The chat route persists the user's own message straight to the DB
+        # (topic ``user.chat``); keep them so a test can assert it happened.
+        self.saved.append(msg)
+
     def load_loop_rounds(self, project_id, limit: int = 20):
         return []
+
+
+class FakeCoder:
+    """A minimal Coder for the chat lane.
+
+    ``chat()`` records the call, publishes ``agent.chat`` on the bus (exactly
+    what the real Coder does in ``kairos/agents/agent_parts/chat.py``), and
+    returns a marked reply -- so a test can prove the Coder lane was taken and
+    that its body + event are unchanged.
+    """
+
+    def __init__(self, bus) -> None:
+        self.bus = bus
+        self.agent_id = "p1.coder"
+        self.chat_calls: list = []
+
+    async def chat(self, text, *, voice_mode: bool = False) -> str:
+        self.chat_calls.append({"text": text, "voice_mode": voice_mode})
+        reply = f"[coder] {text}"
+        from kairos.core.message_bus import Message
+
+        await self.bus.publish(Message(
+            sender=self.agent_id, topic="agent.chat", content=reply,
+            msg_type="text"))
+        return reply
 
 
 class _CancelledLoopTask:
@@ -159,6 +193,15 @@ def _fake_generate(prompt: str) -> str:
         "## 自检引用",
         f"SELF_CHECK: citations={len(names)}/{len(names)} ok",
     ])
+
+
+def _fake_chat_generate(prompt: str) -> str:
+    """A chat-style deterministic generator (no network, no model).
+
+    Distinct from ``_fake_generate`` so a test can tell the general lane's own
+    answer from a Coder reply.
+    """
+    return "（通用车道）这是一次对话式回答。"
 
 
 def _slow_generate(progress: dict, delay: float):
@@ -376,16 +419,19 @@ def test_ordinary_code_task_still_takes_the_loop(make_client, code_root):
     assert "verdict" not in body
 
 
-def test_no_signal_on_an_undecidable_workspace_stays_on_the_loop(make_client, tmp_path):
-    """An empty workspace is undecided -> the loop, exactly as before."""
+def test_no_signal_on_an_undecidable_workspace_takes_the_general_lane(make_client, tmp_path):
+    """An empty workspace is undecided -> the general lane (new default)."""
     empty = tmp_path / "empty"
     empty.mkdir()
     client, fake = make_client(empty)
 
     r = client.post("/api/projects/p1/start", json={"requirement": "do something"})
     assert r.status_code == 200, r.text
-    assert r.json()["session_id"] == "sess-1"
-    assert fake.start_loop_calls == [("p1", "do something")]
+    body = r.json()
+    assert body["route"] == "skeleton"
+    assert body["route_source"] == "default"
+    # the loop was NOT used for an undecided, non-coding task
+    assert fake.start_loop_calls == []
 
 
 def test_explicit_repo_kind_on_a_docs_workspace_takes_the_loop(make_client, docs_root):
@@ -839,3 +885,151 @@ def test_corrupt_newest_record_does_not_hide_the_run(tmp_path):
     assert state is not None
     assert state["run_id"] == "good"
     assert state["status"] == "done"
+
+
+# ---------------------------------------------------------------------------
+# (7) THE CHAT ROUTING: ``POST /{id}/chat`` now picks a lane, and the Coder
+#     lane is byte-for-byte today's chat
+# ---------------------------------------------------------------------------
+
+def test_chat_plain_greeting_takes_the_general_lane(make_client, tmp_path, monkeypatch):
+    """(chat 1) A plain greeting on an undecided workspace -> general lane."""
+    monkeypatch.setattr("kairos.skeleton.service.default_generator",
+                        lambda: _fake_chat_generate)
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    client, fake = make_client(empty)
+    # a Coder IS wired, but must not be touched on the general lane
+    coder = FakeCoder(fake.message_bus)
+    fake.project.coder = coder
+
+    r = client.post("/api/projects/p1/chat", json={"message": "你好，今天天气怎么样？"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+
+    assert body["route"] == "skeleton"
+    assert body["route_source"] == "default"
+    assert body["route_reason"]
+    assert body["mode"] == "chat"
+    assert body["reply"] == _fake_chat_generate("")
+    assert body["message"] == "你好，今天天气怎么样？"
+    # no verifier on the conversational general lane -> undecided, not failed
+    assert body["verdict"]["passed"] is None
+    # the Coder was NOT used
+    assert coder.chat_calls == []
+    # the reply still travelled the same chat event (agent.chat)...
+    topics = [m.topic for m in fake.message_bus.get_history(limit=100)]
+    assert "agent.chat" in topics
+    # ...and the user's message was persisted on the same topic as the loop lane
+    assert any(getattr(m, "topic", "") == "user.chat" for m in fake._db.saved)
+
+
+def test_chat_general_lane_works_without_a_coder(make_client, tmp_path, monkeypatch):
+    """The general lane does not need a Coder at all (unlike today's chat)."""
+    monkeypatch.setattr("kairos.skeleton.service.default_generator",
+                        lambda: _fake_chat_generate)
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    client, fake = make_client(empty)
+    assert fake.project.coder is None
+
+    r = client.post("/api/projects/p1/chat", json={"message": "帮我起个名字"})
+    assert r.status_code == 200, r.text
+    assert r.json()["route"] == "skeleton"
+
+
+def test_chat_docs_workspace_question_takes_the_general_lane(make_client, docs_root, monkeypatch):
+    """(chat 4) A question in a document workspace -> general lane."""
+    monkeypatch.setattr("kairos.skeleton.service.default_generator",
+                        lambda: _fake_chat_generate)
+    client, fake = make_client(docs_root)
+    fake.project.coder = FakeCoder(fake.message_bus)
+
+    r = client.post("/api/projects/p1/chat", json={"message": "帮我总结这几份文档"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["route"] == "skeleton"
+    assert body["route_source"] == "heuristic"
+    assert fake.project.coder.chat_calls == []
+
+
+def test_chat_code_repo_question_takes_the_coder_lane(make_client, code_root):
+    """(chat 3) A repo workspace + a plain question -> today's Coder path."""
+    client, fake = make_client(code_root)
+    coder = FakeCoder(fake.message_bus)
+    fake.project.coder = coder
+
+    r = client.post("/api/projects/p1/chat", json={"message": "这个项目是做什么的？"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert coder.chat_calls == [{"text": "这个项目是做什么的？", "voice_mode": False}]
+    assert body["reply"] == "[coder] 这个项目是做什么的？"
+
+
+def test_chat_coding_intent_takes_the_coder_lane(make_client, tmp_path):
+    """(chat 2) A coding-intent message -> the Coder lane, even with no repo."""
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    client, fake = make_client(empty)
+    coder = FakeCoder(fake.message_bus)
+    fake.project.coder = coder
+
+    r = client.post("/api/projects/p1/chat", json={"message": "修复 src/auth 里的登录 bug"})
+    assert r.status_code == 200, r.text
+    assert coder.chat_calls and coder.chat_calls[0]["text"] == "修复 src/auth 里的登录 bug"
+
+
+def test_chat_plan_mode_takes_the_coder_lane(make_client, tmp_path):
+    """A plan-mode (long) turn -> the Coder lane."""
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    client, fake = make_client(empty)
+    coder = FakeCoder(fake.message_bus)
+    fake.project.coder = coder
+
+    r = client.post("/api/projects/p1/chat",
+                    json={"message": "帮我做这个", "require_plan": True})
+    assert r.status_code == 200, r.text
+    assert coder.chat_calls
+
+
+def test_chat_coder_lane_body_and_event_are_identical_to_today(make_client, tmp_path):
+    """(chat 7) The reversed proof: the Coder lane is today's chat, word for word."""
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    client, fake = make_client(empty)
+    coder = FakeCoder(fake.message_bus)
+    fake.project.coder = coder
+
+    r = client.post("/api/projects/p1/chat",
+                    json={"message": "fix the auth bug", "voice_mode": True})
+    assert r.status_code == 200, r.text
+    body = r.json()
+
+    # exactly today's four fields, in order -- no route/verdict fields leak in
+    assert list(body.keys()) == ["project_id", "reply", "mode", "message"]
+    assert body == {"project_id": "p1", "reply": "[coder] fix the auth bug",
+                    "mode": "chat", "message": "fix the auth bug"}
+    # coder.chat() got the text + voice_mode, exactly as before
+    assert coder.chat_calls == [{"text": "fix the auth bug", "voice_mode": True}]
+    # the reply travelled on the same event the Coder has always published
+    hits = [m for m in fake.message_bus.get_history(limit=100)
+            if m.topic == "agent.chat"]
+    assert hits and hits[-1].sender == "p1.coder"
+    assert hits[-1].content == "[coder] fix the auth bug"
+    # the user message was persisted the same way (user.chat)
+    saved = [m for m in fake._db.saved if getattr(m, "topic", "") == "user.chat"]
+    assert saved and saved[-1].content == "fix the auth bug"
+
+
+def test_chat_general_lane_without_a_model_is_a_503(make_client, tmp_path, monkeypatch):
+    """Honest failure: the general lane needs a model; none -> 503, not a blank."""
+    monkeypatch.setattr("kairos.skeleton.service.default_generator", lambda: None)
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    client, fake = make_client(empty)
+
+    r = client.post("/api/projects/p1/chat", json={"message": "你好"})
+    assert r.status_code == 503, r.text
+    assert "general lane" in r.json()["detail"]
+

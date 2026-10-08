@@ -23,13 +23,14 @@ routed here.
 """
 from __future__ import annotations
 
+import inspect
 import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-from kairos.skeleton.contracts import Task
+from kairos.skeleton.contracts import Task, Verdict
 from kairos.skeleton.driver import SkeletonRun, run_task
 from kairos.skeleton.verifiers import (
     CitationConsistencyVerifier,
@@ -160,6 +161,76 @@ def build_verifier(kind: str):
     return CitationConsistencyVerifier()
 
 
+#: Prompt for a *conversational* general-lane turn (the chat path). Unlike the
+#: deliverable prompt in ``PromptWorker`` this asks for a plain answer, because
+#: a chat message ("你好", "这个项目是做什么的？") is not a document to be
+#: produced -- and it must never make the worker write a file into the user's
+#: workspace.
+_CHAT_PROMPT = (
+    "You are answering the user's message conversationally, inside their "
+    "project workspace.\n\n"
+    "Use the workspace context below when it is relevant to the message. If "
+    "it is not relevant, just answer the question directly and briefly.\n\n"
+    "WORKSPACE CONTEXT:\n{context}\n\n"
+    "USER MESSAGE:\n{message}\n\n"
+    "Write your reply now."
+)
+
+
+def undecided_chat_verdict() -> Verdict:
+    """The verdict a conversational general-lane turn carries: ``undecided``.
+
+    A single chat answer is not a deliverable with pass/fail criteria, so the
+    general lane runs its Worker **without a Verifier**. ``passed`` is ``None``
+    (undecided) by design -- never ``False``, which would read as a failure.
+    """
+    return Verdict(
+        passed=None,
+        verifier="",
+        reason="conversational turn: the general lane runs no verifier",
+    )
+
+
+async def run_chat_reply(
+    *,
+    kind: str,
+    root: Any,
+    message: str,
+    generate: Optional[Callable] = None,
+    max_context_chars: Optional[int] = None,
+) -> Optional[str]:
+    """One conversational turn on the general lane; the reply text, or ``None``.
+
+    The general lane's Worker (a model) is run WITHOUT a Verifier -- a chat
+    answer has no pass/fail, so the verdict is :func:`undecided_chat_verdict`
+    (``passed is None``) by design. This deliberately does **not** call
+    ``PromptWorker.run``: that worker *emits an artifact* (writes a deliverable
+    file) and demands citations, neither of which fits a chat turn and both of
+    which would pollute the user's workspace on every "你好". It reuses the two
+    parts of the skeleton that do fit -- the same generator seam
+    (:func:`default_generator`) and the same bounded workspace-context renderer
+    (:meth:`kairos.skeleton.contracts.Workspace.as_prompt_context`).
+
+    Returns ``None`` when no model provider is configured (the caller surfaces
+    that honestly instead of pretending a turn ran).
+    """
+    workspace = build_workspace(kind, root)
+    generator = generate if generate is not None else default_generator()
+    if generator is None:
+        return None
+    context = workspace.as_prompt_context(
+        max_chars=max_context_chars, query=message)
+    prompt = _CHAT_PROMPT.format(context=context, message=message)
+    try:
+        text = generator(prompt)
+        if inspect.isawaitable(text):
+            text = await text
+    except Exception:  # a provider failure must surface, not crash the route
+        logger.exception("general-lane chat generation failed")
+        raise
+    return "" if text is None else str(text)
+
+
 async def run_general_task(
     *,
     kind: str,
@@ -214,5 +285,7 @@ __all__ = [
     "build_workspace",
     "build_verifier",
     "run_general_task",
+    "run_chat_reply",
+    "undecided_chat_verdict",
     "DEFAULT_OUTPUT_NAME",
 ]

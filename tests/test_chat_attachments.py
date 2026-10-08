@@ -76,6 +76,25 @@ def _upload(name: str, data: bytes, mime: str | None = None) -> UploadFile:
     return UploadFile(file=io.BytesIO(data), filename=name, headers=headers)
 
 
+def _stub_general_lane(monkeypatch, reply: str = "通用车道回复"):
+    """Patch the general-lane generator so ``/chat`` never reaches a model.
+
+    A plain message on the undecided temp workspace now routes to the general
+    lane (skeleton); without this the route would resolve the configured
+    provider and make a real network call. Returns the list of prompts the
+    generator received, so a test can assert the ``[附件]`` block reached the
+    model.
+    """
+    seen: list[str] = []
+
+    def _gen(prompt: str) -> str:
+        seen.append(prompt)
+        return reply
+
+    monkeypatch.setattr("kairos.skeleton.service.default_generator", lambda: _gen)
+    return seen
+
+
 @pytest.fixture
 def project(tmp_path):
     """Fake orchestrator + a project whose work_dir is a temp directory."""
@@ -213,7 +232,8 @@ def test_attachment_block_rejects_missing_file(project):
 # ---------------------------------------------------------------------------
 
 
-async def test_chat_appends_attachment_block_and_echoes_message(project):
+async def test_chat_appends_attachment_block_and_echoes_message(project, monkeypatch):
+    seen = _stub_general_lane(monkeypatch)
     await upload_attachments("p1", files=[_upload("data.csv", b"a,b\n1,2\n",
                                                   "text/csv")])
     body = _projects.ChatRequest(message="看看这个表",
@@ -221,29 +241,47 @@ async def test_chat_appends_attachment_block_and_echoes_message(project):
 
     resp = await chat("p1", body)
 
-    assert resp["reply"] == "ok"
-    sent = project.coder.seen[-1]
-    assert sent.startswith("看看这个表")
-    assert f"- {ATTACHMENTS_DIRNAME}/data.csv" in sent
     # the echoed message is what the thread should render / what got persisted
-    assert resp["message"] == sent
+    assert resp["message"].startswith("看看这个表")
+    assert f"- {ATTACHMENTS_DIRNAME}/data.csv" in resp["message"]
+    # ...and it is exactly what the model (the general lane) was handed
+    assert f"- {ATTACHMENTS_DIRNAME}/data.csv" in seen[-1]
+    assert resp["reply"] == "通用车道回复"
+    # a plain message with no code signal took the general lane, not the Coder
+    assert project.coder.seen == []
 
 
-async def test_chat_without_attachments_is_unchanged(project):
+async def test_chat_without_attachments_is_unchanged(project, monkeypatch):
+    seen = _stub_general_lane(monkeypatch)
     body = _projects.ChatRequest(message="你好")
     resp = await chat("p1", body)
-    assert project.coder.seen[-1] == "你好"
-    assert resp["message"] == "你好"
+    assert resp["message"] == "你好"          # no [附件] block was added
+    assert "你好" in seen[-1]
 
 
-async def test_chat_allows_attachment_only_message(project):
+async def test_chat_allows_attachment_only_message(project, monkeypatch):
     """Dropping a file with no text at all still sends (no 400)."""
+    seen = _stub_general_lane(monkeypatch)
     await upload_attachments("p1", files=[_upload("shot.png", b"\x89PNG")])
     body = _projects.ChatRequest(message="",
                                  attachments=[f"{ATTACHMENTS_DIRNAME}/shot.png"])
     resp = await chat("p1", body)
-    assert "shot.png" in project.coder.seen[-1]
     assert resp["message"].startswith("[附件")
+    assert "shot.png" in seen[-1]
+
+
+async def test_chat_attachment_folds_on_the_coder_lane_for_a_repo_workspace(project, monkeypatch):
+    """A code-looking workspace keeps the Coder lane; attachments still fold."""
+    (Path(project.work_dir) / "main.py").write_text("x = 1\n", encoding="utf-8")
+    await upload_attachments("p1", files=[_upload("data.csv", b"a,b")])
+    body = _projects.ChatRequest(message="看看这个表",
+                                 attachments=[f"{ATTACHMENTS_DIRNAME}/data.csv"])
+
+    resp = await chat("p1", body)
+
+    assert resp["reply"] == "ok"
+    assert resp["message"] == project.coder.seen[-1]
+    assert f"- {ATTACHMENTS_DIRNAME}/data.csv" in project.coder.seen[-1]
 
 
 async def test_chat_rejects_missing_attachment_with_404(project):

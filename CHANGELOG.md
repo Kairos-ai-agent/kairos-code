@@ -168,6 +168,37 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **前端一直在调、后端不存在的三个端点：现在按前端的现有契约做出来了。** 与「检查点面板」
+  同一类（两层各自都有、中间对不上），但这次是**只有前端有、后端没有**：
+  `GET /projects/{id}/stats`（Loop 页的分数条形图 / tokens / 失败连击 / 无进展计数卡片）、
+  `GET /projects/{id}/plan/visualization`（计划 Mermaid 图 + 文件树）、
+  `POST /projects/{id}/requirements`（需求框的草稿自动保存，失败静默）。三个都在意会中被
+  `.catch(() => null)` 吞掉 ⇒ 卡片不显示、草稿从不保存，谁都不知道。**只加后端、不动前端**
+  （调用本来就在，让声称变成真的；不需要重打前端包）。
+
+  - **`/stats`**：字段全部从 `LoopSession` 映射（`rounds` 由 `session.history` 映射，
+    **回滚行被显式跳过**，不会被误当成一次 `approve=False`；`score_window` /
+    `total_tokens_used` / `infra_failure_streak` / `no_progress_count` / `running`）。
+    **`approximate_cost_usd` 恒为 `0.0`，这是如实标注的哨兵值**：花费台账（`kairos/cost.py`）
+    每次 LLM 调用记一条，但**不按项目打标** ⇒ 无法得出一个真实的按项目花费，宁可返回 0 也不编。
+    另：`history` 行上**没有时间戳**，`ts` 返回 `0.0`（卡片未使用该字段）——两个缺口都写在
+    端点 docstring 里。没有 loop 会话时返回 **404**（前端 `.catch` 让卡片继续不显示，
+    比渲染一张「0 轮 0 问题」的空卡诚实）。
+  - **`/plan/visualization`**：`mermaid` 优先取**结构化计划**（`kairos/loop/plan.py` 的
+    `Plan`/`TodoItem`，带 `pending`/`in_progress`/`completed`，按状态上色 + 顺序边）；没有
+    结构化 todos 但有计划文本时，把**计划自己的行**渲染成节点，并在图内用 `%%` 注释
+    **明说这是「计划原文的呈现、不是模型生成的图」**。所有标签经统一转义
+    （换行→`<br/>`、`&`/`<`/`>`/`"`/`#` 全部转义，节点 id 另行生成）⇒ **计划文本里的引号、
+    换行、`-->` 不会弄坏图**（有敌意输入测试兜着）。`file_tree` 复用 workbench 的文件树
+    遍历，**深度 3 / 条目 200 封顶**并带截断脚注（实测 300 条 → 201 行 +
+    `(+100 more entries, truncated)`）。
+  - **`/requirements`**：写入 `project.requirements` + `save_project`（与 `start_loop` 启动时
+    写的是**同一个字段**）⇒ 草稿能挺过刷新与重开；项目不存在 404、非字符串或超长
+    （>100k）400，坏输入不会是 500。
+  - **守卫白名单从 5 条缩到 2 条**：`tests/test_frontend_route_parity.py` 的 `KNOWN_MISSING`
+    现在只剩两条动态枚举（都带 reason）。这个守卫正是当初把这三条照出来的东西 ⇒ 它自己
+    会报「白名单过期」，所以白名单的缩短本身就是修复的证据。
+
 - **Loop 页的「检查点 / 差异 / 回滚」面板是坏的：前端调的路径后端一个都不存在。** 这是又一起
   「静默空转」——但机制和之前几起不同：**两层都写了，中间的线从没被断言过**。后端
   `api/routes/checkpoints.py` 的路由自身写了 `/projects/{id}/checkpoints`，却又被

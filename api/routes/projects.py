@@ -650,6 +650,211 @@ async def get_plan(project_id: str):
     return plan
 
 
+# ---------------------------------------------------------------------------
+# Loop stats card  (web/src/pages/Loop.tsx `interface Stats`)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{project_id}/stats")
+async def get_project_stats(project_id: str):
+    """Score / token / counter stats for the Loop page's Stats card.
+
+    Contract: ``web/src/pages/Loop.tsx`` ``interface Stats`` — every field is
+    present, because the card is gated by ``{stats && ...}`` and renders
+    nothing when the whole object is missing.
+
+    Every value comes from the live in-memory ``LoopSession``
+    (``kairos/loop/review_loop.py``):
+
+      * ``running``              ← ``project.loop_task``
+      * ``rounds``               ← ``session.history`` mapped (see below)
+      * ``score_window``         ← ``session.score_window``
+      * ``total_tokens_used``    ← ``session.total_tokens_used``
+      * ``approximate_cost_usd`` ← **always 0.0**. The cost ledger
+        (``kairos/cost.py``) records one entry per LLM call but does not tag
+        the entry with a project id, so a truthful *per-project* cost cannot
+        be derived. We return the documented sentinel ``0.0`` rather than
+        invent a number; the card renders ``0.0000``.
+      * ``infra_failure_streak`` ← ``session.infra_failure_streak``
+      * ``no_progress_count``    ← ``session.no_progress_count``
+
+    ``history`` → ``rounds`` mapping: a normal round row is
+    ``{round, review, coder, plan}`` (kairos/loop/loop_runner.py) and we
+    surface ``review``'s ``score`` / ``approve`` / ``issues`` (count) /
+    ``summary``. A row may instead be a regression-rollback note
+    ``{round, rollback, reason, plan}`` — a rollback is **not** a review, so
+    it is skipped and never emitted as ``approve=False`` (which would paint a
+    red bar the Reviewer never gave). ``ts`` has no in-memory source (history
+    rows carry no timestamp), so it is ``0.0`` — the frontend never reads it
+    (the card uses round/score/approve/issues only).
+
+    No loop session → **404**: the frontend's ``.catch(() => null)`` then
+    leaves the card hidden, exactly as today. An all-zero card would be a
+    misleading "0 issues, 0 rounds" render.
+    """
+    project = _orch().get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404,
+                            detail=f"Project not found: {project_id}")
+    session = getattr(project, "loop_session", None)
+    if not session:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No loop session for project: {project_id}")
+
+    rounds = []
+    for row in getattr(session, "history", None) or []:
+        if not isinstance(row, dict):
+            continue
+        if row.get("rollback"):
+            # Regression rollback note, not a review round: skip it so it is
+            # never mistaken for an approve=False verdict.
+            continue
+        review = row.get("review")
+        if not isinstance(review, dict):
+            continue  # nothing the Reviewer produced — nothing to chart
+        issues = review.get("issues") or []
+        rounds.append({
+            "round": int(row.get("round", 0) or 0),
+            "score": int(review.get("score", 0) or 0),
+            "approve": bool(review.get("approve", False)),
+            "issues": len(issues) if isinstance(issues, list) else 0,
+            "summary": str(review.get("summary") or ""),
+            "ts": 0.0,  # not tracked on the in-memory history row
+        })
+
+    return {
+        "running": bool(getattr(project, "loop_task", None)
+                        and not project.loop_task.done()),
+        "rounds": rounds,
+        "score_window": list(getattr(session, "score_window", None) or []),
+        "total_tokens_used": int(getattr(session, "total_tokens_used", 0) or 0),
+        "approximate_cost_usd": 0.0,
+        "infra_failure_streak": int(
+            getattr(session, "infra_failure_streak", 0) or 0),
+        "no_progress_count": int(getattr(session, "no_progress_count", 0) or 0),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Plan visualization  (web/src/pages/Loop.tsx `interface PlanViz`)
+# ---------------------------------------------------------------------------
+
+# Bounds for the embedded file tree: a large repo must never yield an
+# unbounded response body.
+_PLAN_VIZ_MAX_TREE_DEPTH = 3
+_PLAN_VIZ_MAX_TREE_ENTRIES = 200
+
+
+@router.get("/{project_id}/plan/visualization")
+async def get_plan_visualization(project_id: str):
+    """Plan diagram (Mermaid) + file tree for the Loop plan-viz card.
+
+    Contract: ``web/src/pages/Loop.tsx`` ``interface PlanViz`` —
+    ``{mermaid, file_tree, round}``.
+
+    ``mermaid`` source, in order of preference:
+
+      1. the **structured** plan on the live session (``session.plan_todos``,
+         a ``kairos.loop.plan.Plan``) → one status-coloured node per todo
+         (``completed`` / ``in_progress`` / ``pending``), sequential edges;
+      2. otherwise the Coder's free-form ``plan.text`` → one node per
+         top-level numbered / bulleted line. This is explicitly **a rendering
+         of the plan text the Coder wrote, not a model-generated graph**
+         (see ``kairos/review/plan_viz.py``).
+
+    Every label goes through ``escape_mermaid_label`` first, so plan text
+    containing quotes, newlines, ``<``/``>``, ``#`` or ``-->`` cannot break
+    the diagram — or the frontend renderer.
+
+    ``file_tree`` reuses the workbench walk (``api.routes.workbench._walk``)
+    rooted at the project work_dir, depth-bounded (``_PLAN_VIZ_MAX_TREE_DEPTH``)
+    and entry-capped (``_PLAN_VIZ_MAX_TREE_ENTRIES``).
+
+    **404** when there is neither a structured plan nor plan text — the
+    frontend only requests this route once ``plan.pending || plan.text``, so a
+    404 is the honest "nothing to draw".
+    """
+    project = _orch().get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404,
+                            detail=f"Project not found: {project_id}")
+
+    session = getattr(project, "loop_session", None)
+    plan = _orch().get_plan(project_id)  # {pending, decision, text, round}|None
+
+    from kairos.review.plan_viz import (
+        entries_to_tree_text,
+        plan_text_to_mermaid,
+        todos_to_mermaid,
+    )
+
+    plan_obj = getattr(session, "plan_todos", None) if session else None
+    todos = getattr(plan_obj, "todos", None) if plan_obj is not None else None
+
+    mermaid = todos_to_mermaid(todos) if todos else ""
+    if not mermaid and plan and plan.get("text"):
+        mermaid = plan_text_to_mermaid(plan["text"])
+    if not mermaid:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No plan to visualize for project: {project_id}")
+
+    round_no = int(plan.get("round", 0) or 0) if plan else 0
+    if not round_no:
+        round_no = int(getattr(session, "round", 0) or 0)
+
+    # Reuse the workbench tree walk. Imported lazily: workbench imports
+    # api.deps at module load, so a top-level import here would be a cycle.
+    from api.routes.workbench import _load_manifest, _resolve_project_root, _walk
+
+    root = _resolve_project_root(project_id)
+    manifest = _load_manifest(root)
+    entries = _walk(root, root, "", _PLAN_VIZ_MAX_TREE_DEPTH, manifest)
+    file_tree = entries_to_tree_text(
+        entries, max_entries=_PLAN_VIZ_MAX_TREE_ENTRIES)
+
+    return {"mermaid": mermaid, "file_tree": file_tree, "round": round_no}
+
+
+# ---------------------------------------------------------------------------
+# Requirements autosave  (web/src/pages/Project.tsx)
+# ---------------------------------------------------------------------------
+
+# The Project page autosaves the requirements textarea (debounced 1s). Cap it
+# so a hostile / runaway client cannot persist an unbounded blob.
+MAX_REQUIREMENTS_LEN = 100_000
+
+
+@router.post("/{project_id}/requirements")
+async def update_requirements(project_id: str, body: dict):
+    """Persist the Project page's requirements draft.
+
+    Body: ``{"requirements": str}``. Written to ``project.requirements`` and
+    saved, so the value comes back on the project list
+    (``Project.to_dict()`` → ``requirements``) and re-fills the textarea.
+
+    ``404`` for an unknown project; ``400`` for a non-string or oversized
+    (> ``MAX_REQUIREMENTS_LEN``) value — bad input is never a 500.
+    """
+    project = _orch().get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404,
+                            detail=f"Project not found: {project_id}")
+    value = body.get("requirements") if isinstance(body, dict) else None
+    if not isinstance(value, str):
+        raise HTTPException(status_code=400,
+                            detail="'requirements' must be a string")
+    if len(value) > MAX_REQUIREMENTS_LEN:
+        raise HTTPException(
+            status_code=400,
+            detail=f"requirements too long ({len(value)} chars; "
+                   f"max {MAX_REQUIREMENTS_LEN})")
+    project.requirements = value
+    _orch()._db.save_project(project)
+    return {"status": "saved", "project_id": project_id, "requirements": value}
+
+
 @router.post("/{project_id}/plan/approve")
 async def approve_plan(project_id: str):
     """User approves the Coder'"'"'s plan 鈥?loop continues with tool execution."""

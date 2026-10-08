@@ -57,16 +57,6 @@ WEB_SRC = ROOT / "web" / "src"
 # (METHOD, normalised-client-path). Every entry must carry a reason; the test
 # prints the whole list so these are visible, not hidden.
 KNOWN_MISSING: dict[tuple[str, str], str] = {
-    ("GET", "/api/projects/{param}/stats"):
-        "pre-existing: the Loop stats card calls a route the backend never "
-        "implemented; the 404 is swallowed by .catch(() => null). Out of scope "
-        "for the checkpoint-parity fix.",
-    ("GET", "/api/projects/{param}/plan/visualization"):
-        "pre-existing: the plan-viz card calls an unimplemented route; also "
-        "swallowed by .catch(() => null). Out of scope.",
-    ("POST", "/api/projects/{param}/requirements"):
-        "pre-existing: Project page posts requirements to an unimplemented "
-        "route. Out of scope.",
     ("POST", "/api/borrowed/{param}/plans/{param}/{param}"):
         "dynamic enum: the final segment is a runtime `${action}` "
         "(approve|reject) that resolves to the literal backend routes "

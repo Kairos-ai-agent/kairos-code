@@ -22,9 +22,59 @@ is accepted until the Reviewer's verdict passes the gate. Every round, every
 token and every dollar is written to a ledger you can audit — and the whole run
 exports as a one-file **Gate Report** you can paste into a PR.
 
-Kairos Code is not a chat assistant and not a single-agent coding CLI. It is the
-**checkpoint**, the **receipt** and the **invoice** around whichever model you
-already pay for.
+Kairos Code is not a single-agent coding CLI — and, since the general lane
+landed, not a code-only tool either. It is the **checkpoint**, the **receipt**
+and the **invoice** around whichever model you already pay for, and the same
+engine also answers ordinary chat and document tasks. See
+[What it is now](#what-it-is-now).
+
+## What it is now
+
+Kairos Code is a self-hosted agent skeleton, not only a coding pipeline: one
+engine, two lanes, four ways in. Each claim below is backed by a file you can
+read.
+
+**Two lanes.** Every task is routed first (`kairos/task_router.py`):
+
+- **Coder ↔ Reviewer loop** — the gated round described above. Coding tasks and
+  long / multi-step (plan-mode) tasks take it.
+- **General lane** — the domain-neutral skeleton under `kairos/skeleton/`.
+  Ordinary chat and document tasks take it, and it carries its own **read-only
+  file tools** (`kairos/skeleton/read_tools.py`: text / docx / xlsx / csv
+  readers, grep, find) fenced to a single capability, `READ_FILE`, inside the
+  project directory. It never writes a file, runs a process, or touches the
+  network.
+
+The route is decided automatically and inspectably: an explicit `kind`
+(`docs`/`repo`), a long-task flag, a fixed coding-intent vocabulary in the
+message, or a workspace scan. **An undecided task takes the general lane by
+default** (`KAIROS_ROUTE_DEFAULT`, default `skeleton`); set
+`KAIROS_ROUTE_DEFAULT=loop` to restore the historical default where an undecided
+task went to the loop. Explicit, long-task and coding-intent signals always
+outrank that default.
+
+**Four ways in, one engine.** A message arrives from any of:
+
+- the **Web UI** (`api/routes/projects.py`),
+- an **IM** account (`api/routes/im.py`),
+- **企业微信 / WeCom** self-built app (`api/routes/wecom.py`,
+  [setup](docs/IM_WECOM.md)),
+- **微信 / Weixin** personal account, via the iLink channel
+  (`api/routes/weixin.py`, [setup](docs/WEIXIN_ILINK.md)).
+
+Every entrance runs the same router and the same two lanes.
+
+**A "yes" is asked for, not assumed.** A tool call that is not clearly safe is
+put to the user through an approval channel (`kairos/approvals.py`); the gate
+(`kairos/sentinel.py`, `requires_approval`) decides what needs asking, and a run
+can be stopped from the UI or from a channel.
+
+> **Not verified on real devices.** The 微信 (Weixin/iLink) and 企业微信 (WeCom)
+> channels are exercised by **offline tests only** — their inbound and outbound
+> message flow has not been run end-to-end against a real account. The WeChat
+> side (and exactly what is and is not proven) is spelled out in
+> [docs/WEIXIN_ILINK.md](docs/WEIXIN_ILINK.md); the WeCom side in
+> [docs/IM_WECOM.md](docs/IM_WECOM.md).
 
 ## 60 seconds, no API key
 
@@ -278,9 +328,11 @@ History lists one row per run, with the delta against the run before it:
 - MCP client (stdio + Streamable HTTP/SSE) with five offline servers enabled out of the box, three-tier skills with FTS5 index and hot reload
 - Windows computer-use tools, speech-to-text / text-to-speech, Feishu & Slack
   webhooks, and a two-way 企业微信「自建应用」channel
-  ([setup](docs/IM_WECOM.md))
+  ([setup](docs/IM_WECOM.md)) — **offline-tested only, not yet verified against a
+  real account**
 - 微信官方 ClawBot / iLink 通道：扫码登录 + 多账号隔离，纯 Python 原生实现
-  （无 OpenClaw / npm / Docker）([setup](docs/WEIXIN_ILINK.md))
+  （无 OpenClaw / npm / Docker）([setup](docs/WEIXIN_ILINK.md)) ——
+  **未经真机验证，仅离线测试**
 - **63-language UI**, RTL-aware, one locale per language
 
 ## Agent roles
@@ -340,15 +392,16 @@ the loop ended — and the reason lands in the Gate Report.
 | `/api/projects` | GET / POST | list / create projects |
 | `/api/projects/:id` | GET / DELETE | get / delete |
 | `/api/projects/:id/start` · `/stop` | POST | start the loop / stop it |
-| `/api/projects/:id/loop` | GET | round, score, issues, history |
-| `/api/projects/:id/stats` | GET | score history, tokens, cost, gate firings |
-| `/api/projects/:id/diff` · `/checkpoint` | GET / POST | per-round diff · rollback |
+| `/api/projects/:id/loop` · `/health` | GET | round, score, issues, history · loop health |
+| `/api/projects/:id/chat` | POST | one routed message (general lane or Coder loop) |
+| `/api/projects/:id/skeleton` · `/skeleton/stop` | GET / POST | general-lane status · stop that run |
 | `/api/projects/:id/plan` · `/plan/approve` · `/plan/reject` | GET / POST | plan-mode gate |
 | `/api/projects/:id/gate-report` | GET | **the Gate Report** (`format`, `lang`, `download`) |
-| `/api/projects/:id/ask` | POST | answer a pending Reviewer question |
-| `/api/projects/:id/comments` | GET | inline review comments for editor plugins |
+| `/api/projects/:id/ask` · `/ask/answer` | GET / POST | pending Reviewer question · answer it |
+| `/api/artifacts/:id/comments` | GET / POST | inline review comments |
 | `/api/projects/:id/attachments` | GET / POST / DELETE | chat attachments |
 | `/api/projects/:id/messages` | GET | project-scoped message history |
+| `/api/approvals` · `/api/approvals/:id` | GET / POST | pending approvals · answer one |
 | `/api/agents` · `/agents/chat` · `/agents/task` | GET / POST | agent states, chat, one-off task |
 | `/api/review/project` · `/api/review/file` | POST | one-shot review, no loop |
 | `/api/config/models` | GET / POST | model profiles + role mapping |

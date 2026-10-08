@@ -708,7 +708,23 @@ class Sentinel:
 
     def _ladder(self, tool: str, resource: str) -> Tuple[Decision, str]:
         from kairos.approval import READ_ONLY_TOOLS, decide
-        return decide(self.policy, tool, resource, self.mode)
+        base, reason = decide(self.policy, tool, resource, self.mode)
+        if base != Decision.ALLOW:
+            return base, reason
+        # A tool declared through the capability gate -- not one of the tools
+        # that shipped before it -- may need approval even when the name-based
+        # ladder would have waved it through. Only runtime declarations are
+        # consulted, so every registered/legacy tool keeps its exact ladder.
+        try:
+            from kairos.capabilities import requires_approval, runtime_capabilities
+            caps = runtime_capabilities(tool)
+            if caps is not None:
+                need, why = requires_approval(caps, self.mode)
+                if need:
+                    return Decision.ASK, why
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("capability approval lookup failed for %s: %s", tool, exc)
+        return base, reason
 
     # -- provenance -------------------------------------------------------
 

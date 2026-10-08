@@ -17,6 +17,14 @@ import ChatComposer from '../components/ChatComposer';
 import FullAccessToggle from '../components/FullAccessToggle';
 import { useChatStore } from '../stores/chatStore';
 import api from '../api/client';
+import { DARK, LIGHT } from '../styles/theme';
+
+/** Inline style colors come back normalized (hex -> rgb()), so compare like for like. */
+const normalized = (color: string): string => {
+  const probe = document.createElement('div');
+  probe.style.color = color;
+  return probe.style.color;
+};
 
 // The toggle reports through AntdApp.useApp(), which needs an <App> ancestor.
 const Wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -174,5 +182,34 @@ describe('FullAccessToggle in the composer', () => {
     expect(send.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
     expect(screen.getByTestId('composer-box')).toContainElement(toggle);
+  });
+
+  it('renders ON from the backend value (the knob is where antd puts aria-checked=true)', async () => {
+    mockedApi.get.mockResolvedValue({ data: { fullAccess: true } });
+    render(<FullAccessToggle />, { wrapper: Wrapper });
+    const sw = await waitFor(() => {
+      const el = screen.getByTestId(SWITCH);
+      expect(el).not.toBeDisabled();
+      return el;
+    });
+    // aria-checked is what actually moves the knob: true => slider on the right.
+    expect(sw.getAttribute('aria-checked')).toBe('true');
+    // A screenshot of an ON state has to be read off this, not off the pixels.
+    const c = (screen.getByTestId('composer-full-access-label') as HTMLElement).style.color;
+    // The hook returns whichever theme is active; assert against the level, not one palette.
+    expect([normalized(LIGHT.labelPrimary), normalized(DARK.labelPrimary)]).toContain(c);
+    expect([normalized(LIGHT.labelTertiary), normalized(DARK.labelTertiary)]).not.toContain(c);
+  });
+
+  it('keeps the label readable when OFF — never the tertiary hints level', async () => {
+    mockedApi.get.mockResolvedValue({ data: { fullAccess: false } });
+    render(<FullAccessToggle />, { wrapper: Wrapper });
+    await waitFor(() => expect(screen.getByTestId(SWITCH)).not.toBeDisabled());
+    expect(screen.getByTestId(SWITCH).getAttribute('aria-checked')).toBe('false');
+    // Regression guard: OFF used to use labelTertiary (#8a8f96), which was
+    // nearly unreadable next to the send button in the dark theme.
+    const c = (screen.getByTestId('composer-full-access-label') as HTMLElement).style.color;
+    expect([normalized(LIGHT.labelSecondary), normalized(DARK.labelSecondary)]).toContain(c);
+    expect([normalized(LIGHT.labelTertiary), normalized(DARK.labelTertiary)]).not.toContain(c);
   });
 });

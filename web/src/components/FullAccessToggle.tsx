@@ -82,9 +82,13 @@ const FullAccessToggle: React.FC = () => {
   const tip = failed
     ? t('chat.composer.fullAccessReadFailed')
     : t('chat.composer.fullAccessTip');
+  // Off must still be *readable*: labelTertiary is the hints level and was
+  // nearly invisible in the dark theme next to the send button. Secondary is
+  // the same level the rest of the action row uses; the switch itself carries
+  // the on/off signal.
   const labelColor = failed
     ? tokens.danger
-    : (on ? tokens.labelPrimary : tokens.labelTertiary);
+    : (on ? tokens.labelPrimary : tokens.labelSecondary);
 
   return (
     <Tooltip title={tip} placement="top">

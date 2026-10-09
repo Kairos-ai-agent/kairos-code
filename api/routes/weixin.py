@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import io
 import logging
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Response
@@ -422,33 +423,65 @@ def make_dispatch(orchestrator, store: WeixinAccountStore
     return dispatch
 
 
+def _coder_worktree_root(project) -> Optional[Path]:
+    """项目在沙箱模式下 coder 的**写盘地**（git worktree）根；没有就返回 None。
+
+    沙箱模式里 agent 的文件工具被围到 coder 工作树（``FileReadTool(allowed_root=
+    coder_root)``，见 ``kairos/core/orchestrator.py:_create_agents``），所以新生成
+    的文件会落在 ``project.runtime.coder_worktree.path`` 里，而**不在**项目根下。
+    属性名照 ``kairos/worktree.py`` 的 ``Worktree`` dataclass（``.path``），取不到
+    就当「没有工作树」，绝不猜测、也不抛。
+    """
+    runtime = getattr(project, "runtime", None)
+    if runtime is None:
+        return None
+    worktree = getattr(runtime, "coder_worktree", None)
+    if worktree is None:
+        return None
+    raw = getattr(worktree, "path", None)
+    if raw is None:
+        return None
+    try:
+        return Path(str(raw)).expanduser().resolve()
+    except (OSError, ValueError):
+        logger.debug("weixin: 解析 coder 工作树根失败（不发文件）", exc_info=True)
+        return None
+
+
 def make_workspace_resolver(orchestrator, store: WeixinAccountStore
                             ) -> Callable[[str, str], Any]:
-    """构造 channel 用的「账号 + 聊天对象 → 工作区根」解析器（异步）。
+    """构造 channel 用的「账号 + 聊天对象 → 围墙根列表」解析器（异步）。
 
-    出站文件那条路要用**项目工作区根**做围墙判定（``resolve_sendable_files`` 里调
-    ``kairos.tools.base.resolve_within_root``，与只读文件工具同一套）。这里复用
-    ``_resolve_project`` 用的同一条绑定链：``store.lookup`` → ``orchestrator.
-    get_project`` → ``_project_root``。**只读**——它不创建项目（没绑定就返回 None，
-    于是不发文件）。任何异常都当「解析不出」处理（返回 None），绝不影响文本回复。
+    出站文件那条路要拿**围墙根**做判定（``resolve_sendable_files`` /
+    ``select_sendable_paths`` 里调 ``kairos.tools.base.resolve_within_root``，与只读
+    文件工具同一套）。返回**两个根**：项目根（``work_dir or workspace``）+ coder
+    **工作树**根（沙箱模式下 agent 真正的写盘地）—— 文件落在**任一**根内都算合格
+    候选。复用 ``_resolve_project`` 用的同一条绑定链：``store.lookup`` →
+    ``orchestrator.get_project`` → ``_project_root`` / ``_coder_worktree_root``。
+    **只读**——它不创建项目（没绑定就返回 ``[]``，于是不发文件）。任何异常都当
+    「解析不出」处理（返回 ``[]``），绝不影响文本回复。
     """
 
-    async def resolve_root(account_id: str, chat_id: str) -> Optional[str]:
+    async def resolve_root(account_id: str, chat_id: str) -> List[str]:
         try:
             project_id = await store.lookup(account_id, chat_id)
         except Exception:  # noqa: BLE001 - 查绑定失败只是不发文件
             logger.debug("weixin: 查会话绑定失败（不发文件）", exc_info=True)
-            return None
+            return []
         if not project_id:
-            return None
+            return []
         project = orchestrator.get_project(project_id)
         if project is None:
-            return None
+            return []
+        roots: List[str] = []
         try:
-            return str(_project_root(project))
+            roots.append(str(_project_root(project)))
         except Exception:  # noqa: BLE001
             logger.debug("weixin: 解析项目根失败（不发文件）", exc_info=True)
-            return None
+        worktree_root = _coder_worktree_root(project)
+        if worktree_root is not None and str(worktree_root) not in roots:
+            roots.append(str(worktree_root))
+        return roots
 
     return resolve_root
 

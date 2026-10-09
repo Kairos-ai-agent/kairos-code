@@ -6,6 +6,53 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Default approval mode is now `full-auto`.** Out of the box the agent no
+  longer interrupts the user to write a file or to run a shell command; it
+  starts the work immediately. The unconditional safety rules are unchanged and
+  are consulted *before* the mode, so they still refuse: the app's own key store
+  and credential files (`~/.ssh/id_rsa`, `.aws/credentials`, `.netrc`,
+  `.kube/config`, `.kdbx`, …), any explicit `DENY` in the permission policy, and
+  — in a tainted run — egress (`webfetch` / `curl` / …) and reads of a secrets
+  file (`.env`, `secrets.json`). `KAIROS_APPROVAL_MODE` remains a process-wide
+  *ceiling*: a stricter value still tightens every project, and a project may be
+  stricter than the ceiling but never looser.
+
+- **微信出站文件改以「本轮真正写出来的文件」为准，文本启发式降为兜底 fallback。**
+  此前「发文件」只看模型回复里**是不是提到了**某个路径（启发式）——空谈也能命中、真产出
+  反而可能漏。现在在微信入站处理里、调 agent **之前与之后**各对围墙根拍一次
+  「路径 → (mtime, size)」快照，**新增或 (mtime/size) 变动的文件**（快照差集）作为**主
+  候选**；`.git` / `node_modules` / `.venv` / `__pycache__` / `attachments`（入站附件）/
+  `runs` / `.kairos-*` / `*.tmp` 等无关目录与文件的变动不计入（忽略名单集中成一个常量并
+  注明理由）。快照有界（条目数 5000、墙钟 0.5s）且 best-effort，任何失败都只意味着「不发
+  文件」，**绝不影响文本回复**。真信号与文本启发式候选**合并去重**（同一文件只发一次、
+  顺序稳定），且过与之前**完全一致**的安全门（围墙 / `is_file` / 25 MiB / 最多 3 个 /
+  名字黑名单 / 内容嗅探）。另加两条日志（候选 / 实发），便于日后区分「本轮没产出」与
+  「产出了但发失败」。**范围：微信专用** —— 企微（`WeComBot.send_text`）与 IM 连接器出站
+  队列都不走这条出站文件路，未改动它们。
+
+### Fixed
+
+- **Read-only tools were mis-classified as needing approval in `SUGGEST` mode.**
+  `kairos.approval.decide` only auto-allowed `READ_ONLY_TOOLS` in `EDIT`, so the
+  default tier (and a strict gate) asked before reading a file the user had just
+  handed the agent — contradicting the module's own comment ("silent in SUGGEST
+  and EDIT modes"). Reads are now silent in both interactive tiers, while writes
+  and process execution still ask there. The read-only set was also corrected to
+  cover the tools that really read (`doc_read`, `xlsx_read`, `data_analyze`,
+  `history_search`) and to drop names that were never dispatchable tools
+  (`git_diff` / `git_log` / `git_show` / `list_skills` / `list_agents`).
+
+- **沙箱模式（coder git worktree）里生成的文件发不回去。** 出站文件的围墙根此前只取
+  项目根（`work_dir or workspace`），而沙箱模式下 agent 的文件工具被围到 **coder 工作树**
+  （`project.runtime.coder_worktree.path`），新产出的文件落在工作树里、**不在**项目根下 ⇒
+  按项目根做的相对路径判定落空，于是什么都发不回来。现在工作区解析器同时给出「项目根 +
+  coder 工作树」两个根（取路径照 `kairos.worktree.Worktree.path`，不猜属性名），候选在
+  **任一**根内即为合格；围墙判定仍是既有的 `resolve_within_root`（**逐根各自判定**，不在
+  任何根内的不发展为候选）。首次消息时工作树是在 dispatch 期间才创建、无可信基线，此时
+  不启用差集，避免把工作树 checkout 出的既有文件误当成本轮产出。
+
 ### Added
 
 - **微信出站文件：一组「绝不自动外发」的判据（比上面那条特性本身更要紧）。** 触发规则是

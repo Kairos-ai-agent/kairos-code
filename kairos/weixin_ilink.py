@@ -112,6 +112,15 @@ __all__ = [
     "build_file_message_item",
     "build_file_message",
     "resolve_sendable_files",
+    "snapshot_tree_files",
+    "diff_touched_files",
+    "select_sendable_paths",
+    "merge_sendable_candidates",
+    "WEIXIN_SNAPSHOT_IGNORE_DIRS",
+    "WEIXIN_SNAPSHOT_IGNORE_PREFIXES",
+    "WEIXIN_SNAPSHOT_IGNORE_SUFFIXES",
+    "WEIXIN_SNAPSHOT_MAX_ENTRIES",
+    "WEIXIN_SNAPSHOT_MAX_SECONDS",
     "ILinkClient",
     "WeixinLoginSession",
     "WeixinAccount",
@@ -1358,6 +1367,247 @@ def _refuse_to_send(path: Path) -> bool:
     return redact(text_sample) != text_sample
 
 
+# ---------------------------------------------------------------------------
+# 「本轮真实产出」信号
+# ---------------------------------------------------------------------------
+# 出站文件不应只靠「模型嘴上有没有提到某个路径」来判断 —— 那是启发式，而且在
+# 沙箱模式下模型的写盘地是 **coder 工作树**（``project.runtime.coder_worktree``
+# 的 ``.path``），它嘴里的相对路径往往落不到项目根上。这里加一条**真信号**：
+# 调 agent 之前对相关根（项目根 + coder 工作树）拍一次「路径 → (mtime, size)」
+# 快照，agent 返回后再拍一次，**新增或 (mtime/size) 变化的文件**就是本轮真正写
+# 出来的东西。快照只用于**挑候选**；发送仍走与启发式**完全同一套**安全门
+# （围墙 / is_file / 大小上限 / 数量上限 / 名字黑名单 / 内容嗅探）。
+#
+# 全程 best-effort、有界（条目数 + 墙钟），任何异常都退化为「没有本轮产出信号」。
+
+#: 快照扫描时**跳过**的目录名（任意一层命中即不进其子树）。集中一处，理由：
+#: * ``.git`` / ``node_modules`` / ``.venv`` / ``venv`` / ``site-packages`` /
+#:   ``__pycache__``：版本控制与依赖/字节码缓存 —— 它们的变动不是用户要的交付物；
+#: * ``attachments``：**入站附件**暂存目录（用户自己发进来的东西）；把它当「本轮
+#:   产出」回发，等于把用户刚上传的文件再弹回去，纯噪音；
+#: * ``.kairos-worktrees`` / ``runs`` / 前缀 ``.kairos-``：运行时目录（沙箱工作树、
+#:   任务运行记录、锁与日志）—— 工作树本身会作为**独立的根**被单独扫描，这里不重复进；
+#: * ``dist`` / ``build`` / ``.mypy_cache`` / ``.pytest_cache`` / ``.tox`` / ``.eggs``：
+#:   构建产物与工具缓存。
+WEIXIN_SNAPSHOT_IGNORE_DIRS = frozenset({
+    ".git", "node_modules", ".venv", "venv", "site-packages", "__pycache__",
+    "attachments", "runs", "dist", "build", ".eggs",
+    ".mypy_cache", ".pytest_cache", ".tox", ".ruff_cache",
+})
+
+#: 名字（目录或文件）以这些前缀开头即跳过 —— 运行时目录/文件（``.kairos-worktrees``
+#: 等 ``.kairos-*`` 形态，以及 ``.kairos_*``）。
+WEIXIN_SNAPSHOT_IGNORE_PREFIXES = (".kairos-", ".kairos_")
+
+#: 文件后缀命中即跳过（临时 / 中间文件）。
+WEIXIN_SNAPSHOT_IGNORE_SUFFIXES = (
+    ".tmp", ".temp", ".swp", ".swo", ".pyc", ".pyo", ".log", ".lock",
+)
+
+#: 单次快照扫描的**条目上限**（含被忽略的条目）：防大目录把一次回复拖慢。
+WEIXIN_SNAPSHOT_MAX_ENTRIES = 5000
+#: 单次快照扫描的**墙钟上限**（秒）；超时就用已扫到的部分，绝不拖慢回复。
+WEIXIN_SNAPSHOT_MAX_SECONDS = 0.5
+
+
+def _normalize_roots(value: Any) -> List[str]:
+    """把「解析器返回的根」规范成去重的字符串列表。
+
+    接受 ``None`` / 单个路径（``str``/``Path``）/ 路径序列 —— 这样路由可以只给
+    项目根、也可以同时给「项目根 + coder 工作树」，两种形态 channel 都能消化。
+    """
+    if value is None:
+        return []
+    if isinstance(value, (str, Path)):
+        single = str(value).strip()
+        return [single] if single else []
+    out: List[str] = []
+    try:
+        items = list(value)
+    except TypeError:
+        single = str(value).strip()
+        return [single] if single else []
+    for item in items:
+        text = str(item or "").strip()
+        if text and text not in out:
+            out.append(text)
+    return out
+
+
+def _snapshot_ignored_dir(name: str) -> bool:
+    """快照时这个**目录**是否整棵跳过。"""
+    low = (name or "").lower()
+    if low in WEIXIN_SNAPSHOT_IGNORE_DIRS:
+        return True
+    return any(low.startswith(p) for p in WEIXIN_SNAPSHOT_IGNORE_PREFIXES)
+
+
+def _snapshot_ignored_file(name: str) -> bool:
+    """快照时这个**文件**是否跳过。"""
+    low = (name or "").lower()
+    if any(low.startswith(p) for p in WEIXIN_SNAPSHOT_IGNORE_PREFIXES):
+        return True
+    return low.endswith(WEIXIN_SNAPSHOT_IGNORE_SUFFIXES)
+
+
+def snapshot_tree_files(
+    roots: Any,
+    *,
+    max_entries: int = WEIXIN_SNAPSHOT_MAX_ENTRIES,
+    max_seconds: float = WEIXIN_SNAPSHOT_MAX_SECONDS,
+) -> Dict[str, Tuple[float, int]]:
+    """对若干根做一次「路径 → (mtime, size)」快照（best-effort、封顶、绝不抛）。
+
+    返回 ``{realpath: (mtime, size)}``。任何异常 / 不存在的根 / 超上限都只意味着
+    「拿到的更少」—— 调用方据此退化为「没有本轮产出信号」，**不影响文本回复**。
+    结果键用 ``os.path.realpath``，让同一文件经不同根/软链看到时能对上、可去重。
+    """
+    import stat as _stat
+
+    snap: Dict[str, Tuple[float, int]] = {}
+    root_list = _normalize_roots(roots)
+    if not root_list:
+        return snap
+    try:
+        deadline = time.monotonic() + max(0.0, float(max_seconds))
+    except (TypeError, ValueError):
+        deadline = time.monotonic() + WEIXIN_SNAPSHOT_MAX_SECONDS
+    try:
+        limit = max(0, int(max_entries))
+    except (TypeError, ValueError):
+        limit = WEIXIN_SNAPSHOT_MAX_ENTRIES
+    count = 0
+    for root in root_list:
+        try:
+            root_path = Path(str(root))
+            if not root_path.is_dir():
+                continue
+        except (OSError, ValueError):
+            continue
+        try:
+            for dirpath, dirnames, filenames in os.walk(root_path):
+                if count >= limit or time.monotonic() >= deadline:
+                    return snap
+                # 就地剪枝：被忽略的目录不进其子树（os.walk 认这个就地改动）。
+                dirnames[:] = [d for d in dirnames
+                               if not _snapshot_ignored_dir(d)]
+                for filename in filenames:
+                    if count >= limit or time.monotonic() >= deadline:
+                        return snap
+                    count += 1
+                    if _snapshot_ignored_file(filename):
+                        continue
+                    full = os.path.join(dirpath, filename)
+                    try:
+                        st = os.stat(full)
+                        if not _stat.S_ISREG(st.st_mode):
+                            continue
+                        key = os.path.realpath(full)
+                    except OSError:
+                        continue
+                    snap[key] = (st.st_mtime, st.st_size)
+        except Exception:  # noqa: BLE001 - 快照整体 best-effort
+            continue
+    return snap
+
+
+def diff_touched_files(
+    before: Optional[Dict[str, Tuple[float, int]]],
+    after: Optional[Dict[str, Tuple[float, int]]],
+) -> List[Path]:
+    """快照差集：本轮**新增**或 **(mtime 或 size) 变化**的文件（顺序稳定）。
+
+    未变动的旧文件（即便模型在回复里提到了）不在此列 —— 它由文本启发式兜底。
+    """
+    before = before or {}
+    after = after or {}
+    touched = [key for key, sig in after.items() if before.get(key) != sig]
+    touched.sort()          # 稳定顺序（与 os.walk 的遍历次序无关）
+    return [Path(p) for p in touched]
+
+
+def _resolve_first_within(path: Any, roots: Sequence[Path]) -> Optional[Path]:
+    """把 ``path`` 解析到**任意一个**根之内；都不在就返回 ``None``。
+
+    与只读文件工具用**同一套**围墙（``resolve_within_root``）—— 逐根判定，
+    不在任何根内（或非法路径）的候选一律丢弃。
+    """
+    from kairos.tools.base import resolve_within_root
+
+    for root in roots:
+        try:
+            return resolve_within_root(str(path), root)
+        except (PermissionError, OSError, ValueError):
+            continue
+    return None
+
+
+def select_sendable_paths(
+    paths: Sequence[Any],
+    roots: Any,
+    *,
+    max_files: int = WEIXIN_MAX_OUTBOUND_FILES,
+    max_bytes: int = WEIXIN_MEDIA_MAX_BYTES,
+) -> List[Path]:
+    """把一批**已知**路径过一遍与启发式完全相同的安全门，返回合格文件。
+
+    门（与 :func:`resolve_sendable_files` 逐条一致）：围墙内（``resolve_within_root``
+    逐根判定）→ ``is_file()`` → ``≤ max_bytes`` → 过 ``_refuse_to_send``（名字黑名单
+    + 后缀 + 目录 + 内容嗅探）。去重、封顶 ``max_files``，顺序按传入顺序。
+    """
+    root_list = [Path(str(r)) for r in _normalize_roots(roots)]
+    if not root_list:
+        return []
+    seen: set = set()
+    picked: List[Path] = []
+    for raw in paths:
+        if len(picked) >= max(0, int(max_files)):
+            break
+        candidate = _resolve_first_within(raw, root_list)
+        if candidate is None:
+            continue
+        try:
+            if not candidate.is_file():
+                continue
+            size = candidate.stat().st_size
+        except OSError:
+            continue
+        if size > max_bytes:
+            continue
+        if _refuse_to_send(candidate):
+            continue
+        key = str(candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+        picked.append(candidate)
+    return picked
+
+
+def merge_sendable_candidates(
+    primary: Sequence[Path],
+    fallback: Sequence[Path],
+    *,
+    max_files: int = WEIXIN_MAX_OUTBOUND_FILES,
+) -> List[Path]:
+    """合并「真产出信号」与「文本启发式」候选，**同一文件只留一次**、顺序稳定。
+
+    真产出（``primary``）在前 —— 那是这一轮真正写出来的东西，比「模型嘴上提到
+    了某个旧文件」更值得先发；然后补 ``fallback`` 里没重复的，封顶 ``max_files``。
+    """
+    out: List[Path] = []
+    seen: set = set()
+    for path in list(primary) + list(fallback):
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(path)
+        if len(out) >= max(0, int(max_files)):
+            break
+    return out
+
+
 def resolve_sendable_files(
     text: str,
     root: Any,
@@ -1367,23 +1617,26 @@ def resolve_sendable_files(
 ) -> List[Path]:
     """**启发式**：从回复文本里挑出「工作区内真实存在、且不超限」的文件路径。
 
-    **这只是启发式，不是可靠的「产出文件」信号** —— 本仓库的 ``run_chat_reply``
+    **这只是启发式（现在是 fallback，不是主信号）** —— 本仓库的 ``run_chat_reply``
     / ``coder.chat`` 都只返回 ``str``，路径上没有任何「我产出了哪些文件」的字段
     （见 ``kairos/skeleton/service.py`` 与 ``kairos/agents/agent_parts/chat.py``）。
-    所以这里退而求其次：**扫描回复文本里出现的、位于项目工作区内且真实存在的
-    文件路径**，最多 ``max_files`` 个、每个 ≤ ``max_bytes``。
+    真正的「本轮产出」信号由 **快照差集**（:func:`diff_touched_files`）提供；这里
+    退而求其次：**扫描回复文本里出现的、位于工作区内且真实存在的文件路径**，用来
+    兜住「模型主动点名、但本轮没改动的既有文件」。最多 ``max_files`` 个、每个
+    ≤ ``max_bytes``。
 
     围墙判定与只读文件工具**同一套**：``kairos.tools.base.resolve_within_root``
     （相对路径按 root 解析、绝对路径原样、``..``/软链都会解析后重新检查是否仍在
-    root 之内；``is_full_access()`` 时按同一策略放行）。围墙外 / 不存在 / 目录 /
-    超限的候选一律跳过 —— 找不到就返回 ``[]``，调用方据此**不发任何文件**、
-    只发文本（与改动前逐字一致）。
+    root 之内；``is_full_access()`` 时按同一策略放行）。``root`` 可以是单个根，
+    也可以是「项目根 + coder 工作树」的列表 —— **逐根判定**，不在任何根内的候选
+    一律跳过。围墙外 / 不存在 / 目录 / 超限的候选一律跳过 —— 找不到就返回 ``[]``，
+    调用方据此**不发任何文件**、只发文本。
     """
     if not text or root is None:
         return []
-    from kairos.tools.base import resolve_within_root
-
-    root_path = Path(str(root))
+    root_paths = [Path(str(r)) for r in _normalize_roots(root)]
+    if not root_paths:
+        return []
     seen: set = set()
     picked: List[Path] = []
     for token in _candidate_path_tokens(str(text)):
@@ -1392,10 +1645,9 @@ def resolve_sendable_files(
         for variant in _path_token_variants(token):
             if len(picked) >= max(0, int(max_files)):
                 break
-            try:
-                candidate = resolve_within_root(variant, root_path)
-            except (PermissionError, OSError, ValueError):
-                continue    # 围墙外 / 非法路径 → 不发
+            candidate = _resolve_first_within(variant, root_paths)
+            if candidate is None:
+                continue    # 不在任何围墙根内 / 非法路径 → 不发
             try:
                 if not candidate.is_file():
                     continue
@@ -2327,6 +2579,18 @@ class WeixinChannel:
             await self.store.set_context_token(
                 account_id, from_user, msg["context_token"])
 
+        # 「本轮真实产出」快照（1/2）—— 调 agent **之前**先对围墙根拍一次
+        # 「路径 → (mtime, size)」。best-effort + 封顶：拿不到就当「没有本轮产出
+        # 信号」，绝不影响下面的 dispatch 或文本回复。
+        roots_before: List[str] = []
+        snapshot_before: Dict[str, Tuple[float, int]] = {}
+        try:
+            roots_before = await self._resolve_workspace_roots(account_id, from_user)
+            if roots_before:
+                snapshot_before = snapshot_tree_files(roots_before)
+        except Exception:  # noqa: BLE001 - 快照只是可选信号
+            roots_before, snapshot_before = [], {}
+
         reply = ""
         if self._dispatch is not None:
             # 处理这条消息期间标记「当前会话」：审批桥据此判断闸门刚问出的
@@ -2341,13 +2605,32 @@ class WeixinChannel:
             finally:
                 current_session.reset(token)
         if reply:
+            # 「本轮真实产出」快照（2/2）—— agent 返回后再拍一次；**新增或
+            # (mtime/size) 变化的文件**就是这一轮真正写出来的东西（沙箱模式下写在
+            # coder 工作树里）。注意：首次消息时项目/工作树可能是在 dispatch 内才
+            # 创建（此时 roots_before 为空 → 无可信基线 ``baseline_ok=False``，本轮
+            # 不启用差集，避免把工作树 checkout 出的既有文件全当成「新产出」）。
+            roots_after: List[str] = roots_before
+            snapshot_after: Dict[str, Tuple[float, int]] = {}
+            try:
+                roots_after = await self._resolve_workspace_roots(
+                    account_id, from_user)
+                if roots_after:
+                    snapshot_after = snapshot_tree_files(roots_after)
+            except Exception:  # noqa: BLE001 - 快照只是可选信号
+                roots_after, snapshot_after = roots_before, {}
             # 出站文件（可选能力）：**先发文件、再发文本** —— 用户先看到东西、再看
-            # 说明。文件来自「回复里点名 + 工作区内真实存在」的**启发式**（没有可靠
-            # 的「产出文件」信号，见 resolve_sendable_files）。这条路整体 best-effort：
-            # 没有围墙根 / 没有文件 / 取参数失败 / 加密或上传失败 / 超限 / 围墙外 ——
-            # 一律**什么都不发**（不改下面这条文本回复），**绝不**吞掉或重复发文本。
+            # 说明。文件 = 「本轮真实产出」（快照差集，主信号）∪「回复里点名 +
+            # 工作区内真实存在」（文本启发式，fallback），合并去重、过同一套安全门。
+            # 这条路整体 best-effort：没有围墙根 / 没有文件 / 取参数失败 / 加密或
+            # 上传失败 / 超限 / 围墙外 —— 一律**什么都不发**（不改下面这条文本回复），
+            # **绝不**吞掉或重复发文本。
             await self.deliver_files_before_reply(
-                client, account_id, from_user, reply, context_token)
+                client, account_id, from_user, reply, context_token,
+                roots=roots_after,
+                before=snapshot_before,
+                after=snapshot_after,
+                baseline_ok=bool(roots_before))
             # 分段渐进投递（不是 token 流）：短回复一条、长回复 ≤N 条，拼接逐字
             # 等于 reply。中途失败会把剩余整体重投，仍失败则 report.ok=False
             # 且 report.failed_at 指出边界 —— 下面记一条 ERROR，决不静默截断。
@@ -2370,28 +2653,34 @@ class WeixinChannel:
         return await client.send_message(build_text_message(
             to_user_id, text, context_token=context_token, client_id=client_id))
 
-    # -- 出站文件（启发式，best-effort）--------------------------------
+    # -- 出站文件（真产出信号 + 启发式 fallback，best-effort）------------
 
-    async def _resolve_workspace_root(self, account_id: str,
-                                      chat_id: str) -> Optional[str]:
-        """解析「账号 + 聊天对象」对应项目的工作区根；解析不出返回 None。
+    async def _resolve_workspace_roots(self, account_id: str,
+                                       chat_id: str) -> List[str]:
+        """解析「账号 + 聊天对象」对应的**所有**围墙根（项目根 + coder 工作树）。
 
         ``workspace_resolver`` 可以是同步函数、也可以是协程（路由那个要查 store，
-        是异步的）—— 两种都支持。任何异常都当「拿不到根」处理（不抛），因为拿不到
-        根只会导致「不发文件」，不该影响这条回复。
+        是异步的）—— 两种都支持；**返回值可以是单个根（``str``/``Path``）也可
+        以是根列表**，都规范成去重后的字符串列表。任何异常都当「拿不到根」处理
+        （返回 ``[]``，不抛），因为拿不到根只会导致「不发文件」，不该影响回复。
         """
         resolver = self.workspace_resolver
         if resolver is None:
-            return None
+            return []
         try:
-            root = resolver(account_id, chat_id)
-            if inspect.isawaitable(root):
-                root = await root
+            value = resolver(account_id, chat_id)
+            if inspect.isawaitable(value):
+                value = await value
         except Exception:  # noqa: BLE001 - 拿不到根只是不发文件
             logger.debug("weixin: 解析工作区根失败（不发文件）", exc_info=True)
-            return None
-        root = str(root or "").strip()
-        return root or None
+            return []
+        return _normalize_roots(value)
+
+    async def _resolve_workspace_root(self, account_id: str,
+                                      chat_id: str) -> Optional[str]:
+        """兼容旧契约：只取第一个根（新代码请用 :meth:`_resolve_workspace_roots`）。"""
+        roots = await self._resolve_workspace_roots(account_id, chat_id)
+        return roots[0] if roots else None
 
     async def send_files_best_effort(self, client: ILinkClient, to_user_id: str,
                                      paths: Sequence[Path], *,
@@ -2421,25 +2710,59 @@ class WeixinChannel:
             sent += 1
         return sent
 
-    async def deliver_files_before_reply(self, client: ILinkClient,
-                                         account_id: str, to_user_id: str,
-                                         reply: str,
-                                         context_token: Optional[str] = None) -> int:
-        """启发式地把回复里点名的、工作区内的文件发出去（**先于**文本回复）。
+    async def deliver_files_before_reply(
+        self, client: ILinkClient, account_id: str, to_user_id: str,
+        reply: str, context_token: Optional[str] = None, *,
+        roots: Any = None,
+        before: Optional[Dict[str, Tuple[float, int]]] = None,
+        after: Optional[Dict[str, Tuple[float, int]]] = None,
+        baseline_ok: bool = True,
+    ) -> int:
+        """把「本轮真正产出的文件」+「回复里点名的文件」发出去（**先于**文本回复）。
+
+        两路候选**合并去重、顺序稳定**：
+
+        1. **真信号**（主）：``before``/``after`` 两份「路径 → (mtime, size)」快照的
+           差集 = 本轮新增或改动的文件（``baseline_ok`` 为假时跳过 —— 没有可信基线）；
+        2. **文本启发式**（fallback，见 :func:`resolve_sendable_files`）：模型在回复里
+           点名、但本轮没改动的既有文件。
+
+        两路都过**完全同一套**安全门（围墙 / ``is_file`` / 大小上限 / 数量上限 /
+        名字黑名单 ``WEIXIN_NEVER_SEND_NAMES`` / 内容嗅探 ``_refuse_to_send``）。
+        ``roots`` 可传（项目根 + coder 工作树）；不传则现解析。
 
         返回成功发出的文件数（``0`` = 没发任何文件：没配解析器 / 没找到合格文件 /
         全失败）。任何情况下都**不抛**、**不改**文本回复 —— 文件发不出时，文本本身
         就写着文件在哪，用户仍然知道东西在哪，故**不另补一条**说明（避免重复消息）。
         """
         try:
-            root = await self._resolve_workspace_root(account_id, to_user_id)
-            if not root:
+            if roots is None:
+                root_list = await self._resolve_workspace_roots(
+                    account_id, to_user_id)
+            else:
+                root_list = _normalize_roots(roots)
+            if not root_list:
                 return 0
-            files = resolve_sendable_files(reply, root)
+            # 1) 真信号：本轮新增/改动的文件（与启发式同一套安全门）。
+            touched: List[Path] = []
+            if baseline_ok:
+                touched = select_sendable_paths(
+                    diff_touched_files(before, after), root_list)
+            # 2) fallback：回复文本里点名、工作区内真实存在的文件。
+            heuristic = resolve_sendable_files(reply, root_list)
+            files = merge_sendable_candidates(touched, heuristic)
             if not files:
                 return 0
-            return await self.send_files_best_effort(
+            # 可观测（路径脱敏为文件名）：区分「本轮没产出」与「产出了但发失败」。
+            logger.info(
+                "weixin: 出站文件候选 candidates=%d (touched=%d heuristic=%d) "
+                "names=%s", len(files), len(touched), len(heuristic),
+                [p.name for p in files])
+            sent = await self.send_files_best_effort(
                 client, to_user_id, files, context_token=context_token)
+            logger.info("weixin: 出站文件实发 sent=%d/%d names=%s",
+                        sent, len(files), [p.name for p in files])
+            return sent
         except Exception:  # noqa: BLE001 - 文件这条路整体 best-effort
             logger.exception("weixin: 出站文件流程异常（已忽略，文本照发）")
             return 0

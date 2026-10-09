@@ -677,7 +677,7 @@ class _ResolverOrch:
 
 
 def test_make_workspace_resolver_resolves_bound_chat_only(tmp_path):
-    """路由注入的解析器：只对**已绑定**的会话给出项目根，未绑定返回 None。"""
+    """路由注入的解析器：只对**已绑定**的会话给出围墙根，未绑定返回空列表。"""
     from api.routes.weixin import make_workspace_resolver
 
     async def go():
@@ -686,11 +686,45 @@ def test_make_workspace_resolver_resolves_bound_chat_only(tmp_path):
         project = _ResolverProject(root)
         resolve = make_workspace_resolver(_ResolverOrch(project), store)
 
-        assert await resolve("acct", "nobody") is None      # 未绑定 → 不发文件
+        assert await resolve("acct", "nobody") == []        # 未绑定 → 不发文件
         await store.bind("acct", "user-1", project.id)
         got = await resolve("acct", "user-1")
-        assert got is not None
-        assert Path(got) == root.resolve()                 # 已 resolve 的项目根
+        assert got == [str(root.resolve())]                 # 已 resolve 的项目根
+
+    asyncio.run(go())
+
+
+def test_make_workspace_resolver_adds_coder_worktree_root(tmp_path):
+    """沙箱模式：解析器要同时给出**项目根 + coder 工作树**两个围墙根。
+
+    工作树根取自 ``project.runtime.coder_worktree.path``（kairos.worktree.Worktree
+    的 ``.path``）—— 这是 agent 真正的写盘地，项目根之外。
+    """
+    from api.routes.weixin import make_workspace_resolver
+
+    class _Worktree:
+        def __init__(self, path: Path) -> None:
+            self.path = path
+
+    class _Runtime:
+        coder_worktree = None
+
+    async def go():
+        store = await _store(tmp_path)
+        root = _root(tmp_path)
+        worktree = tmp_path / "sandbox-wt"
+        worktree.mkdir()
+        project = _ResolverProject(root)
+        project.runtime = _Runtime()
+        project.runtime.coder_worktree = _Worktree(worktree)
+        resolve = make_workspace_resolver(_ResolverOrch(project), store)
+
+        await store.bind("acct", "user-1", project.id)
+        got = await resolve("acct", "user-1")
+        assert str(root.resolve()) in got
+        assert str(worktree.resolve()) in got
+        assert len(got) == 2                                # 两个根，顺序稳定
+        assert got == [str(root.resolve()), str(worktree.resolve())]
 
     asyncio.run(go())
 

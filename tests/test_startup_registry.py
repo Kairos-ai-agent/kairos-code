@@ -11,6 +11,14 @@ allow). Log lines are not something a test can assert on.
 So ``api/app.py`` keeps ``STARTUP_FAILURES`` (read via
 ``api.app.get_startup_failures()`` and mirrored on ``app.state.startup_failures``)
 and verifies every ``_STARTUP_SUBSYSTEMS`` entry is live after assembly.
+
+It also keeps ``STARTUP_SKIPS``: an *optional* subsystem that a given build
+legitimately does not ship (``browser_manager`` — playwright is the optional
+``browser`` extra) is recorded as a skip, not a failure, so the failure list
+stays a signal that something is actually wrong. The last two tests here are the
+guard rails on that: optionality must never excuse a real fault, and a *required*
+subsystem must never be excused by it.
+
 These tests assert the observable outcome — the record and the probes — by
 running the real lifespan through ``TestClient``.
 """
@@ -23,9 +31,11 @@ from fastapi.testclient import TestClient
 import api.app as app_module
 from api.app import (
     STARTUP_FAILURES,
+    STARTUP_SKIPS,
     _STARTUP_SUBSYSTEMS,
     app,
     get_startup_failures,
+    get_startup_skips,
 )
 
 
@@ -46,8 +56,10 @@ def _reset_startup_state():
                  "_weixin_store", "_weixin_channel", "_weixin_approval_bridge"):
         setattr(app_module, attr, None)
     STARTUP_FAILURES.clear()
+    STARTUP_SKIPS.clear()
     yield
     STARTUP_FAILURES.clear()
+    STARTUP_SKIPS.clear()
 
 
 def _browser_starts_ok(monkeypatch):
@@ -71,6 +83,7 @@ def test_a_clean_startup_records_no_failures(monkeypatch):
             f"{failures!r}"
         )
         assert app.state.startup_failures == []
+        assert app.state.startup_skips == get_startup_skips()
 
 
 def test_every_registered_subsystem_is_alive_after_startup(monkeypatch):
@@ -82,7 +95,8 @@ def test_every_registered_subsystem_is_alive_after_startup(monkeypatch):
     """
     _browser_starts_ok(monkeypatch)
     with TestClient(app):
-        dead = [name for name, probe in _STARTUP_SUBSYSTEMS if not _probe(probe)]
+        dead = [name for name, probe, _optional in _STARTUP_SUBSYSTEMS
+                if not _probe(probe)]
     assert dead == [], (
         "registered subsystem(s) reported 'not alive' after startup: "
         f"{dead!r} — the lifespan never actually brought them up"
@@ -102,10 +116,16 @@ def test_a_failed_subsystem_is_recorded_and_named(monkeypatch):
     It also must not take the other subsystems down with it (that regression —
     the browser try containing the approval/registry/daemon blocks — is why
     these are separate ``try``s now).
+
+    ``_browser_is_optional`` is pinned to ``None`` here: this test is about a
+    browser that *should* come up and did not (playwright present), so the
+    failure must be recorded rather than excused as an optional-missing skip.
     """
     from kairos.browser import BrowserManager
     from kairos import approvals
     from kairos.daemon import get_supervisor
+
+    monkeypatch.setattr(app_module, "_browser_is_optional", lambda: None)
 
     async def _boom(self, *a, **kw):  # noqa: ANN002, ANN003
         raise RuntimeError("no browser in this environment (test)")
@@ -132,11 +152,16 @@ def test_a_failed_subsystem_is_recorded_and_named(monkeypatch):
         entry = next(f for f in failures if f["subsystem"] == "browser_manager")
         assert "RuntimeError" in entry["error"]
         assert entry["phase"] == "startup"
+        # A real fault is never filed as a skip.
+        assert not any(s["subsystem"] == "browser_manager"
+                       for s in get_startup_skips())
 
 
 def test_the_failure_record_is_also_mirrored_on_app_state(monkeypatch):
     """The read entry is reachable both ways the task asked for."""
     from kairos.browser import BrowserManager
+
+    monkeypatch.setattr(app_module, "_browser_is_optional", lambda: None)
 
     async def _boom(self, *a, **kw):  # noqa: ANN002, ANN003
         raise RuntimeError("boom (test)")
@@ -146,3 +171,129 @@ def test_the_failure_record_is_also_mirrored_on_app_state(monkeypatch):
         assert app.state.startup_failures == get_startup_failures()
         assert any(f["subsystem"] == "browser_manager"
                    for f in app.state.startup_failures)
+
+
+# ---------------------------------------------------------------------------
+# The optional subsystem: skipped, not failed — and that can never mask a fault.
+# ---------------------------------------------------------------------------
+
+def test_an_optional_subsystem_is_skipped_not_failed(monkeypatch):
+    """playwright absent ⇒ the browser manager is a legitimate skip.
+
+    The failure list must stay a list where every entry means something is
+    wrong; a base/packaged build has no browser and that is not a fault.
+    """
+    from kairos.browser import BrowserManager
+
+    # playwright absent (the extra is not installed) — the real reason string.
+    monkeypatch.setattr(app_module, "_browser_is_optional",
+                        lambda: "playwright is an optional extra (test)")
+
+    async def _boom(self, *a, **kw):  # noqa: ANN002, ANN003
+        raise ModuleNotFoundError("No module named 'playwright'")
+
+    monkeypatch.setattr(BrowserManager, "start", _boom, raising=True)
+
+    with TestClient(app):
+        failures = get_startup_failures()
+        skips = get_startup_skips()
+
+    assert not any(f["subsystem"] == "browser_manager" for f in failures), (
+        "an optional subsystem was recorded as a failure: " f"{failures!r}")
+    names = [s["subsystem"] for s in skips]
+    assert names.count("browser_manager") == 1, (
+        f"the skip was not recorded exactly once: {skips!r}")
+    entry = next(s for s in skips if s["subsystem"] == "browser_manager")
+    assert "playwright" in entry["reason"], entry
+
+
+def test_optionality_cannot_mask_a_real_browser_failure(monkeypatch):
+    """The nail: playwright present (optional_when ⇒ None) but no manager ⇒ failure.
+
+    This is the case optionality must *not* swallow: the extra is installed, so
+    a browser that still did not start is a genuine fault and belongs in
+    ``STARTUP_FAILURES``, never in ``STARTUP_SKIPS``.
+    """
+    from kairos.browser import BrowserManager
+
+    monkeypatch.setattr(app_module, "_browser_is_optional", lambda: None)
+
+    async def _boom(self, *a, **kw):  # noqa: ANN002, ANN003
+        raise RuntimeError("no browser in this environment (test)")
+
+    monkeypatch.setattr(BrowserManager, "start", _boom, raising=True)
+
+    with TestClient(app):
+        failures = get_startup_failures()
+        skips = get_startup_skips()
+
+    assert any(f["subsystem"] == "browser_manager" for f in failures), (
+        f"a real browser fault was excused by optionality: {failures!r}")
+    assert not any(s["subsystem"] == "browser_manager" for s in skips), (
+        f"a real browser fault was misfiled as a skip: {skips!r}")
+
+
+@pytest.mark.parametrize("name, attr", [
+    ("feishu", "_feishu_store"),
+    ("wecom", "_wecom_forwarder"),
+    ("im_store", "_im_store"),
+    ("weixin_ilink", "_weixin_store"),
+])
+def test_required_subsystems_are_never_excused_by_optionality(
+        monkeypatch, name, attr):
+    """The other 8 subsystems are required: not alive ⇒ a failure, never a skip.
+
+    Probes are run directly against the 'nothing wired' state the fixture
+    leaves, so each named subsystem is genuinely not alive.
+    """
+    monkeypatch.setattr(app_module, attr, None)
+    app_module._verify_startup_subsystems()
+    failures = {f["subsystem"] for f in get_startup_failures()}
+    skips = {s["subsystem"] for s in get_startup_skips()}
+    assert name in failures, f"{name} must be a failure, got {failures!r}"
+    assert name not in skips, f"{name} was wrongly filed as a skip"
+
+
+# ---------------------------------------------------------------------------
+# Part 2: the record is reachable over HTTP.
+# ---------------------------------------------------------------------------
+
+def test_sentinel_status_exposes_the_startup_record(monkeypatch):
+    """``GET /api/sentinel/status`` appends both records, as lists."""
+    from kairos.browser import BrowserManager
+
+    monkeypatch.setattr(app_module, "_browser_is_optional", lambda: None)
+
+    async def _boom(self, *a, **kw):  # noqa: ANN002, ANN003
+        raise RuntimeError("boom (test)")
+
+    monkeypatch.setattr(BrowserManager, "start", _boom, raising=True)
+
+    with TestClient(app) as client:
+        body = client.get("/api/sentinel/status").json()
+        assert isinstance(body["startup_failures"], list)
+        assert isinstance(body["startup_skips"], list)
+        assert any(f["subsystem"] == "browser_manager"
+                   for f in body["startup_failures"])
+    # The keys the frontend already reads are untouched.
+    assert "mode" in body and "policy" in body and "always_refused" in body
+
+
+def test_sentinel_status_carries_the_skip_record(monkeypatch):
+    """...and the skip record rides along (browser absent ⇒ it is a skip)."""
+    from kairos.browser import BrowserManager
+
+    monkeypatch.setattr(app_module, "_browser_is_optional",
+                        lambda: "playwright is an optional extra (test)")
+
+    async def _boom(self, *a, **kw):  # noqa: ANN002, ANN003
+        raise ModuleNotFoundError("No module named 'playwright'")
+
+    monkeypatch.setattr(BrowserManager, "start", _boom, raising=True)
+
+    with TestClient(app) as client:
+        body = client.get("/api/sentinel/status").json()
+    assert any(s["subsystem"] == "browser_manager"
+               for s in body["startup_skips"])
+    assert not any(f["subsystem"] == "browser_manager"
+                   for f in body["startup_failures"])

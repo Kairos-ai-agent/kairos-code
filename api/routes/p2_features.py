@@ -541,6 +541,28 @@ def _project_work_dir(project_id):
                 or Path.cwd())
 
 
+def _project_memory_kb(project_id):
+    """The project-scoped MemoryKB for a ``/remember`` or ``/forget`` command.
+
+    The agent reads ``<project_dir>/.kairos/memory_kb.json``, so a memory the
+    user saves from chat must land there. Falls back to the default store
+    (with a warning) only when the project directory cannot be resolved."""
+    from kairos.memory_kb import MemoryKB, resolve_storage_path
+    from api.routes.projects import _orch
+    project = _orch().get_project(project_id) if _orch() else None
+    project_dir = ""
+    if project is not None:
+        project_dir = (getattr(project, "work_dir", "")
+                       or getattr(project, "workspace", "") or "")
+    if project_dir:
+        return MemoryKB(project_dir=project_dir)
+    logger.warning(
+        "slash memory: no project directory for project_id=%r; using the "
+        "default store %s — entries will NOT be visible to the project agent",
+        project_id, resolve_storage_path())
+    return MemoryKB()
+
+
 @router.get("/{project_id}/harness")
 async def harness_get(project_id: str):
     from kairos.continual_harness import HarnessStore
@@ -825,9 +847,7 @@ async def slash_command(project_id: str, body: dict):
     if cmd == "forget":
         if not arg:
             return {"reply": "Usage: /forget <key>", "continue_chat": True}
-        from kairos.config.settings import settings as ksettings
-        from kairos.memory_kb import MemoryKB
-        kb = MemoryKB(storage_path=ksettings.data_dir / "memory_kb.json")
+        kb = _project_memory_kb(project_id)
         return {"reply": "Forgot: " + arg if kb.forget(arg, "project") else "Not found",
                 "continue_chat": True}
     if cmd == "remember":
@@ -835,9 +855,7 @@ async def slash_command(project_id: str, body: dict):
             return {"reply": "Usage: /remember <key>=<value>", "continue_chat": True}
         k, v = arg.split("=", 1)
         k, v = k.strip(), v.strip()
-        from kairos.config.settings import settings as ksettings
-        from kairos.memory_kb import MemoryKB
-        kb = MemoryKB(storage_path=ksettings.data_dir / "memory_kb.json")
+        kb = _project_memory_kb(project_id)
         kb.remember(k, v, "project")
         return {"reply": f"Remembered {k!r}", "continue_chat": True}
     return {"reply": f"Unknown command: /{cmd}", "continue_chat": True}

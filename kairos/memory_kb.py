@@ -8,7 +8,15 @@ Exposes the four atomic memory operations from
     forget(key, scope="project")
     improve(key, feedback, scope="project")
 
-Storage is local-first (JSON file under ``<data_dir>/memory/kb.json``).
+Storage is local-first. The canonical store is **per project**:
+``<project_dir>/.kairos/memory_kb.json`` — the location the agent reads,
+so a memory written for a project is one the agent can recall. When no
+project directory is available (e.g. a project-less API call) the resolver
+falls back to the documented default ``<data_dir>/memory/kb.json`` and the
+caller logs why. Stores written before the paths were unified
+(``<data_dir>/memory_kb.json`` and ``<data_dir>/memory/kb.json``) are read
+read-only when the canonical store does not exist yet — never migrated,
+moved or deleted.
 The four operations are atomic per call, and the file is rewritten
 on every mutation with a `.tmp` + `os.replace` rename so a crash
 mid-write doesn't corrupt prior state.
@@ -33,6 +41,54 @@ from typing import Any, Dict, Iterable, List, Optional
 logger = logging.getLogger(__name__)
 
 VALID_SCOPES = ("user", "project", "session")
+
+
+# --- storage-path resolution (the single source of truth) -----------------
+
+def _data_dir() -> Path:
+    """The dev/prod data directory (``KAIROS_DATA_DIR`` or repo default)."""
+    return Path(os.environ.get(
+        "KAIROS_DATA_DIR",
+        Path(__file__).resolve().parent.parent / "data",
+    ))
+
+
+def project_storage_path(project_dir) -> Path:
+    """Canonical per-project store: ``<project_dir>/.kairos/memory_kb.json``.
+
+    ``.kairos/`` is the repo's existing per-project convention (skills,
+    checkpoints, harness) and the exact path ``kairos/agents/base.py``
+    reads, so every write path must resolve here for the agent to see it.
+    """
+    return Path(project_dir) / ".kairos" / "memory_kb.json"
+
+
+def default_storage_path() -> Path:
+    """The documented default store: ``<data_dir>/memory/kb.json``.
+
+    Used only when no project directory is available; the caller must log
+    the fallback so it is never silent."""
+    return _data_dir() / "memory" / "kb.json"
+
+
+def legacy_storage_paths() -> List[Path]:
+    """Pre-fix store locations, READ-ONLY compatibility fallback.
+
+    Returned in preference order. These files are only ever read (when the
+    canonical store does not exist yet); they are never written, migrated,
+    moved or deleted."""
+    data = _data_dir()
+    return [data / "memory_kb.json", data / "memory" / "kb.json"]
+
+
+def resolve_storage_path(*, project_dir=None) -> Path:
+    """The one place a MemoryKB storage path is decided.
+
+    Prefer the per-project location; fall back to the documented default
+    only when no project directory is available."""
+    if project_dir:
+        return project_storage_path(project_dir)
+    return default_storage_path()
 
 
 @dataclass
@@ -76,13 +132,10 @@ class MemoryKB:
     process as the writer.
     """
 
-    def __init__(self, storage_path: Optional[Path] = None):
+    def __init__(self, storage_path: Optional[Path] = None, *,
+                 project_dir=None):
         if storage_path is None:
-            data_dir = Path(os.environ.get(
-                "KAIROS_DATA_DIR",
-                Path(__file__).resolve().parent.parent / "data",
-            ))
-            storage_path = data_dir / "memory" / "kb.json"
+            storage_path = resolve_storage_path(project_dir=project_dir)
         self.path = Path(storage_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
@@ -95,12 +148,30 @@ class MemoryKB:
     # --- persistence -----------------------------------------------------
 
     def _load(self) -> None:
-        if not self.path.exists():
+        if self.path.exists():
+            self._load_from(self.path)
             return
+        # The canonical store does not exist yet: a memory written before the
+        # paths were unified may still live in an old location. Read it so it
+        # is not lost to the agent — READ-ONLY. The legacy file is never
+        # written, moved or deleted; a later remember() writes the canonical
+        # path (a copy of the merged view, never a move of the old file).
+        for legacy in legacy_storage_paths():
+            if legacy == self.path or not legacy.exists():
+                continue
+            self._load_from(legacy)
+            logger.info(
+                "memory_kb: canonical %s absent; loaded legacy store %s "
+                "(read-only — not migrated)",
+                self.path, legacy,
+            )
+            return
+
+    def _load_from(self, path: Path) -> None:
         try:
-            raw = json.loads(self.path.read_text(encoding="utf-8"))
+            raw = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
-            logger.warning("memory_kb: failed to load %s: %s", self.path, exc)
+            logger.warning("memory_kb: failed to load %s: %s", path, exc)
             return
         for scope in VALID_SCOPES:
             for key, entry in (raw.get(scope) or {}).items():

@@ -258,3 +258,36 @@ def test_the_browser_is_a_taint_source():
     """Reading a page is reading content this run cannot vouch for."""
     from kairos.taint import classify
     assert classify("browser") == "network"
+
+
+# --------------------------------------------------------------------------
+# a build without the optional browser extra says so in words
+# --------------------------------------------------------------------------
+
+def test_a_build_without_playwright_says_so_not_a_raw_import_error(
+        tmp_path, monkeypatch):
+    """No injected manager + playwright absent ⇒ a plain-language refusal.
+
+    A base/packaged build ships no playwright (the optional ``browser`` extra),
+    so the tool must not surface a raw ``ModuleNotFoundError`` from deep inside
+    a page call — the user did not break anything.
+    """
+    import kairos.browser as kb
+
+    monkeypatch.setattr(kb, "browser_unavailable_reason",
+                        lambda: kb.PLAYWRIGHT_MISSING_HINT)
+    tool = BrowserTool(project_id="p", manager=None, allowed_root=tmp_path)
+    res = run(tool, action="current")
+    assert not res.success
+    assert "playwright" in (res.error or "")
+    assert "optional" in (res.error or "")
+    assert "ModuleNotFoundError" not in (res.error or "")
+
+
+def test_an_injected_manager_is_never_blocked_by_the_playwright_check(tmp_path):
+    """A manager handed in explicitly (tests / the app's wired one) is honoured."""
+    tool, mgr = make_tool(tmp_path)
+    res = run(tool, action="current")
+    assert res.success, res.error
+    assert mgr.calls, "the injected manager was never used"
+

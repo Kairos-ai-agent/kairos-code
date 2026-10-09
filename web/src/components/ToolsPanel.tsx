@@ -344,7 +344,7 @@ const HooksTab: React.FC<{ projectId: string }> = ({ projectId }) => {
 };
 
 // ============= Memory =============
-const MemoryTab: React.FC<{ projectId: string }> = () => {
+const MemoryTab: React.FC<{ projectId: string }> = ({ projectId }) => {
   const t = useT();
   const tokens = useThemeTokens();
   const [keys, setKeys] = useState<string[]>([]);
@@ -356,18 +356,22 @@ const MemoryTab: React.FC<{ projectId: string }> = () => {
 
   const load = useCallback(async () => {
     try {
-      const r = await api.get<{keys: string[]}>('/borrowed/memory/list?scope=project');
+      // Scope to the current project: the store is per project, and the agent
+      // reads the same file (<project>/.kairos/memory_kb.json). A project-less
+      // call would silently write to a store the agent never reads.
+      const r = await api.get<{keys: string[]}>(
+        `/borrowed/memory/list?scope=project&project_id=${projectId}`);
       setKeys(r.data.keys || []);
     } catch {/* ignore */}
-  }, []);
+  }, [projectId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (projectId) load(); }, [projectId, load]);
 
   const search = async () => {
     if (!query.trim()) return;
     try {
       const r = await api.post<{results: any[]}>('/borrowed/memory/recall',
-        { query, scope: 'project', limit: 10 });
+        { query, scope: 'project', limit: 10, project_id: projectId });
       setResults(r.data.results || []);
     } catch (e: any) {
       msgApi.error(e?.response?.data?.detail || 'failed');
@@ -376,7 +380,8 @@ const MemoryTab: React.FC<{ projectId: string }> = () => {
 
   const remember = async (values: any) => {
     try {
-      await api.post('/borrowed/memory/remember', { ...values, scope: 'project' });
+      await api.post('/borrowed/memory/remember',
+        { ...values, scope: 'project', project_id: projectId });
       msgApi.success('Remembered');
       setShowAdd(false);
       form.resetFields();
@@ -388,7 +393,8 @@ const MemoryTab: React.FC<{ projectId: string }> = () => {
 
   const forget = async (key: string) => {
     try {
-      await api.post('/borrowed/memory/forget', { key, scope: 'project' });
+      await api.post('/borrowed/memory/forget',
+        { key, scope: 'project', project_id: projectId });
       msgApi.success('Forgotten');
       load();
     } catch (e: any) { msgApi.error(e?.response?.data?.detail || 'failed'); }

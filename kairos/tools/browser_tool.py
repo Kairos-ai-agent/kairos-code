@@ -152,6 +152,18 @@ class BrowserTool(BaseTool):
             except ValueError as e:
                 return ToolResult(success=False, output="", error=str(e))
 
+        # A base / packaged build ships no playwright (the optional `browser`
+        # extra), so a manager cannot be auto-created. Say that plainly instead
+        # of letting the action raise a raw ``ModuleNotFoundError`` deep inside
+        # a page call. An explicitly injected manager is always honoured (the
+        # app's wired manager, and tests), so this only guards the auto-create
+        # path.
+        if self._manager is None:
+            from kairos.browser import browser_unavailable_reason
+            reason = browser_unavailable_reason()
+            if reason:
+                return ToolResult(success=False, output="", error=reason)
+
         try:
             pid = self._pid()
             mgr = self._mgr()
@@ -161,6 +173,13 @@ class BrowserTool(BaseTool):
                                         height=height, max_chars=max_chars)
         except Exception as e:  # noqa: BLE001
             logger.debug("browser tool failed: %s", e, exc_info=True)
+            # Belt: even on a path that slipped past the pre-check, a missing
+            # playwright must read as "this build has no browser", not as a
+            # raw import error.
+            if isinstance(e, ModuleNotFoundError) and "playwright" in str(e):
+                from kairos.browser import PLAYWRIGHT_MISSING_HINT
+                return ToolResult(success=False, output="",
+                                  error=PLAYWRIGHT_MISSING_HINT)
             return ToolResult(success=False, output="", error=str(e))
 
     async def _dispatch(self, act: str, mgr: Any, pid: str, *, url: str,

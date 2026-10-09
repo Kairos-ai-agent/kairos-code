@@ -20,10 +20,25 @@ router = APIRouter(prefix="/api/sentinel", tags=["sentinel"])
 
 @router.get("/status")
 async def status() -> Dict[str, Any]:
-    """Whether the gate is on, and what it is enforcing right now."""
+    """Whether the gate is on, and what it is enforcing right now.
+
+    Also surfaces the startup record (``startup_failures`` / ``startup_skips``)
+    so the UI — and a bug report — can see which subsystems failed to come up
+    and which were legitimately skipped, without a test having to parse logs.
+    """
     from kairos.sentinel import allow_file, get_sentinel
 
     sentinel = get_sentinel()
+    # Delayed import: ``api.app`` mounts this router, so a top-level import
+    # would be a cycle. And a diagnostics lookup must never 500 the gate's own
+    # status endpoint — if the record cannot be read, degrade to empty lists.
+    try:
+        from api.app import get_startup_failures, get_startup_skips
+        startup_failures = get_startup_failures()
+        startup_skips = get_startup_skips()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("sentinel status: startup record unavailable: %s", exc)
+        startup_failures, startup_skips = [], []
     return {
         "enabled": sentinel.enabled,
         "strict": sentinel.strict,
@@ -31,6 +46,8 @@ async def status() -> Dict[str, Any]:
         "audit_dir": str(sentinel.audit.directory),
         "allow_file": str(allow_file()),
         "policy": sentinel.policy.to_dict(),
+        "startup_failures": startup_failures,
+        "startup_skips": startup_skips,
         "always_refused": [
             "private keys and cloud credentials (.ssh/id_*, .aws/credentials,"
             " .netrc, .git-credentials)",

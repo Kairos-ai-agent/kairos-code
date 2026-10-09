@@ -34,6 +34,20 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **Project memory was written and read from different files, so the agent
+  never saw what was remembered in the UI.** The memory panel (and the
+  `/remember` chat command) wrote to `<data_dir>/memory_kb.json`, while the
+  agent read `<project_dir>/.kairos/memory_kb.json` — two stores that never
+  met, so a memory the user saved was silently uncallable. All constructions now
+  go through a single resolver (`kairos.memory_kb.resolve_storage_path` /
+  `project_storage_path`): writes land in the per-project store the agent reads,
+  and a project-less call falls back to the documented default with an explicit
+  warning. There is no silent fallback and no silent `None` KB. Old stores
+  (`<data_dir>/memory_kb.json`, `<data_dir>/memory/kb.json`) are read read-only
+  when the canonical store does not exist yet — never migrated, moved or
+  deleted. The memory panel now sends `project_id`. Guarded by
+  `tests/test_memory_store_alignment.py`.
+
 - **Read-only tools were mis-classified as needing approval in `SUGGEST` mode.**
   `kairos.approval.decide` only auto-allowed `READ_ONLY_TOOLS` in `EDIT`, so the
   default tier (and a strict gate) asked before reading a file the user had just
@@ -43,6 +57,25 @@ All notable changes to this project are documented here. The format follows
   cover the tools that really read (`doc_read`, `xlsx_read`, `data_analyze`,
   `history_search`) and to drop names that were never dispatchable tools
   (`git_diff` / `git_log` / `git_show` / `list_skills` / `list_agents`).
+
+- **Startup failures were recorded but unreadable, and one of them cried wolf
+  every launch.** `get_startup_failures()` had no reader outside `api/app.py`,
+  so nothing told the user which subsystems failed to assemble; and because
+  `playwright` is the optional `browser` extra (`pyproject.toml`), a base or
+  packaged build recorded `browser_manager` as a *failed* subsystem on every
+  start — the kind of signal that trains a reader to ignore the list. The
+  subsystem table now carries a third field, an optionality predicate: a
+  subsystem that may legitimately be absent is recorded in the new
+  `STARTUP_SKIPS` (`get_startup_skips()`) with the reason, and
+  `STARTUP_FAILURES` stays a list where every entry means something is really
+  wrong. Optionality can never launder a fault: when `playwright` *is*
+  installed, a manager that still did not come up remains a failure. Both
+  records are exposed on `GET /api/sentinel/status` (`startup_failures`,
+  `startup_skips` — additive keys). The browser tool and the `/api/browser/...`
+  routes now return "browser support is not included in this build (optional
+  extra `browser`)" instead of a raw `ModuleNotFoundError`. Guarded by
+  `tests/test_startup_registry.py`, including the nail that a real browser fault
+  is never excused by optionality.
 
 - **沙箱模式（coder git worktree）里生成的文件发不回去。** 出站文件的围墙根此前只取
   项目根（`work_dir or workspace`），而沙箱模式下 agent 的文件工具被围到 **coder 工作树**

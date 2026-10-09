@@ -43,6 +43,7 @@ Resource limits
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import re
 import logging
 import os
@@ -357,6 +358,32 @@ class BrowserManager:
 # lazily so a CLI or an embedded run still works without an HTTP app.
 # ---------------------------------------------------------------------------
 _default_manager: Optional["BrowserManager"] = None
+
+
+# ``playwright`` is the optional ``browser`` extra (``pyproject.toml``:
+# ``browser = ["playwright>=1.40"]``); a base install — and every packaged
+# build without that extra — does not ship it. The browser tool and the HTTP
+# panel must say that plainly instead of surfacing a raw
+# ``ModuleNotFoundError`` from deep inside a page action: the user did not break
+# anything, this build simply has no browser.
+PLAYWRIGHT_MISSING_HINT = (
+    "browser support is not included in this build: playwright is an optional "
+    "extra (install 'kairos-code[browser]' to enable the Browser tab and the "
+    "browser tool)"
+)
+
+
+def browser_unavailable_reason() -> Optional[str]:
+    """Why browser support is absent, or ``None`` when it is available.
+
+    Single source of the "optional extra not installed" wording, shared by
+    ``kairos.tools.browser_tool``, ``api.routes.browser`` and
+    ``api.app._browser_is_optional`` so a missing playwright reads the same
+    everywhere.
+    """
+    if importlib.util.find_spec("playwright") is None:
+        return PLAYWRIGHT_MISSING_HINT
+    return None
 
 
 def set_default_manager(mgr: "BrowserManager") -> None:

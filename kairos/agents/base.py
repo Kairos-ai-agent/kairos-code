@@ -458,16 +458,21 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
         self._memory_kb = None
         if self._project_dir:
             try:
-                from kairos.memory_kb import MemoryKB
-                mem_path = self._project_dir / ".kairos" / "memory_kb.json"
-                if mem_path.parent.exists():
-                    kb = MemoryKB(storage_path=mem_path)
-                    # Only do a quick recall at construction; full
-                    # recall runs on each task. Avoid hitting the
-                    # network on every agent spawn.
-                    self._memory_kb = kb
+                from kairos.memory_kb import MemoryKB, project_storage_path
+                # Build the KB unconditionally. A project with no memory file
+                # yet reads as empty, which is correct; the old guard (only
+                # build when the parent dir already existed) silently disabled
+                # recall for every fresh project — the exact bug this fixes.
+                # MemoryKB creates <project>/.kairos/ on first write.
+                self._memory_kb = MemoryKB(
+                    storage_path=project_storage_path(self._project_dir))
             except Exception as exc:
-                logger.debug("memory_kb init failed: %s", exc)
+                # A path/lookup failure used to vanish at debug level and the
+                # agent then had no cross-session memory with no trace. Warn.
+                logger.warning(
+                    "memory_kb init failed for project %s (cross-session "
+                    "memory unavailable this run): %s",
+                    self._project_dir, exc)
                 self._memory_kb = None
 
         # Optional output guardrail (the cloud task-Harness-style hook). When

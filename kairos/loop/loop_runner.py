@@ -901,9 +901,21 @@ def _record_plan_deviation(session) -> None:
         rep = plan_deviation_report(plan)
         if rep["completion"] >= 0.999 and not rep["pending"]:
             return
-        from kairos.memory_kb import MemoryKB
-        kb = MemoryKB()
+        from kairos.memory_kb import MemoryKB, resolve_storage_path
         sid = str(getattr(session, "session_id", "") or "")
+        project = getattr(session, "project", None)
+        project_dir = (getattr(project, "work_dir", "")
+                       or getattr(project, "workspace", ""))
+        if project_dir:
+            kb = MemoryKB(project_dir=project_dir)
+        else:
+            # No project directory on the session: this write cannot land where
+            # the agent reads, so say so rather than silently writing elsewhere.
+            kb = MemoryKB()
+            logger.warning(
+                "plan deviation memory: session %s has no project dir; "
+                "writing to the default store %s — the project agent will "
+                "NOT see this entry", sid, resolve_storage_path())
         key = (
             f"plan-deviation:{getattr(session.project, 'id', 'p')}"
             f":{sid[:8]}"

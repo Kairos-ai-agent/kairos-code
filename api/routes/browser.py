@@ -46,9 +46,15 @@ def set_manager(mgr: BrowserManager) -> None:
 
 def _mgr() -> BrowserManager:
     if _manager is None:
+        # A base / packaged build ships no playwright (the optional `browser`
+        # extra), so the manager was never wired. Say that plainly instead of a
+        # bare "not initialized" — the two cases mean different things to the
+        # user, and neither should look like a raw import error.
+        from kairos.browser import browser_unavailable_reason
+        reason = browser_unavailable_reason()
         raise HTTPException(
             status_code=503,
-            detail="browser manager not initialized",
+            detail=reason or "browser manager not initialized",
         )
     return _manager
 

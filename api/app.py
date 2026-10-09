@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import logging
 import os
 import traceback
@@ -135,11 +136,72 @@ def _has_startup_failure(subsystem: str) -> bool:
     return any(f["subsystem"] == subsystem for f in STARTUP_FAILURES)
 
 
-# Registered subsystems: (name, probe). A probe returns truthy when the
-# subsystem is *live in this process*. Lifespan verifies every entry after
-# assembly and ``tests/test_startup_registry.py`` iterates this same tuple, so a
-# subsystem that is wired up but never actually starts is caught by a test
-# instead of by a user noticing the feature is a no-op.
+# Legitimately-skipped subsystems. Some subsystems are an *optional* extra that
+# a given build simply does not ship (``browser_manager`` / playwright): they
+# are expected to be absent, so recording them as a failure every startup is
+# the boy-who-cried-wolf signal that trains a reader to ignore the list. They
+# are recorded here instead, with the reason they may legitimately be missing,
+# and ``STARTUP_FAILURES`` stays a list where every entry means something is
+# actually wrong. Read via ``get_startup_skips()`` and mirrored on
+# ``app.state.startup_skips``.
+STARTUP_SKIPS: list[dict] = []
+
+
+def _record_startup_skip(subsystem: str, reason: str,
+                         *, phase: str = "probe") -> dict:
+    """Record that ``subsystem`` was legitimately skipped (never raises)."""
+    entry: dict = {
+        "subsystem": subsystem,
+        "phase": phase,          # "startup" | "shutdown" | "probe"
+        "reason": reason,
+    }
+    STARTUP_SKIPS.append(entry)
+    return entry
+
+
+def get_startup_skips() -> list[dict]:
+    """Read entry for tests / diagnostics: the legitimate-skip record.
+
+    Empty means no optional subsystem was skipped because it is not part of
+    this build. Deliberately a plain function (``STARTUP_SKIPS`` is also
+    mirrored onto ``app.state.startup_skips``).
+    """
+    return list(STARTUP_SKIPS)
+
+
+def _has_startup_skip(subsystem: str) -> bool:
+    return any(s["subsystem"] == subsystem for s in STARTUP_SKIPS)
+
+
+def _browser_is_optional() -> str | None:
+    """Why the browser manager may *legitimately* be absent, or ``None``.
+
+    ``playwright`` is the optional ``browser`` extra (``pyproject.toml``:
+    ``browser = ["playwright>=1.40"]``), so a base install — and therefore any
+    packaged build without the extra — has no browser at all. A browser manager
+    that did not start because playwright is not installed is not a fault; the
+    lifespan degrades the Browser tab gracefully and this returns the reason so
+    it is recorded as a *skip*, not a failure (see ``_verify_startup_subsystems``
+    and the browser ``except`` in ``lifespan``).
+
+    When playwright *is* installed the browser is a required subsystem again:
+    this returns ``None``, so a manager that still failed to come up is recorded
+    as a real failure. That asymmetry is the point — optionality must never be
+    used to launder a genuine fault.
+    """
+    if importlib.util.find_spec("playwright") is None:
+        from kairos.browser import PLAYWRIGHT_MISSING_HINT
+        return PLAYWRIGHT_MISSING_HINT
+    return None
+
+
+# Registered subsystems: (name, probe, optional_when). A probe returns truthy
+# when the subsystem is *live in this process*. ``optional_when`` is a callable
+# that returns a non-empty reason (a ``str``) when the subsystem may *legitimately*
+# be absent in this build, or ``None`` when it is required. Lifespan verifies
+# every entry after assembly and ``tests/test_startup_registry.py`` iterates this
+# same tuple, so a subsystem that is wired up but never actually starts is caught
+# by a test instead of by a user noticing the feature is a no-op.
 def _probe_approvals() -> bool:
     from kairos import approvals as _approvals
     return _approvals.get_channel() is not None
@@ -162,34 +224,67 @@ def _probe_daemon_supervisor() -> bool:
     return _dm._SUPERVISOR is not None
 
 
-_STARTUP_SUBSYSTEMS: tuple[tuple[str, object], ...] = (
-    ("approvals", _probe_approvals),
-    ("long_running_registry", _probe_long_running_registry),
-    ("autonomous_worker", _probe_autonomous_worker),
-    ("daemon_supervisor", _probe_daemon_supervisor),
-    ("browser_manager", lambda: _browser_manager is not None),
-    ("feishu", lambda: _feishu_store is not None),
-    ("wecom", lambda: _wecom_forwarder is not None),
-    ("im_store", lambda: _im_store is not None),
+_STARTUP_SUBSYSTEMS: tuple[tuple[str, object, object], ...] = (
+    ("approvals", _probe_approvals, None),
+    ("long_running_registry", _probe_long_running_registry, None),
+    ("autonomous_worker", _probe_autonomous_worker, None),
+    ("daemon_supervisor", _probe_daemon_supervisor, None),
+    # The browser is the optional `browser` extra: absent playwright ⇒ the
+    # manager is legitimately not there, not broken. Present playwright ⇒ a
+    # manager that still did not start is a real failure (_browser_is_optional
+    # returns None then). Late-bound through the module global so the
+    # optionality decision is resolved at probe time (and a test can monkeypatch
+    # ``_browser_is_optional`` — exactly as it does the ``_browser_manager``
+    # probe — to simulate playwright being present).
+    ("browser_manager", lambda: _browser_manager is not None,
+     lambda: _browser_is_optional()),
+    ("feishu", lambda: _feishu_store is not None, None),
+    ("wecom", lambda: _wecom_forwarder is not None, None),
+    ("im_store", lambda: _im_store is not None, None),
     ("weixin_ilink",
-     lambda: _weixin_store is not None and _weixin_channel is not None),
+     lambda: _weixin_store is not None and _weixin_channel is not None, None),
 )
 
 
+def _record_missing_subsystem(name: str, exc: BaseException, reason: str,
+                              optional_when) -> None:
+    """Classify a subsystem that did not come up as a skip or a failure.
+
+    ``optional_when`` (when not ``None``) is consulted first: a non-empty
+    reason means the subsystem may legitimately be absent, so it is recorded in
+    ``STARTUP_SKIPS`` (once) and the caller moves on. Otherwise it is recorded
+    in ``STARTUP_FAILURES`` with ``reason`` (once), so a required subsystem is
+    never excused by optionality it does not have.
+    """
+    optional_reason = optional_when() if optional_when is not None else None
+    if optional_reason:
+        if not _has_startup_skip(name):
+            _record_startup_skip(name, optional_reason, phase="probe")
+        return
+    if not _has_startup_failure(name):
+        _record_startup_failure(name, exc, phase="probe", reason=reason)
+
+
 def _verify_startup_subsystems() -> list[dict]:
-    """Probe every registered subsystem; record any that did not come up."""
-    for name, probe in _STARTUP_SUBSYSTEMS:
+    """Probe every registered subsystem; record any that did not come up.
+
+    Both the "probe raised" and the "probe reported not alive" paths consult
+    the entry's ``optional_when`` first, so an optional subsystem that is
+    legitimately absent lands in ``STARTUP_SKIPS`` instead of
+    ``STARTUP_FAILURES`` — while a required subsystem (or an optional one whose
+    optionality does not apply, e.g. playwright present) still records a
+    failure, with the reason naming which of the two paths fired.
+    """
+    for name, probe, optional_when in _STARTUP_SUBSYSTEMS:
         try:
             alive = bool(probe())
         except Exception as exc:  # noqa: BLE001
-            if not _has_startup_failure(name):
-                _record_startup_failure(name, exc, phase="probe",
-                                        reason="probe raised")
+            _record_missing_subsystem(name, exc, "probe raised", optional_when)
             continue
-        if not alive and not _has_startup_failure(name):
-            _record_startup_failure(
+        if not alive:
+            _record_missing_subsystem(
                 name, RuntimeError("subsystem not alive after startup"),
-                phase="probe", reason="probe reported not alive")
+                "probe reported not alive", optional_when)
     return get_startup_failures()
 
 
@@ -228,7 +323,9 @@ async def lifespan(app: FastAPI):
     # Fresh record per startup, so a test that asserts "nothing failed" is not
     # fooled by a failure recorded by an earlier lifespan in the same process.
     STARTUP_FAILURES.clear()
+    STARTUP_SKIPS.clear()
     app.state.startup_failures = STARTUP_FAILURES
+    app.state.startup_skips = STARTUP_SKIPS
 
     # The gate can ask now. Before this line the permission ladder's ASK
     # verdict had no channel to ask through and fell through to allowing the
@@ -309,8 +406,20 @@ async def lifespan(app: FastAPI):
         set_default_manager(_browser_manager)
         log.info("Browser manager started (R38.6 §32)")
     except Exception as exc:  # noqa: BLE001
-        _record_startup_failure("browser_manager", exc)
-        log.warning("Browser manager failed to start: %s", exc)
+        # The browser is the optional `browser` extra, so a failure here when
+        # playwright is not installed is the *expected* state of a base build,
+        # not a fault: record it as a skip so the failure list stays a real
+        # signal. If playwright *is* installed (optionality returns None) the
+        # manager not starting is a genuine fault and is recorded as one.
+        optional_reason = _browser_is_optional()
+        if optional_reason:
+            if not _has_startup_skip("browser_manager"):
+                _record_startup_skip("browser_manager", optional_reason,
+                                     phase="startup")
+            log.info("Browser manager skipped (%s): %s", optional_reason, exc)
+        else:
+            _record_startup_failure("browser_manager", exc)
+            log.warning("Browser manager failed to start: %s", exc)
         _browser_manager = None
 
     # R38.6 §33: Feishu bot. We bring up the binding store
@@ -484,6 +593,7 @@ async def lifespan(app: FastAPI):
     # structured failure instead of a no-op the user discovers weeks later.
     _verify_startup_subsystems()
     app.state.startup_failures = STARTUP_FAILURES
+    app.state.startup_skips = STARTUP_SKIPS
 
     yield
 

@@ -518,7 +518,7 @@ def audit_startup_calls(source: str, registered_names: set[str]) -> list[str]:
 
 def _registered_names() -> set[str]:
     from api.app import _STARTUP_SUBSYSTEMS
-    return {name for name, _probe in _STARTUP_SUBSYSTEMS}
+    return {name for name, _probe, _optional in _STARTUP_SUBSYSTEMS}
 
 
 def test_every_startup_call_is_registered_or_whitelisted():

@@ -433,35 +433,56 @@ class MemoryRememberBody(BaseModel):
     value: str
     scope: str = "project"
     tags: List[str] = []
+    project_id: str = ""
 
 
 class MemoryRecallBody(BaseModel):
     query: str
     scope: str = "project"
     limit: int = 10
+    project_id: str = ""
 
 
 class MemoryForgetBody(BaseModel):
     key: str
     scope: str = "project"
+    project_id: str = ""
 
 
-def _kb():
+def _kb(project_id: str = ""):
+    """The MemoryKB for a memory API call.
+
+    The store is per project (``<project_dir>/.kairos/memory_kb.json``) so a
+    memory written here is one the project's agent can recall. Without a
+    resolvable project directory (no ``project_id``, or an unknown one) this
+    falls back to the default store and logs why — never silently."""
     MemoryKB = _kmemory()
-    from kairos.config.settings import settings as ksettings
-    return MemoryKB(storage_path=ksettings.data_dir / "memory_kb.json")
+    project_dir = ""
+    if project_id:
+        project = _orch().get_project(project_id) if _orch() else None
+        if project is not None:
+            project_dir = (getattr(project, "work_dir", "")
+                           or getattr(project, "workspace", "") or "")
+    if project_dir:
+        return MemoryKB(project_dir=project_dir)
+    from kairos.memory_kb import resolve_storage_path
+    logger.warning(
+        "memory API: no project directory for project_id=%r; falling back to "
+        "the default store %s — entries written here are NOT visible to a "
+        "project agent", project_id, resolve_storage_path())
+    return MemoryKB()
 
 
 @router.post("/memory/remember")
 async def memory_remember(body: MemoryRememberBody):
-    kb = _kb()
+    kb = _kb(body.project_id)
     entry = kb.remember(body.key, body.value, body.scope, body.tags)
     return {"ok": True, "key": entry.key}
 
 
 @router.post("/memory/recall")
 async def memory_recall(body: MemoryRecallBody):
-    kb = _kb()
+    kb = _kb(body.project_id)
     results = kb.recall(body.query, body.scope, body.limit)
     return {"results": [
         {"key": r.key, "value": r.value, "scope": r.scope,
@@ -472,13 +493,13 @@ async def memory_recall(body: MemoryRecallBody):
 
 @router.post("/memory/forget")
 async def memory_forget(body: MemoryForgetBody):
-    kb = _kb()
+    kb = _kb(body.project_id)
     return {"ok": kb.forget(body.key, body.scope)}
 
 
 @router.get("/memory/list")
-async def memory_list(scope: str = "project"):
-    kb = _kb()
+async def memory_list(project_id: str = "", scope: str = "project"):
+    kb = _kb(project_id)
     return {"keys": kb.list_keys(scope)}
 
 

@@ -87,6 +87,112 @@ _weixin_channel: WeixinChannel | None = None
 _weixin_approval_bridge = None
 
 
+# ---------------------------------------------------------------------------
+# Structured startup-failure registry.
+#
+# Why this exists: this module assembles ~a dozen subsystems at startup, each
+# in its own ``try`` so one failure degrades only that feature. That design is
+# right — but the failures used to be *silent*: a swallowed ``NameError`` here
+# once took the approval channel, the long-running registry and the daemon
+# supervisor down as a single log line, and nobody noticed the gate had stopped
+# asking for permission (``kairos/sentinel.py``: with no channel an ASK verdict
+# falls through to allow). A log line is not a signal a test can assert on.
+#
+# Every ``except`` in the lifespan now records here at least once, and the
+# ``_STARTUP_SUBSYSTEMS`` table below lets a test iterate the subsystems that
+# must prove they came up instead of hard-coding their names.
+# ---------------------------------------------------------------------------
+STARTUP_FAILURES: list[dict] = []
+
+
+def _record_startup_failure(subsystem: str, exc: BaseException,
+                            *, phase: str = "startup",
+                            reason: str | None = None) -> dict:
+    """Record that ``subsystem`` failed to assemble (never raises)."""
+    entry: dict = {
+        "subsystem": subsystem,
+        "phase": phase,          # "startup" | "shutdown" | "probe"
+        "error": f"{type(exc).__name__}: {exc}",
+    }
+    if reason:
+        entry["reason"] = reason
+    STARTUP_FAILURES.append(entry)
+    return entry
+
+
+def get_startup_failures() -> list[dict]:
+    """Read entry for tests / diagnostics: the failed-assembly record.
+
+    Empty means every assembled subsystem came up. Deliberately a plain
+    function (``STARTUP_FAILURES`` is also mirrored onto
+    ``app.state.startup_failures``) so a test can assert on the outcome
+    without parsing log lines.
+    """
+    return list(STARTUP_FAILURES)
+
+
+def _has_startup_failure(subsystem: str) -> bool:
+    return any(f["subsystem"] == subsystem for f in STARTUP_FAILURES)
+
+
+# Registered subsystems: (name, probe). A probe returns truthy when the
+# subsystem is *live in this process*. Lifespan verifies every entry after
+# assembly and ``tests/test_startup_registry.py`` iterates this same tuple, so a
+# subsystem that is wired up but never actually starts is caught by a test
+# instead of by a user noticing the feature is a no-op.
+def _probe_approvals() -> bool:
+    from kairos import approvals as _approvals
+    return _approvals.get_channel() is not None
+
+
+def _probe_long_running_registry() -> bool:
+    from kairos import long_running as _lr
+    # get_registry() lazily *creates* one, so it cannot be the probe: only a
+    # non-None module global proves the lifespan primed the real registry.
+    return _lr._REGISTRY is not None
+
+
+def _probe_autonomous_worker() -> bool:
+    from kairos import autonomous_worker as _aw
+    return _aw._WORKER is not None
+
+
+def _probe_daemon_supervisor() -> bool:
+    from kairos import daemon as _dm
+    return _dm._SUPERVISOR is not None
+
+
+_STARTUP_SUBSYSTEMS: tuple[tuple[str, object], ...] = (
+    ("approvals", _probe_approvals),
+    ("long_running_registry", _probe_long_running_registry),
+    ("autonomous_worker", _probe_autonomous_worker),
+    ("daemon_supervisor", _probe_daemon_supervisor),
+    ("browser_manager", lambda: _browser_manager is not None),
+    ("feishu", lambda: _feishu_store is not None),
+    ("wecom", lambda: _wecom_forwarder is not None),
+    ("im_store", lambda: _im_store is not None),
+    ("weixin_ilink",
+     lambda: _weixin_store is not None and _weixin_channel is not None),
+)
+
+
+def _verify_startup_subsystems() -> list[dict]:
+    """Probe every registered subsystem; record any that did not come up."""
+    for name, probe in _STARTUP_SUBSYSTEMS:
+        try:
+            alive = bool(probe())
+        except Exception as exc:  # noqa: BLE001
+            if not _has_startup_failure(name):
+                _record_startup_failure(name, exc, phase="probe",
+                                        reason="probe raised")
+            continue
+        if not alive and not _has_startup_failure(name):
+            _record_startup_failure(
+                name, RuntimeError("subsystem not alive after startup"),
+                phase="probe", reason="probe reported not alive")
+    return get_startup_failures()
+
+
 def _orch():
     """Resolve the live orchestrator at call time.
 
@@ -119,6 +225,11 @@ async def lifespan(app: FastAPI):
     # defined — the swallowed ``NameError`` is why none of them ever came up.)
     from kairos.config.settings import settings as kairos_settings
 
+    # Fresh record per startup, so a test that asserts "nothing failed" is not
+    # fooled by a failure recorded by an earlier lifespan in the same process.
+    STARTUP_FAILURES.clear()
+    app.state.startup_failures = STARTUP_FAILURES
+
     # The gate can ask now. Before this line the permission ladder's ASK
     # verdict had no channel to ask through and fell through to allowing the
     # action (see kairos/approvals.py). The UI polls /api/approvals and
@@ -129,6 +240,7 @@ async def lifespan(app: FastAPI):
             approvals.ApprovalChannel(message_bus=_orch().message_bus))
         log.info("Approval channel ready")
     except Exception as exc:  # noqa: BLE001
+        _record_startup_failure("approvals", exc)
         log.warning("approval channel unavailable: %s", exc)
 
     # R38.6.4: prime the long-running registry with the message bus so async
@@ -145,6 +257,7 @@ async def lifespan(app: FastAPI):
         set_registry(reg)
         log.info("Long-running registry primed (R38.6 §34)")
     except Exception as exc:  # noqa: BLE001
+        _record_startup_failure("long_running_registry", exc)
         log.debug("long-running registry init failed: %s", exc)
 
     if reg is not None:
@@ -160,6 +273,7 @@ async def lifespan(app: FastAPI):
             set_worker(w)
             log.info("Autonomous worker running (R38.6 §34)")
         except Exception as exc:  # noqa: BLE001
+            _record_startup_failure("autonomous_worker", exc)
             log.debug("autonomous worker start failed: %s", exc)
 
         # R38.6.4: Daemon supervisor. Emits a daemon.heartbeat
@@ -175,6 +289,7 @@ async def lifespan(app: FastAPI):
             set_supervisor(s)
             log.info("Daemon supervisor started id=%s", s.daemon_id)
         except Exception as exc:  # noqa: BLE001
+            _record_startup_failure("daemon_supervisor", exc)
             log.debug("daemon supervisor start failed: %s", exc)
 
     # R38.6 §32: bring up the browser manager. We do this
@@ -194,6 +309,7 @@ async def lifespan(app: FastAPI):
         set_default_manager(_browser_manager)
         log.info("Browser manager started (R38.6 §32)")
     except Exception as exc:  # noqa: BLE001
+        _record_startup_failure("browser_manager", exc)
         log.warning("Browser manager failed to start: %s", exc)
         _browser_manager = None
 
@@ -216,6 +332,7 @@ async def lifespan(app: FastAPI):
             _feishu_forwarder.attach(orchestrator.message_bus)
             await _feishu_forwarder.start()
         except Exception as exc:  # noqa: BLE001
+            _record_startup_failure("feishu_forwarder", exc)
             log.debug("feishu forwarder bus attach failed: %s", exc)
         feishu_routes.set_dependencies(
             bot=_feishu_bot, store=_feishu_store,
@@ -223,6 +340,7 @@ async def lifespan(app: FastAPI):
         )
         log.info("Feishu integration ready (R38.6 §33)")
     except Exception as exc:  # noqa: BLE001
+        _record_startup_failure("feishu", exc)
         log.warning("Feishu setup failed: %s", exc)
 
     # R38.6 §35: 企业微信自建应用。配置由 settings_store 持有；这里
@@ -247,6 +365,7 @@ async def lifespan(app: FastAPI):
                 _wecom_forwarder.attach(orchestrator.message_bus)
                 await _wecom_forwarder.start()
             except Exception as exc:  # noqa: BLE001
+                _record_startup_failure("wecom_forwarder", exc)
                 log.debug("wecom forwarder bus attach failed: %s", exc)
         wecom_routes.set_dependencies(
             bot=_wecom_bot, bindings=_wecom_bindings,
@@ -254,6 +373,7 @@ async def lifespan(app: FastAPI):
         )
         log.info("WeCom self-app integration ready (R38.6 §35)")
     except Exception as exc:  # noqa: BLE001
+        _record_startup_failure("wecom", exc)
         log.warning("WeCom setup failed: %s", exc)
 
     # Per-account IM: the account / binding / queue store the
@@ -268,6 +388,7 @@ async def lifespan(app: FastAPI):
         im_routes.set_store(_im_store)
         log.info("IM account store ready")
     except Exception as exc:  # noqa: BLE001
+        _record_startup_failure("im_store", exc)
         log.warning("IM store setup failed: %s", exc)
 
     # 微信官方 ClawBot / iLink 通道（纯 Python，无 OpenClaw/npm）：多账号
@@ -294,6 +415,7 @@ async def lifespan(app: FastAPI):
                 try:
                     await _weixin_channel.start_account(_acct.account_id)
                 except Exception as exc:  # noqa: BLE001
+                    _record_startup_failure("weixin_account", exc)
                     log.debug("weixin account start failed %s: %s",
                               _acct.account_id, exc)
         log.info("WeChat iLink channel ready")
@@ -324,9 +446,11 @@ async def lifespan(app: FastAPI):
                     "process — WeChat approvals stay fail-closed "
                     "(see docs/WEIXIN_ILINK.md §7)")
         except Exception as exc:  # noqa: BLE001
+            _record_startup_failure("weixin_approval_bridge", exc)
             _weixin_approval_bridge = None
             log.warning("WeChat approval bridge unavailable: %s", exc)
     except Exception as exc:  # noqa: BLE001
+        _record_startup_failure("weixin_ilink", exc)
         log.warning("WeChat iLink setup failed: %s", exc)
 
     # MCP servers are configured by the user, so they can hang: a command
@@ -343,13 +467,23 @@ async def lifespan(app: FastAPI):
                     try:
                         await reg.start_all()
                     except Exception as exc:  # noqa: BLE001
+                        _record_startup_failure("mcp_warmup", exc,
+                                                phase="shutdown")
                         log.debug("mcp warm-up failed: %s", exc)
             app.state.mcp_warm_task = asyncio.create_task(_warm_mcp())
             log.info("MCP warm-up scheduled for %d registry(ies)", len(pending))
     except Exception as exc:  # noqa: BLE001
         # Loud on purpose: a silent failure here means the servers never
         # start, and the only symptom is tools that quietly are not there.
+        _record_startup_failure("mcp_warmup_schedule", exc)
         log.warning("MCP warm-up scheduling failed: %s", exc)
+
+    # Every registered subsystem must now prove it is actually live. A probe
+    # that reports "not alive" (and had no exception of its own) is recorded
+    # here by name, so a startup call that silently does nothing becomes a
+    # structured failure instead of a no-op the user discovers weeks later.
+    _verify_startup_subsystems()
+    app.state.startup_failures = STARTUP_FAILURES
 
     yield
 
@@ -362,16 +496,20 @@ async def lifespan(app: FastAPI):
         try:
             await _warm
         except asyncio.CancelledError:
+            # Expected: we just cancelled it on the line above.
             pass
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            _record_startup_failure("mcp_warm_task", exc, phase="shutdown")
+            log.debug("mcp warm task did not settle cleanly: %s", exc)
 
     # Shutdown: close the browser first, then LLM clients
     if _browser_manager is not None:
         try:
             await _browser_manager.stop()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            _record_startup_failure("browser_manager_stop", exc,
+                                    phase="shutdown")
+            log.debug("browser manager stop failed: %s", exc)
     # R38.6.4: the daemon supervisor (a heartbeat every 5s) and the autonomous
     # worker (the /autonomous queue) own background tasks. They are started in
     # the startup half above and must be stopped here, or they outlive the
@@ -382,6 +520,7 @@ async def lifespan(app: FastAPI):
         if _supervisor is not None:
             await _supervisor.stop()
     except Exception as exc:  # noqa: BLE001
+        _record_startup_failure("daemon_supervisor_stop", exc, phase="shutdown")
         log.debug("daemon supervisor stop failed: %s", exc)
     try:
         from kairos.autonomous_worker import get_worker
@@ -389,34 +528,43 @@ async def lifespan(app: FastAPI):
         if _autonomous_worker is not None:
             await _autonomous_worker.stop()
     except Exception as exc:  # noqa: BLE001
+        _record_startup_failure("autonomous_worker_stop", exc, phase="shutdown")
         log.debug("autonomous worker stop failed: %s", exc)
     if _feishu_forwarder is not None:
         try:
             await _feishu_forwarder.stop()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            _record_startup_failure("feishu_forwarder_stop", exc,
+                                    phase="shutdown")
+            log.debug("feishu forwarder stop failed: %s", exc)
     if _wecom_forwarder is not None:
         try:
             await _wecom_forwarder.stop()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            _record_startup_failure("wecom_forwarder_stop", exc,
+                                    phase="shutdown")
+            log.debug("wecom forwarder stop failed: %s", exc)
     # 微信 iLink：停掉每个账号的长轮询协程（并尽量通知服务端会话结束）。
     if _weixin_approval_bridge is not None:
         try:
             _weixin_approval_bridge.detach()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            _record_startup_failure("weixin_approval_bridge_detach", exc,
+                                    phase="shutdown")
+            log.debug("weixin approval bridge detach failed: %s", exc)
     if _weixin_channel is not None:
         try:
             await _weixin_channel.stop_all()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            _record_startup_failure("weixin_channel_stop", exc,
+                                    phase="shutdown")
+            log.debug("weixin channel stop failed: %s", exc)
     log.info("Shutting down: closing LLM provider clients...")
     for agent in orchestrator._agents.values():
         try:
             await agent._llm.close()
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            _record_startup_failure("agent_llm_close", exc, phase="shutdown")
     # Then the project runtimes: the watchers, the worktrees, and each MCP
     # registry. Without that last part every MCP child this app spawned
     # outlives it -- and a bundled server is a second copy of this same
@@ -425,6 +573,7 @@ async def lifespan(app: FastAPI):
     try:
         await orchestrator.close()
     except Exception as exc:  # noqa: BLE001
+        _record_startup_failure("orchestrator_close", exc, phase="shutdown")
         log.warning("orchestrator close failed: %s", exc)
     log.info("Shutdown complete.")
 

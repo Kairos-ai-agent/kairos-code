@@ -166,6 +166,45 @@ All notable changes to this project are documented here. The format follows
     「把用户消息交给 coder」的调用点，任何未过路由、又不在带理由白名单里的新
     入口都会让测试失败并指名 `文件:行`。
 
+### Added
+
+- **「启动装配空转」升级成结构性防线**（不再靠事后手写守卫追）。病根回顾：`api/app.py` 的
+  lifespan 曾调 `_orch()`，而该名字在本文件**既不定义也不导入** ⇒ `NameError` 被外层
+  `except Exception` 吞成一行日志 ⇒ 审批通道 / 长任务登记表 / 守护进程**从未启动**；而
+  `kairos/sentinel.py:672-674` 对「无通道」是 `return ruling`（放行）⇒ **所有 ASK 档动作
+  从没问过人就执行了**。手写一条守卫只盖住那一个名字，追不上这一类 ⇒ 三道一起上：
+
+  1. **未定义名静态守卫**（`tests/test_startup_wiring_guard.py`）—— 只用标准库
+     `ast` + `symtable`，**不依赖 ruff**（F821 语义：被引用但既非局部/参数/导入/自由变量、
+     也不是模块绑定或内置名 ⇒ 报 `文件:行: Undefined name 'xxx'`）。
+     **红证用的是真实历史而不是我编的错**：`git show 57221b4^:api/app.py`（修复前的真身）
+     喂给守卫 ⇒
+     ```
+     api/app.py:115: Undefined name '_orch'
+     ```
+  2. **装配失败不许静默**（`api/app.py`）—— `STARTUP_FAILURES` +
+     `_record_startup_failure(name, exc[, phase])`：lifespan 里**每一处** `except`
+     （装配段与关停段共 25 处）都登记，同时保留原有日志。对外读取入口
+     `api.app.get_startup_failures()`，并镜像到 `app.state.startup_failures`（每条含
+     `subsystem` / `phase`(`startup`|`shutdown`|`probe`) / `error`）。测试三连：正常跑 ⇒
+     登记表**为空**；故意让 browser manager 起不来 ⇒ 登记表**指名 `browser_manager`** 且其余
+     子系统照旧起来；另有源码级守卫拦「`except Exception` 没有登记」。⇒ 「抛了却被吞成一行
+     日志」这件事从此**有结构化痕迹**。
+  3. **显式子系统注册表**（`api/app.py` 的 `_STARTUP_SUBSYSTEMS`，9 项 `(name, probe)`：
+     approvals / long_running_registry / autonomous_worker / daemon_supervisor /
+     browser_manager / feishu / wecom / im_store / weixin_ilink）—— 测试**遍历注册表**逐个
+     断言「现在真的活着」（不再写死三个名字）；源码级 `audit_startup_calls` 拦「装配区里有
+     未注册的启动调用」，白名单条目**必须带理由、过期会报错**。⇒ 以后往里加子系统，
+     **忘了注册就会被测试拦住**。
+
+  三道合起来正好盖完三种成因 —— ①名字根本不存在 ②存在但抛了被吞 ③新加的没人测。
+
+- **新守卫上线第一分钟就抓出 5 处同类存量**（同一个 `symtable` 语义扫 `api/` + `kairos/`）：
+  `api/routes/agents.py:55` `AgentTask` · `api/routes/cost.py:230/251` `_get_log_path` ·
+  `api/routes/p2_features.py:91` `_orch` · `api/routes/projects.py:1339` `orchestrator`。
+  **这就是「手写守卫追不上」的实证**：光修 `api/app.py` 那一处，另有 5 处照样活着在吞异常。
+  （`kairos/perf.py:168` 的 `field` 是 `... if False else None` 死分支里的假调用，无害。）
+
 ### Fixed
 
 - **微信 / 企微 / IM 发的东西在网页聊天页看不到。** 网页线程**只读库**（`GET /{id}/chat-messages`

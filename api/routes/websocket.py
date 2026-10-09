@@ -124,7 +124,9 @@ async def collaboration_ws(websocket: WebSocket):
                 break
 
     except WebSocketDisconnect:
-        pass
+        # The client is gone, so this is not an error path — but never write
+        # back to the dead socket. Leave a server-side trace only.
+        log.debug("collaboration_ws: client %s disconnected", client_id)
     finally:
         client.alive = False
         # Drop the listener by token so reconnects don't accumulate closures.

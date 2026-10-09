@@ -193,8 +193,12 @@ class BrowserTool(BaseTool):
             try:
                 from kairos import artifacts
                 artifacts.record_screenshot(pid, path)
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:
+                # The screenshot itself succeeded (the path is returned below);
+                # only the artifact registration failed, which would leave the
+                # PNG unaddressable in the UI. Non-fatal, but must be visible.
+                logger.warning("browser screenshot: record_screenshot failed "
+                               "(project_id=%s, path=%s): %s", pid, path, exc)
             size = Path(path).stat().st_size
             meta.update({"path": str(path), "bytes": size,
                          "full_page": bool(full_page)})

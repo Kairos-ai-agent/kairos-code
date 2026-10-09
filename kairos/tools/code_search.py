@@ -27,6 +27,7 @@ build happens once and later searches reuse it.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import threading
 from collections.abc import Callable
@@ -34,6 +35,8 @@ from pathlib import Path
 from typing import Any
 
 from kairos.tools.base import BaseTool, ToolResult
+
+logger = logging.getLogger(__name__)
 
 # Matches GrepTool's cap: one tool must not be able to blow up the context on
 # its own.
@@ -80,8 +83,12 @@ def build_semble_index(root: Path) -> Any:
         if save_index_to_cache is not None:
             try:
                 save_index_to_cache(index, str(root))
-            except Exception:  # noqa: BLE001 - a cache write failure is never fatal
-                pass
+            except Exception as exc:  # noqa: BLE001 - a cache write failure is never fatal
+                # The index is still returned and usable; losing the disk cache
+                # only costs a re-index on the next search, so this is an
+                # ignorable performance miss, not an error.
+                logger.debug("code_search: save_index_to_cache failed "
+                             "(root=%s): %s", root, exc)
         return index
 
     try:

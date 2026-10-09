@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import inspect
 import json
 import logging
 import os
@@ -488,15 +489,27 @@ async def run_exec(args: argparse.Namespace) -> int:
             # 5. Pull the latest plan / result from the orchestrator.
             plan_text = ""
             try:
-                # start_project's return value isn't kept; pull
-                # from the latest "project.plan" message.
-                msgs = await orch.message_bus.get_history(
-                    limit=50, topic_filter="project.plan"
-                )
+                # start_project's return value isn't kept; pull the latest
+                # plan diff from the "plan.updated" bus topic. Three bugs used
+                # to hide here under ``except Exception: pass`` so plan_text
+                # was always "":
+                #   1. ``get_history`` has no ``topic_filter`` kwarg -> TypeError;
+                #   2. it is SYNC (``def get_history``), so ``await`` on its
+                #      return raised "object list can't be used in 'await'
+                #      expression";
+                #   3. it returns ``Message`` objects, not dicts, so
+                #      ``msgs[-1].get(...)`` raised AttributeError.
+                # Tolerate an awaitable too, because the bus mixes sync and
+                # async accessors (``recent`` is async, ``get_history`` is not).
+                msgs = orch.message_bus.get_history(50, "plan.updated")
+                if inspect.isawaitable(msgs):
+                    msgs = await msgs
                 if msgs:
-                    plan_text = msgs[-1].get("content", "") or ""
-            except Exception:
-                pass
+                    last = msgs[-1]
+                    plan_text = (last.get("content", "") if isinstance(last, dict)
+                                 else getattr(last, "content", "")) or ""
+            except Exception as exc:
+                logger.warning("exec: could not read plan from bus: %s", exc)
 
             result = {
                 "project_id": pid,

@@ -368,7 +368,11 @@ class _OtelSpanAdapter:
         try:
             self._s.record_exception(exc)
         except Exception:
-            pass
+            # This is the OTel SDK's own error path. Going through the normal
+            # formatter here risks re-entering span/exception handling, so keep
+            # it to a bare, argument-free debug line — no formatting, no
+            # exc_info, no recursion. It only needs to prove the swallow ran.
+            logger.debug("_OtelSpanAdapter.record_exception: span.record_exception failed (swallowed)")
         return self
 
     def add_event(self, name, attrs=None):

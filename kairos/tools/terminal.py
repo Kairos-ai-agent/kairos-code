@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import re
 import shlex
@@ -14,6 +15,8 @@ from typing import Callable, List, Optional, Tuple
 from kairos.access_control import is_full_access
 from kairos.platform_flags import hidden_kwargs
 from kairos.tools.base import BaseTool, ToolResult
+
+logger = logging.getLogger(__name__)
 
 
 def _console_encodings() -> List[str]:
@@ -742,8 +745,14 @@ class TerminalTool(BaseTool):
                 try:
                     process.stdin.write(stdin.encode("utf-8"))
                     await process.stdin.drain()
-                except (BrokenPipeError, ConnectionResetError):
-                    pass
+                except (BrokenPipeError, ConnectionResetError) as exc:
+                    # The child closed stdin before we finished writing (common
+                    # for pipes / commands that never read stdin, and on
+                    # shutdown). Server-side only — the command's result is
+                    # unaffected — but the dropped input must leave a trace.
+                    logger.warning("terminal: stdin write failed, input not "
+                                   "delivered (command=%r): %s",
+                                   str(command)[:120], type(exc).__name__)
                 try:
                     process.stdin.close()
                 except Exception:

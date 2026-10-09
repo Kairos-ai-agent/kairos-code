@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import os
 import re
 import shutil
@@ -54,6 +55,8 @@ from kairos.llm.scripted import (
     write_file_call,
 )
 from kairos.platform_flags import hidden_kwargs
+
+logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEMO_PROJECT_NAME = "demo-relay"
@@ -470,7 +473,12 @@ def _git_init(repo: Path) -> None:
         try:
             subprocess.run(args, cwd=str(repo), env=env, capture_output=True,
                            timeout=20, **hidden_kwargs())
-        except (OSError, subprocess.SubprocessError):
+        except (OSError, subprocess.SubprocessError) as exc:
+            # Best effort: real commits make the checkpoints/rollback section
+            # meaningful, but a machine without git (or a failing git step) must
+            # not break the demo. Leave a trace rather than an invisible gap.
+            logger.warning("demo: git step %r failed (best-effort; the demo "
+                           "continues without VCS history): %s", args, exc)
             return
 
 

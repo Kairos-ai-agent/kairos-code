@@ -193,9 +193,14 @@ def _make_fake_orchestrator(*, plan_text: str = "", status: str = "completed"):
     project.task_count = 0
     fake.create_project = MagicMock(return_value=project)
 
-    async def fake_get_history(limit, topic_filter):
+    # 真实 ``MessageBus.get_history`` 是**同步**的、形参叫 ``topic``、返回 ``Message`` 对象列表。
+    # 这个 stub 以前三处都写错（``async`` / ``topic_filter`` / 返回 dict）⇒ 生产代码里那三处
+    # bug（见 kairos/cli.py 的注释）一直坏着而这里一直绿。
+    from kairos.core.message_bus import Message as _BusMessage
+
+    def fake_get_history(limit, topic=None, project_id=None):
         if plan_text:
-            return [{"content": plan_text}]
+            return [_BusMessage(topic=topic or "plan.updated", content=plan_text)]
         return []
     fake.message_bus.get_history = fake_get_history
 

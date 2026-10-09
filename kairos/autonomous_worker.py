@@ -89,7 +89,9 @@ class AutonomousWorker:
         requirement = None
         try:
             requirement = await self._fetch_requirement(job_id)
-        except Exception:
+        except Exception as exc:
+            logger.warning("autonomous worker: requirement fetch failed for "
+                           "job %s: %s", job_id, exc)
             requirement = None
         if not requirement:
             self._registry.update_autonomous(
@@ -130,12 +132,29 @@ class AutonomousWorker:
             return None
         try:
             history = await self._orch.message_bus.recent(limit=200)
-        except Exception:
+        except Exception as exc:
+            logger.warning("autonomous worker: message_bus.recent() failed: %s",
+                           exc)
             return None
         for msg in history:
-            if (msg.get("topic") == "autonomous.submitted"
-                    and msg.get("metadata", {}).get("job_id") == job_id):
-                return msg.get("content", "")
+            # ``recent()`` yields ``Message`` dataclass instances, NOT dicts:
+            # ``msg.get(...)`` / ``msg[...]`` used to raise AttributeError here,
+            # which the caller swallowed, so every autonomous job died with
+            # "could not fetch requirement from bus". Read attributes; also
+            # accept a plain dict so an alternate/legacy bus can't reintroduce
+            # the same silent failure.
+            if isinstance(msg, dict):
+                topic = msg.get("topic")
+                meta = msg.get("metadata") or {}
+                content = msg.get("content")
+            else:
+                topic = getattr(msg, "topic", None)
+                meta = getattr(msg, "metadata", None) or {}
+                content = getattr(msg, "content", None)
+            if topic == "autonomous.submitted" and meta.get("job_id") == job_id:
+                return content or ""
+        logger.debug("autonomous worker: no autonomous.submitted message for "
+                     "job %s in last 200 bus messages", job_id)
         return None
 
     async def _run_agent(self, project_id, requirement, max_turns,

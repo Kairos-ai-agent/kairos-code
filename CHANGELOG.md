@@ -207,6 +207,62 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **自主任务链从来没成功过：把 `Message` 当 dict 用，异常被自己吞掉。**
+  `MessageBus.recent()` 返回的是 **`Message` 对象**列表（`kairos/core/message_bus.py:16-38`，
+  dataclass，**没有 `.get`、也不可下标**），而 `kairos/autonomous_worker.py` 的
+  `_fetch_requirement` 写的是 `msg.get("topic")` ⇒ 每次 `AttributeError` ⇒ 被同函数的
+  `except Exception: return None` 吞掉 ⇒ **永远取不到需求文本** ⇒ 任务永远
+  `failed: "could not fetch requirement from bus"`。跟发布那头无关（发布一直是成功的），
+  所以只看「发布成不成功」永远查不出来。修：按属性读、并容忍 dict；`except` 改成
+  `logger.warning`。**活体验证**：发布一条 `autonomous.submitted` ⇒ `_fetch_requirement`
+  返回 `'REQ-TEXT-42'`（修前是 `AttributeError`）。
+
+- **同一次全仓排查（`recent()`/`get_history()` 的消费方逐个过）又抓出一处三重 bug**：
+  `kairos/cli.py` 的 `exec` 读计划那里 —— ① `get_history` 根本没有 `topic_filter` 形参
+  （应是 `topic`）② 它是**同步**方法，却被 `await` ③ 返回 `Message` 对象，却按 dict 取
+  （`msgs[-1].get(...)`）—— 三条全被 `except Exception: pass` 吞掉 ⇒ **`plan_text` 永远是空**。
+  修好后同样给测试 stub 正名：`tests/test_cli.py` 的 `fake_get_history` 把这三处错**原样写进了
+  测试**（`async`、`topic_filter`、返回 dict）⇒ 生产代码一直坏、测试一直绿，是
+  **「测试把 bug 固化成契约」**的典型；现在 stub 按真签名（同步、`topic`、返回 `Message`）。
+
+- **`POST /api/agents/task` 永远 500**：它调 `orchestrator.assign_task(...)`，而全仓
+  **没有任何 `def assign_task`**（自首个提交起就是幻影方法）。前端**无人调用**它
+  （`grep agents/task|assignTask web/src/` 零命中，UI 走 `/projects/{id}/chat`）⇒ 结论是
+  「实现它」而不是「删掉它」：改成仓库里各处都在用的真实机制
+  `project.coder.run(task)` / `project.reviewer.run(task)`（未知角色 404、未装配 503）。
+  **活体验证**：`/task` → **HTTP 200** 且一路走到真 agent 调 LLM（只因测试环境没配 key
+  才 `status: failed`）。同文件另发现 `POST /api/agents/chat` 调同样不存在的
+  `orchestrator.chat_with_agent`，一并改成 `agent.chat(message)`。
+
+- **13 条「围着有副作用的调用、却把失败静默吞掉」的处理器全部改成有痕迹**（保留 best-effort
+  语义不变、不新增任何用户可见错误；每条的日志级别按严重度逐条给理由）：
+
+  | 位置 | 被吞的调用 | 级别 |
+  |---|---|---|
+  | `api/routes/websocket.py` `collaboration_ws` | `send_json` | `debug`（客户端断开会话是常态；只服务端记，不往死 socket 写） |
+  | `kairos/cost.py` `litellm_cost_callback` | `is_recording` | `debug`（best-effort 的 span tag） |
+  | `kairos/daemon.py` `DaemonSupervisor.start` | `write_text` | `warning`（daemon.json 身份文件"本该写成功"） |
+  | `kairos/daemon.py` `DaemonSupervisor._heartbeat` | `publish` | `warning`（心跳是存活证明） |
+  | `kairos/observability.py` `_OtelSpanAdapter.record_exception` | `record_exception` | `debug`（**防递归**：无参无格式化无 exc_info） |
+  | `kairos/weixin_ilink.py` `WeixinChannel.stop_account` | `notify_stop` | `warning`（远端停机通知"本该发出"） |
+  | `kairos/llm/scripted.py` `ScriptedProvider._record_cost` | `record_entry` | `warning`（账本是这个 provider 的意义，静默丢会让 gate 报告漏报） |
+  | `kairos/loop/loop_runner.py` `_best_of_n_attempts` | `publish` | `debug`＋`exc_info`（判选与返回已定，只丢 UI 通知） |
+  | `kairos/loop/loop_runner.py` `_maybe_auto_approve_plan` | `publish` | `debug`＋`exc_info`（`session.plan_*` 已提交，只丢 UI 通知） |
+  | `kairos/tools/browser_tool.py` `BrowserTool._dispatch` | `record_screenshot` | `warning`（截了图却记不下地址） |
+  | `kairos/tools/code_search.py` `build_semble_index._build` | `save_index_to_cache` | `debug`（纯性能缓存） |
+  | `kairos/tools/terminal.py` `TerminalTool.execute` | `write` | `warning`（投进 stdin 的输入"本该送到"，但不升成用户可见错误） |
+  | `kairos/demo.py` `_git_init` | `subprocess.run(git…)` | `warning`（demo 声称有真实版本历史，静默缺失是误导） |
+
+  `loop_runner.py` 是红线文件（**用户单独授权**只动这两处处理器）：`git diff` 恰好 2 个 hunk，
+  各自只把裸 `pass` 换成注释 + `logger.debug`，**计划/评分/重试逻辑一行未动**。
+
+- **守卫口径从「只有 `pass`」扩到「静默处理器」**（`pass` / 无痕 `return` / `return None`）：
+  记录 173 → 198（+25 条新增全是 `return None` 且**不围任何副作用**，逐条读其 `try` 分类入册），
+  并且它自己的**过期检查**抓出 1 条被上面那笔 cli 修复自然淘汰的旧条目（机制有效），
+  收口后 **9 passed**。
+
+### Fixed
+
 - **5 处未定义名（新守卫上线第一分钟抓出的存量）全部修掉**：
 
   | 位置 | 名字 | 原来的后果 | 修法 |

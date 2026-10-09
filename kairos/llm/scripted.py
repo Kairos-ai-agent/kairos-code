@@ -19,6 +19,7 @@ exactly as it does with a real provider.
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
 from typing import Any, AsyncIterator, Callable, Dict, List, Optional
@@ -30,6 +31,8 @@ from kairos.llm.base import (
     LLMResponse,
     ToolCall,
 )
+
+logger = logging.getLogger(__name__)
 
 #: A script maps (conversation, call number, tool schemas) → the next response.
 #: ``tools`` is empty/None when the caller hid tools (e.g. plan mode), which a
@@ -124,8 +127,12 @@ class ScriptedProvider(BaseLLMProvider):
                 duration_ms=0,
                 call_id=f"{self.label}-{self.calls}-{uuid.uuid4().hex[:6]}",
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            # The ledger is the point of this call (it shows what ran, at
+            # $0.000000); a failed write must not break the demo but should be
+            # visible rather than silently dropping the row.
+            logger.warning("scripted provider: cost record_entry failed "
+                           "(model=%s): %s", self.config.model, exc)
 
     async def stream(
         self,

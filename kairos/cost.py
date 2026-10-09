@@ -235,8 +235,12 @@ def litellm_cost_callback(
                 span = _trace.get_current_span()
                 if span and span.is_recording():
                     span.set_attribute("gen_ai.usage.cost", cost_usd)
-        except Exception:
-            pass
+        except Exception as exc:
+            # Best-effort OTel span tag: the cost is already in the ledger
+            # above; failing to also tag the active span must not break the
+            # call. Debug to match the neighbouring best-effort sinks.
+            logger.debug("cost callback: otel span tag failed (non-fatal): %s",
+                         exc)
     except Exception as exc:
         # NEVER let a cost-tracking error break the LLM call.
         logger.debug("cost callback failed (non-fatal): %s", exc)

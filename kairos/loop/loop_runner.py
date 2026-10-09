@@ -750,7 +750,14 @@ async def _best_of_n_attempts(session, requirement, round_no, n, bus):
                       ]},
         ))
     except Exception:
-        pass
+        # Non-fatal: the pick and the returned text are already decided above;
+        # only the UI notice is lost. Match the file's convention for a failed
+        # best-effort publish and keep the full traceback. Access ids via
+        # getattr so a malformed session cannot turn this swallow into a raise.
+        logger.debug("best-of-N: failed to publish pick for project=%s "
+                     "session=%s (non-fatal)",
+                     getattr(getattr(session, "project", None), "id", None),
+                     getattr(session, "session_id", None), exc_info=True)
     return best_text, best_score
 
 def _parse_self_confidence(coder_text: str) -> int:
@@ -967,7 +974,14 @@ async def _maybe_auto_approve_plan(session, round_no, bus, requirement: str):
                       "round": round_no},
         ))
     except Exception:
-        pass
+        # Non-fatal: session.plan_* was already committed above; only the UI
+        # notice is lost. Match the file's convention for a failed best-effort
+        # publish and keep the full traceback. Access ids via getattr so a
+        # malformed session cannot turn this swallow into a raise.
+        logger.debug("auto-approve: failed to publish notice for project=%s "
+                     "session=%s (non-fatal)",
+                     getattr(getattr(session, "project", None), "id", None),
+                     getattr(session, "session_id", None), exc_info=True)
     return True
 
 async def run_loop(session, requirement, *, unbounded: bool = False):

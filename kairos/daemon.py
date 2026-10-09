@@ -45,8 +45,13 @@ class DaemonSupervisor:
                 json.dumps({"id": self.daemon_id, "pid": os.getpid(),
                             "started_at": self.started_at}),
                 encoding="utf-8")
-        except Exception:
-            pass
+        except Exception as exc:
+            # The identity file is how status/attach find this daemon; its
+            # absence is not fatal (the supervisor keeps running) but must be
+            # visible rather than silently missing.
+            logger.warning("daemon.start: failed to write daemon.json "
+                           "(id=%s, dir=%s): %s",
+                           self.daemon_id, self._work_dir, exc)
 
     async def stop(self):
         self._stop.set()
@@ -93,8 +98,11 @@ class DaemonSupervisor:
                             len(self._registry._autonomous)
                             if self._registry else 0),
                     }))
-            except Exception:
-                pass
+            except Exception as exc:
+                # The heartbeat is the daemon's proof-of-life on the bus;
+                # losing it is non-fatal but should never be silent.
+                logger.warning("daemon.heartbeat: publish failed "
+                               "(daemon_id=%s): %s", self.daemon_id, exc)
 
     def status_dict(self):
         return {

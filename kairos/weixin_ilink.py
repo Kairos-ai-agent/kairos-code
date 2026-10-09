@@ -2240,8 +2240,11 @@ class WeixinChannel:
         if client is not None:
             try:
                 await client.notify_stop()
-            except ILinkError:
-                pass
+            except ILinkError as exc:
+                # Best-effort shutdown notice to iLink; the account is already
+                # stopped locally, but a failed notify_stop must leave a trace.
+                logger.warning("weixin stop_account: notify_stop failed "
+                               "(account=%s): %s", account_id, exc)
         await self.store.set_status(account_id, "offline")
 
     async def stop_all(self) -> None:

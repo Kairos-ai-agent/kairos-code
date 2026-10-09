@@ -17,6 +17,33 @@ from api.schemas.agent import (
 
 router = APIRouter()
 
+
+def _resolve_role_agent(project, role: str):
+    """Resolve a role name to the project's wired agent instance.
+
+    ``Orchestrator._create_agents`` wires exactly two stable roles per
+    project — ``project.coder`` and ``project.reviewer`` — and every task
+    runner in the codebase goes through one of them
+    (``project.coder.run`` / ``project.reviewer.run``). Returns ``None`` for
+    an unknown role or an unwired project so the caller can 404/503 rather
+    than raise ``AttributeError``.
+    """
+    key = (role or "").strip().lower()
+    if key == "coder":
+        return getattr(project, "coder", None)
+    if key == "reviewer":
+        return getattr(project, "reviewer", None)
+    return None
+
+
+def _role_error(role: str, project_id: str) -> HTTPException:
+    """404 for an unknown role; 503 when the role exists but isn't wired."""
+    if (role or "").strip().lower() in ("coder", "reviewer"):
+        return HTTPException(
+            status_code=503,
+            detail=f"Agent '{role}' is not wired for project {project_id}")
+    return HTTPException(status_code=404, detail=f"Unknown agent role: {role}")
+
 @router.get("")
 async def list_agents(project_id: str = None):
     """List all agents or agents in a project."""
@@ -37,8 +64,14 @@ async def get_agent(agent_id: str):
 @router.post("/chat")
 async def chat_with_agent(request: ChatRequest, project_id: str = Query(..., description="Project ID (required)")):
     """Chat directly with an agent."""
+    project = orchestrator.get_project(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+    agent = _resolve_role_agent(project, request.agent_role)
+    if agent is None:
+        raise _role_error(request.agent_role, project_id)
     try:
-        response = await orchestrator.chat_with_agent(project_id, request.agent_role, request.message)
+        response = await agent.chat(request.message)
         return ChatResponse(
             agent_id=f"{project_id}.{request.agent_role}",
             agent_name=request.agent_role,
@@ -56,19 +89,30 @@ async def assign_task(request: AssignTaskRequest, project_id: str = Query(..., d
     # bootloader (see module __getattr__ below), so import lazily here —
     # the same convention the module already documents.
     from kairos.agents.base import AgentTask
+
+    project = orchestrator.get_project(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+    agent = _resolve_role_agent(project, request.agent_role)
+    if agent is None:
+        raise _role_error(request.agent_role, project_id)
+
     task = AgentTask(
         id=uuid.uuid4().hex[:8],
         title=request.title,
         description=request.description,
-        context=request.context,
+        # Thread project_id through context: KairosAgent._run_impl reads
+        # task.context["project_id"] for hook attribution. Preserve any
+        # caller-supplied context keys.
+        context={**(request.context or {}), "project_id": project_id},
     )
 
     try:
-        result = await orchestrator.assign_task(project_id, request.agent_role, task)
+        result = await agent.run(task)
         return TaskResponse(
             task_id=task.id,
             agent_role=request.agent_role,
-            result=result,
+            result=str(result),
             status=task.status,
         )
     except ValueError as e:

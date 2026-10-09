@@ -156,6 +156,32 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The chat lane is now a real agent: it calls tools, produces files and hands
+  them back to you.** The conversational lane used to be read-only by design
+  (`read_only_tools()` built readers and nothing else), so "分析一下…给我 md 文档"
+  could only answer that the workspace had no files. It now runs the same tool
+  classes the Coder is wired with — `file_write`, `file_edit_replace`,
+  `multi_edit`, `terminal`, `webfetch`, plus the readers — rooted at the project
+  workspace, inside the same capability allowlist and red lines (the default
+  full-auto dial and the credential/egress refusals are untouched). The lane has
+  its own turn budget (`GENERAL_CHAT_MAX_TURNS = 12`, was 6) and clips each tool
+  result, so a real task (read → write → run → answer) fits without blowing the
+  context window.
+
+  What a turn produced is decided by a before/after filesystem snapshot diff —
+  never by the model's claim — reusing the WeChat lane's snapshot machinery, now
+  extracted to `kairos/file_snapshot.py` (the WeChat lane re-exports it
+  unchanged). The chat response gains an `artifacts` array (`path` / `name` /
+  `size` / `mime`; always present, empty when nothing was produced), the same
+  array is stored on the reply message's `metadata.artifacts` so it survives a
+  refresh, and `GET /api/projects/{id}/artifacts/download?path=…` serves the file
+  back (`inline` for text, so markdown previews in a tab; absolute paths, `..`
+  traversal and symlink escapes are all refused — 400). The web chat renders each
+  artifact as a card with its size, a download link and a preview toggle for
+  text/markdown, in all 63 languages (the 7 new keys are honest English fallbacks
+  outside zh/en: the configured translator key returns 401 and no translation was
+  invented).
+
 - **微信出站文件：一组「绝不自动外发」的判据（比上面那条特性本身更要紧）。** 触发规则是
   启发式，会把模型只是**提及**的文件也选中 ⇒ 不做闸的话，一句「你正在看的
   `data/settings.json`」就会把**带密钥的文件加密上传到第三方 CDN** —— 那不是体验问题，

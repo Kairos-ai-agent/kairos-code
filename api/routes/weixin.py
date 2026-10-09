@@ -272,10 +272,11 @@ async def _answer_message(project, text: str, *,
     if not decision.uses_skeleton:
         return await project.coder.chat(text)
 
+    artifacts: list = []
     try:
         reply = await run_chat_reply(
             kind=decision.workspace_kind, root=str(root), message=text,
-            project_id=project.id)
+            artifacts_out=artifacts, project_id=project.id)
     except Exception:  # noqa: BLE001 - 通用车道出错不能丢掉这一轮
         logger.exception("weixin: 通用车道失败，回退 Coder")
         return await project.coder.chat(text)
@@ -295,7 +296,7 @@ async def _answer_message(project, text: str, *,
                 sender=f"{project.id}.skeleton", topic="agent.chat",
                 content=reply, msg_type="text",
                 metadata={"project_id": project.id, "route": "skeleton",
-                          "source": "weixin"},
+                          "source": "weixin", "artifacts": list(artifacts)},
             ))
         except Exception:  # noqa: BLE001 - 历史是锦上添花，失败只记日志
             logger.exception("weixin: 发布通用车道回复失败")

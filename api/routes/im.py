@@ -408,10 +408,11 @@ async def _answer_inbound(project, text: str, bus=None) -> str:
     if not decision.uses_skeleton:
         return await project.coder.chat(text)
 
+    artifacts: list = []
     try:
         reply = await run_chat_reply(
             kind=decision.workspace_kind, root=str(root), message=text,
-            project_id=project.id)
+            artifacts_out=artifacts, project_id=project.id)
     except Exception:  # noqa: BLE001 - a lane miss must not lose the turn
         logger.exception("im: general lane failed; falling back to the coder")
         return await project.coder.chat(text)
@@ -433,7 +434,7 @@ async def _answer_inbound(project, text: str, bus=None) -> str:
                 sender=f"{project.id}.skeleton", topic="agent.chat",
                 content=reply, msg_type="text",
                 metadata={"project_id": project.id, "route": "skeleton",
-                          "source": "im"},
+                          "source": "im", "artifacts": list(artifacts)},
             ))
         except Exception:  # noqa: BLE001 - 历史是锦上添花，失败只记日志
             logger.exception("im: 发布通用车道回复失败")

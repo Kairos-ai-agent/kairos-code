@@ -298,8 +298,16 @@ def test_run_chat_reply_uses_the_read_only_loop_when_a_client_is_given(ws):
         kind="repo", root=ws, message="data.csv 里有什么？", tool_client=client))
 
     assert secret in reply
-    # the reader was advertised, and nothing else
-    assert {s["name"] for s in client.requests[0]["tools"]} == EXPECTED_TOOLS
+    # The lane advertises the readers *and* the general toolset it now runs with.
+    # The lane was deliberately widened (chat must be able to write files, run
+    # commands and fetch the web, not only read), so the old equality-with-readers
+    # pin no longer describes the product: readers must all still be advertised,
+    # and the write/exec/network tools must be present, so a future narrowing back
+    # to readers-only fails here.
+    advertised = {s["name"] for s in client.requests[0]["tools"]}
+    assert EXPECTED_TOOLS <= advertised, sorted(EXPECTED_TOOLS - advertised)
+    assert {"file_write", "file_edit_replace", "multi_edit", "terminal",
+            "webfetch"} <= advertised, sorted(advertised)
 
 
 def test_default_tool_client_is_none_without_credentials():

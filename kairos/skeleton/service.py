@@ -28,7 +28,7 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from kairos.skeleton.contracts import Task, Verdict
 from kairos.skeleton.driver import SkeletonRun, run_task
@@ -246,23 +246,30 @@ _CHAT_PROMPT = (
 )
 
 
-#: System prompt for the general lane when it is given the read-only file tools
-#: (the usual case in production). Like ``_CHAT_PROMPT`` it asks for a plain
-#: answer -- but it also tells the model it may *open* the files the user
-#: attached, which is the whole point of giving this lane tools. The toolset is
-#: read-only, so the prompt states that limit plainly: the model must not claim
-#: to have written a file, run a command or reached the network.
+#: System prompt for the general lane when it is given the full toolset (the
+#: usual case in production). It asks for a plain answer *and* tells the model
+#: it is a real agent -- it may not only read the files the user attached, it may
+#: write a deliverable, run it and fetch a page. The limits are stated plainly
+#: (everything is sandboxed to the project directory) so the model neither
+#: over-claims nor under-tries.
 _TOOL_CHAT_PROMPT = (
     "You are answering the user's message conversationally, inside their "
     "project workspace.\n\n"
-    "You have read-only tools: use file_read to open a text file (or list a "
-    "directory), doc_read for a .docx/.pptx, xlsx_read for a .xlsx, "
-    "data_analyze for a .csv/.tsv, and grep/find to locate files. When the "
-    "user attached a file (a [附件 / attachments] block names its path), open "
-    "it before answering. The tools can only READ inside the project "
-    "directory -- you cannot write files, run commands or reach the network, "
-    "so never claim to have done any of those. When you have what you need, "
-    "answer the question directly and briefly.\n\n"
+    "You are a real agent, not just a talker: use the tools when they help, and "
+    "do the work the user asks for rather than only describing it. You can READ "
+    "(file_read for a text file or a directory listing, doc_read for "
+    ".docx/.pptx, xlsx_read for .xlsx, data_analyze for .csv/.tsv, grep/find to "
+    "search), WRITE and EDIT (file_write to create or overwrite a file, "
+    "file_edit_replace and multi_edit for targeted edits), RUN commands "
+    "(terminal -- e.g. to build or run something you just wrote) and FETCH a "
+    "page (webfetch).\n\n"
+    "Every tool is sandboxed to the project directory: you cannot read or write "
+    "anything outside it, and webfetch reaches only public URLs. When the user "
+    "attached a file (a [附件 / attachments] block names its path), open it "
+    "before answering. If the task needs a deliverable (a file, a report), "
+    "create it in the workspace and mention its path -- the files you create or "
+    "change are reported back to the user automatically. When you have what you "
+    "need, answer the question directly and briefly.\n\n"
     "WORKSPACE CONTEXT:\n{context}"
 )
 
@@ -441,6 +448,7 @@ async def run_chat_reply(
     tool_client: Any = None,
     project_id: Optional[str] = None,
     history: Optional[Any] = None,
+    artifacts_out: Optional[List[Any]] = None,
 ) -> Optional[str]:
     """One conversational turn on the general lane; the reply text, or ``None``.
 
@@ -453,17 +461,20 @@ async def run_chat_reply(
 
     Two model seams, tried in order:
 
-    * **Read-only tools (preferred).** When a tool-capable client is available
+    * **Agent tools (preferred).** When a tool-capable client is available
       (``tool_client``, else :func:`default_tool_client`) the turn runs through
-      :func:`kairos.skeleton.read_tools.run_read_tool_loop`: the model may open
-      the files the user attached (the ``[附件]`` block) with the same
-      sandboxed, capability-gated readers the Coder uses. This is what makes
-      the general lane able to *read* an attachment instead of only being told
-      its path.
+      :func:`kairos.skeleton.general_tools.run_general_tool_loop` with the full
+      toolset (:func:`kairos.skeleton.general_tools.general_tools`): the model
+      may read the files the user attached (the ``[附件]`` block) *and* write a
+      deliverable, edit it, run a command or fetch a page, all through the same
+      sandboxed, capability-gated tools the Coder uses. This is what makes a
+      chat turn able to actually *produce* something. Any file the turn creates
+      or changes is collected from a before/after workspace snapshot and handed
+      back on ``artifacts_out`` when the caller supplies a list.
     * **Prompt only (fallback).** Otherwise the historical seam
       (:func:`default_generator`, a ``generate(prompt) -> str``) is used -- the
       general lane degrades to a single text answer, exactly as before the
-      tools existed.
+      tools existed (and no artifacts: nothing ran a tool).
 
     **Conversation history.** A conversational follow-up ("重新分析…") is
     meaningless without the turns before it, so prior chat is replayed in front
@@ -486,24 +497,38 @@ async def run_chat_reply(
 
     client = tool_client if tool_client is not None else default_tool_client()
     if client is not None:
-        from kairos.skeleton.read_tools import read_only_tools, run_read_tool_loop
+        from kairos.file_snapshot import snapshot_tree_files
+        from kairos.skeleton.general_tools import (
+            collect_artifacts,
+            general_tools,
+            run_general_tool_loop,
+        )
 
-        tools = read_only_tools(workspace.root)
+        tools = general_tools(workspace.root)
         context = workspace.as_prompt_context(
             max_chars=max_context_chars, query=message)
         system = _TOOL_CHAT_PROMPT.format(context=context)
         if history_block:
             # The loop's contract is ``system_prompt`` + ``message``: the
             # history is rendered *into* the system prompt rather than adding a
-            # parameter, so ``run_read_tool_loop`` is untouched.
+            # parameter, so the loop is untouched.
             system = f"{history_block}\n\n{system}"
+        # Snapshot the workspace BEFORE the model acts: the files it creates or
+        # changes during the loop are then exactly the diff. Best-effort and
+        # bounded (see kairos.file_snapshot) -- a snapshot that fails only means
+        # "no artifacts", never a failed turn.
+        before = snapshot_tree_files([workspace.root])
         try:
-            text = await run_read_tool_loop(
+            text = await run_general_tool_loop(
                 client=client, tools=tools, system_prompt=system,
                 message=message)
         except Exception:  # a provider failure must surface, not be swallowed
             logger.exception("general-lane tool loop failed")
             raise
+        artifacts = collect_artifacts(
+            workspace.root, before, snapshot_tree_files([workspace.root]))
+        if artifacts_out is not None:
+            artifacts_out[:] = artifacts
         return "" if text is None else str(text)
 
     generator = generate if generate is not None else default_generator()

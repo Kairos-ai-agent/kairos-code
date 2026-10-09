@@ -194,5 +194,33 @@
   "chat.thread.tokensUsed": {
     "zh": "{n} tokens",
     "en": "{n} tokens"
+  },
+  "chat.artifacts.title": {
+    "zh": "产出文件 {n} 个",
+    "en": "{n} produced file(s)"
+  },
+  "chat.artifacts.download": {
+    "zh": "下载",
+    "en": "Download"
+  },
+  "chat.artifacts.downloadName": {
+    "zh": "下载 {name}",
+    "en": "Download {name}"
+  },
+  "chat.artifacts.preview": {
+    "zh": "预览",
+    "en": "Preview"
+  },
+  "chat.artifacts.hidePreview": {
+    "zh": "收起预览",
+    "en": "Hide preview"
+  },
+  "chat.artifacts.previewLoading": {
+    "zh": "正在加载预览…",
+    "en": "Loading preview…"
+  },
+  "chat.artifacts.previewFailed": {
+    "zh": "预览加载失败，请下载后查看。",
+    "en": "Could not load the preview — download the file instead."
   }
 }

@@ -1389,141 +1389,27 @@ def _refuse_to_send(path: Path) -> bool:
 #:   任务运行记录、锁与日志）—— 工作树本身会作为**独立的根**被单独扫描，这里不重复进；
 #: * ``dist`` / ``build`` / ``.mypy_cache`` / ``.pytest_cache`` / ``.tox`` / ``.eggs``：
 #:   构建产物与工具缓存。
-WEIXIN_SNAPSHOT_IGNORE_DIRS = frozenset({
-    ".git", "node_modules", ".venv", "venv", "site-packages", "__pycache__",
-    "attachments", "runs", "dist", "build", ".eggs",
-    ".mypy_cache", ".pytest_cache", ".tox", ".ruff_cache",
-})
-
-#: 名字（目录或文件）以这些前缀开头即跳过 —— 运行时目录/文件（``.kairos-worktrees``
-#: 等 ``.kairos-*`` 形态，以及 ``.kairos_*``）。
-WEIXIN_SNAPSHOT_IGNORE_PREFIXES = (".kairos-", ".kairos_")
-
-#: 文件后缀命中即跳过（临时 / 中间文件）。
-WEIXIN_SNAPSHOT_IGNORE_SUFFIXES = (
-    ".tmp", ".temp", ".swp", ".swo", ".pyc", ".pyo", ".log", ".lock",
+# The snapshot / diff machinery itself now lives in the neutral module
+# ``kairos.file_snapshot`` (shared with the general chat lane). These names are
+# re-exported here unchanged so every existing importer -- and this module's own
+# ``__all__`` -- keeps working.
+from kairos.file_snapshot import (  # noqa: E402  (mid-module on purpose)
+    SNAPSHOT_IGNORE_DIRS as WEIXIN_SNAPSHOT_IGNORE_DIRS,
+    SNAPSHOT_IGNORE_PREFIXES as WEIXIN_SNAPSHOT_IGNORE_PREFIXES,
+    SNAPSHOT_IGNORE_SUFFIXES as WEIXIN_SNAPSHOT_IGNORE_SUFFIXES,
+    SNAPSHOT_MAX_ENTRIES as WEIXIN_SNAPSHOT_MAX_ENTRIES,
+    SNAPSHOT_MAX_SECONDS as WEIXIN_SNAPSHOT_MAX_SECONDS,
+    diff_touched_files,
+    normalize_roots as _normalize_roots,
+    snapshot_ignored_dir as _snapshot_ignored_dir,
+    snapshot_ignored_file as _snapshot_ignored_file,
+    snapshot_tree_files,
 )
 
-#: 单次快照扫描的**条目上限**（含被忽略的条目）：防大目录把一次回复拖慢。
-WEIXIN_SNAPSHOT_MAX_ENTRIES = 5000
-#: 单次快照扫描的**墙钟上限**（秒）；超时就用已扫到的部分，绝不拖慢回复。
-WEIXIN_SNAPSHOT_MAX_SECONDS = 0.5
 
-
-def _normalize_roots(value: Any) -> List[str]:
-    """把「解析器返回的根」规范成去重的字符串列表。
-
-    接受 ``None`` / 单个路径（``str``/``Path``）/ 路径序列 —— 这样路由可以只给
-    项目根、也可以同时给「项目根 + coder 工作树」，两种形态 channel 都能消化。
-    """
-    if value is None:
-        return []
-    if isinstance(value, (str, Path)):
-        single = str(value).strip()
-        return [single] if single else []
-    out: List[str] = []
-    try:
-        items = list(value)
-    except TypeError:
-        single = str(value).strip()
-        return [single] if single else []
-    for item in items:
-        text = str(item or "").strip()
-        if text and text not in out:
-            out.append(text)
-    return out
-
-
-def _snapshot_ignored_dir(name: str) -> bool:
-    """快照时这个**目录**是否整棵跳过。"""
-    low = (name or "").lower()
-    if low in WEIXIN_SNAPSHOT_IGNORE_DIRS:
-        return True
-    return any(low.startswith(p) for p in WEIXIN_SNAPSHOT_IGNORE_PREFIXES)
-
-
-def _snapshot_ignored_file(name: str) -> bool:
-    """快照时这个**文件**是否跳过。"""
-    low = (name or "").lower()
-    if any(low.startswith(p) for p in WEIXIN_SNAPSHOT_IGNORE_PREFIXES):
-        return True
-    return low.endswith(WEIXIN_SNAPSHOT_IGNORE_SUFFIXES)
-
-
-def snapshot_tree_files(
-    roots: Any,
-    *,
-    max_entries: int = WEIXIN_SNAPSHOT_MAX_ENTRIES,
-    max_seconds: float = WEIXIN_SNAPSHOT_MAX_SECONDS,
-) -> Dict[str, Tuple[float, int]]:
-    """对若干根做一次「路径 → (mtime, size)」快照（best-effort、封顶、绝不抛）。
-
-    返回 ``{realpath: (mtime, size)}``。任何异常 / 不存在的根 / 超上限都只意味着
-    「拿到的更少」—— 调用方据此退化为「没有本轮产出信号」，**不影响文本回复**。
-    结果键用 ``os.path.realpath``，让同一文件经不同根/软链看到时能对上、可去重。
-    """
-    import stat as _stat
-
-    snap: Dict[str, Tuple[float, int]] = {}
-    root_list = _normalize_roots(roots)
-    if not root_list:
-        return snap
-    try:
-        deadline = time.monotonic() + max(0.0, float(max_seconds))
-    except (TypeError, ValueError):
-        deadline = time.monotonic() + WEIXIN_SNAPSHOT_MAX_SECONDS
-    try:
-        limit = max(0, int(max_entries))
-    except (TypeError, ValueError):
-        limit = WEIXIN_SNAPSHOT_MAX_ENTRIES
-    count = 0
-    for root in root_list:
-        try:
-            root_path = Path(str(root))
-            if not root_path.is_dir():
-                continue
-        except (OSError, ValueError):
-            continue
-        try:
-            for dirpath, dirnames, filenames in os.walk(root_path):
-                if count >= limit or time.monotonic() >= deadline:
-                    return snap
-                # 就地剪枝：被忽略的目录不进其子树（os.walk 认这个就地改动）。
-                dirnames[:] = [d for d in dirnames
-                               if not _snapshot_ignored_dir(d)]
-                for filename in filenames:
-                    if count >= limit or time.monotonic() >= deadline:
-                        return snap
-                    count += 1
-                    if _snapshot_ignored_file(filename):
-                        continue
-                    full = os.path.join(dirpath, filename)
-                    try:
-                        st = os.stat(full)
-                        if not _stat.S_ISREG(st.st_mode):
-                            continue
-                        key = os.path.realpath(full)
-                    except OSError:
-                        continue
-                    snap[key] = (st.st_mtime, st.st_size)
-        except Exception:  # noqa: BLE001 - 快照整体 best-effort
-            continue
-    return snap
-
-
-def diff_touched_files(
-    before: Optional[Dict[str, Tuple[float, int]]],
-    after: Optional[Dict[str, Tuple[float, int]]],
-) -> List[Path]:
-    """快照差集：本轮**新增**或 **(mtime 或 size) 变化**的文件（顺序稳定）。
-
-    未变动的旧文件（即便模型在回复里提到了）不在此列 —— 它由文本启发式兜底。
-    """
-    before = before or {}
-    after = after or {}
-    touched = [key for key, sig in after.items() if before.get(key) != sig]
-    touched.sort()          # 稳定顺序（与 os.walk 的遍历次序无关）
-    return [Path(p) for p in touched]
+# ``_normalize_roots`` / ``_snapshot_ignored_dir`` / ``_snapshot_ignored_file``
+# / ``snapshot_tree_files`` / ``diff_touched_files`` are the shared
+# implementations imported above from ``kairos.file_snapshot``.
 
 
 def _resolve_first_within(path: Any, roots: Sequence[Path]) -> Optional[Path]:
@@ -1617,9 +1503,11 @@ def resolve_sendable_files(
 ) -> List[Path]:
     """**启发式**：从回复文本里挑出「工作区内真实存在、且不超限」的文件路径。
 
-    **这只是启发式（现在是 fallback，不是主信号）** —— 本仓库的 ``run_chat_reply``
-    / ``coder.chat`` 都只返回 ``str``，路径上没有任何「我产出了哪些文件」的字段
-    （见 ``kairos/skeleton/service.py`` 与 ``kairos/agents/agent_parts/chat.py``）。
+    **这只是启发式（现在是 fallback，不是主信号）** —— ``run_chat_reply`` 与
+    ``coder.chat`` 的**返回值**都只有 ``str``，没有任何「我产出了哪些文件」的字段
+    （通用车道的产物走 ``run_chat_reply(artifacts_out=...)`` 出参，见
+    ``kairos/skeleton/service.py``；coder 侧 ``kairos/agents/agent_parts/chat.py``
+    仍是纯文本）。
     真正的「本轮产出」信号由 **快照差集**（:func:`diff_touched_files`）提供；这里
     退而求其次：**扫描回复文本里出现的、位于工作区内且真实存在的文件路径**，用来
     兜住「模型主动点名、但本轮没改动的既有文件」。最多 ``max_files`` 个、每个

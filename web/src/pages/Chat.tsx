@@ -37,6 +37,7 @@ import ChatThread from '../components/ChatThread';
 import ChatComposer, { ChatAttachment } from '../components/ChatComposer';
 import { classifyIntent } from '../utils/intent';
 import { keepIfSame } from '../utils/equal';
+import { normalizeArtifacts } from '../utils/artifacts';
 import { knownSlashCommand, type SlashCommand } from '../utils/slash';
 import api, { onWebSocketMessage, onWebSocketState } from '../api/client';
 import type { Message, LoopSession, SessionRound } from '../types';
@@ -820,7 +821,9 @@ const Chat: React.FC = () => {
         // Single-turn chat. POST and wait for the reply, then
         // append it as a coder bubble so the thread reads like a
         // conversation. No loop is started.
-        const r = await api.post<{ reply: string; mode: string; message?: string }>(
+        const r = await api.post<{
+          reply: string; mode: string; message?: string; artifacts?: unknown;
+        }>(
           `/projects/${currentProject.id}/chat`,
           {
             message: text,
@@ -837,7 +840,11 @@ const Chat: React.FC = () => {
           updateMessage(bubbleId, { content: r.data.message });
         }
         const reply = (r.data?.reply || '').trim();
-               if (reply) {
+        // Files this turn produced. The contract guarantees an array (empty
+        // when there is none); normalizing here makes a malformed value mean
+        // "no cards" and nothing else.
+        const artifacts = normalizeArtifacts(r.data?.artifacts);
+        if (reply || artifacts.length) {
           // The Coder also publishes the reply over the WebSocket
           // (topic `agent.chat`), which the WS handler renders as a
           // bubble. To avoid showing the reply twice we only append
@@ -852,19 +859,33 @@ const Chat: React.FC = () => {
           // returns, or vice versa, and the two paths would each
           // append a bubble.
           const replyTrim = reply.trim();
-          const alreadyShown = useChatStore.getState().currentMessages.some(
-            (m) => {
-              const mContent = typeof m.content === 'string'
-                                 ? m.content.trim() : '';
-              if (mContent !== replyTrim) return false;
-              // Accept short form ('coder') and full agent_id
-              // ('63bebf36.coder') — both are the same agent.
-              const s = (m.sender || '').toLowerCase();
-              return s === 'agent' || s === 'coder' || s === 'assistant'
-                || s.endsWith('.coder') || s.endsWith('.reviewer')
-                || s.includes('coder') || s.includes('reviewer');
-            });
-          if (!alreadyShown) {
+          // Accept short form ('coder') and full agent_id
+          // ('63bebf36.coder') — both are the same agent.
+          const sameReply = (m: Message) => {
+            if (!replyTrim) return false;
+            const mContent = typeof m.content === 'string'
+                               ? m.content.trim() : '';
+            if (mContent !== replyTrim) return false;
+            const s = (m.sender || '').toLowerCase();
+            return s === 'agent' || s === 'coder' || s === 'assistant'
+              || s.endsWith('.coder') || s.endsWith('.reviewer')
+              || s.includes('coder') || s.includes('reviewer');
+          };
+          // The most recent copy: a streamed reply leaves exactly one, and the
+          // last match is the bubble the user is looking at.
+          const shown = [...useChatStore.getState().currentMessages]
+            .reverse().find(sameReply);
+          if (shown) {
+            // The reply already landed over the WebSocket. That event carries
+            // no artifacts, so this turn's files are attached to the bubble
+            // here — otherwise the cards would be missing from exactly the
+            // turns that streamed, which is most of them.
+            if (artifacts.length) {
+              updateMessage(shown.id, {
+                metadata: { ...(shown.metadata || {}), artifacts },
+              });
+            }
+          } else {
             appendMessage({
               id: `chat-reply-${Date.now()}`,
               sender: 'coder',
@@ -873,7 +894,7 @@ const Chat: React.FC = () => {
               content: reply,
               msg_type: 'text',
               timestamp: Date.now() / 1000,
-              metadata: { mode: 'chat' },
+              metadata: { mode: 'chat', artifacts },
             });
           }
         }

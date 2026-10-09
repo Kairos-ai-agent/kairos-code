@@ -49,6 +49,7 @@ import { useT } from '../i18n';
 import type { Message } from '../types';
 import { useChatStore } from '../stores/chatStore';
 import { renderMarkdown, MONO_STACK, type MarkdownStyle } from '../utils/markdown';
+import ChatArtifacts from './ChatArtifacts';
 
 interface Props {
   messages: Message[];
@@ -1016,6 +1017,12 @@ const AssistantBubble: React.FC<{
           {rendered}
           {running && <LoadingOutlined spin style={{ marginInlineStart: 6 }} />}
         </div>
+        {/* Files this turn produced. Present the moment the reply lands (the
+            chat page writes the POST response's `artifacts` onto the message)
+            and again after a refresh (the persisted message carries
+            `metadata.artifacts`). Renders nothing when there are none, and
+            silently ignores a missing or malformed array. */}
+        <ChatArtifacts artifacts={meta.artifacts} />
       </div>
     </div>
   );

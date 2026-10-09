@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import json
 import logging
-import mimetypes
 import uuid
 from pathlib import Path
 
@@ -404,9 +403,10 @@ async def _chat_on_general_lane(project_id: str, project, request,
     except Exception:
         logger.exception("failed to persist user chat message (general lane)")
 
+    artifacts: list = []
     reply = await run_chat_reply(
         kind=decision.workspace_kind, root=root, message=text,
-        project_id=project_id,
+        project_id=project_id, artifacts_out=artifacts,
     )
     if reply is None:
         logger.error(
@@ -436,6 +436,10 @@ async def _chat_on_general_lane(project_id: str, project, request,
                     "route_source": decision.source,
                     "route_reason": decision.reason,
                     "workspace_kind": decision.workspace_kind,
+                    # The files this turn produced, on the reply message itself
+                    # -- so a refresh that re-hydrates the thread from the DB
+                    # still shows the deliverables, not just the prose.
+                    "artifacts": list(artifacts),
                 },
             ))
         except Exception:
@@ -454,6 +458,9 @@ async def _chat_on_general_lane(project_id: str, project, request,
         "route_reason": decision.reason,
         "workspace_kind": decision.workspace_kind,
         "verdict": undecided_chat_verdict().to_dict(),
+        # Always present: the files this turn created/changed, each
+        # {path, name, size, mime}. Empty list when the turn produced nothing.
+        "artifacts": list(artifacts),
     }
 
 
@@ -1677,42 +1684,23 @@ def _human_size(n: int) -> str:
 
 # Windows' mimetypes module only knows what the registry maps, so common
 # dev/text formats (.md, .py, .csv, ...) come back as None. The model reads
-# the mime in the [附件] block, so fill the gaps explicitly.
-_EXTRA_MIME_TYPES = {
-    ".md": "text/markdown", ".markdown": "text/markdown",
-    ".txt": "text/plain", ".log": "text/plain", ".env": "text/plain",
-    ".csv": "text/csv", ".tsv": "text/tab-separated-values",
-    ".json": "application/json", ".jsonl": "application/json",
-    ".yaml": "application/yaml", ".yml": "application/yaml",
-    ".toml": "application/toml", ".ini": "text/plain",
-    ".py": "text/x-python", ".pyi": "text/x-python",
-    ".js": "text/javascript", ".jsx": "text/jsx",
-    ".ts": "text/typescript", ".tsx": "text/tsx",
-    ".sh": "application/x-sh", ".bat": "application/x-batch",
-    ".ps1": "application/x-powershell",
-    ".c": "text/x-c", ".h": "text/x-c", ".hpp": "text/x-c++",
-    ".cpp": "text/x-c++", ".cc": "text/x-c++",
-    ".rs": "text/x-rust", ".go": "text/x-go", ".java": "text/x-java",
-    ".kt": "text/x-kotlin", ".rb": "text/x-ruby", ".php": "text/x-php",
-    ".sql": "application/sql", ".ipynb": "application/json",
-    ".html": "text/html", ".htm": "text/html", ".css": "text/css",
-    ".scss": "text/scss", ".xml": "application/xml",
-    ".svg": "image/svg+xml", ".pdf": "application/pdf",
-}
+# the mime in the [附件] block, so fill the gaps explicitly. The table and the
+# lookup now live in the neutral ``kairos.mime_guess`` (shared with the chat
+# artifact entries and the download endpoint); ``_EXTRA_MIME_TYPES`` is kept as
+# a name bound to that same table for any existing reader.
+from kairos.mime_guess import EXTRA_MIME_TYPES as _EXTRA_MIME_TYPES
 
 
 def _guess_mime(name: str) -> str:
-    """Mime type for a filename, with a fallback table for dev formats.
+    """Mime type for a filename -- delegated to the shared table.
 
-    The table wins over ``mimetypes`` so the answer doesn't depend on the
-    host's registry (Windows maps ``.csv`` to ``application/vnd.ms-excel``,
-    which is useless to the model reading the [附件] block).
+    ``kairos.mime_guess.guess_mime`` is the single source of truth (the table
+    wins over ``mimetypes`` so the answer doesn't depend on the host's
+    registry -- Windows maps ``.csv`` to ``application/vnd.ms-excel``, which is
+    useless to the model reading the [附件] block).
     """
-    suffix = Path(str(name or "")).suffix.lower()
-    if suffix in _EXTRA_MIME_TYPES:
-        return _EXTRA_MIME_TYPES[suffix]
-    return (mimetypes.guess_type(str(name or ""))[0]
-            or "application/octet-stream")
+    from kairos.mime_guess import guess_mime
+    return guess_mime(name)
 
 
 def attachment_prompt_block(root: Path, attachments) -> str:
@@ -1829,6 +1817,102 @@ async def delete_attachment(project_id: str, rel_path: str):
     except OSError as e:
         raise HTTPException(status_code=500, detail=f"cannot delete: {e}")
     return {"status": "deleted", "rel_path": target.relative_to(root).as_posix()}
+
+
+# ============================================================================
+# Chat artifacts: download a file a chat turn produced
+# ============================================================================
+#
+# POST /{project_id}/chat returns the files a general-lane turn created or
+# changed (the ``artifacts`` array, each {path, name, size, mime}). This is how
+# the frontend fetches one: the raw bytes, with a Content-Disposition the
+# browser can honour (inline preview for text / markdown, a download for
+# everything else). ``path`` is the same project-relative key the response and
+# the reply message's ``metadata.artifacts`` carry.
+
+#: Mime prefixes the browser may render *inline* (text / markdown and the
+#: textual data formats). Anything else is served as a download -- a produced
+#: binary is not something to render in a tab.
+_INLINE_ARTIFACT_MIME_PREFIXES = (
+    "text/", "application/json", "application/yaml", "application/xml",
+    "image/svg+xml",
+)
+
+
+def _artifact_disposition(name: str, mime: str) -> str:
+    """A ``Content-Disposition`` value: inline for text/markdown, else attach.
+
+    Non-ASCII filenames ride in the RFC 5987 ``filename*`` parameter, with an
+    ASCII fallback in ``filename`` for older clients. A quote in the name is
+    neutralised so it cannot break out of the header value.
+    """
+    from urllib.parse import quote
+
+    inline = (mime or "").startswith(_INLINE_ARTIFACT_MIME_PREFIXES)
+    kind = "inline" if inline else "attachment"
+    ascii_name = name.encode("ascii", "ignore").decode("ascii") or "artifact"
+    ascii_name = ascii_name.replace('"', "_")
+    quoted = quote(name, safe="")
+    return f'{kind}; filename="{ascii_name}"; filename*=UTF-8\'\'{quoted}'
+
+
+def _resolve_artifact_path(root: Path, rel: str) -> Path:
+    """Resolve a client-supplied artifact path **strictly inside** ``root``.
+
+    Unlike the attachment resolver (which re-roots a leading ``/``), an
+    artifact path must already be relative: an absolute path is refused, and so
+    is anything that resolves outside ``root`` after ``..`` and symlink
+    resolution. Raises 400 on escape, 404 when the file is absent.
+    """
+    raw = str(rel or "").strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="path is required")
+    candidate = Path(raw)
+    if candidate.is_absolute():
+        raise HTTPException(
+            status_code=400,
+            detail=f"artifact path must be project-relative: {raw}")
+    target = (root / candidate).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"artifact path escapes the project directory: {raw}")
+    if not target.is_file():
+        raise HTTPException(status_code=404,
+                            detail=f"artifact not found: {raw}")
+    return target
+
+
+@router.get("/{project_id}/artifacts/download")
+async def download_artifact(project_id: str, path: str = Query(...)):
+    """Download a file a chat turn produced, by project-relative ``path``.
+
+    Containment is the whole point: the path is resolved inside the project root
+    and a path that escapes it -- an absolute path, a ``..`` traversal, or a
+    symlink that leaves the tree -- is refused with a 400. Text and markdown are
+    served ``inline`` (so they preview in a tab); everything else is an
+    attachment.
+    """
+    from fastapi.responses import Response
+
+    project = _orch().get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404,
+                            detail=f"Project not found: {project_id}")
+    root = _project_root(project)
+    target = _resolve_artifact_path(root, path)   # 400 on escape, 404 if gone
+    mime = _guess_mime(target.name)
+    try:
+        data = target.read_bytes()
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"cannot read file: {e}")
+    return Response(
+        content=data,
+        media_type=mime,
+        headers={"Content-Disposition": _artifact_disposition(target.name, mime)},
+    )
 
 
 # ============================================================================

@@ -86,6 +86,25 @@ All notable changes to this project are documented here. The format follows
   任何根内的不发展为候选）。首次消息时工作树是在 dispatch 期间才创建、无可信基线，此时
   不启用差集，避免把工作树 checkout 出的既有文件误当成本轮产出。
 
+- **`get_project` leaked MCP subprocesses and rebuilt the whole registry on
+  every request.** Two defects combined: (1) `_attach_mcp` always built a
+  brand-new `McpRegistry` (a full set of MCP subprocesses, ~100 MB each) and
+  then *overwrote* `project.runtime.mcp_registry` without closing the previous
+  one, so the old children were orphaned; (2) the lazy-retry guard in
+  `get_project` treated a non-raising `_create_agents` as success and dropped
+  its "only retry once" marker — even when the project was left without a
+  `coder` — so the rebuild ran again on the very next request. A running
+  instance spawned a new `--mcp-serve` child every few seconds and never
+  reaped the old ones. `_attach_mcp` now reuses the registry a project already
+  owns (by `runtime.mcp_registry` and by a process-level map keyed on project
+  id, so a cache-miss rehydrate still finds it) and never constructs a second
+  one; the retry guard, extracted to `_attach_agents_once`, keys on the
+  *result* — a return that leaves `coder` unset stays in `_attach_failures`
+  (once per process, not once per request), while a genuinely wired project
+  clears the marker so a later transient failure can still retry. The
+  rehydrate path routes through the same guard. Regression guard:
+  `tests/test_mcp_registry_idempotence.py`.
+
 ### Added
 
 - **微信出站文件：一组「绝不自动外发」的判据（比上面那条特性本身更要紧）。** 触发规则是

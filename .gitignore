@@ -102,3 +102,6 @@ connectors/
 
 # Test-run report written by run_tests.bat (the agent reads it; not committed)
 _pytest_report.txt
+
+# App runtime scratch (per-project runs/ dir written during turns)
+runs/

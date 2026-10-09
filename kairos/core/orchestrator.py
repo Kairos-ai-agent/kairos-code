@@ -315,6 +315,14 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
         # 503 → know to refresh Settings → the next request will
         # log a fresh attempt.
         self._attach_failures: set = set()
+        #: Live MCP registries keyed by project id. A registry owns
+        #: subprocesses, so a project must never accumulate a second one:
+        #: reusing by id keeps the child-process count flat even when the
+        #: ``Project`` object is rebuilt (a cache-miss rehydrate) or the
+        #: toolset is otherwise rebuilt. Cleared on ``close``/delete.
+        #: (Also reachable via ``getattr`` — some tests build the
+        #: orchestrator with ``__new__`` and skip this initialiser.)
+        self._mcp_registries: dict = {}
         # In-memory cache of per-project Best-of-N override; the API
         # reads/writes this and start_loop copies it into the session.
         if db is None:
@@ -695,6 +703,31 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
         from kairos.mcp_client import McpRegistry, should_defer_start
         if not work_dir:
             return []
+        # One live registry per project — never build a second one. This
+        # method can run more than once for the same project: the lazy retry
+        # in ``get_project``, a cache-miss rehydrate, or a manual
+        # re-attach all call ``_create_agents`` again. The old code built a
+        # brand-new ``McpRegistry`` on every one of those and then overwrote
+        # ``runtime.mcp_registry`` with it, orphaning the previous registry's
+        # MCP subprocesses (~100MB each) with nothing left to ``close_all``
+        # them — the process leak (an instance spawned new ``--mcp-serve``
+        # children every few seconds and never reaped the old ones).
+        # Reusing the registry the project already owns makes a rebuild free:
+        # no new children, same tool set, no growth. Two sources are checked:
+        # the runtime handle on this Project object, and a process-level map
+        # keyed by project id (so a rebuilt Project — a cache-miss rehydrate —
+        # still finds its registry instead of spawning a second set).
+        regs = getattr(self, "_mcp_registries", None)
+        if regs is None:
+            regs = {}
+            self._mcp_registries = regs
+        existing = regs.get(project.id)
+        if existing is None:
+            existing = getattr(project.runtime, "mcp_registry", None)
+        if existing is not None:
+            regs[project.id] = existing
+            project.runtime.mcp_registry = existing
+            return list(existing.all_tools())
         reg = McpRegistry()
         try:
             reg.load(project_dir=Path(work_dir))
@@ -734,6 +767,7 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
                         "MCP start_all failed for %s: %s", project.id, e)
                     return []
         project.runtime.mcp_registry = reg
+        regs[project.id] = reg
         return list(reg.all_tools())
 
     def _attach_manifest(self, project: Project, work_dir: str) -> None:
@@ -779,6 +813,44 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
             asyncio.run(watcher.start())
         project.runtime.skills_watcher = watcher
 
+    def _attach_agents_once(self, project: Project) -> None:
+        """Wire a project's Coder/Reviewer at most once per process.
+
+        ``get_project`` sits on the request hot path, so an attach that
+        *neither raises nor actually wires the project* must not be re-run on
+        every request: each re-run rebuilds the whole MCP registry and spawns
+        a fresh set of MCP subprocesses (see ``_attach_mcp``), and the request
+        latency with it.
+
+        The guard keys on the **result**, not on whether ``_create_agents``
+        raised. Success means ``project.coder`` is set. A return that leaves
+        ``coder`` None (an attach that silently did nothing) stays in
+        ``_attach_failures`` so it is retried once per process — the
+        documented contract — not once per request. When a later attach *is*
+        genuinely wired the marker is cleared, so a subsequent transient
+        failure can retry again.
+        """
+        pid = project.id
+        if project.coder is not None or pid in self._attach_failures:
+            return
+        self._attach_failures.add(pid)
+        try:
+            self._create_agents(project)
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "get_project: agent attach failed for %s "
+                "(will not retry until backend restart); attach_errors: %s",
+                pid,
+                getattr(project.runtime, "attach_errors", []),
+            )
+            return
+        if project.coder is not None:
+            # Genuinely wired: drop the marker so a future transient
+            # failure can retry again.
+            self._attach_failures.discard(pid)
+        # else: returned without wiring the project — keep the marker so we
+        # do not rebuild the registry on every request.
+
     def get_project(self, project_id: str) -> Optional[Project]:
         """Look up a project by id, self-healing from the DB.
 
@@ -789,35 +861,12 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
         references the frontend may have cached.
 
         Also lazy-retries agent creation if a previous attempt failed
-        (e.g. transient MCP / provider init error). The project is
-        always added to memory; ``_create_agents`` is re-invoked on
-        each miss until it succeeds.
+        (e.g. transient MCP / provider init error), at most once per
+        process — see ``_attach_agents_once``.
         """
         p = self._projects.get(project_id)
         if p is not None:
-            if p.coder is None and project_id not in self._attach_failures:
-                # Lazy retry: a previous attach failed (e.g. transient
-                # MCP error). Try once more — transient errors often
-                # resolve by the next request. We only retry once
-                # per process to avoid log spam; the user can clear
-                # this set by restarting the backend (or by clicking
-                # Save in Settings, which currently re-runs the
-                # initial-load useEffect and calls _create_agents).
-                self._attach_failures.add(project_id)
-                try:
-                    self._create_agents(p)
-                    # success → drop from the failure set so the
-                    # next request after a future transient failure
-                    # can retry again
-                    self._attach_failures.discard(project_id)
-                except Exception:
-                    logger.warning(
-                        "get_project: agent re-attach failed for %s "
-                        "(will not retry until backend restart); "
-                        "attach_errors: %s",
-                        project_id,
-                        getattr(p.runtime, "attach_errors", []),
-                    )
+            self._attach_agents_once(p)
             return p
         # Self-heal: reload from DB and instantiate the Project in memory
         # so subsequent lookups are fast again.
@@ -843,13 +892,9 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
             project.requirements = row.get("requirements", "")
             project.status = row.get("status", "active")
             self._projects[project_id] = project
-            try:
-                self._create_agents(project)
-            except Exception:
-                # Agent creation might fail if a provider is missing;
-                # the project itself is still usable for read endpoints.
-                logger.debug("re-hydrate: agent creation failed for %s",
-                             project_id, exc_info=True)
+            # Same once-per-process guard as the cache-hit path: a rehydrate
+            # that keeps missing must not rebuild the MCP registry per request.
+            self._attach_agents_once(project)
             return project
         return None
 
@@ -895,6 +940,11 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
         worktrees; this adds the MCP close_all which is async.
         """
         rt = project.runtime
+        # Drop the process-level handle too, otherwise a later re-attach for
+        # the same id would hand back a registry whose children just closed.
+        regs = getattr(self, "_mcp_registries", None)
+        if regs is not None:
+            regs.pop(project.id, None)
         if rt.mcp_registry is not None:
             try:
                 await rt.mcp_registry.close_all()

@@ -40,6 +40,17 @@ from kairos.skeleton.workspaces import DocSetWorkspace, RepoWorkspace
 
 logger = logging.getLogger(__name__)
 
+#: How many prior chat turns (user + agent bubbles) a conversational turn may
+#: replay into its prompt. Small on purpose: the *immediate* context is what a
+#: follow-up ("重新分析一下…") needs, and the workspace context already spends the
+#: bulk of the budget -- the history must not squeeze it out.
+CHAT_HISTORY_MAX_MESSAGES = 20
+
+#: Character budget for those replayed turns, independent of the count cap: 20
+#: pasted walls of text would blow any window, so the newest turns are kept
+#: until this many characters are used and the rest are dropped.
+CHAT_HISTORY_MAX_CHARS = 4000
+
 #: Default deliverable name for a routed task; the workspace decides where it
 #: lands (``docs`` -> ``outputs/<name>``).
 DEFAULT_OUTPUT_NAME = "report.md"
@@ -256,6 +267,156 @@ _TOOL_CHAT_PROMPT = (
 )
 
 
+#: Header for the replayed conversation block. ``## Recent conversation`` marks
+#: it unmistakably, and the body says out loud that these are *earlier turns*,
+#: not a fresh instruction -- without that a follow-up-looking history entry
+#: ("重新分析…") can be mistaken for the user's new command and re-executed.
+_HISTORY_HEADER = (
+    "## Recent conversation (earlier turns in this project)\n"
+    "These are the previous exchanges with the user, provided so you keep the "
+    "context of the conversation. They are background only -- NOT a new "
+    "instruction: do not repeat, re-answer or re-execute them. Respond only "
+    "to the new message."
+)
+
+
+def _default_history_db():
+    """The live persistence to read chat history from, or ``None``.
+
+    The chat lane is a leaf that the loop never enters, and this is the *one*
+    place it reaches back for state. Resolved lazily (mirroring
+    ``kairos.artifacts``) so importing this module never drags the API layer
+    in, and best-effort: no orchestrator (a CLI run, a unit test) simply means
+    no history, never an error.
+    """
+    try:
+        from api.deps import orchestrator
+        return getattr(orchestrator, "_db", None)
+    except Exception:  # noqa: BLE001 - no API layer = no history, not a fault
+        logger.debug("chat history: no orchestrator available", exc_info=True)
+        return None
+
+
+def _history_role(row: dict) -> str:
+    """Map a stored chat row to ``"user"`` / ``"assistant"``.
+
+    A user's own bubble is written with ``sender="user"`` / ``topic="user.chat"``
+    by every entrance (web + IM); everything else on the chat channel (the
+    Coder's reply, the skeleton's reply) is the agent talking.
+    """
+    sender = str(row.get("sender") or "").lower()
+    topic = str(row.get("topic") or "")
+    if sender.startswith("user") or topic == "user.chat":
+        return "user"
+    return "assistant"
+
+
+def load_chat_history(
+    project_id: Optional[str] = None,
+    *,
+    db: Any = None,
+    current_message: str = "",
+    limit: int = CHAT_HISTORY_MAX_MESSAGES,
+    max_chars: int = CHAT_HISTORY_MAX_CHARS,
+) -> list:
+    """Best-effort: a project's recent conversation, oldest first.
+
+    Reads the ``messages`` table (through ``Persistence.load_messages`` with
+    ``chat_only=True``) scoped to ``project_id`` so one project's chat can
+    never bleed into another's. Returns ``[{"role": ..., "content": ...}, ...]``
+    in chronological order, capped by BOTH ``limit`` (newest N turns) and
+    ``max_chars`` (newest turns that fit the character budget).
+
+    ``current_message`` is the turn being answered *right now*. Every entrance
+    persists the user's own bubble before it asks for the reply, so that bubble
+    is already the newest row; passing it here lets the live turn be dropped
+    **before** the cap is applied, so the ``limit`` counts real prior turns
+    rather than the message we are already handling.
+
+    Never raises: an unknown/absent project, a DB without the loader, a schema
+    that predates ``messages``, or a bad row all degrade to ``[]`` -- a missing
+    history must never turn a chat reply into an error.
+    """
+    if not project_id:
+        return []
+    database = db if db is not None else _default_history_db()
+    loader = getattr(database, "load_messages", None)
+    if not callable(loader):
+        return []
+    limit = int(limit)
+    try:
+        # One spare slot for the live turn we may drop just below.
+        rows = loader(limit=limit + 1, project_id=project_id, chat_only=True)
+    except Exception:  # noqa: BLE001 - history is context, never a hard dep
+        logger.warning("chat history read failed for project %s",
+                       project_id, exc_info=True)
+        return []
+    if not rows:
+        return []
+
+    current = (current_message or "").strip()
+    remaining = int(max_chars)
+    picked: list = []
+    for row in rows:  # newest-first from the loader
+        if not isinstance(row, dict):
+            continue
+        content = row.get("content")
+        if not isinstance(content, str):
+            content = "" if content is None else str(content)
+        content = content.strip()
+        if not content:
+            continue
+        role = _history_role(row)
+        # The live turn is the newest row; never replay it as history.
+        if not picked and role == "user" and current and content == current:
+            continue
+        if len(picked) >= limit:
+            break                  # count cap reached
+        if len(content) > remaining:
+            if picked:
+                break              # a newer turn already fits: stop here
+            content = content[:max(0, remaining)].rstrip()
+            if not content:
+                break              # budget is zero: nothing to show
+        picked.append({"role": role, "content": content})
+        remaining -= len(content)
+        if remaining <= 0:
+            break
+    picked.reverse()               # chronological order for the prompt
+    return picked
+
+
+def _render_history_block(message: str, history: Optional[Any]) -> str:
+    """Render replayed turns into a labelled block; ``""`` when there are none.
+
+    Returns ``""`` for no history, so the no-history prompt stays *byte for
+    byte* what it was before history existed. A trailing entry equal to the
+    current ``message`` is dropped: every entrance persists the user's own
+    bubble *before* it asks for the reply, so the live turn is already the
+    newest row and must not appear twice.
+    """
+    if not history:
+        return ""
+    items = [
+        h for h in history
+        if isinstance(h, dict) and str(h.get("content") or "").strip()
+    ]
+    current = (message or "").strip()
+    if items:
+        last = items[-1]
+        if (str(last.get("role") or "").lower() == "user"
+                and str(last.get("content") or "").strip() == current):
+            items = items[:-1]
+    if not items:
+        return ""
+    body = "\n".join(
+        f'{"USER" if str(h.get("role") or "").lower() == "user" else "AGENT"}: '
+        f'{h.get("content")}'
+        for h in items
+    )
+    return f"{_HISTORY_HEADER}\n\n{body}"
+
+
 def undecided_chat_verdict() -> Verdict:
     """The verdict a conversational general-lane turn carries: ``undecided``.
 
@@ -278,6 +439,8 @@ async def run_chat_reply(
     generate: Optional[Callable] = None,
     max_context_chars: Optional[int] = None,
     tool_client: Any = None,
+    project_id: Optional[str] = None,
+    history: Optional[Any] = None,
 ) -> Optional[str]:
     """One conversational turn on the general lane; the reply text, or ``None``.
 
@@ -302,10 +465,24 @@ async def run_chat_reply(
       general lane degrades to a single text answer, exactly as before the
       tools existed.
 
+    **Conversation history.** A conversational follow-up ("重新分析…") is
+    meaningless without the turns before it, so prior chat is replayed in front
+    of the prompt. Pass ``history`` (already-loaded rows from
+    :func:`load_chat_history`) or just ``project_id`` and the history is read
+    from the ``messages`` table here. Either way it is folded into the system
+    prompt / prompt under a labelled ``## Recent conversation`` block; when
+    there is none, both seams build the **exact** prompt they did before this
+    parameter existed. Best-effort throughout: a missing table, no project, or
+    an unreadable row leaves the single-turn reply untouched.
+
     Returns ``None`` when neither seam has a model (the caller surfaces that
     honestly instead of pretending a turn ran).
     """
     workspace = build_workspace(kind, root)
+
+    if history is None and project_id:
+        history = load_chat_history(project_id, current_message=message)
+    history_block = _render_history_block(message, history)
 
     client = tool_client if tool_client is not None else default_tool_client()
     if client is not None:
@@ -315,6 +492,11 @@ async def run_chat_reply(
         context = workspace.as_prompt_context(
             max_chars=max_context_chars, query=message)
         system = _TOOL_CHAT_PROMPT.format(context=context)
+        if history_block:
+            # The loop's contract is ``system_prompt`` + ``message``: the
+            # history is rendered *into* the system prompt rather than adding a
+            # parameter, so ``run_read_tool_loop`` is untouched.
+            system = f"{history_block}\n\n{system}"
         try:
             text = await run_read_tool_loop(
                 client=client, tools=tools, system_prompt=system,
@@ -330,6 +512,8 @@ async def run_chat_reply(
     context = workspace.as_prompt_context(
         max_chars=max_context_chars, query=message)
     prompt = _CHAT_PROMPT.format(context=context, message=message)
+    if history_block:
+        prompt = f"{history_block}\n\n{prompt}"
     try:
         text = generator(prompt)
         if inspect.isawaitable(text):
@@ -390,10 +574,13 @@ async def run_general_task(
 
 __all__ = [
     "SkeletonOutcome",
+    "CHAT_HISTORY_MAX_MESSAGES",
+    "CHAT_HISTORY_MAX_CHARS",
     "default_generator",
     "default_tool_client",
     "build_workspace",
     "build_verifier",
+    "load_chat_history",
     "run_general_task",
     "run_chat_reply",
     "undecided_chat_verdict",

@@ -34,6 +34,20 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **The chat lane never saw the conversation so far, so every turn felt like a
+  brand-new agent.** `run_chat_reply` took a single `message` and built its
+  prompt from the workspace files alone — no history parameter, and no caller
+  passed any prior turn, so the model could not know what it had just said.
+  The lane now loads the project's real chat history from SQLite (chat topics
+  only, newest-first, capped at 20 turns / 4000 chars with the oldest dropped
+  first, a single oversized turn clipped rather than dropped) and injects it
+  into both model seams as a labelled `## Recent conversation` block that states
+  it is background — *not* a new instruction — so a follow-up-looking past turn
+  cannot be mistaken for the new command. History is project-scoped because the
+  chat lane has no session id (`/chat/:sessionId` addresses the Coder loop, not
+  this lane). With no history the prompt is byte-identical to before, the live
+  turn is not duplicated, and one project's history can never leak into another's.
+
 - **Streaming tool calls were silently dropped on the litellm provider.**
   `litellm_provider.stream()`'s comment claimed it collapsed the incremental
   tool-call deltas into a final sentinel, but there was no accumulator at all and

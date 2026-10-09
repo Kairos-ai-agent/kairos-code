@@ -410,7 +410,8 @@ async def _answer_inbound(project, text: str, bus=None) -> str:
 
     try:
         reply = await run_chat_reply(
-            kind=decision.workspace_kind, root=str(root), message=text)
+            kind=decision.workspace_kind, root=str(root), message=text,
+            project_id=project.id)
     except Exception:  # noqa: BLE001 - a lane miss must not lose the turn
         logger.exception("im: general lane failed; falling back to the coder")
         return await project.coder.chat(text)

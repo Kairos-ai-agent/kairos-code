@@ -406,6 +406,7 @@ async def _chat_on_general_lane(project_id: str, project, request,
 
     reply = await run_chat_reply(
         kind=decision.workspace_kind, root=root, message=text,
+        project_id=project_id,
     )
     if reply is None:
         logger.error(

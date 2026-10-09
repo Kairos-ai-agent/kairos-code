@@ -347,7 +347,8 @@ async def _answer_message(project, text: str,
 
     try:
         reply = await run_chat_reply(
-            kind=decision.workspace_kind, root=str(root), message=text)
+            kind=decision.workspace_kind, root=str(root), message=text,
+            project_id=project.id)
     except Exception:  # noqa: BLE001 - 通用车道出错不能丢掉这一轮
         logger.exception("wecom: 通用车道失败，回退 Coder")
         return await project.coder.chat(text)

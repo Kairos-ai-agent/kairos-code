@@ -224,6 +224,7 @@ async def replay_dataset_endpoint(
 ) -> Dict[str, Any]:
     """Replay a recorded dataset against the default target."""
     from kairos.eval import replay_dataset, save_suite_result
+    from kairos.cost import _get_log_path
     result = replay_dataset(Path(dataset_path))
     final_out = (
         Path(out_path) if out_path
@@ -246,6 +247,7 @@ async def derive_from_git_endpoint(
 ) -> Dict[str, Any]:
     """Derive an eval suite from a git repo's kairos commit history."""
     from kairos.eval import derive_and_write_suite
+    from kairos.cost import _get_log_path
     out = (
         Path(out_path) if out_path
         else _get_log_path().parent / "derived.yaml"

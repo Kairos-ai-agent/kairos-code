@@ -165,7 +165,7 @@ def ttl_cache(ttl_s: float, maxsize: int = 128):
 class ProfileSample:
     name: str
     duration_s: float
-    extra: Dict[str, Any] = field(default_factory=dict) if False else None  # type: ignore
+    extra: Optional[Dict[str, Any]] = None
 
     def __init__(self, name: str, duration_s: float,
                  extra: Optional[Dict[str, Any]] = None) -> None:

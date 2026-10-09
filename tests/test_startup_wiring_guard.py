@@ -57,50 +57,129 @@ def _module_bound_names(module_table: symtable.SymbolTable) -> set[str]:
     return bound
 
 
-def _iter_scopes(table: symtable.SymbolTable):
-    yield table
-    for child in table.get_children():
-        yield from _iter_scopes(child)
+# AST nodes that open a new symbol-table scope.
+_SCOPE_NODES = (
+    ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda,
+    ast.ClassDef, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp,
+)
+
+
+def _scope_parent_parts(node):
+    """Sub-nodes of a scope opener that resolve in the *enclosing* scope.
+
+    Symtable attributes decorators, argument defaults/annotations and (for a
+    comprehension) the first generator's ``iter`` to the outer scope, so the
+    walker must visit those with the parent's table to stay in lock-step.
+    """
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        parts = list(node.decorator_list)
+        parts.append(node.args)
+        if node.returns is not None:
+            parts.append(node.returns)
+        return parts
+    if isinstance(node, ast.Lambda):
+        return [node.args]
+    if isinstance(node, ast.ClassDef):
+        return list(node.decorator_list) + list(node.bases) + list(node.keywords)
+    if isinstance(node, (ast.ListComp, ast.SetComp,
+                         ast.DictComp, ast.GeneratorExp)):
+        return [node.generators[0].iter]
+    return []
+
+
+def _scope_child_parts(node):
+    """Sub-nodes of a scope opener that resolve in the *new* scope."""
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return list(node.body)
+    if isinstance(node, ast.Lambda):
+        return [node.body]
+    if isinstance(node, (ast.ListComp, ast.SetComp,
+                         ast.DictComp, ast.GeneratorExp)):
+        gens = node.generators
+        first = gens[0]
+        out = [first.target] + list(first.ifs)
+        for gen in gens[1:]:
+            out += [gen.iter, gen.target]
+            out += list(gen.ifs)
+        elt = getattr(node, "elt", None)
+        key = getattr(node, "key", None)
+        out.append(elt if elt is not None else key)
+        if isinstance(node, ast.DictComp):
+            out.append(node.value)
+        return [x for x in out if x is not None]
+    return []
 
 
 def find_undefined_names(source: str, filename: str) -> list[str]:
     """Return ``filename:line: Undefined name 'x'`` for every F821-style use.
 
-    A name is *undefined* when it is referenced from some scope yet resolves to
-    neither a local/parameter/import in that scope, nor a free variable of an
-    enclosing function, nor a module-level binding, nor a builtin. ``symtable``
-    does the scope resolution (so comprehensions, closures and nested ``def``s
-    are handled correctly); ``ast`` supplies the line number.
+    A name is *undefined* when a reference to it, **in the exact scope it is
+    written in**, resolves to neither a local/parameter/import of that scope,
+    nor a free variable of an enclosing function, nor a module-level binding,
+    nor a builtin.
+
+    ``symtable`` does the scope resolution and ``ast`` supplies both the line
+    number and the scope→node mapping, so a name defined in one function is
+    still reported when a *different* function references it without binding
+    it. (Tracking the scope matters: an earlier version deduped undefined names
+    by name alone and reported each at the file's first load line, which made
+    it flag a *defined* use — ``api/routes/cost.py:68`` — instead of the two
+    real misses at ``:230``/``:251``.)
     """
     tree = ast.parse(source, filename)
     module_table = symtable.symtable(source, filename, "exec")
     defined = _module_bound_names(module_table) | set(dir(builtins)) | _EXTRA_DEFINED
 
-    undefined: set[str] = set()
-    for table in _iter_scopes(module_table):
-        for sym in table.get_symbols():
-            if not sym.is_referenced():
-                continue
-            # Bound *in this scope* (local/param/import), or resolved by an
-            # enclosing function scope (free) — not undefined.
-            if sym.is_local() or sym.is_free() or sym.is_imported() or sym.is_parameter():
-                continue
-            if sym.get_name() not in defined:
-                undefined.add(sym.get_name())
+    def _is_undefined(table: symtable.SymbolTable, name: str) -> bool:
+        try:
+            sym = table.lookup(name)
+        except KeyError:
+            return False  # not referenced in this scope
+        if not sym.is_referenced():
+            return False
+        # Bound here (local/param/import) or closed over (free): fine.
+        if (sym.is_local() or sym.is_free() or sym.is_imported()
+                or sym.is_parameter()):
+            return False
+        return name not in defined
 
-    first_line: dict[str, int] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
-            cur = first_line.get(node.id)
-            if cur is None or node.lineno < cur:
-                first_line[node.id] = node.lineno
+    findings: set[tuple[int, str]] = set()
 
-    findings = [
-        (first_line.get(name, 0), name) for name in undefined
-    ]
-    findings.sort()
+    def _walk(nodes, table: symtable.SymbolTable) -> None:
+        # Symtable creates exactly one child table per scope opener, in source
+        # order, so consuming ``get_children()`` as the walker meets each
+        # opener keeps the AST node and its symbol table aligned.
+        children = list(table.get_children())
+        idx = 0
+
+        def _next_child() -> symtable.SymbolTable:
+            nonlocal idx
+            child = children[idx]
+            idx += 1
+            return child
+
+        def _scan(node) -> None:
+            if isinstance(node, _SCOPE_NODES):
+                child = _next_child()
+                for part in _scope_parent_parts(node):
+                    _scan(part)
+                _walk(_scope_child_parts(node), child)
+                return
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+                if _is_undefined(table, node.id):
+                    findings.add((node.lineno, node.id))
+                return
+            for sub in ast.iter_child_nodes(node):
+                _scan(sub)
+
+        for node in nodes:
+            _scan(node)
+        assert idx == len(children), (
+            f"scope/symtable desync in {table.get_name()} ({filename})")
+
+    _walk(list(tree.body), module_table)
     return [f"{filename}:{line}: Undefined name '{name}'"
-            for line, name in findings]
+            for line, name in sorted(findings)]
 
 
 def test_app_module_has_no_undefined_names():
@@ -170,10 +249,127 @@ def test_the_pre_fix_app_module_reported_the_orch_nameerror():
         "the guard must flag _orch in the pre-fix module; "
         f"findings were {findings!r}"
     )
-    # And it must be the *only* undefined name — no false positives on a real
-    # 600-line module.
-    orch = [f for f in findings if "'_orch'" in f]
-    assert len(orch) == 1, findings
+    # Every finding must be a *genuine* use of _orch — no false positives on a
+    # real 600-line module. (Each use is reported at its own line: the checker
+    # tracks scopes, so it does not collapse the six references into one.)
+    flagged = {f.rsplit("'", 2)[1] for f in findings}
+    assert flagged == {"_orch"}, findings
+
+
+# ---------------------------------------------------------------------------
+# Defense 1 (tree half): no undefined name anywhere under api/ or kairos/.
+#
+# A per-file guard only protects the file it names; a new F821 can land in any
+# other module and stay invisible until a request hits the branch. The scan is
+# line-independent — an allowlist entry is keyed by ``<relpath>:<name>``, not by
+# line, so editing above a symbol does not rot it.
+# ---------------------------------------------------------------------------
+_SCAN_ROOTS = ("api", "kairos")
+
+# ``<relpath>:<name>`` -> reason. Empty by design: api/ and kairos/ are clean.
+# An entry suppresses *every* use of that name in that file, so it must carry a
+# reason — and it goes stale (fails the test) the moment the name resolves.
+_UNDEFINED_NAME_ALLOWLIST: dict[str, str] = {}
+
+
+def _scan_paths():
+    for root in _SCAN_ROOTS:
+        base = REPO_ROOT / root
+        for path in sorted(base.rglob("*.py")):
+            if "__pycache__" in path.parts:
+                continue
+            yield path
+
+
+def _iter_undefined_findings(paths):
+    """Yield ``(rel, line, name, raw)`` for every F821-style use found."""
+    for path in paths:
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        source = path.read_text(encoding="utf-8")
+        for raw in find_undefined_names(source, rel):
+            head, _, quoted = raw.partition(": Undefined name ")
+            rel_part, _, line = head.rpartition(":")
+            yield rel_part, int(line), quoted.strip("'"), raw
+
+
+def audit_undefined_names(paths, allowlist):
+    """Return violations: un-allowlisted undefined names + rotted entries."""
+    violations: list[str] = []
+    used: set[str] = set()
+    for rel, _line, name, raw in _iter_undefined_findings(paths):
+        key = f"{rel}:{name}"
+        if key in allowlist:
+            used.add(key)
+            continue
+        violations.append(f"{raw} — import or define it")
+    for key, reason in sorted(allowlist.items()):
+        if key not in used:
+            violations.append(
+                f"stale undefined-name allowlist entry {key!r} ({reason!r}) — "
+                "the name now resolves; remove the entry"
+            )
+    return violations
+
+
+def test_no_undefined_names_across_api_and_kairos():
+    violations = audit_undefined_names(_scan_paths(), _UNDEFINED_NAME_ALLOWLIST)
+    assert violations == [], (
+        "an F821-style undefined name exists under api/ or kairos/ — a runtime "
+        "NameError waiting for a code path to reach it:\n  "
+        + "\n  ".join(violations)
+    )
+
+
+def test_undefined_name_allowlist_entries_do_not_rot():
+    """A fabricated entry for a name that *does* resolve must be reported."""
+    violations = audit_undefined_names(
+        [REPO_ROOT / "api" / "routes" / "cost.py"],
+        {"api/routes/cost.py:zzz_never_undefined": "fabricated"})
+    assert any("stale undefined-name allowlist entry" in v for v in violations), (
+        f"the stale-entry check did not fire; got {violations!r}"
+    )
+
+
+def test_undefined_name_checker_reports_the_true_line_not_the_first_load():
+    """Precision: a name imported in one function must not be reported at that
+    (defined) use just because a sibling function leaves it undefined — exactly
+    the ``api/routes/cost.py`` shape the old checker got wrong (it reported the
+    defined use at :68 instead of the real misses at :230/:251)."""
+    snippet = (
+        "def summary():\n"                              # 1
+        "    from kairos.cost import _get_log_path\n"    # 2  (local import)
+        "    return _get_log_path()\n"                   # 3  (defined — no report)
+        "\n"
+        "def replay():\n"                                # 5
+        "    return _get_log_path().parent\n"            # 6  (undefined — report)
+    )
+    findings = find_undefined_names(snippet, "snippet.py")
+    assert findings == ["snippet.py:6: Undefined name '_get_log_path'"], findings
+
+
+def test_undefined_name_checker_respects_nested_closures():
+    """A free variable from an enclosing scope is defined; a truly missing name
+    in a sibling function is still reported at its own line."""
+    snippet = (
+        "def outer():\n"                     # 1
+        "    import os\n"                    # 2
+        "    def inner():\n"                 # 3
+        "        return os.getcwd()\n"       # 4  (os is free — no report)
+        "    return inner()\n"               # 5
+        "def other():\n"                     # 6
+        "    return missing_thing\n"         # 7  (undefined — report)
+    )
+    findings = find_undefined_names(snippet, "snippet.py")
+    assert findings == ["snippet.py:7: Undefined name 'missing_thing'"], findings
+
+
+def test_the_cost_route_module_has_no_undefined_names():
+    """End-to-end precision on the real module that started this: it must be
+    clean (its two genuine misses were fixed, and :68 never was a bug)."""
+    findings = find_undefined_names(
+        (REPO_ROOT / "api" / "routes" / "cost.py").read_text(encoding="utf-8"),
+        "api/routes/cost.py")
+    assert findings == [], findings
 
 
 # ---------------------------------------------------------------------------

@@ -207,6 +207,65 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **5 处未定义名（新守卫上线第一分钟抓出的存量）全部修掉**：
+
+  | 位置 | 名字 | 原来的后果 | 修法 |
+  |---|---|---|---|
+  | `api/routes/agents.py:55` | `AgentTask` | `POST /api/agents/task` 一调就 `NameError`（被 `except` 转成 500，端点等于死的） | 函数内局部 import（模块级的 PEP-562 `__getattr__` 只在**属性访问**时触发，函数体里的裸名字根本不走它） |
+  | `api/routes/cost.py:230` / `:251` | `_get_log_path` | 两个 eval 端点炸（同文件另 5 个函数都有这个 import，只有这两个漏了） | 补 import |
+  | `api/routes/p2_features.py:91` | `_orch` | 自主提交的**唯一载体**发布从未发生 | 照同文件另 13 处调用点的写法 import |
+  | `api/routes/projects.py:1339` | `orchestrator` | 「agent 学到了什么」记忆面板**永远空白** | 改用本文件自己的 `_orch()` shim（**不新增**顶层 `from api.deps import orchestrator`，那会踩 `api.deps` 的 monkeypatch 约定） |
+  | `kairos/perf.py:168` | `field` | 死分支（`... if False else None`），无害 | 清掉死分支 |
+
+- **自主提交接口以前会返回「已排队」，而那个任务根本跑不了。** `POST .../autonomous` 里的
+  `try: await _orch().message_bus.publish("autonomous.submitted")` 配的是
+  **`except Exception: pass`** ⇒ 发布失败被静默吃掉 ⇒ 调用方拿到 `200 {"status":"queued"}`，
+  而工作是**注册了但永远跑不起来**。这比静默更坏：**返回体在撒谎**。
+  改法有事实依据 —— 核过 `kairos/autonomous_worker.py:128-139`（`_fetch_requirement`）：
+  worker 只从 `message_bus.recent()` 里按 `topic == 'autonomous.submitted'` + `job_id`
+  取任务文本，取不到就把任务标 `failed` ⇒ **发布是唯一通道**。所以现在
+  `logger.exception` + 把登记标 `failed` + **`HTTPException(503)`**，不再谎报 queued。
+
+- **`p2_features.py:1007` 的 `coder.chat`（LLM 副作用）也补上了痕迹**（原来同样是静默 `pass`）。
+
+### Added
+
+- **未定义名守卫铺到全树**（`tests/test_startup_wiring_guard.py`）：扫 `api/` + `kairos/`，
+  **0 容差**；`_UNDEFINED_NAME_ALLOWLIST` 按 `"<relpath>:<name>"` 键（行号无关）、必须带理由、
+  **过期报错**，终态为空。
+- **守卫精度重写**：老版本把未定义名收进一个全局名字集合、再按文件里第一个 `Load` 行报出去 ⇒
+  **真错报在错行、位置信息全丢**（在 `cost.py` 上表现为 `:68` 误报、`:230/:251` 漏报）。
+  现在每个 `ast.Name` 与**精确的 symtable 作用域**配对（作用域开启点↔symtable 子表的遍历，
+  正确处理装饰器、参数默认值/注解、以及推导式第一个 `iter` 属于父作用域），全树 259/259 无失配。
+  重写后历史红证**更强**：`git show 57221b4^:api/app.py` 喂进去会报出**全部 6 个** `_orch`
+  调用点（`:115/:125/:136/:137/:152/:153`），而现行 `api/app.py` 是 0 条。
+- **「不许 `except: pass` 吞掉」也成了常驻守卫**（`tests/test_pass_only_except_guard.py`，纯 `ast`，
+  不用正则）：枚举 `api/` + `kairos/` 里**函数体只有 `pass`** 的 `except` 处理器。白名单键
+  `"<relpath>::<qualname>::<exc>"`（行号无关）、每条必须带理由、**过期报错**；
+  **围着副作用调用的不许进白名单**（错误信息直接写 "give it a trace (log/raise); do NOT add it
+  to the allowlist"）。
+  存量：**174 条，其中 12 条被自动标成 `DEBT:`**（并把被吞的调用名写进理由：
+
+  | 位置 | 被吞掉的副作用 |
+  |---|---|
+  | `kairos/daemon.py::DaemonSupervisor._heartbeat` / `kairos/loop/loop_runner.py::_best_of_n_attempts` / `_maybe_auto_approve_plan` | `publish` |
+  | `kairos/tools/terminal.py::TerminalTool.execute` | `write` |
+  | `api/routes/websocket.py::collaboration_ws` | `send_json` |
+  | `kairos/daemon.py::DaemonSupervisor.start` | `write_text` |
+  | `kairos/tools/browser_tool.py::BrowserTool._dispatch` | `record_screenshot` |
+  | `kairos/tools/code_search.py::build_semble_index._build` | `save_index_to_cache` |
+  | `kairos/weixin_ilink.py::WeixinChannel.stop_account` | `notify_stop` |
+  | `kairos/llm/scripted.py::ScriptedProvider._record_cost` | `record_entry` |
+  | `kairos/cost.py::litellm_cost_callback` | `is_recording` |
+  | `kairos/observability.py::_OtelSpanAdapter.record_exception` | `record_exception` |
+
+  ）等一次专门清理（**其中 2 条在红线文件 `loop_runner.py` 里，需要单独授权**）；其余 162 条是
+  「无可识别副作用」（清理/可选探测/取消），自动分类入册。
+  **已知局限（如实）**：判定"有没有副作用"靠一份**固定的动词表** ⇒ 某个表外的副作用调用被静默
+  吞掉时会被误归入无害那类；12 条 `DEBT` 说明这套分类能抓住主要的那批。
+
+### Fixed
+
 - **微信 / 企微 / IM 发的东西在网页聊天页看不到。** 网页线程**只读库**（`GET /{id}/chat-messages`
   → `Persistence.load_messages(chat_only=True)`，只认 `CHAT_TOPICS`）；四个入站入口里只有网页端
   **既**把用户那条落库成 `user.chat`（`projects.py:544`）**又**把通用车道的回复发上总线

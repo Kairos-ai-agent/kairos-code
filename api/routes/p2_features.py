@@ -87,6 +87,7 @@ async def start_autonomous(project_id: str, body: AutonomousBody):
         gate=body.gate,
     )
     from kairos.core.message_bus import Message
+    from api.routes.projects import _orch
     try:
         await _orch().message_bus.publish(Message(
             sender="user", topic="autonomous.submitted",
@@ -96,8 +97,27 @@ async def start_autonomous(project_id: str, body: AutonomousBody):
                       "time_budget_s": body.time_budget_s,
                       "gate": body.gate},
         ))
-    except Exception:
-        pass
+    except Exception as exc:
+        # Publishing this message is the *only* channel by which the
+        # autonomous worker ever sees the task text: it polls the registry
+        # for a running job and then reads the requirement back off the bus
+        # by ``topic == 'autonomous.submitted'`` + ``job_id``
+        # (AutonomousWorker._fetch_requirement). A swallowed failure here
+        # leaves a registered-but-unrunnable job while the caller is told
+        # "queued" — so fail loudly instead of lying.
+        logger.exception(
+            "autonomous.submitted publish failed for job %s", job_id)
+        try:
+            get_registry().update_autonomous(
+                job_id, status="failed",
+                error="could not publish requirement to message bus")
+        except Exception:
+            logger.exception(
+                "failed to mark autonomous job %s as failed", job_id)
+        raise HTTPException(
+            503,
+            "could not submit autonomous task: message bus publish failed",
+        ) from exc
     return {"job_id": job_id, "status": "queued"}
 
 
@@ -1004,7 +1024,10 @@ async def harness_run(project_id: str, body: RunHarnessBody):
         try:
             await project.coder.chat(ag_task.description or task.prompt)
         except Exception:
-            pass
+            # Best-effort handoff: the harness reports the resulting diff, so
+            # a failed chat yields an empty diff. Record it so the failure is
+            # not invisible (never swallow a side-effecting call silently).
+            logger.exception("harness coder.chat failed for task %s", task.name)
         # Compute the diff between the initial state and current.
         return _diff_repo(work_dir, task)
 

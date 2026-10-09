@@ -52,6 +52,10 @@ async def chat_with_agent(request: ChatRequest, project_id: str = Query(..., des
 @router.post("/task")
 async def assign_task(request: AssignTaskRequest, project_id: str = Query(..., description="Project ID (required)")):
     """Assign a task to an agent."""
+    # Packaging R38.6.4: eager top-level import trips the PyInstaller
+    # bootloader (see module __getattr__ below), so import lazily here —
+    # the same convention the module already documents.
+    from kairos.agents.base import AgentTask
     task = AgentTask(
         id=uuid.uuid4().hex[:8],
         title=request.title,

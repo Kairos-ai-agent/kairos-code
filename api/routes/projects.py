@@ -1336,7 +1336,7 @@ async def get_loop_health(project_id: str):
     # learned" panel alongside the health badge. Best-effort: failure
     # to read memory tables never breaks the health response.
     try:
-        db = getattr(orchestrator, "_db", None)
+        db = getattr(_orch(), "_db", None)
         if db is not None:
             notes = db.list_project_notes(project_id, limit=50) or []
             skills = db.list_skills(project_id) or []

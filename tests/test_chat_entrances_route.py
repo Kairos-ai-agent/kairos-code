@@ -46,6 +46,19 @@ EXCLUDED = {
 #: 允许出现的直连 ``.chat(`` 个数，多一个就会被指名报错。
 ROUTE_EXEMPT: List[dict] = [
     {
+        "path": "api/routes/agents.py",
+        "func": "chat_with_agent",
+        "count": 1,
+        "reason": (
+            "调用方**显式指定了 agent 角色**（coder/reviewer，query + body 都要给），"
+            "这是一条低层、按角色定址的程序化 API（前端零调用：git grep 'agents/chat' "
+            "web/src/ 无命中，UI 走 /projects/{id}/chat）。再走一次 kairos.task_router."
+            "route_task 只会用「按需求文本猜出来的车道」覆盖调用方已经明确给出的目标，"
+            "是信息更少的决定，不是更安全的决定。理由同 p2_features.py::coder_harness "
+            "那条：语义上本就落在被指定的那个 agent 上。"
+        ),
+    },
+    {
         "path": "api/routes/p2_features.py",
         "func": "coder_harness",
         "count": 1,

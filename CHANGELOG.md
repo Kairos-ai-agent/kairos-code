@@ -34,6 +34,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **Streaming tool calls were silently dropped on the litellm provider.**
+  `litellm_provider.stream()`'s comment claimed it collapsed the incremental
+  tool-call deltas into a final sentinel, but there was no accumulator at all and
+  the sentinel was emitted only when the *terminal* chunk itself carried
+  `tool_calls` — which streaming providers never do. `_stream_complete` therefore
+  never saw a tool call and the model's tool use vanished. Deltas are now folded
+  by index (dict- or object-shaped, `id`/`name` first-wins, `arguments`
+  concatenated from string fragments) and the sentinel is emitted whenever the
+  accumulator is non-empty at end of stream; malformed chunks log instead of
+  crashing. Text-only streams are byte-identical. The sibling providers
+  (openai/anthropic/ollama/resilient) already accumulated correctly.
+
 - **Harness memory notes were written and read by nobody, so a note recorded in
   the Continual Harness panel never reached the agent.** `memory_notes` lived in
   `<project_dir>/.kairos/harness/harness.json` and only the HTTP layer ever

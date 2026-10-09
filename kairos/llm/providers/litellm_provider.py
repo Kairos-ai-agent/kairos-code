@@ -94,6 +94,54 @@ def _coerce_tools(tools: Optional[List[dict]]) -> Optional[List[dict]]:
     return tools
 
 
+def _field(obj: Any, name: str, default: Any = None) -> Any:
+    """Read ``name`` from either a dict-shaped or an object-shaped delta.
+
+    litellm chunks are normally pydantic objects, but a dict-shaped delta is
+    also reachable (proxy transports, hand-built test doubles). Reading both
+    shapes through one helper means a dict delta never raises ``AttributeError``
+    on the accumulation path.
+    """
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(name, default)
+    return getattr(obj, name, default)
+
+
+def _accumulate_tool_calls(store: Dict[Any, Dict[str, str]],
+                           tc_list: Any) -> None:
+    """Fold one chunk's incremental tool_call deltas into ``store`` keyed by index.
+
+    A real provider splits a single tool call across many chunks: the ``id``
+    and function ``name`` appear once and the JSON ``arguments`` arrive as
+    string fragments that must be concatenated in order. ``id``/``name`` take
+    their first non-empty value; ``arguments`` accumulates.
+    """
+    for tc_delta in tc_list:
+        idx = _field(tc_delta, "index")
+        if idx is None:
+            idx = 0
+        slot = store.setdefault(idx, {"id": "", "name": "", "arguments": ""})
+        call_id = _field(tc_delta, "id")
+        if call_id and not slot["id"]:
+            slot["id"] = str(call_id)
+        func = _field(tc_delta, "function")
+        if func is None:
+            continue
+        name = _field(func, "name")
+        if name and not slot["name"]:
+            slot["name"] = str(name)
+        frag = _field(func, "arguments")
+        if frag:
+            # Fragments are usually strings to concatenate; a non-string here
+            # is an already-structured payload (as ``complete()`` returns), so
+            # serialise it rather than corrupting the accumulator with repr().
+            if not isinstance(frag, str):
+                frag = json.dumps(frag, ensure_ascii=False)
+            slot["arguments"] += frag
+
+
 class LiteLLMProvider(BaseLLMProvider):
     """Unified provider that talks to 100+ LLM backends via litellm.
 
@@ -183,45 +231,79 @@ class LiteLLMProvider(BaseLLMProvider):
         kw = self._completion_kwargs(
             messages, tools, temperature, max_tokens, stream=True
         )
+        # A real provider streams a single tool call across *many* chunks: the
+        # id and function name appear once, then the JSON ``arguments`` arrive
+        # as string fragments. The terminal chunk (finish_reason="tool_calls")
+        # almost always carries ``delta.tool_calls is None``, so there is no
+        # complete payload to read off any single chunk — the deltas must be
+        # collapsed here, keyed by their ``index``.
+        tool_calls_by_index: Dict[Any, Dict[str, str]] = {}
         async for chunk in await litellm.acompletion(**kw):
-            # litellm stream chunks are typed objects with .choices[0].delta
+            # litellm stream chunks are typed objects with .choices[0].delta;
+            # a dict-shaped chunk is tolerated too. ``_field`` reads either.
+            choices = _field(chunk, "choices") or ()
             try:
-                delta = chunk.choices[0].delta
-            except (AttributeError, IndexError):
+                choice = choices[0]
+            except (AttributeError, IndexError, TypeError, KeyError):
+                logger.debug(
+                    "litellm stream chunk carried no choices; skipping (model=%s)",
+                    self.config.model,
+                )
                 continue
-            # Tool-call JSON sentinel: litellm emits incremental tool_call
-            # deltas; we collapse them into a final sentinel at the
-            # end. Until then, just yield the visible text.
-            text = getattr(delta, "content", None) if delta else None
+            delta = _field(choice, "delta")
+            if delta is None:
+                logger.debug(
+                    "litellm stream chunk had no delta; skipping (model=%s)",
+                    self.config.model,
+                )
+                continue
+            # Visible text streams through unchanged.
+            text = _field(delta, "content")
             if text:
                 yield text
-            # If the chunk carries a finish_reason of "tool_calls" with
-            # a complete tool_calls payload, emit a final sentinel so
-            # the existing _stream_complete parser in kairos.agents.base
-            # can pick it up.
-            try:
-                finish = chunk.choices[0].finish_reason
-            except (AttributeError, IndexError):
-                finish = None
-            if finish == "tool_calls":
-                # Final accumulated tool_calls
-                tool_calls = getattr(delta, "tool_calls", None) or []
-                if tool_calls:
-                    calls = []
-                    for tc in tool_calls:
-                        func = getattr(tc, "function", None) or {}
-                        args = func.get("arguments", "") or ""
-                        # Try to parse as JSON
-                        try:
-                            args_obj = json.loads(args)
-                        except (json.JSONDecodeError, TypeError):
-                            args_obj = args
-                        calls.append({
-                            "id": getattr(tc, "id", "") or "",
-                            "name": (func.get("name", "") if isinstance(func, dict) else getattr(func, "name", "")) or "",
-                            "arguments": args_obj,
-                        })
-                    yield json.dumps({"type": "tool_calls", "tool_calls": calls})
+            # Fold any incremental tool_call deltas into the accumulator. This
+            # runs on *every* chunk (not only the terminal one) because the
+            # arguments are spread across the stream.
+            tc_list = _field(delta, "tool_calls")
+            if tc_list:
+                try:
+                    _accumulate_tool_calls(tool_calls_by_index, tc_list)
+                except (AttributeError, TypeError, KeyError) as exc:
+                    # A malformed delta must not abort the stream, but it must
+                    # not vanish either — record it and carry on.
+                    logger.warning(
+                        "litellm stream: dropping malformed tool_call delta "
+                        "(model=%s): %s", self.config.model, exc,
+                    )
+        # End of stream: emit the collapsed tool calls as the sentinel the
+        # agent's ``_stream_complete`` recognises. Shape (verified against
+        # kairos/agents/agent_parts/llm.py::_stream_complete):
+        #   {"type": "tool_calls",
+        #    "tool_calls": [{"id": str, "name": str, "arguments": <obj|str>}]}
+        # Triggered whenever the accumulator is non-empty — more robust than
+        # keying off finish_reason, which some providers omit.
+        if tool_calls_by_index:
+            calls: List[Dict[str, Any]] = []
+            for idx in sorted(tool_calls_by_index):
+                slot = tool_calls_by_index[idx]
+                raw = slot["arguments"]
+                try:
+                    args_obj: Any = json.loads(raw) if raw else {}
+                except (json.JSONDecodeError, TypeError, ValueError) as exc:
+                    # Broken/partial JSON is forwarded verbatim for the caller
+                    # to inspect, but never silently.
+                    logger.debug(
+                        "litellm stream: tool_call %r arguments are not valid "
+                        "JSON (%s); forwarding the raw string",
+                        slot["name"], exc,
+                    )
+                    args_obj = raw
+                calls.append({
+                    "id": slot["id"],
+                    "name": slot["name"],
+                    "arguments": args_obj,
+                })
+            yield json.dumps({"type": "tool_calls", "tool_calls": calls})
 
 
 def _to_response(resp: Any) -> LLMResponse:

@@ -17,7 +17,13 @@ it determines what happens when the permission policy says
 
 The mode is consulted by ``decide(policy, tool, resource)``,
 which returns the final ``Decision.ALLOW``/``ASK``/``DENY`` for
-a given tool call.
+a given tool call. The shipped default is ``FULL_AUTO``
+(:data:`DEFAULT_MODE`): reading, writing and running do not ask.
+The unconditional rules live in :mod:`kairos.sentinel` (credential
+stores, a policy ``DENY``, tainted egress / tainted secret read)
+and are consulted *before* the mode, so they still refuse. A
+process-wide ``KAIROS_APPROVAL_MODE`` acts as a ceiling and can
+only tighten the outcome, never loosen it.
 """
 from __future__ import annotations
 
@@ -60,10 +66,16 @@ class ApprovalMode(str, enum.Enum):
         }[self]
 
 
-# Tools considered "read-only" — silent in SUGGEST and EDIT modes.
+# Tools considered "read-only" — silent in SUGGEST and EDIT modes (and in
+# FULL_AUTO like everything else). Every name here must be a tool that
+# *really* exists (see tests/test_read_only_ladder_guard.py, which asserts it
+# against the shipped tool classes) and that only reads: it writes nothing,
+# runs no process and opens no egress. ``webfetch`` is the one network read
+# the original set kept; it is a pull, not a write.
 READ_ONLY_TOOLS: frozenset = frozenset({
-    "file_read", "grep", "find", "code_search", "git_diff", "git_log", "git_show",
-    "webfetch", "list_skills", "list_agents",
+    "file_read", "grep", "find", "code_search", "history_search",
+    "doc_read", "xlsx_read", "data_analyze",
+    "webfetch",
 })
 
 
@@ -95,8 +107,14 @@ def decide(
     # definitive allow/deny. Apply the approval mode.
     if mode == ApprovalMode.FULL_AUTO:
         return Decision.ALLOW, "full-auto mode allows anything not denied"
-    if mode == ApprovalMode.EDIT and tool in READ_ONLY_TOOLS:
-        return Decision.ALLOW, f"edit mode auto-allows read-only tool {tool!r}"
+    if tool in READ_ONLY_TOOLS:
+        # Reads are silent in *both* interactive tiers: SUGGEST only ever
+        # gates the non-trivial action (a write, a shell command), and EDIT
+        # additionally silences writes. Asking to read a file the user just
+        # handed the agent is friction with no safety value.
+        return Decision.ALLOW, (
+            f"{mode.value} mode auto-allows read-only tool {tool!r}"
+        )
     return Decision.ASK, f"mode={mode.value} requires user approval"
 
 
@@ -110,8 +128,13 @@ def decide_with_mode_name(
     return decide(policy, tool, resource, ApprovalMode.parse(mode_name))
 
 
-# Default-mode helper for one-off CLI invocations.
-DEFAULT_MODE = ApprovalMode.SUGGEST
+# The shipped default. Agents run without interrupting the user for a file
+# write or a shell command; only the unconditional safety rules (credential
+# stores, policy DENY, tainted egress / tainted secret read) stop a call.
+# ``KAIROS_APPROVAL_MODE`` is still a *ceiling* (see ``effective_mode``): an
+# operator who exports a stricter mode tightens every project, and a project
+# may be stricter than the ceiling, never looser.
+DEFAULT_MODE = ApprovalMode.FULL_AUTO
 
 # Strictest first. Used to combine two sources of intent — a project's stored
 # setting and a process-wide ceiling — without letting either loosen the other.

@@ -156,9 +156,15 @@ def test_the_endpoint_reports_the_record_not_the_mirror(fake_orch):
     assert "Edit" in out["label"]
 
 
-def test_the_default_project_reads_as_suggest(fake_orch):
+def test_the_default_project_reads_as_the_shipped_default(fake_orch):
+    """A project that never chose a mode reads as the module default.
+
+    The shipped default is ``full-auto`` (:data:`kairos.approval.DEFAULT_MODE`),
+    so a fresh project no longer asks before a write or a shell command.
+    """
+    from kairos.approval import DEFAULT_MODE
     out = asyncio.run(get_approval_mode("p1"))
-    assert out["mode"] == "suggest"
+    assert out["mode"] == DEFAULT_MODE.value
 
 
 def test_the_attach_path_applies_the_stored_mode():

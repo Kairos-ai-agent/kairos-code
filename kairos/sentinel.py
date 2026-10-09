@@ -58,7 +58,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from kairos.approval import ApprovalMode, effective_mode, mode_from_env
+from kairos.approval import ApprovalMode, DEFAULT_MODE, effective_mode, mode_from_env
 from kairos.permissions import Decision, PermissionPolicy, PermissionRule
 from kairos.taint import TaintTracker, is_network_tool, mcp_server_of
 
@@ -490,7 +490,7 @@ class Sentinel:
     """The gate. One instance per process; agents read their taint into it."""
 
     def __init__(self, policy: Optional[PermissionPolicy] = None,
-                 mode: ApprovalMode = ApprovalMode.SUGGEST,
+                 mode: ApprovalMode = DEFAULT_MODE,
                  audit: Optional[SentinelAudit] = None,
                  enabled: Optional[bool] = None,
                  strict: Optional[bool] = None) -> None:

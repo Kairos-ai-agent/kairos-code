@@ -560,12 +560,14 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
         # serve several projects, so the mode follows the attached project.
         try:
             from kairos.sentinel import get_sentinel
+            from kairos.approval import DEFAULT_MODE
             metadata = getattr(project, "metadata", None)
             stored = ""
             if isinstance(metadata, dict):
                 stored = metadata.get("approval_mode") or ""
             if not stored:
-                stored = getattr(project.runtime, "approval_mode", "") or "suggest"
+                stored = getattr(project.runtime, "approval_mode", "") \
+                    or DEFAULT_MODE.value
             project.runtime.approval_mode = get_sentinel().set_mode(stored).value
         except Exception as e:  # noqa: BLE001
             logger.warning("approval mode wiring failed for %s: %s", project.id, e)

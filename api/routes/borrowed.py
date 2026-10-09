@@ -14,6 +14,8 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from kairos.approval import DEFAULT_MODE
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/borrowed", tags=["borrowed"])
@@ -316,7 +318,7 @@ async def invoke_skill_route(project_id: str, body: InvokeSkillBody):
 class ApprovalRequestBody(BaseModel):
     tool: str
     resource: str
-    mode: str = "suggest"
+    mode: str = DEFAULT_MODE.value
 
 
 @router.post("/{project_id}/approval/decide")

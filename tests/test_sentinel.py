@@ -169,7 +169,11 @@ def test_the_ladder_is_advisory_by_default(audit):
 
 
 def test_strict_mode_turns_ask_into_a_refusal(tmp_path):
-    strict = Sentinel(audit=SentinelAudit(directory=tmp_path), enabled=True, strict=True)
+    # SUGGEST pinned: the write must be an ASK before strict can refuse it
+    # (the shipped default is full-auto, where a write never asks).
+    strict = Sentinel(mode=ApprovalMode.SUGGEST,
+                      audit=SentinelAudit(directory=tmp_path), enabled=True,
+                      strict=True)
     ruling = strict.authorize("file_write", {"path": "a.txt"})
     assert ruling.denied
     assert ruling.rule == "strict-ask"

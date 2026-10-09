@@ -12,6 +12,7 @@ import pytest
 
 from kairos import approvals
 from kairos.agents.base import KairosAgent
+from kairos.approval import ApprovalMode
 from kairos.sentinel import Decision, Sentinel, SentinelAudit
 from kairos.tools.base import ToolResult
 
@@ -21,7 +22,10 @@ def sentinel(tmp_path, monkeypatch):
     # Audit and standing rules must never land in the user's real directories.
     monkeypatch.setenv("KAIROS_SENTINEL_AUDIT_DIR", str(tmp_path / "audit"))
     monkeypatch.setenv("KAIROS_DATA_DIR", str(tmp_path / "data"))
-    s = Sentinel(audit=SentinelAudit(directory=tmp_path / "audit"))
+    # Pin SUGGEST: the shipped default is full-auto (nothing asks), so the ASK
+    # machinery this file is about only comes alive in an interactive tier.
+    s = Sentinel(mode=ApprovalMode.SUGGEST,
+                 audit=SentinelAudit(directory=tmp_path / "audit"))
     s.reload()
     return s
 

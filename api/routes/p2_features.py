@@ -171,7 +171,7 @@ async def get_approval_mode(project_id: str):
     project = _orch().get_project(project_id)
     if not project:
         raise HTTPException(404, "Project not found: " + project_id)
-    from kairos.approval import ApprovalMode
+    from kairos.approval import ApprovalMode, DEFAULT_MODE
     # The project record is the source of truth; the runtime value is only a
     # mirror of what the gate is currently running (they differ before attach,
     # and after a ceiling in KAIROS_APPROVAL_MODE tightens the mode).
@@ -182,7 +182,7 @@ async def get_approval_mode(project_id: str):
     if not stored:
         stored = getattr(project.runtime, "approval_mode", "") \
             if hasattr(project, "runtime") and project.runtime else ""
-    mode = ApprovalMode.parse(stored or "suggest")
+    mode = ApprovalMode.parse(stored or DEFAULT_MODE.value)
     from kairos.sentinel import get_sentinel
     return {
         "mode": mode.value,

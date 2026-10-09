@@ -11,6 +11,9 @@ know about this project and this kind of work". It stitches together:
   6. FTS5-relevant past rounds (replaces naive "last 5")
   7. Global KB insights — cross-project lessons matched on keywords
   8. Cross-loop advisory — repeated patterns the heuristics already detect
+  9. Harness notes — the agent's own memory_notes from the Continual Harness
+     panel (`<project>/.kairos/harness/harness.json`), so a note recorded
+     there actually reaches the prompt instead of being write-only.
 
 Every section is bounded in tokens. The whole block is returned as one
 string ready to be prepended to the Coder requirement.
@@ -25,6 +28,8 @@ import logging
 import time
 from typing import Any, Iterable, List, Optional
 
+from kairos.continual_harness import load_memory_notes
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,6 +41,11 @@ MAX_COMMENTS_TOKENS = 500
 MAX_ASK_TOKENS = 400
 MAX_HISTORY_TOKENS = 1200
 MAX_GLOBAL_TOKENS = 400
+# Harness notes are a peer of project notes (limit=12 below), so the bound is
+# the same order of magnitude. Newest-first: the most recent self-edit is the
+# most relevant, and 8 keeps even a heavily-used harness from dominating.
+MAX_HARNESS_NOTES = 8
+MAX_HARNESS_TOKENS = 500
 MAX_TOTAL_TOKENS = 4500
 
 # Memory records what was true *then*, it is not a description of now: a note
@@ -121,6 +131,48 @@ def _render_notes(notes: List[dict]) -> str:
         age = _age_suffix(n.get("updated_at"), n.get("created_at"))
         lines.append(f"- [{kind}] {title} ({src}{age}): {body}")
     return _truncate_to_tokens("\n".join(lines), MAX_NOTES_TOKENS)
+
+
+def _norm_for_dedup(text: Any) -> str:
+    """Whitespace/case-folded key for "is this the same note twice?".
+
+    Used to keep a lesson that lives in both the project-notes table and the
+    harness from being injected twice in one prompt.
+    """
+    return " ".join(str(text or "").split()).strip().lower()
+
+
+def _render_harness_notes(notes: List[dict], exclude: Optional[set] = None) -> str:
+    """Render the agent's own Continual-Harness ``memory_notes``.
+
+    ``exclude`` holds normalised texts already injected elsewhere (the project
+    notes rendered just before this), so the same content is not stated twice
+    in one prompt. A header names the source so the model can tell a
+    self-recorded harness note from a user/auto project note.
+    """
+    if not notes:
+        return ""
+    exclude = exclude or set()
+    lines = ["## Harness Notes (self-recorded via the Continual Harness panel)"]
+    seen: set = set()
+    for n in notes:
+        key = (n.get("key") or "").strip() or "(untitled)"
+        value = (n.get("value") or "").strip()
+        if not value:
+            continue
+        norm = _norm_for_dedup(value)
+        if norm in exclude or norm in seen:
+            continue
+        seen.add(norm)
+        tags = n.get("tags")
+        tag_s = ""
+        if isinstance(tags, list) and tags:
+            tag_s = " [" + ", ".join(str(t) for t in tags[:5]) + "]"
+        age = _age_suffix(n.get("updated_at"), n.get("added_at"))
+        lines.append(f"- {key}{tag_s} (harness{age}): {value}")
+    if len(lines) == 1:  # header only — every note was dropped
+        return ""
+    return _truncate_to_tokens("\n".join(lines), MAX_HARNESS_TOKENS)
 
 
 def _render_skills(skills: List[dict]) -> str:
@@ -222,6 +274,31 @@ def _render_global_insights(insights: List[dict]) -> str:
     return _truncate_to_tokens("\n".join(lines), MAX_GLOBAL_TOKENS)
 
 
+def _resolve_project_dir(persistence: Any, project_id: str) -> Optional[str]:
+    """Best-effort location of a project's on-disk directory.
+
+    Mirrors ``api.routes.p2_features._project_work_dir`` — ``work_dir`` first,
+    then ``workspace`` — because that is the directory the harness store writes
+    ``.kairos/harness/harness.json`` under, and the read must use the *same*
+    directory as the write or the note stays invisible. Returns None when the
+    project cannot be resolved, so the harness section is skipped rather than
+    guessed at (never silently reads some other project's notes).
+    """
+    if not project_id:
+        return None
+    try:
+        rows = persistence.load_projects()
+    except Exception:
+        logger.debug("memory: project lookup for harness failed", exc_info=True)
+        return None
+    for row in rows or []:
+        if str(row.get("id")) != str(project_id):
+            continue
+        directory = row.get("work_dir") or row.get("workspace")
+        return str(directory) if directory else None
+    return None
+
+
 def assemble_coder_memory(
     persistence: Any,
     project_id: str,
@@ -247,8 +324,14 @@ def assemble_coder_memory(
     sections: List[str] = []
 
     # 1. Project notes (most-used first)
+    project_note_norms: set = set()
     try:
         notes = persistence.list_project_notes(project_id, limit=12)
+        for n in notes:
+            for field in ("title", "body"):
+                norm = _norm_for_dedup(n.get(field))
+                if norm:
+                    project_note_norms.add(norm)
         rendered = _render_notes(notes)
         if rendered:
             sections.append(rendered)
@@ -260,6 +343,20 @@ def assemble_coder_memory(
                     pass
     except Exception:
         logger.debug("memory: notes retrieval failed", exc_info=True)
+
+    # 1b. Harness notes — the agent's own Continual-Harness memory_notes.
+    # Same "notes" family as (1): read from the project's harness file the
+    # harness API writes, bounded the same way, and deduped against the
+    # project notes just rendered so one lesson is not stated twice.
+    try:
+        project_dir = _resolve_project_dir(persistence, project_id)
+        if project_dir:
+            harness_notes = load_memory_notes(project_dir, limit=MAX_HARNESS_NOTES)
+            rendered = _render_harness_notes(harness_notes, exclude=project_note_norms)
+            if rendered:
+                sections.append(rendered)
+    except Exception:
+        logger.debug("memory: harness-notes retrieval failed", exc_info=True)
 
     # 2. Skills — match on requirement text + last failure text
     try:

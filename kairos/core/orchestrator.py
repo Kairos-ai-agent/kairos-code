@@ -323,6 +323,13 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
         #: (Also reachable via ``getattr`` — some tests build the
         #: orchestrator with ``__new__`` and skip this initialiser.)
         self._mcp_registries: dict = {}
+        #: The effective-MCP-config fingerprint each project's live registry was
+        #: built from, keyed by project id. Compared on every attach so a real
+        #: edit of ``.kairos/mcp.yaml`` (or the user scope) triggers a
+        #: close-then-swap reload, while an unchanged config keeps the registry
+        #: (and its subprocesses) exactly as they are. (Reachable via
+        #: ``getattr`` — some tests build the orchestrator with ``__new__``.)
+        self._mcp_fingerprints: dict = {}
         # In-memory cache of per-project Best-of-N override; the API
         # reads/writes this and start_loop copies it into the session.
         if db is None:
@@ -448,17 +455,28 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
         # non-git or unwritable project still gets a working agent.
         coder_root = effective_root
         reviewer_root = effective_root
-        try:
-            cw, rw = self._create_role_worktrees(effective_root)
-            if cw is not None:
-                project.runtime.coder_worktree = cw
-                coder_root = str(cw.path)
-            if rw is not None:
-                project.runtime.reviewer_worktree = rw
-                reviewer_root = str(rw.path)
-        except Exception as e:  # noqa: BLE001
-            logger.warning("worktree setup failed for %s: %s", project.id, e)
-            project.runtime.attach_errors.append(f"worktree: {e}")
+        # A re-attach (an MCP-config reload, a cache-miss rehydrate) must reuse
+        # the worktrees the project already owns. Creating a second pair would
+        # orphan the first pair's checkouts on disk.
+        existing_coder_wt = project.runtime.coder_worktree
+        existing_reviewer_wt = project.runtime.reviewer_worktree
+        if existing_coder_wt is not None or existing_reviewer_wt is not None:
+            if existing_coder_wt is not None:
+                coder_root = str(existing_coder_wt.path)
+            if existing_reviewer_wt is not None:
+                reviewer_root = str(existing_reviewer_wt.path)
+        else:
+            try:
+                cw, rw = self._create_role_worktrees(effective_root)
+                if cw is not None:
+                    project.runtime.coder_worktree = cw
+                    coder_root = str(cw.path)
+                if rw is not None:
+                    project.runtime.reviewer_worktree = rw
+                    reviewer_root = str(rw.path)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("worktree setup failed for %s: %s", project.id, e)
+                project.runtime.attach_errors.append(f"worktree: {e}")
 
         coder_tools = [
             FileReadTool(allowed_root=coder_root),
@@ -673,8 +691,17 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
             project.runtime.attach_errors.append(f"guardrail: {e}")
 
         # Live-reload of skills for this project. The watcher polls
-        # once a second; if no project_dir is set we skip it.
+        # once a second; if no project_dir is set we skip it. A re-attach
+        # stops the previous watcher first, so consecutive attaches never
+        # leave two pollers running for the same project.
         try:
+            prev_watcher = project.runtime.skills_watcher
+            if prev_watcher is not None:
+                try:
+                    prev_watcher.stop_sync()
+                except Exception as e:  # noqa: BLE001
+                    logger.debug("previous skills watcher stop failed: %s", e)
+                project.runtime.skills_watcher = None
             self._attach_skills_watcher(project, effective_root)
         except Exception as e:  # noqa: BLE001
             logger.warning("SkillsWatcher attach failed for %s: %s",
@@ -693,81 +720,228 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
         project.runtime.attached_at = time.time()
 
     def _attach_mcp(self, project: Project, work_dir: str) -> List[Any]:
-        """Load MCP servers from `<work_dir>/.kairos/mcp.yaml` and
-        start them. Returns the list of MCP-sourced tools (Kairos
-        BaseTool instances) ready to append to a role's toolset.
+        """Attach this project's MCP servers, reloading only on a real change.
 
-        The registry is stored on `project.runtime.mcp_registry` so
-        it can be closed on shutdown.
+        Returns the list of MCP-sourced tools (Kairos BaseTool instances) ready
+        to append to a role's toolset. The registry is stored on
+        ``project.runtime.mcp_registry`` so it can be closed on shutdown.
+
+        One live registry per project. A rebuild is free while the effective
+        config is unchanged; a *reload* (close-then-swap) happens only when the
+        fingerprint of the user-editable config files actually moved. The old
+        code built a brand-new ``McpRegistry`` on every attach and then
+        overwrote ``runtime.mcp_registry`` with it, orphaning the previous
+        registry's MCP subprocesses (~100MB each) with nothing left to
+        ``close_all`` them — the process leak (an instance spawned new
+        ``--mcp-serve`` children every few seconds and never reaped the old
+        ones). Reuse keeps the child count flat; the fingerprint check restores
+        the "edit mcp.yaml and it takes effect" behaviour that pure reuse had
+        removed.
+
+        Two sources are checked for the existing registry: the runtime handle on
+        this Project object, and a process-level map keyed by project id (so a
+        rebuilt Project — a cache-miss rehydrate — still finds its registry
+        instead of spawning a second set).
         """
         from kairos.mcp_client import McpRegistry, should_defer_start
         if not work_dir:
             return []
-        # One live registry per project — never build a second one. This
-        # method can run more than once for the same project: the lazy retry
-        # in ``get_project``, a cache-miss rehydrate, or a manual
-        # re-attach all call ``_create_agents`` again. The old code built a
-        # brand-new ``McpRegistry`` on every one of those and then overwrote
-        # ``runtime.mcp_registry`` with it, orphaning the previous registry's
-        # MCP subprocesses (~100MB each) with nothing left to ``close_all``
-        # them — the process leak (an instance spawned new ``--mcp-serve``
-        # children every few seconds and never reaped the old ones).
-        # Reusing the registry the project already owns makes a rebuild free:
-        # no new children, same tool set, no growth. Two sources are checked:
-        # the runtime handle on this Project object, and a process-level map
-        # keyed by project id (so a rebuilt Project — a cache-miss rehydrate —
-        # still finds its registry instead of spawning a second set).
         regs = getattr(self, "_mcp_registries", None)
         if regs is None:
             regs = {}
             self._mcp_registries = regs
+        fps = getattr(self, "_mcp_fingerprints", None)
+        if fps is None:
+            fps = {}
+            self._mcp_fingerprints = fps
+
+        fingerprint = self._mcp_config_fingerprint(work_dir)
+
         existing = regs.get(project.id)
         if existing is None:
             existing = getattr(project.runtime, "mcp_registry", None)
+
         if existing is not None:
-            regs[project.id] = existing
-            project.runtime.mcp_registry = existing
-            return list(existing.all_tools())
+            stored = fps.get(project.id)
+            if stored is None or stored == fingerprint:
+                # Unchanged (or provenance unknown): reuse. No new children, same
+                # tool set, no growth. Record the fingerprint so a later edit is
+                # still noticed.
+                fps[project.id] = fingerprint
+                regs[project.id] = existing
+                project.runtime.mcp_registry = existing
+                return list(existing.all_tools())
+            # The effective config changed on disk. Bounded reload: the old
+            # registry is closed BEFORE the replacement is built and started, so
+            # two live sets never coexist.
+            reloaded = self._reload_mcp_registry(
+                project, existing, work_dir, fingerprint)
+            if reloaded is None:
+                # close_all raised while stopping the old registry. Building a
+                # second live registry would leave the old children orphaned
+                # with nothing pointing at them — exactly the leak — so keep the
+                # old one and leave a trace. The change is deferred, not lost:
+                # the next attach sees the same fingerprint gap and retries.
+                regs[project.id] = existing
+                project.runtime.mcp_registry = existing
+                note = ("mcp: reload deferred — closing the previous registry "
+                        "for this project failed")
+                if note not in project.runtime.attach_errors:
+                    project.runtime.attach_errors.append(note)
+                return list(existing.all_tools())
+            return reloaded
+
         reg = McpRegistry()
         try:
             reg.load(project_dir=Path(work_dir))
         except Exception as e:  # noqa: BLE001
             logger.debug("MCP load skipped for %s: %s", project.id, e)
             return []
-        # start_all is async, so who starts it depends on the caller:
-        #
-        #   * a running loop (a request, a script) -- scheduled, the caller
-        #     never waits for a server;
-        #   * no loop while the app is starting (it set the flag before
-        #     building this orchestrator) -- deferred, because the app is
-        #     about to open a port and the servers would delay it. This is
-        #     what made a double-click sit on "127.0.0.1 refused to connect":
-        #     five configured servers were awaited before uvicorn owned a
-        #     port, 129 seconds of it;
-        #   * no loop anywhere else (a library caller) -- started inline, as
-        #     before: it is the caller's own startup, not a port somebody is
-        #     already waiting on.
+        self._start_registry(reg, project, should_defer_start)
+        project.runtime.mcp_registry = reg
+        regs[project.id] = reg
+        fps[project.id] = fingerprint
+        return list(reg.all_tools())
+
+    def _mcp_config_fingerprint(self, work_dir: str) -> str:
+        """Fingerprint of the user-editable MCP config under ``work_dir``.
+
+        Best-effort: any error degrades to ``""`` so a fingerprint problem can
+        never block an attach. The heavy part (hashing the files) is cached in
+        ``mcp_client`` on ``(mtime_ns, size)``, so the hot path only pays a
+        ``stat`` per file and only re-reads a file that actually moved.
+        """
+        if not work_dir:
+            return ""
+        try:
+            from kairos.mcp_client import mcp_config_fingerprint
+            return mcp_config_fingerprint(project_dir=Path(work_dir))
+        except Exception as e:  # noqa: BLE001
+            logger.debug("mcp config fingerprint failed for %s: %s", work_dir, e)
+            return ""
+
+    @staticmethod
+    def _start_registry(reg, project: Project, should_defer_start) -> None:
+        """Run or schedule ``reg.start_all()`` to match the caller's context.
+
+        A running loop (a request) schedules it — a request must not block on
+        server startup. With no loop anywhere else (a script, the startup path)
+        it starts inline, or defers when the app is about to open a port (see
+        :func:`kairos.mcp_client.should_defer_start`). Never raises.
+        """
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                # Fire-and-forget: schedule start_all on the running loop.
                 loop.create_task(reg.start_all())
-            elif should_defer_start():
+                return
+            if should_defer_start():
                 reg.defer_start()
-            else:
-                loop.run_until_complete(reg.start_all())
+                return
+            loop.run_until_complete(reg.start_all())
         except RuntimeError:
             if should_defer_start():
                 reg.defer_start()
-            else:
+                return
+            try:
+                asyncio.run(reg.start_all())
+            except Exception as e:  # noqa: BLE001
+                logger.debug("MCP start_all failed for %s: %s", project.id, e)
+        except Exception as e:  # noqa: BLE001
+            logger.debug("MCP start scheduling failed for %s: %s", project.id, e)
+
+    @staticmethod
+    def _run_coroutine(coro) -> None:
+        """Run ``coro`` to completion on this thread (no loop is running here).
+
+        Some embedders leave a closed loop as the thread's current loop, so fall
+        back to ``asyncio.run`` when that one is unusable.
+        """
+        try:
+            loop = asyncio.get_event_loop()
+        except Exception:  # noqa: BLE001
+            loop = None
+        if loop is not None and not loop.is_closed():
+            try:
+                if not loop.is_running():
+                    loop.run_until_complete(coro)
+                    return
+            except RuntimeError as e:
+                # A closed / unusable current loop: fall through to a fresh one
+                # instead of failing the reload.
+                logger.debug("event loop unusable for MCP reload (%s); "
+                             "starting a fresh one", e)
+        asyncio.run(coro)
+
+    def _reload_mcp_registry(self, project: Project, old, work_dir: str,
+                             fingerprint: str) -> Optional[List[Any]]:
+        """Close ``old`` then build + start a replacement, in that order.
+
+        Returns the replacement's tools, or ``None`` when ``old`` could not be
+        closed — the caller then keeps it, never a second live registry.
+
+        Ordering is the whole point: if the old subprocesses are not reaped
+        before the new ones spawn, a reload is just the original churn with
+        extra steps.
+        """
+        from kairos.mcp_client import McpRegistry, should_defer_start
+        try:
+            loop = asyncio.get_event_loop()
+            running = loop.is_running()
+        except RuntimeError:
+            loop = None
+            running = False
+
+        if running:
+            # Inside a request: a fresh coroutine cannot be run to completion
+            # here, so the whole close-then-swap runs as ONE task on this loop.
+            # One task (not a fire-and-forget close plus a separate start) is
+            # what keeps the order from interleaving the other way.
+            #
+            # Record the fingerprint now so a second request arriving mid-swap
+            # does not queue another reload; restore it if the swap fails so a
+            # later attach can retry.
+            prev_fp = self._mcp_fingerprints.get(project.id)
+            self._mcp_fingerprints[project.id] = fingerprint
+
+            async def _swap() -> None:
                 try:
-                    asyncio.run(reg.start_all())
+                    await old.close_all()
                 except Exception as e:  # noqa: BLE001
-                    logger.debug(
-                        "MCP start_all failed for %s: %s", project.id, e)
-                    return []
+                    logger.warning(
+                        "mcp: reload aborted for %s — close_all failed: %s",
+                        project.id, e)
+                    self._mcp_fingerprints[project.id] = prev_fp
+                    return
+                reg = McpRegistry()
+                try:
+                    reg.load(project_dir=Path(work_dir))
+                except Exception as e:  # noqa: BLE001
+                    logger.debug("MCP reload load skipped for %s: %s",
+                                 project.id, e)
+                self._mcp_registries[project.id] = reg
+                project.runtime.mcp_registry = reg
+                await reg.start_all()
+
+            loop.create_task(_swap())
+            return []
+
+        # No running loop (a script, a test, the startup path): do it inline so
+        # the caller sees the finished swap.
+        try:
+            self._run_coroutine(old.close_all())
+        except Exception as e:  # noqa: BLE001
+            logger.warning("mcp: reload aborted for %s — close_all failed: %s",
+                           project.id, e)
+            return None
+        reg = McpRegistry()
+        try:
+            reg.load(project_dir=Path(work_dir))
+        except Exception as e:  # noqa: BLE001
+            logger.debug("MCP reload load skipped for %s: %s", project.id, e)
+        self._mcp_registries[project.id] = reg
         project.runtime.mcp_registry = reg
-        regs[project.id] = reg
+        self._mcp_fingerprints[project.id] = fingerprint
+        self._start_registry(reg, project, should_defer_start)
         return list(reg.all_tools())
 
     def _attach_manifest(self, project: Project, work_dir: str) -> None:
@@ -831,7 +1005,16 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
         failure can retry again.
         """
         pid = project.id
-        if project.coder is not None or pid in self._attach_failures:
+        if project.coder is not None:
+            # Already wired. A live edit of the effective MCP config must still
+            # take effect without a restart, so the hot path checks the cheap
+            # fingerprint once per request. Only an actual change re-attaches;
+            # an unchanged config never rebuilds anything (that per-request
+            # churn was the subprocess leak).
+            if self._mcp_config_changed(project):
+                self._reattach_for_mcp_change(project)
+            return
+        if pid in self._attach_failures:
             return
         self._attach_failures.add(pid)
         try:
@@ -850,6 +1033,39 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
             self._attach_failures.discard(pid)
         # else: returned without wiring the project — keep the marker so we
         # do not rebuild the registry on every request.
+
+    def _mcp_config_changed(self, project: Project) -> bool:
+        """True when the effective MCP config moved since the last attach.
+
+        Cheap by design: the fingerprint is cached on ``(mtime_ns, size)`` in
+        ``mcp_client``, so an unchanged config costs one ``stat`` per config
+        file, and only a file that actually moved is re-read. Returns False when
+        no fingerprint has been recorded yet — a project we never attached has
+        nothing to compare against, and the attach itself will record one.
+        """
+        stored = getattr(self, "_mcp_fingerprints", {}).get(project.id)
+        if stored is None:
+            return False
+        work_dir = project.work_dir or str(project.workspace)
+        return self._mcp_config_fingerprint(work_dir) != stored
+
+    def _reattach_for_mcp_change(self, project: Project) -> None:
+        """Re-wire a live project after its effective MCP config changed.
+
+        Bounded: only reached when the fingerprint actually moved. The reload
+        itself is the close-then-swap inside ``_attach_mcp``; running it through
+        ``_create_agents`` is what hands the *new* tools to the agents (they are
+        baked in at construction). ``_create_agents`` is re-entrant here: it
+        reuses the project's worktrees and stops the previous skills watcher.
+        """
+        logger.info("mcp: effective config changed for %s — reloading the "
+                    "registry and re-wiring its agents", project.id)
+        try:
+            self._create_agents(project)
+        except Exception:  # noqa: BLE001
+            logger.warning("mcp: re-attach after a config change failed for %s; "
+                           "attach_errors: %s", project.id,
+                           getattr(project.runtime, "attach_errors", []))
 
     def get_project(self, project_id: str) -> Optional[Project]:
         """Look up a project by id, self-healing from the DB.
@@ -945,6 +1161,9 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
         regs = getattr(self, "_mcp_registries", None)
         if regs is not None:
             regs.pop(project.id, None)
+        fps = getattr(self, "_mcp_fingerprints", None)
+        if fps is not None:
+            fps.pop(project.id, None)
         if rt.mcp_registry is not None:
             try:
                 await rt.mcp_registry.close_all()

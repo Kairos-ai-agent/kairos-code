@@ -49,6 +49,7 @@ Both are loaded and merged; project wins on name collision.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -323,6 +324,78 @@ def load_configs(
             continue
         out[name] = config
     return out
+
+
+# ---------------------------------------------------------------------------
+# Change detection: a fingerprint of the *user-editable* MCP config
+# ---------------------------------------------------------------------------
+
+#: ``(path, mtime_ns, size) -> content digest``. Keyed so a repeated call is a
+#: ``stat`` away from the cached answer, while any real edit moves the stat and
+#: forces the re-hash. Bounded — it only ever holds the handful of config paths.
+_FINGERPRINT_CACHE: "Dict[tuple, str]" = {}
+
+
+def mcp_config_paths(
+    project_dir: Optional[Path] = None,
+    user_dir: Optional[Path] = None,
+) -> List[Path]:
+    """The files a running instance expects a live edit to reach.
+
+    :func:`load_configs` merges bundled-plugin defaults < user scope < project
+    scope. The bundled defaults ship with the install and only move when the
+    install does, so they are deliberately *excluded* here: this is the
+    user-editable surface. The project file is listed last so the fingerprint
+    reads in the same precedence order the loader applies.
+    """
+    user_dir = Path(user_dir) if user_dir else Path.home() / ".kairos"
+    paths: List[Path] = [Path(user_dir) / "mcp.yaml"]
+    if project_dir:
+        paths.append(Path(project_dir) / ".kairos" / "mcp.yaml")
+    return paths
+
+
+def mcp_config_fingerprint(
+    project_dir: Optional[Path] = None,
+    user_dir: Optional[Path] = None,
+) -> str:
+    """A content fingerprint of every user-editable MCP config file.
+
+    Why content and not ``mtime+size``: the question this answers is "did the
+    *effective* config change", and ``mtime+size`` can say "no" to a real edit —
+    a same-length value (``1`` -> ``2``), or a ``git checkout``/copy that
+    restores the original timestamp — and "yes" to a bare ``touch`` that changed
+    nothing. The files are a few hundred bytes, so hashing them is cheap; the
+    ``(mtime_ns, size)`` keyed cache above keeps the hash off the hot path (a
+    repeat call is one ``stat`` per file, and any real change moves the stat and
+    forces the re-hash).
+
+    A missing file contributes a fixed ``absent`` marker, so "does not exist"
+    and "exists but empty" differ and creating the file is detected. Never
+    raises: an unreadable file degrades to a marker. The result is a stable hex
+    string.
+    """
+    h = hashlib.sha256()
+    for path in mcp_config_paths(project_dir, user_dir):
+        entry = f"{path}:"
+        try:
+            st = path.stat()
+        except OSError:
+            h.update((entry + "absent").encode("utf-8", "replace"))
+            continue
+        key = (str(path), st.st_mtime_ns, st.st_size)
+        digest = _FINGERPRINT_CACHE.get(key)
+        if digest is None:
+            try:
+                digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            except OSError:
+                digest = "unreadable"
+            if len(_FINGERPRINT_CACHE) > 64:
+                _FINGERPRINT_CACHE.clear()
+            _FINGERPRINT_CACHE[key] = digest
+        h.update(f"{entry}{st.st_size}:{digest}".encode("utf-8", "replace"))
+    return h.hexdigest()
+
 
 def _build_config(
     name: str, raw: Dict[str, Any],

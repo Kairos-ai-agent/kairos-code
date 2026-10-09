@@ -34,6 +34,29 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **Harness memory notes were written and read by nobody, so a note recorded in
+  the Continual Harness panel never reached the agent.** `memory_notes` lived in
+  `<project_dir>/.kairos/harness/harness.json` and only the HTTP layer ever
+  touched it; no prompt assembly read it back (the same "written but never read"
+  family as the project-memory store). `assemble_coder_memory` now injects them
+  through the channel that already carries the SQLite project notes — newest
+  first, capped at 8 entries, deduped against the project notes, and labelled
+  `## Harness Notes (self-recorded via the Continual Harness panel)`. The new
+  reader is read-only by contract: it never creates `.kairos/harness/`, never
+  raises, and logs a warning (never swallows silently) when the file is corrupt.
+
+- **Live edits of `.kairos/mcp.yaml` were ignored after the process-leak fix.**
+  Reusing the project's MCP registry (the leak fix) also meant a config edit no
+  longer took effect until the project runtime was closed — previously it did,
+  but only because every request rebuilt the registry, which is exactly what
+  leaked child processes. A content fingerprint (sha256 of the user-editable
+  config files, cached on `(path, mtime_ns, size)`) now decides: unchanged →
+  reuse, so the registry `id()` is stable and no new child process is created;
+  changed → **close-then-swap**, closing the old registry before constructing the
+  new one. If `close_all` fails, the old registry is kept — never two live
+  registries — an `attach_errors` trace is recorded and the fingerprint is not
+  advanced, so the next attach retries.
+
 - **Project memory was written and read from different files, so the agent
   never saw what was remembered in the UI.** The memory panel (and the
   `/remember` chat command) wrote to `<data_dir>/memory_kb.json`, while the

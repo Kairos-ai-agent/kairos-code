@@ -56,6 +56,72 @@ def _load(path: Path) -> Dict[str, Any]:
         return dict(DEFAULT_HARNESS)
 
 
+def _note_sort_key(note: Dict[str, Any]) -> float:
+    """Recency key for a memory note: ``updated_at`` (a later edit) beats the
+    original ``added_at``. Non-numeric / missing stamps sort last (0.0) rather
+    than raising — a hand-edited file must not break assembly."""
+    for field in ("updated_at", "added_at"):
+        value = note.get(field)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            return float(value)
+    return 0.0
+
+
+def load_memory_notes(work_dir: Any, limit: int = 8) -> List[Dict[str, Any]]:
+    """Read-only view of a project's harness ``memory_notes``, newest first.
+
+    This is the *read* half of :meth:`HarnessStore.add_memory_note`. Without
+    it a note recorded in the harness panel is written to
+    ``<work_dir>/.kairos/harness/harness.json`` and never read back — the
+    agent never sees it. :func:`kairos.memory.retrieval.assemble_coder_memory`
+    calls this so harness notes reach the coder prompt.
+
+    Unlike ``HarnessStore`` it never creates the harness directory: merely
+    assembling memory must not litter ``.kairos/harness/`` into a project the
+    user never enabled the harness for.
+
+    Best-effort by contract — never raises, never swallows in silence: a
+    missing file yields ``[]``; a corrupt file, a non-object top level, or a
+    ``memory_notes`` of the wrong shape logs a WARNING and yields ``[]``.
+    """
+    path = Path(work_dir) / ".kairos" / "harness" / "harness.json"
+    try:
+        if not path.exists():
+            return []
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.warning("harness %s unreadable (%s); ignoring", path, exc)
+        return []
+    if not isinstance(data, dict):
+        logger.warning("harness %s: top level is %s, expected an object; ignoring",
+                       path, type(data).__name__)
+        return []
+    notes = data.get("memory_notes")
+    if notes is None:
+        return []
+    if not isinstance(notes, list):
+        logger.warning("harness %s: memory_notes is %s, expected a list; ignoring",
+                       path, type(notes).__name__)
+        return []
+    cleaned: List[Dict[str, Any]] = []
+    for n in notes:
+        if not isinstance(n, dict):
+            logger.warning("harness %s: dropping non-object memory note %r", path, n)
+            continue
+        value = n.get("value")
+        if not isinstance(value, str) or not value.strip():
+            logger.warning("harness %s: dropping note %r with no usable value",
+                           path, n.get("key"))
+            continue
+        cleaned.append(n)
+    cleaned.sort(key=_note_sort_key, reverse=True)
+    if isinstance(limit, int) and limit > 0:
+        cleaned = cleaned[:limit]
+    return cleaned
+
+
 def _save(path: Path, data: Dict[str, Any]) -> None:
     data["updated_at"] = time.time()
     data["version"] = HARNESS_VERSION

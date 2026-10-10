@@ -330,6 +330,16 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
         #: (and its subprocesses) exactly as they are. (Reachable via
         #: ``getattr`` — some tests build the orchestrator with ``__new__``.)
         self._mcp_fingerprints: dict = {}
+        #: Project ids that currently have a close-then-swap reload in flight.
+        #: A reload started from a request runs as a background task, so a
+        #: second attach arriving before it finishes must REUSE the registry it
+        #: will install rather than schedule a second swap. Two swaps for one
+        #: project both capture the same "old" registry and the second
+        #: overwrites the map entry the first wrote — the registry between them
+        #: is left with nothing to ``close_all`` it, which is the subprocess
+        #: leak (observed: one live map entry, many orphaned ``--mcp-serve``
+        #: children). (Reachable via ``getattr``.) See ``_attach_mcp``.
+        self._mcp_reloading: set = set()
         # In-memory cache of per-project Best-of-N override; the API
         # reads/writes this and start_loop copies it into the session.
         if db is None:
@@ -629,8 +639,16 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
         # roles' toolset so the agent can call them; the underlying
         # subprocess registry is owned by the runtime so we can
         # close it on shutdown.
+        #
+        # Keyed to ``effective_root`` (the project's own directory), NOT the
+        # coder worktree: ``.kairos/mcp.yaml`` is a project-level config, and
+        # ``_mcp_config_changed`` fingerprints the project directory. Loading
+        # from (and fingerprinting) the worktree instead made the two disagree
+        # on every request — a git project's worktree path is never the project
+        # path — so ``_mcp_config_changed`` reported "changed" forever and
+        # re-attached the agents on every single request.
         try:
-            mcp_tools = self._attach_mcp(project, coder_root)
+            mcp_tools = self._attach_mcp(project, effective_root)
             coder_tools.extend(mcp_tools)
         except Exception as e:  # noqa: BLE001
             logger.warning("MCP attach failed for %s: %s", project.id, e)
@@ -754,6 +772,10 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
         if fps is None:
             fps = {}
             self._mcp_fingerprints = fps
+        reloading = getattr(self, "_mcp_reloading", None)
+        if reloading is None:
+            reloading = set()
+            self._mcp_reloading = reloading
 
         fingerprint = self._mcp_config_fingerprint(work_dir)
 
@@ -763,17 +785,31 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
 
         if existing is not None:
             stored = fps.get(project.id)
-            if stored is None or stored == fingerprint:
-                # Unchanged (or provenance unknown): reuse. No new children, same
-                # tool set, no growth. Record the fingerprint so a later edit is
-                # still noticed.
-                fps[project.id] = fingerprint
+            if stored is None or stored == fingerprint \
+                    or project.id in reloading:
+                # Unchanged, provenance unknown, or a close-then-swap for this
+                # project is already in flight. All three reuse: no new
+                # children, same tool set, no growth.
+                #
+                # The ``in reloading`` case is the one that closes the leak. A
+                # reload started from a request runs as a background task; until
+                # it finishes the map still holds the OLD registry, so a second
+                # attach with the same always-moving fingerprint would schedule
+                # a SECOND swap. Both swaps capture that same old registry, the
+                # first is overwritten by the second, and the registry in
+                # between is orphaned with nothing to ``close_all`` it. Reuse
+                # while a swap is in flight collapses any number of rapid
+                # triggers into the single swap already running.
+                if stored is None:
+                    fps[project.id] = fingerprint
                 regs[project.id] = existing
                 project.runtime.mcp_registry = existing
                 return list(existing.all_tools())
             # The effective config changed on disk. Bounded reload: the old
             # registry is closed BEFORE the replacement is built and started, so
             # two live sets never coexist.
+            logger.info("mcp: effective config changed for %s — reloading the "
+                        "registry (close-then-swap)", project.id)
             reloaded = self._reload_mcp_registry(
                 project, existing, work_dir, fingerprint)
             if reloaded is None:
@@ -801,6 +837,7 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
         project.runtime.mcp_registry = reg
         regs[project.id] = reg
         fps[project.id] = fingerprint
+        logger.info("mcp: registry created for %s (first attach)", project.id)
         return list(reg.all_tools())
 
     def _mcp_config_fingerprint(self, work_dir: str) -> str:
@@ -897,32 +934,57 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
             # One task (not a fire-and-forget close plus a separate start) is
             # what keeps the order from interleaving the other way.
             #
+            # Mark the swap in flight BEFORE scheduling it. ``_attach_mcp``
+            # refuses to start a second swap while a project is in this set, so
+            # rapid triggers collapse into the one swap already running instead
+            # of each capturing the same old registry and orphaning the ones in
+            # between. Discarded in a ``finally`` so a failed swap never wedges
+            # the project's registry.
+            #
             # Record the fingerprint now so a second request arriving mid-swap
             # does not queue another reload; restore it if the swap fails so a
             # later attach can retry.
             prev_fp = self._mcp_fingerprints.get(project.id)
             self._mcp_fingerprints[project.id] = fingerprint
+            reloading = getattr(self, "_mcp_reloading", None)
+            if reloading is None:
+                reloading = set()
+                self._mcp_reloading = reloading
+            reloading.add(project.id)
 
             async def _swap() -> None:
                 try:
-                    await old.close_all()
-                except Exception as e:  # noqa: BLE001
-                    logger.warning(
-                        "mcp: reload aborted for %s — close_all failed: %s",
-                        project.id, e)
-                    self._mcp_fingerprints[project.id] = prev_fp
-                    return
-                reg = McpRegistry()
-                try:
-                    reg.load(project_dir=Path(work_dir))
-                except Exception as e:  # noqa: BLE001
-                    logger.debug("MCP reload load skipped for %s: %s",
-                                 project.id, e)
-                self._mcp_registries[project.id] = reg
-                project.runtime.mcp_registry = reg
-                await reg.start_all()
+                    try:
+                        await old.close_all()
+                    except Exception as e:  # noqa: BLE001
+                        logger.warning(
+                            "mcp: reload aborted for %s — close_all failed: %s; "
+                            "keeping the previous registry, spawning no second "
+                            "set", project.id, e)
+                        self._mcp_fingerprints[project.id] = prev_fp
+                        return
+                    reg = McpRegistry()
+                    try:
+                        reg.load(project_dir=Path(work_dir))
+                    except Exception as e:  # noqa: BLE001
+                        logger.debug("MCP reload load skipped for %s: %s",
+                                     project.id, e)
+                    self._mcp_registries[project.id] = reg
+                    project.runtime.mcp_registry = reg
+                    await reg.start_all()
+                finally:
+                    self._mcp_reloading.discard(project.id)
 
-            loop.create_task(_swap())
+            try:
+                loop.create_task(_swap())
+            except Exception as e:  # noqa: BLE001
+                # Scheduling failed (a loop that is closing, say): drop the
+                # in-flight marker so a later attach is not wedged, and restore
+                # the fingerprint so the change is retried.
+                logger.warning("mcp: reload task could not be scheduled for "
+                               "%s: %s", project.id, e)
+                self._mcp_reloading.discard(project.id)
+                self._mcp_fingerprints[project.id] = prev_fp
             return []
 
         # No running loop (a script, a test, the startup path): do it inline so
@@ -1164,6 +1226,11 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
         fps = getattr(self, "_mcp_fingerprints", None)
         if fps is not None:
             fps.pop(project.id, None)
+        # A swap in flight for this id must not keep the project wedged, and the
+        # registry it would have installed is gone: forget the marker too.
+        reloading = getattr(self, "_mcp_reloading", None)
+        if reloading is not None:
+            reloading.discard(project.id)
         if rt.mcp_registry is not None:
             try:
                 await rt.mcp_registry.close_all()

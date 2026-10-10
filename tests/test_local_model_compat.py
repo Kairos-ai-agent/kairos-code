@@ -15,15 +15,18 @@ server behind an 8192-token window:
 
 Four fixes, one file:
 
-1. reasoning-channel fallback — empty content + non-empty reasoning => the
-   reasoning IS the reply (never merged when content exists);
+1. reasoning-channel handling — empty content + non-empty reasoning does NOT
+   get silently promoted into the answer (that is how the model's private
+   monologue reached the user); the reply stays empty and the event is flagged
+   (``reply_from_reasoning``) so the caller can retry / explain it;
 2. prompt-budget fitting — trim the request BEFORE sending;
 3. light tool mode — advertise only the core tools to a small model;
 4. per-provider timeout — configurable, with 0/negative meaning "no limit".
 
 Plus a source-level guard (the convention of tests/test_r37_ui_source.py): the
-provider must keep the empty-content rescue, so an empty ``content`` no longer
-falls straight through to the "没有返回任何内容" notice.
+provider must NEVER copy the reasoning channel into ``content`` — an empty
+``content`` stays empty and is marked, so the answer channel is the answer and
+only the answer.
 """
 from __future__ import annotations
 
@@ -145,12 +148,17 @@ def _envelopes(raw):
 
 
 # ===========================================================================
-# ① reasoning-channel fallback
+# ① reasoning-channel handling (empty content is NOT promoted to the answer)
 # ===========================================================================
 
 
-def test_empty_content_with_reasoning_uses_the_reasoning_channel():
-    """The LM Studio shape: content="", reasoning_content=<the answer>."""
+def test_empty_content_with_reasoning_is_not_passed_off_as_the_answer():
+    """The LM Studio shape: content="", reasoning_content=<the answer>.
+
+    The reasoning is NOT the reply: the provider leaves ``content`` empty and
+    flags it, so a caller can retry / explain it instead of the user being
+    handed the model's private monologue.
+    """
     answer = "The user asked a direct question. The answer is 42."
     provider = _provider()
     provider._client = _FakeClient(message=SimpleNamespace(
@@ -158,21 +166,21 @@ def test_empty_content_with_reasoning_uses_the_reasoning_channel():
 
     resp = asyncio.run(provider.complete([LLMMessage(role="user", content="q")]))
 
-    assert resp.content == answer, "an empty content channel must fall back to reasoning"
-    assert resp.reply_from_reasoning is True, "the fallback must be recorded for telemetry"
+    assert resp.content == "", "an empty content channel must stay empty"
+    assert resp.reply_from_reasoning is True, "the event must be recorded for telemetry"
     # The count/tail are still populated as before (used by agent.thinking).
     assert resp.reasoning_chars == len(answer)
     assert resp.reasoning_tail  # non-empty
 
 
-def test_whitespace_only_content_also_falls_back():
+def test_whitespace_only_content_is_also_not_promoted():
     provider = _provider()
     provider._client = _FakeClient(message=SimpleNamespace(
         content="   \n ", tool_calls=None, reasoning_content="real answer"))
 
     resp = asyncio.run(provider.complete([LLMMessage(role="user", content="q")]))
 
-    assert resp.content == "real answer"
+    assert resp.content.strip() == ""
     assert resp.reply_from_reasoning is True
 
 
@@ -184,7 +192,7 @@ def test_reasoning_alias_field_is_honoured():
 
     resp = asyncio.run(provider.complete([LLMMessage(role="user", content="q")]))
 
-    assert resp.content == "via the alias field"
+    assert resp.content == ""
     assert resp.reply_from_reasoning is True
 
 
@@ -202,7 +210,7 @@ def test_nonempty_content_is_never_merged_with_reasoning():
     assert resp.reasoning_tail == "R" * 400  # tail preserved, still separate
 
 
-def test_stream_with_only_reasoning_falls_back_to_the_reply():
+def test_stream_with_only_reasoning_is_not_emitted_as_the_reply():
     """Streaming local model: no content delta at all, only reasoning."""
     provider = _provider()
     provider._client = _FakeClient(stream_items=[
@@ -214,7 +222,8 @@ def test_stream_with_only_reasoning_falls_back_to_the_reply():
     raw = _collect_stream(provider, [LLMMessage(role="user", content="q")])
 
     text = "".join(_text_deltas(raw))
-    assert "答案是 42" in text, "the streamed reasoning must surface as the reply"
+    assert text == "", "streamed reasoning must not surface as the reply"
+    assert "答案是 42" not in text
     meta = [e for e in _envelopes(raw) if e.get("type") == "stream_meta"]
     assert meta and meta[-1]["reply_from_reasoning"] is True
 
@@ -476,25 +485,24 @@ def _code(rel: str) -> str:
                      if not line.strip().startswith("#"))
 
 
-def test_provider_keeps_the_empty_content_reasoning_fallback():
-    """Pin the ① rescue at the source: empty content must not go blank.
+def test_provider_never_promotes_reasoning_into_the_answer():
+    """Pin the rule at the source: an empty ``content`` must NOT be "rescued"
+    by copying the reasoning channel into it.
 
-    If someone removes the fallback, an empty ``content`` with a non-empty
-    reasoning channel falls through to the agent's "没有返回任何内容" notice
-    again — the exact regression this round exists to prevent.
+    That rescue is exactly how the model's private monologue ("Let me build a
+    script…") reached the user as the answer. An empty content stays empty and
+    is *marked* (``reply_from_reasoning``), never overwritten with the thinking.
     """
     src = _code("kairos/llm/providers/openai_provider.py")
-    # The fallback is gated on empty/whitespace content AND non-empty reasoning.
-    assert "not content_text.strip() and reasoning_text.strip()" in src, (
-        "the non-streaming fallback condition was removed — an empty content "
-        "channel would no longer be rescued from the reasoning channel"
+    assert "content_text = reasoning_text" not in src, (
+        "the empty-content => reasoning-as-answer substitution is back"
     )
+    assert "yield reasoning_accum" not in src, (
+        "the streamed reasoning is being surfaced as the reply again"
+    )
+    # The event is still recorded, and both reasoning field spellings are read.
     assert "reply_from_reasoning = True" in src
-    # The streaming path has the equivalent guard.
-    assert "not tool_calls_by_index and reasoning_accum.strip()" in src, (
-        "the streaming fallback condition was removed"
-    )
-    # Both reasoning field spellings are read.
+    assert "NOT using the reasoning channel as the reply" in src
     assert '"reasoning_content"' in src and '"reasoning"' in src
 
 

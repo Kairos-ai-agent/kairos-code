@@ -87,6 +87,42 @@ MAX_CHAT_ARTIFACTS = 20
 #: they are just not offered for download).
 MAX_ARTIFACT_BYTES = 50 * 1024 * 1024
 
+#: How many times a single general-lane chat may recover from a turn that
+#: produced no visible answer AND called no tool. One extra turn is enough to
+#: turn a thinking model's reasoning-only turn (empty content +
+#: ``reply_from_reasoning``) -- or a turn that only *promises* to work -- into
+#: the file the user asked for; capping it at one keeps a model that refuses to
+#: act from spinning the loop.
+GENERAL_CHAT_EMPTY_RECOVERIES = 1
+
+#: The nudge appended (as a user turn) when a model turn ended with no content
+#: and no tool call. It names the two honest outcomes -- act and hand back the
+#: file, or answer -- so "I'll write a script" becomes a real ``file_write``.
+GENERAL_CHAT_EMPTY_ANSWER_NUDGE = (
+    "你上一条回复没有任何可见正文，也没有调用任何工具 —— 只是在内部思考或"
+    "描述计划，用户什么也看不到。现在就给出结果：\n"
+    "· 如果用户要的是文件 / 文档 / 报告 / 脚本，请立刻调用 file_write（或编辑"
+    "类工具）把内容写进项目工作区，不要在回复里粘贴全文，也不要只打印计划或"
+    "代码草稿；写完后在回复里给出文件路径。\n"
+    "· 否则直接写出最终答复。"
+)
+
+#: How many times a single chat may be called out for *promising* work (a plan /
+#: "I'll do it" / a pasted code draft) without actually calling a tool. Bounded
+#: to one for the same reason as :data:`GENERAL_CHAT_EMPTY_RECOVERIES`.
+GENERAL_CHAT_PROMISE_RECOVERIES = 1
+
+#: The nudge appended when the model answered with a plan or a draft but called
+#: no tool. "描述工作不是工作" is the whole point.
+GENERAL_CHAT_PROMISE_NUDGE = (
+    "你上一条回复只是描述了计划，或者贴了一段内容 / 代码草稿，并没有真正动手 —— "
+    "用户要的是结果，不是计划。现在就执行：\n"
+    "· 如果用户要的是文件 / 文档 / 报告 / 脚本，立刻调用 file_write（或编辑类"
+    "工具）把内容写进项目工作区，然后在回复里只给出文件路径和一句说明，"
+    "不要再把全文或代码粘进对话。\n"
+    "· 否则直接给出最终答复。"
+)
+
 
 def general_tools(root: Any) -> List[BaseTool]:
     """Build the general lane's full toolset, sandboxed to ``root``.
@@ -259,7 +295,32 @@ async def run_general_tool_loop(
         response = await client.complete(messages, tools=None)
         return "" if response is None else (getattr(response, "content", "") or "")
 
+    # The "promised but didn't act" detector is the Coder lane's own -- one
+    # source of truth for what counts as a first-person commitment. Imported
+    # lazily so the skeleton lane never drags the agent stack in at import time;
+    # if it is unavailable the promise nudge simply never fires.
+    try:
+        from kairos.agents.base import (FOLLOW_THROUGH_MARKERS,
+                                        _promises_action)
+    except Exception:  # pragma: no cover - degrade to "no promise detected"
+        FOLLOW_THROUGH_MARKERS = ()
+        def _promises_action(_text: str) -> bool:  # type: ignore[misc]
+            return False
+
+    def _looks_like_a_promise_or_draft(text: str) -> bool:
+        """True when a reply announces work / pastes a draft instead of doing it."""
+        if not text:
+            return False
+        if "```" in text:                       # a code/content draft
+            return True
+        if any(m in text.lower() for m in FOLLOW_THROUGH_MARKERS):
+            return True
+        return _promises_action(text)
+
     last_text = ""
+    empty_recoveries = 0
+    promise_recoveries = 0
+    any_tool_call = False
     for _ in range(max(1, int(max_turns))):
         response = await client.complete(messages, tools=schemas)
         if inspect.isawaitable(response):  # a client that is not a coroutine fn
@@ -269,7 +330,42 @@ async def run_general_tool_loop(
         content = getattr(response, "content", "") or ""
         calls = getattr(response, "tool_calls", None) or []
         if not calls:
+            text = content.strip()
+            if not text and empty_recoveries < GENERAL_CHAT_EMPTY_RECOVERIES:
+                # The model stopped without saying anything AND without acting:
+                # the exact shape a thinking model produces when it spends the
+                # turn on hidden reasoning (``reply_from_reasoning``). Returning
+                # that empty text is how the user ends up with no answer and no
+                # file -- so ask once, explicitly, for the result. This is the
+                # decidable recovery: the WARNING below records that the lane
+                # had to nudge.
+                empty_recoveries += 1
+                logger.warning(
+                    "general lane: empty reply with no tool call "
+                    "(model=%s, from_reasoning=%s); asking once for the result",
+                    getattr(response, "model", ""),
+                    bool(getattr(response, "reply_from_reasoning", False)),
+                )
+                messages.append(LLMMessage(
+                    role="user", content=GENERAL_CHAT_EMPTY_ANSWER_NUDGE))
+                continue
+            if (text and not any_tool_call
+                    and promise_recoveries < GENERAL_CHAT_PROMISE_RECOVERIES
+                    and _looks_like_a_promise_or_draft(text)):
+                # The model answered with a plan / "I'll do it" / a pasted draft
+                # and called no tool: describing the work is not doing it. Ask
+                # once, out loud, for the actual result.
+                promise_recoveries += 1
+                logger.warning(
+                    "general lane: reply only promised a plan/draft and called "
+                    "no tool (model=%s); holding it to the work",
+                    getattr(response, "model", ""),
+                )
+                messages.append(LLMMessage(
+                    role="user", content=GENERAL_CHAT_PROMISE_NUDGE))
+                continue
             return content
+        any_tool_call = True
         last_text = content
         messages.append(LLMMessage(role="assistant", content=content,
                                    tool_calls=calls))
@@ -362,6 +458,10 @@ def collect_artifacts(
 __all__ = [
     "GENERAL_TOOL_CAPABILITIES",
     "GENERAL_CHAT_MAX_TURNS",
+    "GENERAL_CHAT_EMPTY_RECOVERIES",
+    "GENERAL_CHAT_EMPTY_ANSWER_NUDGE",
+    "GENERAL_CHAT_PROMISE_RECOVERIES",
+    "GENERAL_CHAT_PROMISE_NUDGE",
     "MAX_TOOL_RESULT_CHARS",
     "MAX_CHAT_ARTIFACTS",
     "MAX_ARTIFACT_BYTES",

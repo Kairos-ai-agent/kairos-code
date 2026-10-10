@@ -659,6 +659,22 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
         # don't care about hooks.
         self._current_project_id = (task.context or {}).get("project_id", "")
 
+        # A Coder run is a round too: the tool-result cache
+        # (kairos/tools/cache.py) is a process-wide singleton and its
+        # documented lifetime is one round. The full Coder<->Reviewer loop
+        # clears it per round (kairos/loop/loop_runner), and so do the chat
+        # lanes; this agent's own tool loop -- the one ``coder.chat()`` and
+        # every ``spawn_subagent`` child run -- never did, so a file read in a
+        # prior run (or by this project's sibling run) could answer a read
+        # here. Start every run with a clean cache. Best-effort: a cache hiccup
+        # must not fail the run.
+        try:
+            from kairos.tools.cache import clear_round
+            clear_round()
+        except Exception:  # noqa: BLE001 - a cache hiccup must not fail the run
+            logger.debug("%s: could not clear the round tool cache",
+                         self.agent_id, exc_info=True)
+
         # Check API key
         if not self._llm_config.api_key or self._llm_config.api_key == "sk-placeholder":
             self.status = AgentStatus.ERROR
@@ -1105,14 +1121,17 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
                         getattr(getattr(self, "current_task", None), "id", ""),
                         turn,
                     )
-                    # ① Telemetry: the reply was salvaged from the model's
-                    # hidden-reasoning channel because it left ``content`` empty
-                    # (small local models do this). Recorded so the behaviour is
-                    # explainable and never looks like a silent success.
+                    # ① Telemetry: the model reasoned but left ``content`` empty
+                    # (deepseek-flash and small local models do this). The
+                    # reasoning is NOT the reply and is never promoted into
+                    # ``content`` — the empty-content handling below turns this
+                    # into a wrap-up request / a readable notice. Recorded so the
+                    # behaviour is explainable and never looks like a silent
+                    # success.
                     if getattr(response, "reply_from_reasoning", False):
                         logger.warning(
-                            "%s: reply came from the reasoning channel "
-                            "(model=%s, turn=%d) — content was empty",
+                            "%s: model reasoned but returned no content "
+                            "(model=%s, turn=%d) — the reasoning is NOT the reply",
                             self.agent_id, self._llm_config.model, turn,
                         )
                         try:
@@ -1120,8 +1139,9 @@ class KairosAgent(AgentLLMMixin, AgentToolMixin, AgentMemoryMixin, AgentChatMixi
                                 sender=self.agent_id,
                                 topic="agent.progress",
                                 content=(
-                                    "Reply taken from the model's reasoning "
-                                    "channel (the content channel was empty)."
+                                    "The model reasoned but returned an empty "
+                                    "content channel; its reasoning is not used "
+                                    "as the reply."
                                 ),
                                 msg_type="text",
                                 metadata={"task_id": getattr(

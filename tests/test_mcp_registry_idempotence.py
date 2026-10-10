@@ -22,6 +22,8 @@ subprocesses — MCP start is neutralised):
 """
 from __future__ import annotations
 
+import asyncio
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -282,3 +284,185 @@ async def test_close_calls_close_all_and_releases_the_id(tmp_path, monkeypatch):
     assert closed["n"] == 1, "close_all() was not invoked on the registry"
     assert orch._mcp_registries.get(p.id) is None, "id handle leaked after close"
     assert p.runtime.mcp_registry is None
+
+
+# --------------------------------------------------- 4. single-flight reload
+# The second leak (72e71d2): a reload started from a request runs as a
+# background task, and until it finishes the live-registry map still holds the
+# OLD registry. When the effective fingerprint moves faster than a swap lands —
+# an edit per request, or a rehydrate that rebuilds a role worktree so the coder
+# checkout path (and with it the fingerprint) changes every time — a second
+# attach scheduled a SECOND swap. Both swaps captured the same old registry, the
+# second overwrote the map entry the first wrote, and the registry in between was
+# orphaned with nothing left to ``close_all`` it. Observed against the real code:
+# 36 live ``--mcp-serve`` children, one live-registry map entry.
+
+class _FakeReloadRegistry:
+    """Registry stand-in that records when it is built and when it is closed."""
+
+    def __init__(self, factory: "_ReloadFactory", index: int):
+        self.factory = factory
+        self.index = index
+        factory.alive.add(self)
+
+    def load(self, project_dir=None, user_dir=None):
+        self.load_dir = str(project_dir)
+
+    def defer_start(self):
+        pass
+
+    async def start_all(self):
+        pass
+
+    def all_tools(self):
+        return []
+
+    async def close_all(self):
+        if self.factory.close_raises:
+            raise RuntimeError("close_all blown up")
+        self.factory.alive.discard(self)
+
+
+class _ReloadFactory:
+    def __init__(self, *, close_raises: bool = False):
+        self.constructed = 0
+        self.alive: set = set()
+        self.close_raises = close_raises
+
+    def __call__(self, *args, **kwargs) -> _FakeReloadRegistry:
+        self.constructed += 1
+        return _FakeReloadRegistry(self, self.constructed)
+
+
+def _install_reload_factory(monkeypatch, factory: "_ReloadFactory") -> "_ReloadFactory":
+    import kairos.mcp_client as mcp
+    monkeypatch.setattr(mcp, "McpRegistry", factory)
+    return factory
+
+
+@pytest.mark.asyncio
+async def test_rapid_fingerprint_moves_never_orphan_a_registry(tmp_path, monkeypatch):
+    """A fingerprint that moves on every request must keep ONE live registry.
+
+    The reverse pin of the leak: with a single-flight guard, N rapid triggers
+    collapse into the one swap already running, so the live count never grows.
+    Without it, every trigger schedules its own swap and all but the last are
+    orphaned (``len(factory.alive)`` climbs with the request count).
+    """
+    import kairos.mcp_client as mcp
+
+    monkeypatch.setattr(mcp, "should_defer_start", lambda: True)
+    factory = _install_reload_factory(monkeypatch, _ReloadFactory())
+
+    orch, _ = _make_orch(tmp_path)
+    ws = tmp_path / "svc"
+    (ws / ".kairos").mkdir(parents=True, exist_ok=True)
+    p = orch.create_project("slip", "d", work_dir=str(ws))
+    assert factory.constructed == 1
+
+    cfg = ws / ".kairos" / "mcp.yaml"
+    # Move the effective fingerprint on every request, with NO await between
+    # calls, so all the swaps are queued before any of them runs — the exact
+    # shape of the leak.
+    for i in range(12):
+        cfg.write_text(f"mcp_servers: {{}}  # rev {i}\n", encoding="utf-8")
+        orch.get_project(p.id)
+
+    await asyncio.sleep(0.3)  # let the (single) queued swap run
+
+    assert len(factory.alive) == 1, (
+        f"{len(factory.alive)} registries live — swaps orphaned their "
+        f"predecessors (constructed={factory.constructed})")
+    assert factory.constructed <= 3, (
+        f"{factory.constructed} registries built for 12 rapid triggers — the "
+        f"single-flight guard did not collapse them")
+
+
+@pytest.mark.asyncio
+async def test_reload_guard_clears_so_a_later_change_still_reloads(
+        tmp_path, monkeypatch):
+    """The in-flight guard must not wedge: a change after a settled swap reloads."""
+    import kairos.mcp_client as mcp
+
+    monkeypatch.setattr(mcp, "should_defer_start", lambda: True)
+    factory = _install_reload_factory(monkeypatch, _ReloadFactory())
+
+    orch, _ = _make_orch(tmp_path)
+    ws = tmp_path / "svc2"
+    (ws / ".kairos").mkdir(parents=True, exist_ok=True)
+    p = orch.create_project("wedge", "d", work_dir=str(ws))
+    cfg = ws / ".kairos" / "mcp.yaml"
+
+    cfg.write_text("mcp_servers: {}  # one\n", encoding="utf-8")
+    orch.get_project(p.id)
+    await asyncio.sleep(0.3)             # swap settles, guard clears
+    assert p.id not in orch._mcp_reloading, "guard left the project wedged"
+    after_first = factory.constructed
+
+    cfg.write_text("mcp_servers: {}  # two\n", encoding="utf-8")
+    orch.get_project(p.id)
+    await asyncio.sleep(0.3)
+    assert factory.constructed == after_first + 1, \
+        "a real change after a settled swap did not reload"
+    assert len(factory.alive) == 1
+
+
+@pytest.mark.asyncio
+async def test_close_failure_spawns_no_second_set(tmp_path, monkeypatch):
+    """close_all raising must not build a second live registry (the leak)."""
+    import kairos.mcp_client as mcp
+
+    monkeypatch.setattr(mcp, "should_defer_start", lambda: True)
+    factory = _install_reload_factory(
+        monkeypatch, _ReloadFactory(close_raises=True))
+
+    orch, _ = _make_orch(tmp_path)
+    ws = tmp_path / "svc3"
+    (ws / ".kairos").mkdir(parents=True, exist_ok=True)
+    p = orch.create_project("cfail", "d", work_dir=str(ws))
+    old = p.runtime.mcp_registry
+    cfg = ws / ".kairos" / "mcp.yaml"
+
+    cfg.write_text("mcp_servers: {}  # changed\n", encoding="utf-8")
+    orch.get_project(p.id)
+    await asyncio.sleep(0.3)
+
+    assert factory.constructed == 1, "a second live registry was built anyway"
+    assert p.runtime.mcp_registry is old
+    assert len(factory.alive) == 1
+
+
+# ---------------------------------------- 5. fingerprint source is the project
+def test_attach_mcp_uses_the_project_root_not_the_coder_worktree(tmp_path,
+                                                                 monkeypatch):
+    """``.kairos/mcp.yaml`` is a project config; the fingerprint must agree.
+
+    Loading from (and fingerprinting) the coder worktree while
+    ``_mcp_config_changed`` fingerprints ``project.work_dir`` made the two
+    disagree on every request for any git project — the worktree path is never
+    the project path — so ``_mcp_config_changed`` was permanently True and the
+    agents were re-attached on every request.
+    """
+    _install_hermetic_mcp(monkeypatch)
+    orch, _ = _make_orch(tmp_path)
+    ws = tmp_path / "proj"
+    ws.mkdir(parents=True, exist_ok=True)
+    p = orch.create_project("root", "d", work_dir=str(ws))
+
+    # A stand-in coder worktree at a DIFFERENT path than the project root.
+    other = tmp_path / "elsewhere-worktree"
+    other.mkdir()
+    p.runtime.coder_worktree = SimpleNamespace(path=other)
+
+    seen = {}
+
+    def spy(project, work_dir):
+        seen["work_dir"] = work_dir
+        return []
+
+    monkeypatch.setattr(orch, "_attach_mcp", spy)
+    orch._create_agents(p)
+
+    assert seen["work_dir"] == str(ws), (
+        f"_attach_mcp got {seen['work_dir']!r}; it must fingerprint the project "
+        f"root, not the coder worktree ({other})")

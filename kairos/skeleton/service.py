@@ -24,6 +24,7 @@ routed here.
 from __future__ import annotations
 
 import inspect
+import json
 import logging
 import time
 from dataclasses import dataclass
@@ -251,7 +252,10 @@ _CHAT_PROMPT = (
 #: it is a real agent -- it may not only read the files the user attached, it may
 #: write a deliverable, run it and fetch a page. The limits are stated plainly
 #: (everything is sandboxed to the project directory) so the model neither
-#: over-claims nor under-tries.
+#: over-claims nor under-tries. It also states the deliverable rule out loud:
+#: when the user asks for a file/document, the model must *write it* with the
+#: tools and hand back the path -- not paste the whole thing into the reply or
+#: stop at a plan -- while a plain greeting still writes nothing.
 _TOOL_CHAT_PROMPT = (
     "You are answering the user's message conversationally, inside their "
     "project workspace.\n\n"
@@ -266,10 +270,18 @@ _TOOL_CHAT_PROMPT = (
     "Every tool is sandboxed to the project directory: you cannot read or write "
     "anything outside it, and webfetch reaches only public URLs. When the user "
     "attached a file (a [附件 / attachments] block names its path), open it "
-    "before answering. If the task needs a deliverable (a file, a report), "
-    "create it in the workspace and mention its path -- the files you create or "
-    "change are reported back to the user automatically. When you have what you "
-    "need, answer the question directly and briefly.\n\n"
+    "before answering.\n\n"
+    "Producing a deliverable. When the message asks you to produce something "
+    "-- a document (a .md report, a summary), a report, a script or any other "
+    "file -- you MUST actually produce it: call file_write (or an edit tool) to "
+    "put it in the project workspace, then hand back its path. Do NOT paste the "
+    "whole document into your reply, and do NOT stop at describing a plan or "
+    "printing a code draft: describing the work is not doing it. A plain "
+    "greeting or a question that needs no artifact needs no file -- answer "
+    "those directly and write nothing. The files you create or change are "
+    "reported back to the user automatically as artifacts, so a file in the "
+    "workspace -- not a wall of prose -- is what the user asked for. When you "
+    "have what you need, answer the question directly and briefly.\n\n"
     "WORKSPACE CONTEXT:\n{context}"
 )
 
@@ -318,6 +330,32 @@ def _history_role(row: dict) -> str:
     return "assistant"
 
 
+def _row_is_foreign(row: dict, project_id: str) -> bool:
+    """True when a stored row's OWN metadata names a *different* project.
+
+    The SQL already scopes ``load_messages`` by the ``project_id`` column, so a
+    row seen here has that column set to this project. That column, however, is
+    derived by the bus subscriber (:meth:`Persistence.save_message`) from the
+    message's ``metadata``/sender prefix -- a message whose payload still names
+    another project, or whose sender was mis-keyed, could land under this
+    project while its metadata says otherwise. Replaying such a row is exactly
+    the cross-conversation bleed this module exists to prevent, so it is dropped
+    here as a second, independent filter. A row with no metadata ``project_id``
+    is kept (older writers did not set it); only an explicit, *contradicting*
+    owner is refused.
+    """
+    meta = row.get("metadata")
+    if isinstance(meta, str):
+        try:
+            meta = json.loads(meta) if meta else {}
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return False
+    if not isinstance(meta, dict):
+        return False
+    owner = str(meta.get("project_id") or "").strip()
+    return bool(owner) and owner != str(project_id)
+
+
 def load_chat_history(
     project_id: Optional[str] = None,
     *,
@@ -343,6 +381,15 @@ def load_chat_history(
     Never raises: an unknown/absent project, a DB without the loader, a schema
     that predates ``messages``, or a bad row all degrade to ``[]`` -- a missing
     history must never turn a chat reply into an error.
+
+    **A conversation *is* a project.** Every entrance creates one project per
+    conversation -- the web "New chat" gets its own project whose ``work_dir``
+    is a distinct ``.kairos_chats/chat_<ts>`` directory, and each IM chat maps
+    to its own project per ``chat_id`` -- and the ``messages`` table carries no
+    ``session_id`` (only a bus ``topic``, which is not a thread id). The project
+    **is** therefore the session key; scoping to it is what keeps two live
+    conversations from sharing history, and :func:`_row_is_foreign` is the
+    second line of defence for a row persisted under the wrong column value.
     """
     if not project_id:
         return []
@@ -366,6 +413,14 @@ def load_chat_history(
     picked: list = []
     for row in rows:  # newest-first from the loader
         if not isinstance(row, dict):
+            continue
+        if _row_is_foreign(row, project_id):
+            # A payload that names another project never enters this prompt,
+            # even though the column matched. Logged (not silent) so a real
+            # mis-persisting writer is findable.
+            logger.warning(
+                "chat history: dropped a row whose metadata names another "
+                "project (requested=%s)", project_id)
             continue
         content = row.get("content")
         if not isinstance(content, str):
@@ -529,6 +584,14 @@ async def run_chat_reply(
             workspace.root, before, snapshot_tree_files([workspace.root]))
         if artifacts_out is not None:
             artifacts_out[:] = artifacts
+        # Decidable signal (paired with the provider's ``reply_from_reasoning``
+        # WARNING and the loop's empty-reply WARNING): how big the reply was and
+        # how many files the turn actually produced. An empty reply next to an
+        # empty artifact list is exactly the "answered nothing, produced
+        # nothing" failure the lane must never present as success.
+        logger.info(
+            "general-lane chat: reply=%d chars, %d artifact(s) produced",
+            len(text or ""), len(artifacts))
         return "" if text is None else str(text)
 
     generator = generate if generate is not None else default_generator()

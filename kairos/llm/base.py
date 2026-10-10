@@ -100,12 +100,14 @@ class LLMResponse(BaseModel):
     # and the UI can show a live line. It must never be merged into
     # ``content``, which is the answer and only the answer.
     reasoning_tail: str = ""
-    # Set ONLY when the provider had to fall back to the hidden-reasoning
-    # channel because ``content`` came back empty (a small local model that
-    # writes its whole answer into ``reasoning_content`` and leaves ``content``
-    # as ""). ``content`` then carries that text so the caller has an answer at
-    # all; this flag is the telemetry that records the reply did NOT come from
-    # the model's content channel. False on every normal reply.
+    # Set ONLY when the provider saw an empty ``content`` and a non-empty
+    # hidden-reasoning channel (a thinking model that reasoned but did not
+    # answer). ``content`` is left EMPTY in that case -- the reasoning is never
+    # promoted into it (the answer channel carries the answer and only the
+    # answer). This flag is the decidable telemetry that lets a caller retry,
+    # show a readable notice, or nudge the model, instead of silently passing
+    # the model's private monologue off as the reply. False on every normal
+    # reply, and on an empty-content turn that carried a tool call.
     reply_from_reasoning: bool = False
 
 class BaseLLMProvider(ABC):

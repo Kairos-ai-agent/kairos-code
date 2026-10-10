@@ -151,22 +151,28 @@ class OpenAIProvider(BaseLLMProvider):
         reasoning_text = _reasoning_field(choice.message)
 
         # Small local models (LM Studio's gemma-4-e4b-…, Ollama and friends)
-        # routinely write their WHOLE answer into the hidden-reasoning channel
-        # and leave ``content`` as "". Kairos reads only ``content``, so the
-        # user saw "模型没有返回任何内容" while the model had, in fact, answered.
-        # The fallback is deliberately narrow: it fires only when ``content``
-        # is empty/whitespace AND reasoning is non-empty, and it never merges
-        # the two when content exists (the invariant the module has always
-        # guarded). ``reply_from_reasoning`` records which channel answered.
+        # and thinking models (deepseek-flash) routinely return an empty
+        # ``content`` while filling the hidden-reasoning channel. That reasoning
+        # is NOT the answer: promoting it into ``content`` is exactly how a user
+        # ends up staring at the model's private monologue ("Let me build a
+        # script… Should I ask for clarification?") instead of a reply. The
+        # invariant the module has always documented — ``content`` is the answer
+        # and only the answer — is enforced here: ``content`` stays whatever the
+        # content channel said (empty when empty). The fact that the model
+        # thought but did not answer is recorded on ``reply_from_reasoning`` (the
+        # decidable telemetry) and the tail is kept for the thinking line, so a
+        # caller can retry, explain the empty reply, or nudge the model — never
+        # silently receive the thinking as if it were the reply.
         content_text = choice.message.content or ""
         reply_from_reasoning = False
         if not content_text.strip() and reasoning_text.strip():
-            content_text = reasoning_text
             reply_from_reasoning = True
             logger.warning(
                 "provider returned empty content with %d chars of reasoning; "
-                "using the reasoning channel as the reply (model=%s)",
+                "NOT using the reasoning channel as the reply "
+                "(model=%s, finish_reason=%s)",
                 len(reasoning_text), self.config.model,
+                choice.finish_reason or "",
             )
 
         # Parse tool calls
@@ -300,22 +306,23 @@ class OpenAIProvider(BaseLLMProvider):
                     args = tc["arguments"]
                 calls.append({"id": tc["id"], "name": tc["name"], "arguments": args})
             yield json.dumps({"type": "tool_calls", "tool_calls": calls})
-        # Streaming fallback for the same local-model shape as ``complete()``:
-        # the model streamed its whole answer on the reasoning channel and not a
-        # single content delta. Only when there was no content AND no tool call
-        # (a tool call is a legitimate empty-content turn) do we surface the
-        # reasoning as the reply — otherwise the turn reaches the caller blank
-        # and the UI shows "模型没有返回任何内容". It is emitted as an ordinary
-        # text delta so every downstream consumer treats it as the reply.
+        # Same rule as ``complete()``: reasoning is not the reply. A thinking
+        # model (deepseek-flash) can stream its whole turn on the hidden-reasoning
+        # channel and not a single content delta. We used to surface that
+        # reasoning as the reply text delta — which is exactly how the user ends
+        # up with the model's private monologue in the chat bubble. Instead we
+        # emit nothing as text and flag it: a caller (the agent loop) turns the
+        # empty streamed answer into its own readable notice / retry, and the
+        # ``reply_from_reasoning`` marker keeps the event decidable. A tool call
+        # is a legitimate empty-content turn and never flags.
         reply_from_reasoning = False
         if content_chars == 0 and not tool_calls_by_index and reasoning_accum.strip():
             reply_from_reasoning = True
             logger.warning(
                 "streamed reply had no content and %d chars of reasoning; "
-                "using the reasoning channel as the reply (model=%s)",
+                "NOT using the reasoning channel as the reply (model=%s)",
                 reasoning_chars, self.config.model,
             )
-            yield reasoning_accum
         # Trailing metadata envelope. The stream contract is "plain text
         # deltas plus typed JSON envelopes"; the consumer recognises the
         # ``type`` and never renders this as text.

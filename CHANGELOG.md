@@ -34,6 +34,44 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **The model's private reasoning was handed to you as the answer.** The provider
+  promoted the hidden reasoning channel into `content` whenever a turn produced no
+  content of its own (`complete()` did `content = reasoning`; `stream()` yielded the
+  reasoning buffer), so a reasoning model such as `deepseek-flash` — which spends
+  its turn thinking and returns an empty `content` — appeared in the chat bubble as
+  its own monologue ("…Let me build a Python script…"). `content` is now purely the
+  content channel: when it is empty the provider leaves it empty, keeps the
+  reasoning tail for the thinking line, sets `reply_from_reasoning` and logs a
+  warning. The comment in `kairos/llm/base.py` ("it must never be merged into
+  content, which is the answer and only the answer") is now actually true.
+
+- **A request for a document produced a plan instead of a file.** With the
+  monologue gone the general chat lane can be held to the work: a turn that returns
+  no content and calls no tool, or a reply that only promises a plan/draft, gets one
+  bounded corrective nudge and is re-asked — so the model actually calls
+  `file_write`, the file lands in the workspace and comes back in `artifacts`. The
+  lane prompt now states the deliverable rule outright (write the document into the
+  workspace and hand back the path; do not paste it and do not stop at a plan),
+  while keeping the original "a plain greeting writes nothing" behaviour.
+
+- **MCP servers leaked processes while the app ran** (a real machine showed 36 live
+  `--mcp-serve` children four minutes after launch). Two composed causes:
+  `_create_agents` attached MCP with the per-role **worktree** root while
+  `_mcp_config_changed` fingerprinted the **project** root, so a git project looked
+  like "config changed" on every request and re-attached constantly; and the reload
+  path was fire-and-forget, so each rapid trigger scheduled its own close-then-swap,
+  all closing the same old registry and orphaning the ones in between. Attach now
+  always fingerprints the project root, and a single-flight guard collapses any
+  number of rapid triggers into one swap (a failed close keeps the old registry and
+  spawns no second set).
+
+- **A chat turn could be answered from another project's state.** The tool-result
+  cache (`kairos/tools/cache.py`) is a process-wide singleton, and the agent loop
+  behind `coder.chat()` and every `spawn_subagent` child never cleared it; it now
+  clears at the start of each run. Chat history reads also drop a row whose own
+  `metadata.project_id` contradicts the requested project, which catches a
+  mis-persisting writer that the SQL scope alone cannot.
+
 - **The chat lane never saw the conversation so far, so every turn felt like a
   brand-new agent.** `run_chat_reply` took a single `message` and built its
   prompt from the workspace files alone — no history parameter, and no caller

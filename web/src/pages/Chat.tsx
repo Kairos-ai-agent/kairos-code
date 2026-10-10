@@ -39,6 +39,7 @@ import { classifyIntent } from '../utils/intent';
 import { keepIfSame } from '../utils/equal';
 import { normalizeArtifacts } from '../utils/artifacts';
 import { knownSlashCommand, type SlashCommand } from '../utils/slash';
+import { isForeignProjectMessage } from '../utils/projectScope';
 import api, { onWebSocketMessage, onWebSocketState } from '../api/client';
 import type { Message, LoopSession, SessionRound } from '../types';
 
@@ -389,6 +390,30 @@ const Chat: React.FC = () => {
       // ----- activity: dispatch on the inner topic -----
       const msg = data.message;
       const topic = (msg.topic || '').toString();
+
+      // Project isolation (the "回答串到不同的聊天界面" bug). The backend
+      // fans EVERY project's activity out to every connected client, so
+      // without this check another project's reply was appended into the
+      // thread on screen — and snapshotted into it on the next project switch.
+      // Resolve the event's project from `metadata.project_id` (authoritative
+      // when present) or, failing that, the sender's "<project>.lane" prefix,
+      // and drop it when it provably belongs to a project that is not the one
+      // open. This guards EVERY path below — the live-status chain, the
+      // stream/append bubbles and the loop lifecycle — so a foreign project's
+      // streamed tokens can't leak into the current bubble either.
+      //
+      // A message with no project signal at all (projectId → '') is left alone:
+      // the local short-form senders ("coder", "orchestrator", "user") carry no
+      // project, and guessing would break the ordinary single-project flow.
+      //
+      // Dropped rather than buffered into messagesByProject[other]: when the
+      // user switches to that project, loadHistory() refetches its whole thread
+      // from the backend (the authoritative store) anyway, so a live buffer
+      // would only duplicate what the refetch already delivers — while growing
+      // localStorage for projects the user is not even looking at.
+      if (isForeignProjectMessage(msg, currentProject?.id ?? null)) {
+        return;
+      }
 
       // R38.6.3: filter out the per-turn "Turn X/Y: reasoning..."
       // chatter. It's a status message for the Coder's tool loop,

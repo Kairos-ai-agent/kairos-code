@@ -34,6 +34,17 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **A reply from another conversation rendered into the thread on screen.** The
+  backend's WebSocket fans every project's activity out to every connected client,
+  and the web chat appended purely by message topic without ever comparing the
+  project — so a reply produced by a conversation running elsewhere (for example
+  the WeChat project) appeared inside the open web thread, and switching projects
+  then snapshotted it into that thread. The activity handler now resolves each
+  event's project (`metadata.project_id` first, else the sender's
+  `<project>.lane` prefix) and drops provably-foreign events before any append,
+  stream chunk, live-status update or loop badge — an event with no project signal
+  at all is still let through, so the ordinary single-project flow is unchanged.
+
 - **The model's private reasoning was handed to you as the answer.** The provider
   promoted the hidden reasoning channel into `content` whenever a turn produced no
   content of its own (`complete()` did `content = reasoning`; `stream()` yielded the

@@ -71,6 +71,11 @@ from kairos.tools.terminal import TerminalTool
 from kairos.tools.todos import WriteTodosTool
 from kairos.tools.webfetch import WebFetchTool, WebSearchTool
 from kairos.tools.xlsx_read import XlsxReadTool
+# The MCP lifecycle log is a plain function on a module this one already depends
+# on transitively (kairos.tools.base); importing it at module scope keeps the
+# ``lifecycle_log`` calls in ``_start_registry`` / ``_attach_agents_once`` /
+# ``_close_project_runtime_async`` resolvable without a per-method import.
+from kairos.mcp_client import lifecycle_log
 
 
 @dataclasses.dataclass(eq=False)
@@ -761,7 +766,7 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
         rebuilt Project — a cache-miss rehydrate — still finds its registry
         instead of spawning a second set).
         """
-        from kairos.mcp_client import McpRegistry, should_defer_start
+        from kairos.mcp_client import McpRegistry, lifecycle_log, should_defer_start
         if not work_dir:
             return []
         regs = getattr(self, "_mcp_registries", None)
@@ -804,12 +809,27 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
                     fps[project.id] = fingerprint
                 regs[project.id] = existing
                 project.runtime.mcp_registry = existing
+                blocked = project.id in reloading
+                if blocked:
+                    lifecycle_log("reload.blocked", project=project.id,
+                                  registry=getattr(existing, "reg_id", "?"),
+                                  reason="a reload is already in flight")
+                lifecycle_log(
+                    "mount.request", project=project.id,
+                    registry=getattr(existing, "reg_id", "?"),
+                    action=("reload_blocked" if blocked else "reuse"),
+                    triggered=False)
                 return list(existing.all_tools())
             # The effective config changed on disk. Bounded reload: the old
             # registry is closed BEFORE the replacement is built and started, so
             # two live sets never coexist.
             logger.info("mcp: effective config changed for %s — reloading the "
                         "registry (close-then-swap)", project.id)
+            lifecycle_log("mount.request", project=project.id,
+                          registry=getattr(existing, "reg_id", "?"), action="reload",
+                          triggered=True)
+            lifecycle_log("reload.start", project=project.id,
+                          registry=getattr(existing, "reg_id", "?"), reason="config changed")
             reloaded = self._reload_mcp_registry(
                 project, existing, work_dir, fingerprint)
             if reloaded is None:
@@ -820,6 +840,10 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
                 # the next attach sees the same fingerprint gap and retries.
                 regs[project.id] = existing
                 project.runtime.mcp_registry = existing
+                lifecycle_log("reload.close_failed", project=project.id,
+                              registry=getattr(existing, "reg_id", "?"),
+                              reason="kept the previous registry; spawning no "
+                                     "second set")
                 note = ("mcp: reload deferred — closing the previous registry "
                         "for this project failed")
                 if note not in project.runtime.attach_errors:
@@ -832,12 +856,17 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
             reg.load(project_dir=Path(work_dir))
         except Exception as e:  # noqa: BLE001
             logger.debug("MCP load skipped for %s: %s", project.id, e)
+            lifecycle_log("mount.load_failed", project=project.id, error=e)
             return []
         self._start_registry(reg, project, should_defer_start)
         project.runtime.mcp_registry = reg
         regs[project.id] = reg
         fps[project.id] = fingerprint
         logger.info("mcp: registry created for %s (first attach)", project.id)
+        lifecycle_log("mount.first", project=project.id, registry=getattr(reg, "reg_id", "?"),
+                      servers=len(getattr(reg, "_configs", {}) or {}))
+        lifecycle_log("mount.request", project=project.id, registry=getattr(reg, "reg_id", "?"),
+                      action="first", triggered=True)
         return list(reg.all_tools())
 
     def _mcp_config_fingerprint(self, work_dir: str) -> str:
@@ -869,10 +898,16 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                loop.create_task(reg.start_all())
+                task = loop.create_task(reg.start_all())
+                # Hold a strong reference: asyncio keeps only a weak one, so a
+                # fire-and-forget start could be collected mid-flight and never
+                # reaped. ``close_all`` looks here to stop it.
+                reg._start_task = task
                 return
             if should_defer_start():
                 reg.defer_start()
+                lifecycle_log("start.deferred", registry=getattr(reg, "reg_id", "?"),
+                              reason="the app is about to serve; warmed up later")
                 return
             loop.run_until_complete(reg.start_all())
         except RuntimeError:
@@ -920,7 +955,7 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
         before the new ones spawn, a reload is just the original churn with
         extra steps.
         """
-        from kairos.mcp_client import McpRegistry, should_defer_start
+        from kairos.mcp_client import McpRegistry, lifecycle_log, should_defer_start
         try:
             loop = asyncio.get_event_loop()
             running = loop.is_running()
@@ -961,6 +996,9 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
                             "mcp: reload aborted for %s — close_all failed: %s; "
                             "keeping the previous registry, spawning no second "
                             "set", project.id, e)
+                        lifecycle_log("reload.close_failed", project=project.id,
+                                      registry=getattr(old, "reg_id", "?"),
+                                      error=e)
                         self._mcp_fingerprints[project.id] = prev_fp
                         return
                     reg = McpRegistry()
@@ -969,9 +1007,29 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
                     except Exception as e:  # noqa: BLE001
                         logger.debug("MCP reload load skipped for %s: %s",
                                      project.id, e)
+                        lifecycle_log("reload.load_failed", project=project.id,
+                                      error=e)
                     self._mcp_registries[project.id] = reg
                     project.runtime.mcp_registry = reg
-                    await reg.start_all()
+                    try:
+                        await reg.start_all()
+                    except Exception as e:  # noqa: BLE001
+                        # A replacement that failed to start must not be left
+                        # live and unreferenced by the next swap: close it (and
+                        # let the next attach retry) instead of orphaning it.
+                        logger.warning(
+                            "mcp: reload start failed for %s: %s — closing the "
+                            "replacement; a later attach will retry", project.id, e)
+                        lifecycle_log("reload.start_failed", project=project.id,
+                                      registry=getattr(reg, "reg_id", "?"), error=e)
+                        try:
+                            await reg.close_all()
+                        except Exception as close_exc:  # noqa: BLE001
+                            logger.debug("mcp: closing the failed replacement "
+                                         "for %s: %s", project.id, close_exc)
+                        raise
+                    lifecycle_log("reload.done", project=project.id,
+                                  registry=getattr(reg, "reg_id", "?"))
                 finally:
                     self._mcp_reloading.discard(project.id)
 
@@ -994,16 +1052,20 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
         except Exception as e:  # noqa: BLE001
             logger.warning("mcp: reload aborted for %s — close_all failed: %s",
                            project.id, e)
+            lifecycle_log("reload.close_failed", project=project.id,
+                          registry=getattr(old, "reg_id", "?"), error=e)
             return None
         reg = McpRegistry()
         try:
             reg.load(project_dir=Path(work_dir))
         except Exception as e:  # noqa: BLE001
             logger.debug("MCP reload load skipped for %s: %s", project.id, e)
+            lifecycle_log("reload.load_failed", project=project.id, error=e)
         self._mcp_registries[project.id] = reg
         project.runtime.mcp_registry = reg
         self._mcp_fingerprints[project.id] = fingerprint
         self._start_registry(reg, project, should_defer_start)
+        lifecycle_log("reload.done", project=project.id, registry=getattr(reg, "reg_id", "?"))
         return list(reg.all_tools())
 
     def _attach_manifest(self, project: Project, work_dir: str) -> None:
@@ -1073,7 +1135,13 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
             # fingerprint once per request. Only an actual change re-attaches;
             # an unchanged config never rebuilds anything (that per-request
             # churn was the subprocess leak).
-            if self._mcp_config_changed(project):
+            changed = self._mcp_config_changed(project)
+            # One greppable line per request: did this request trigger a mount?
+            # On a windowed build with no console and no log file this is the
+            # only way to answer "is the leak back?" without a process listing.
+            lifecycle_log("hotpath.mount_check", project=pid,
+                          triggered=bool(changed))
+            if changed:
                 self._reattach_for_mcp_change(project)
             return
         if pid in self._attach_failures:
@@ -1235,7 +1303,9 @@ class Orchestrator(OrchLifecycleMixin, OrchWiringMixin, OrchReferenceMixin, Orch
             try:
                 await rt.mcp_registry.close_all()
             except Exception as e:  # noqa: BLE001
-                logger.debug("MCP close_all failed: %s", e)
+                logger.warning("MCP close_all failed for %s: %s — a child may "
+                               "outlive the project", project.id, e)
+                lifecycle_log("close.failed", project=project.id, error=e)
             rt.mcp_registry = None
 
     async def start_loop(self, project_id: str, requirement: str) -> str:

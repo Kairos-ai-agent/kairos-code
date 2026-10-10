@@ -1156,7 +1156,7 @@ def _skills_section(project_root: Optional[Path]) -> dict:
 
 
 
-def _mcp_section(project_root: Optional[Path], probe: bool) -> dict:
+async def _mcp_section(project_root: Optional[Path], probe: bool) -> dict:
     from kairos.mcp_client import McpRegistry, audit_configs
     from kairos.mcp_local_servers import BUNDLED_SERVERS
 
@@ -1219,18 +1219,28 @@ def _mcp_section(project_root: Optional[Path], probe: bool) -> dict:
 
     if probe:
         # Spawning servers is a side effect, so it only happens on request.
+        # This is the request's own event loop: the old code called the async
+        # ``registry.start_all()`` WITHOUT awaiting it and then closed with
+        # ``asyncio.run(...)``, which raises "cannot be called from a running
+        # event loop". So the probe never started anything, and had it started
+        # anything the close would have failed and left the servers running
+        # with nothing to reap them. Await both, on the loop we already have.
+        from kairos.mcp_client import lifecycle_log
         registry = McpRegistry()
         try:
             registry.load(project_dir=project_root, user_dir=home)
-            tools = registry.start_all()
-            section["liveTools"] = sorted(t.name for t in tools)
-        except Exception as exc:
+            await registry.start_all()
+            section["liveTools"] = sorted(t.name for t in registry.all_tools())
+        except Exception as exc:  # noqa: BLE001
             section["probeError"] = f"{type(exc).__name__}: {exc}"
         finally:
             try:
-                asyncio.run(registry.close_all())
-            except Exception as exc:
-                logger.debug("capabilities: close_all: %s", exc)
+                await registry.close_all()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("capabilities: closing the probed registry "
+                               "failed: %s — a probed child may be left running",
+                               exc)
+                lifecycle_log("probe.close_failed", error=exc)
         section["startupErrors"] = dict(registry.startup_errors() or {})
 
     return section
@@ -1275,7 +1285,7 @@ async def capabilities(project_id: Optional[str] = None,
     """
     project_root = _project_root(project_id)
     skills = _skills_section(project_root)
-    mcp = _mcp_section(project_root, probe)
+    mcp = await _mcp_section(project_root, probe)
     plugins = _plugins_section()
     native = _native_tools()
 

@@ -34,6 +34,20 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **MCP servers still leaked on the hot path.** The reload guard only covered the
+  config-change path; the per-request mount check could still spawn a fresh set
+  (`--mcp-serve` children were measured climbing 5 → 8 across identical request
+  rounds). Mounting is now deferred while a mount is already in flight
+  (`should_defer_start`), and every lifecycle decision is written to a greppable
+  file under the instance's own data directory
+  (`logs/mcp-lifecycle.log`: first mount, reload-on-config-change, a reload blocked
+  by the guard, a failed close, and whether a request triggered a mount at all) —
+  a windowed build has no console, so a file is the only signal an operator can
+  read. Measured live afterwards: 13 MCP processes stable across 15 identical
+  request rounds, zero new PIDs. The same pass fixed the extensions probe, which
+  called the async `start_all()` without awaiting it and then closed with
+  `asyncio.run(...)` from inside a running loop.
+
 - **A reply from another conversation rendered into the thread on screen.** The
   backend's WebSocket fans every project's activity out to every connected client,
   and the web chat appended purely by message topic without ever comparing the

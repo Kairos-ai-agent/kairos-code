@@ -1055,6 +1055,51 @@ def should_defer_start() -> bool:
     return _DEFER_UNTIL_SERVING
 
 
+# ---------------------------------------------------------------------------
+# Lifecycle log: an auditable file under the instance's own data directory
+# ---------------------------------------------------------------------------
+#
+# A shipped build is a windowed executable with no console and no log file, so
+# the only signal an operator had for "did a server get mounted, and why did
+# the count grow" was a process listing. These lines are deliberately written
+# to a *file* the user can grep (<data_dir>/logs/mcp-lifecycle.log) and cover
+# the questions that matter: first mount, reload-on-config-change, a reload
+# swallowed by the single-flight guard, a close that failed, and whether a
+# given request triggered a mount at all.
+#
+# Best-effort by construction: a logging failure must never break a mount,
+# so every path is wrapped and a missing data dir just yields no file.
+
+def _lifecycle_log_path() -> "Optional[Path]":
+    try:
+        from kairos.config.settings import settings
+        directory = Path(settings.data_dir) / "logs"
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory / "mcp-lifecycle.log"
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("mcp: no lifecycle log directory: %s", exc)
+        return None
+
+
+def lifecycle_log(event: str, **fields: Any) -> None:
+    """Append one line to the instance's mcp-lifecycle.log. Never raises."""
+    try:
+        path = _lifecycle_log_path()
+        if path is None:
+            return
+        from datetime import datetime
+        stamp = datetime.now().isoformat(timespec="milliseconds")
+        parts = [stamp, f"pid={os.getpid()}", event]
+        for key in sorted(fields):
+            parts.append(f"{key}={fields[key]}")
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(" ".join(parts) + "\n")
+    except Exception:  # noqa: BLE001
+        # A lifecycle log must never be the reason a mount fails, but a silent
+        # failure here would hide the log itself from the operator.
+        logger.debug("mcp: lifecycle log write failed", exc_info=True)
+
+
 class McpRegistry:
     """Loads MCP server configs, starts them, and aggregates their tools.
 
@@ -1079,6 +1124,18 @@ class McpRegistry:
         #: True when this registry was created without a running loop and
         #: is waiting for one to hand it to.
         self._deferred = False
+        #: Set once ``close_all`` has run. A closed registry is *inert*: a
+        #: start already in flight must not register a child nobody will ever
+        #: close. Without this, a reload that closed a registry mid-``start_all``
+        #: left the children that ``start_all`` spawned afterwards alive with
+        #: nothing pointing at them — the residual process leak.
+        self._closed = False
+        #: The task running ``start_all`` on a live loop, so ``close_all`` can
+        #: stop it instead of racing it.
+        self._start_task: Optional[asyncio.Task] = None
+        #: A short id for the lifecycle log, so several registries in one
+        #: process are distinguishable.
+        self.reg_id = f"reg-{id(self) & 0xffffff:06x}"
 
     def defer_start(self) -> None:
         """Record that this registry still has to start, without starting it.
@@ -1119,9 +1176,26 @@ class McpRegistry:
         is a ceiling on the whole phase (START_BUDGET_S) instead of parallelism.
         A server that hangs spends its slice; the rest still start.
         """
+        if self._closed:
+            # Closed before the loop got to us (a reload or shutdown won the
+            # race): starting now would spawn children nobody would close.
+            return
+        # Remember the task that owns this start so ``close_all`` can cancel it
+        # rather than let it keep spawning behind the close.
+        try:
+            self._start_task = asyncio.current_task()
+        except RuntimeError:
+            self._start_task = None
         deadline = time.monotonic() + START_BUDGET_S
 
         for name, cfg in self._configs.items():
+            if self._closed:
+                # A close landed mid-start. Stop here instead of spending the
+                # next server's slice on a child that would be orphaned the
+                # moment this task returned.
+                logger.info("mcp: %s closed mid-start — stopping before %s",
+                            self.reg_id, name)
+                break
             if not cfg.enabled:
                 continue
             if name in self._clients:
@@ -1148,17 +1222,64 @@ class McpRegistry:
 
     async def _start_one(self, name: str, cfg: McpServerConfig,
                          budget_s: float) -> None:
-        """Start a single server. Never raises — failures are recorded."""
+        """Start a single server. Never raises (except on cancellation)."""
+        if self._closed:
+            return
         client = client_for(cfg, budget_s=budget_s)
+        # Register BEFORE the handshake. The child process exists as soon as
+        # ``start`` runs its spawn, so a close that lands during the (slow)
+        # initialize handshake must be able to see and reap it. The old order —
+        # spawn, handshake, *then* register — was the leak window: a close
+        # arriving mid-handshake could not reach a client that was not yet in
+        # ``self._clients``, and the child came up with nothing pointing at it.
+        # No await between the ``_closed`` check above and this assignment, so
+        # a concurrent ``close_all`` cannot slip in between them.
+        self._clients[name] = client
         try:
             await client.start()
+        except asyncio.CancelledError:
+            # A close-ordered cancellation while the child was coming up. The
+            # client is registered, so the cancelling ``close_all`` will reap
+            # it; do a bounded local close too so a start cancelled by anything
+            # else cannot leak a child either.
+            try:
+                await client.close()
+            except Exception as close_exc:  # noqa: BLE001
+                logger.debug("mcp: closing a cancelled start failed: %s",
+                             close_exc)
+            self._clients.pop(name, None)
+            raise
         except Exception as exc:
             logger.warning("mcp: server %s failed to start: %s", name, exc)
             self._startup_errors[name] = str(exc)
+            self._clients.pop(name, None)
             # Clean up partial state
-            await client.close()
+            try:
+                await client.close()
+            except Exception as close_exc:  # noqa: BLE001
+                logger.warning("mcp: cleaning up failed start of %s: %s",
+                               name, close_exc)
+                lifecycle_log("start.cleanup_failed", registry=self.reg_id,
+                              server=name, error=close_exc)
             return
-        self._clients[name] = client
+        if self._closed:
+            # The registry was closed while this server was starting — a
+            # reload's close-then-swap, or shutdown, won the race. The client is
+            # registered, so ``close_all`` either already closed it or is about
+            # to; drop it here and spawn nothing further.
+            logger.info("mcp: %s closed while starting %s — discarding the child",
+                        self.reg_id, name)
+            lifecycle_log("start.discarded", registry=self.reg_id, server=name)
+            try:
+                await client.close()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "mcp: closing the discarded server %s failed: %s — a child "
+                    "may outlive this registry", name, exc)
+                lifecycle_log("start.discard_close_failed",
+                              registry=self.reg_id, server=name, error=exc)
+            self._clients.pop(name, None)
+            return
         try:
             schemas = await client.list_tools()
         except Exception as exc:
@@ -1166,7 +1287,12 @@ class McpRegistry:
                 "mcp: server %s tools/list failed: %s", name, exc
             )
             self._startup_errors[name] = f"tools/list: {exc}"
+            self._clients.pop(name, None)
             await client.close()
+            return
+        if self._closed:
+            # Closed during ``tools/list``: the client is registered and already
+            # reaped by ``close_all``; make sure its tools never surface.
             self._clients.pop(name, None)
             return
         for schema in schemas:
@@ -1193,13 +1319,52 @@ class McpRegistry:
         return self._tools.get(name)
 
     async def close_all(self) -> None:
-        for client in list(self._clients.values()):
+        """Stop every child and make the registry inert. Idempotent.
+
+        Order matters. ``start_all`` spawns servers one at a time, so a close
+        that ran *behind* it (a reload's close-then-swap) left every server the
+        start spawned afterwards alive with nothing pointing at them — the
+        residual ``--mcp-serve`` leak. So:
+
+          1. flip ``_closed`` first, so a start that resumes does not register a
+             new child;
+          2. cancel and await an in-flight ``start_all`` so it stops spawning;
+          3. close whatever is registered, and only then clear.
+
+        A close failure is loud (warning + lifecycle line), never silent: an
+        unreaped child is exactly the thing this exists to prevent.
+        """
+        already = self._closed
+        self._closed = True
+        task = self._start_task
+        if task is not None and not task.done():
+            try:
+                current = asyncio.current_task()
+            except RuntimeError:
+                current = None
+            if task is not current:
+                task.cancel()
+                try:
+                    await asyncio.wait({task}, timeout=5.0)
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("mcp: awaiting the cancelled start task: %s", exc)
+        closed = failed = 0
+        for name, client in list(self._clients.items()):
             try:
                 await client.close()
-            except Exception as exc:
-                logger.debug("mcp: close error: %s", exc)
+                closed += 1
+            except Exception as exc:  # noqa: BLE001
+                failed += 1
+                logger.warning("mcp: closing server %s failed: %s — a child may "
+                               "outlive this registry", name, exc)
+                lifecycle_log("close.failed", registry=self.reg_id,
+                              server=name, error=exc)
         self._clients.clear()
         self._tools.clear()
+        self._start_task = None
+        if not already and (closed or failed):
+            lifecycle_log("close.done", registry=self.reg_id,
+                          closed=closed, failed=failed)
 
     def __len__(self) -> int:
         return len(self._tools)
